@@ -7,6 +7,7 @@ Optionally sends email notification via SMTP.
 import os, sys, json, urllib.request, urllib.parse, traceback
 from datetime import datetime, timezone, timedelta
 from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 import smtplib
 
 JST = timezone(timedelta(hours=9))
@@ -189,8 +190,83 @@ def find_matching_action(schedule, now_jst):
 #  NOTIFICATION
 # ═══════════════════════════════════════════════════════════
 
-def send_email(subject, body):
-    """Send email notification via SMTP. Requires env vars."""
+def build_checkin_html(status, action, location_name, location_key, note, now_jst, ci_after=None, co_after=None, error_detail=None):
+    """Build beautiful HTML email for checkin/checkout notification."""
+    colors = {"success": "#22c55e", "failure": "#ef4444", "error": "#f97316"}
+    bg_colors = {"success": "#f0fdf4", "failure": "#fef2f2", "error": "#fff7ed"}
+    icons = {"success": "✅", "failure": "❌", "error": "🚨"}
+    labels = {"success": "SUCCESS", "failure": "FAILED", "error": "ERROR"}
+    action_icons = {"checkin": "📥", "checkout": "📤"}
+
+    color = colors.get(status, "#6b7280")
+    bg = bg_colors.get(status, "#f9fafb")
+    icon = icons.get(status, "❓")
+    label = labels.get(status, "UNKNOWN")
+    a_icon = action_icons.get(action, "🔄")
+
+    date_str = now_jst.strftime("%Y-%m-%d")
+    time_str = now_jst.strftime("%H:%M")
+    day_str = now_jst.strftime("%A")
+
+    verified_html = ""
+    if ci_after:
+        verified_html = f"""
+        <tr><td style="padding:8px 12px;color:#6b7280;font-size:13px;">Verified</td>
+            <td style="padding:8px 12px;font-size:13px;">CI: {ci_after} / CO: {co_after or '—'}</td></tr>"""
+
+    error_html = ""
+    if error_detail:
+        error_html = f"""
+        <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:12px;margin-top:16px;">
+          <strong style="color:#dc2626;">Error Detail:</strong>
+          <pre style="margin:8px 0 0;font-size:12px;color:#7f1d1d;white-space:pre-wrap;">{error_detail}</pre>
+        </div>"""
+
+    log_html = "\n".join(f"<div style='padding:2px 0;'>{line}</div>" for line in LOG_LINES)
+
+    return f"""<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f3f4f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+<div style="max-width:520px;margin:20px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+  <!-- Header -->
+  <div style="background:{color};padding:20px 24px;text-align:center;">
+    <div style="font-size:36px;">{a_icon}</div>
+    <div style="color:#fff;font-size:20px;font-weight:700;margin-top:4px;">{action.upper()} {label}</div>
+    <div style="color:rgba(255,255,255,0.85);font-size:13px;margin-top:4px;">{icon} DokoKin Auto System</div>
+  </div>
+
+  <!-- Body -->
+  <div style="padding:20px 24px;">
+    <table style="width:100%;border-collapse:collapse;">
+      <tr><td style="padding:8px 12px;color:#6b7280;font-size:13px;width:90px;">Date</td>
+          <td style="padding:8px 12px;font-weight:600;">{date_str} ({day_str})</td></tr>
+      <tr style="background:#f9fafb;"><td style="padding:8px 12px;color:#6b7280;font-size:13px;">Time</td>
+          <td style="padding:8px 12px;font-weight:600;font-size:18px;">{time_str} JST</td></tr>
+      <tr><td style="padding:8px 12px;color:#6b7280;font-size:13px;">Location</td>
+          <td style="padding:8px 12px;">📍 {location_name}</td></tr>
+      {"<tr style='background:#f9fafb;'><td style='padding:8px 12px;color:#6b7280;font-size:13px;'>Note</td><td style='padding:8px 12px;'>" + note + "</td></tr>" if note else ""}
+      {verified_html}
+    </table>
+    {error_html}
+
+    <!-- Log -->
+    <details style="margin-top:20px;">
+      <summary style="cursor:pointer;color:#6b7280;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">
+        Execution Log ({len(LOG_LINES)} lines)
+      </summary>
+      <div style="background:#1e293b;color:#e2e8f0;padding:12px;border-radius:8px;margin-top:8px;font-family:'Cascadia Code',Consolas,monospace;font-size:11px;line-height:1.6;max-height:400px;overflow-y:auto;">
+        {log_html}
+      </div>
+    </details>
+  </div>
+
+  <!-- Footer -->
+  <div style="padding:12px 24px;background:#f9fafb;border-top:1px solid #e5e7eb;text-align:center;">
+    <span style="color:#9ca3af;font-size:11px;">🤖 Auto Checkin System • GitHub Actions • {date_str}</span>
+  </div>
+</div></body></html>"""
+
+
+def send_email(subject, body, html=None):
+    """Send email notification via SMTP. Supports HTML."""
     smtp_server = os.environ.get("SMTP_SERVER", "smtp.gmail.com")
     smtp_port = int(os.environ.get("SMTP_PORT", "587"))
     smtp_user = os.environ.get("SMTP_USER")
@@ -202,7 +278,12 @@ def send_email(subject, body):
         return
 
     try:
-        msg = MIMEText(body, "plain", "utf-8")
+        if html:
+            msg = MIMEMultipart("alternative")
+            msg.attach(MIMEText(body, "plain", "utf-8"))
+            msg.attach(MIMEText(html, "html", "utf-8"))
+        else:
+            msg = MIMEText(body, "plain", "utf-8")
         msg["Subject"] = subject
         msg["From"] = smtp_user
         msg["To"] = notify_email
@@ -252,6 +333,12 @@ def main():
 
     result_status = "skip"
     result_detail = ""
+    action = ""
+    location_name = ""
+    location_key = ""
+    note = ""
+    ci_after = None
+    co_after = None
 
     try:
         # ── Check for manual override via env ──
@@ -282,6 +369,7 @@ def main():
         action = action_entry["action"]
         location_key = action_entry["location"]
         loc = schedule["locations"][location_key]
+        location_name = loc["name"]
         note = action_entry.get("note", "")
 
         log(f"Action: {action} at {location_key} ({loc['name']})")
@@ -379,9 +467,20 @@ def main():
         # ── Send notification (only on action, not routine skips) ──
         if result_status != "skip":
             emoji_map = {"success": "✅", "failure": "❌", "error": "🚨"}
-            subject = f"{emoji_map.get(result_status, '❓')} DokoKin {result_status.upper()}: {now_jst.strftime('%Y-%m-%d %H:%M %A')}"
-            body = "\n".join(LOG_LINES) + f"\n\n--- Result: {result_status} ---\n{result_detail}"
-            send_email(subject, body)
+            subject = f"{emoji_map.get(result_status, '❓')} DokoKin {action.upper() or result_status.upper()}: {now_jst.strftime('%Y-%m-%d %H:%M %A')}"
+            plain_body = "\n".join(LOG_LINES) + f"\n\n--- Result: {result_status} ---\n{result_detail}"
+            html_body = build_checkin_html(
+                status=result_status,
+                action=action or "unknown",
+                location_name=location_name or "—",
+                location_key=location_key or "—",
+                note=note,
+                now_jst=now_jst,
+                ci_after=ci_after,
+                co_after=co_after,
+                error_detail=result_detail if result_status != "success" else None,
+            )
+            send_email(subject, plain_body, html=html_body)
 
 
 if __name__ == "__main__":

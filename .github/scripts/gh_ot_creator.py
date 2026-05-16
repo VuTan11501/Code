@@ -8,6 +8,7 @@ import os, sys, json, urllib.request, urllib.parse, traceback
 from datetime import datetime, timezone, timedelta, date
 from calendar import monthrange
 from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 import smtplib
 
 JST = timezone(timedelta(hours=9))
@@ -170,7 +171,72 @@ def create_ot_request(token, entry):
 #  EMAIL
 # ═══════════════════════════════════════════════════════════
 
-def send_email(subject, body):
+def build_ot_html(created, existing, past, outside_window, errors, today):
+    """Build HTML email for OT creator results."""
+    has_errors = len(errors) > 0
+    color = "#ef4444" if has_errors else "#22c55e" if created else "#3b82f6"
+    title = "OT Requests Created" if created else "OT Status Check"
+
+    rows = ""
+    for item in created:
+        rows += f"""<tr style="background:#f0fdf4;">
+            <td style="padding:8px 12px;">✅ {item['date']}</td>
+            <td style="padding:8px 12px;">{item['start']}→{item['end']}</td>
+            <td style="padding:8px 12px;font-weight:600;">{item['hours']}h</td>
+            <td style="padding:8px 12px;color:#16a34a;">CREATED</td></tr>"""
+    for item in existing:
+        rows += f"""<tr>
+            <td style="padding:8px 12px;">✓ {item['date']}</td>
+            <td style="padding:8px 12px;">{item['start']}→{item['end']}</td>
+            <td style="padding:8px 12px;">{item['hours']}h</td>
+            <td style="padding:8px 12px;color:#6b7280;">EXISTS</td></tr>"""
+    for item in outside_window:
+        rows += f"""<tr style="background:#f9fafb;">
+            <td style="padding:8px 12px;">⏳ {item['date']}</td>
+            <td style="padding:8px 12px;">{item['start']}→{item['end']}</td>
+            <td style="padding:8px 12px;">{item['hours']}h</td>
+            <td style="padding:8px 12px;color:#9ca3af;">WAITING</td></tr>"""
+
+    error_html = ""
+    if errors:
+        err_items = "".join(f"<li style='color:#dc2626;margin:4px 0;'>{e}</li>" for e in errors)
+        error_html = f"""<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:12px;margin-top:16px;">
+            <strong style="color:#dc2626;">⚠️ Errors:</strong><ul style="margin:8px 0 0;padding-left:20px;">{err_items}</ul></div>"""
+
+    log_html = "\n".join(f"<div style='padding:2px 0;'>{line}</div>" for line in LOG_LINES)
+
+    return f"""<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f3f4f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+<div style="max-width:560px;margin:20px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+  <div style="background:{color};padding:20px 24px;text-align:center;">
+    <div style="font-size:36px;">📋</div>
+    <div style="color:#fff;font-size:20px;font-weight:700;margin-top:4px;">{title}</div>
+    <div style="color:rgba(255,255,255,0.85);font-size:13px;margin-top:4px;">
+      {len(created)} created • {len(existing)} exist • {len(outside_window)} waiting</div>
+  </div>
+  <div style="padding:20px 24px;">
+    <table style="width:100%;border-collapse:collapse;font-size:13px;">
+      <tr style="border-bottom:2px solid #e5e7eb;">
+        <th style="padding:8px 12px;text-align:left;color:#6b7280;">Date</th>
+        <th style="padding:8px 12px;text-align:left;color:#6b7280;">Time</th>
+        <th style="padding:8px 12px;text-align:left;color:#6b7280;">Hours</th>
+        <th style="padding:8px 12px;text-align:left;color:#6b7280;">Status</th></tr>
+      {rows}
+    </table>
+    {error_html}
+    <details style="margin-top:20px;">
+      <summary style="cursor:pointer;color:#6b7280;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">
+        Execution Log ({len(LOG_LINES)} lines)</summary>
+      <div style="background:#1e293b;color:#e2e8f0;padding:12px;border-radius:8px;margin-top:8px;font-family:'Cascadia Code',Consolas,monospace;font-size:11px;line-height:1.6;max-height:400px;overflow-y:auto;">
+        {log_html}</div>
+    </details>
+  </div>
+  <div style="padding:12px 24px;background:#f9fafb;border-top:1px solid #e5e7eb;text-align:center;">
+    <span style="color:#9ca3af;font-size:11px;">🤖 OT Auto-Creator • GitHub Actions • {today}</span>
+  </div>
+</div></body></html>"""
+
+
+def send_email(subject, body, html=None):
     smtp_user = os.environ.get("SMTP_USER")
     smtp_pass = os.environ.get("SMTP_PASS")
     notify_email = os.environ.get("NOTIFY_EMAIL")
@@ -178,7 +244,12 @@ def send_email(subject, body):
         log("Email not configured, skip notification")
         return
     try:
-        msg = MIMEText(body, "plain", "utf-8")
+        if html:
+            msg = MIMEMultipart("alternative")
+            msg.attach(MIMEText(body, "plain", "utf-8"))
+            msg.attach(MIMEText(html, "html", "utf-8"))
+        else:
+            msg = MIMEText(body, "plain", "utf-8")
         msg["Subject"] = subject
         msg["From"] = smtp_user
         msg["To"] = notify_email
@@ -200,9 +271,9 @@ def main():
     today = now.date()
     log(f"OT Auto-Creator running at {now.strftime('%Y-%m-%d %H:%M:%S %A')}")
 
-    created_count = 0
-    skipped_existing = 0
-    skipped_window = 0
+    created_items = []
+    existing_items = []
+    outside_items = []
     skipped_past = 0
     errors = []
 
@@ -228,13 +299,13 @@ def main():
             if days_until < 0:
                 skipped_past += 1
             elif days_until > CREATION_WINDOW_DAYS:
-                skipped_window += 1
+                outside_items.append(entry)
                 log(f"  {entry['date']}: {days_until} days away, outside {CREATION_WINDOW_DAYS}-day window")
             else:
                 actionable.append(entry)
 
         if not actionable:
-            log(f"No OT entries within creation window. (past:{skipped_past}, waiting:{skipped_window})")
+            log(f"No OT entries within creation window. (past:{skipped_past}, waiting:{len(outside_items)})")
             return
 
         log(f"{len(actionable)} entries within {CREATION_WINDOW_DAYS}-day window, checking existing...")
@@ -269,7 +340,7 @@ def main():
             day_name = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][ot_date.weekday()]
 
             if ot_date in existing_dates:
-                skipped_existing += 1
+                existing_items.append(entry)
                 log(f"  ✓ {entry['date']} {day_name}: already exists, skip")
                 continue
 
@@ -277,7 +348,7 @@ def main():
             try:
                 status, resp = create_ot_request(kintai_token, entry)
                 if status == 200:
-                    created_count += 1
+                    created_items.append(entry)
                     log(f"    ✅ Created successfully")
                 else:
                     errors.append(f"{entry['date']}: HTTP {status} - {resp}")
@@ -289,7 +360,6 @@ def main():
         # Handle token rotation
         if new_refresh != refresh_token:
             log("⚠️ Azure refresh token rotated!")
-            # Mask token in GitHub Actions logs
             print(f"::add-mask::{new_refresh}")
             output_file = os.environ.get("GITHUB_OUTPUT")
             if output_file:
@@ -305,21 +375,22 @@ def main():
         # Summary
         log("")
         log("═══ Summary ═══")
-        log(f"  Created: {created_count}")
-        log(f"  Already exist: {skipped_existing}")
+        log(f"  Created: {len(created_items)}")
+        log(f"  Already exist: {len(existing_items)}")
         log(f"  Past dates: {skipped_past}")
-        log(f"  Outside window: {skipped_window}")
+        log(f"  Outside window: {len(outside_items)}")
         if errors:
             log(f"  Errors: {len(errors)}")
             for e in errors:
                 log(f"    • {e}")
 
         # Send email if anything was created or failed
-        if created_count > 0 or errors:
+        if created_items or errors:
             emoji = "✅" if not errors else "⚠️"
-            subject = f"{emoji} OT Auto-Creator: {created_count} created, {len(errors)} errors — {today}"
-            body = "\n".join(LOG_LINES)
-            send_email(subject, body)
+            subject = f"{emoji} OT Auto-Creator: {len(created_items)} created, {len(errors)} errors — {today}"
+            plain_body = "\n".join(LOG_LINES)
+            html_body = build_ot_html(created_items, existing_items, skipped_past, outside_items, errors, today)
+            send_email(subject, plain_body, html=html_body)
 
         if errors:
             sys.exit(1)
