@@ -1,0 +1,9 @@
+{
+  "checkin_time": "09:00",
+  "checkout_time": "18:00",
+  "checkin_type": 1,
+  "office_latitude": 35.649212999999996,
+  "office_longitude": 139.7536882,
+  "app_id": "com.fjp.portal",
+  "randomize_minutes": 5
+}

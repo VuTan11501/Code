@@ -1,0 +1,77 @@
+{
+  "timezone": "Asia/Tokyo",
+  "tolerance_minutes": 20,
+  "locations": {
+    "office": {"lat": 35.5202417, "lon": 139.620325, "name": "NEC Tamagawa"},
+    "home": {"lat": 35.51386, "lon": 139.6749183, "name": "FPT Residence Tsurumi"}
+  },
+  "actions": [
+    {"datetime": "2026-05-01 09:00", "action": "checkin",  "location": "office"},
+    {"datetime": "2026-05-01 18:00", "action": "checkout", "location": "office"},
+    {"datetime": "2026-05-02 09:00", "action": "checkin",  "location": "office"},
+    {"datetime": "2026-05-02 18:00", "action": "checkout", "location": "office"},
+
+    {"datetime": "2026-05-07 09:00", "action": "checkin",  "location": "office"},
+    {"datetime": "2026-05-07 18:00", "action": "checkout", "location": "office"},
+    {"datetime": "2026-05-08 09:00", "action": "checkin",  "location": "office"},
+    {"datetime": "2026-05-08 18:00", "action": "checkout", "location": "office"},
+    {"datetime": "2026-05-09 09:00", "action": "checkin",  "location": "office"},
+    {"datetime": "2026-05-09 18:00", "action": "checkout", "location": "office"},
+
+    {"datetime": "2026-05-11 09:00", "action": "checkin",  "location": "office"},
+    {"datetime": "2026-05-12 00:00", "action": "checkout", "location": "home", "note": "May11 OT 18-00"},
+
+    {"datetime": "2026-05-12 09:00", "action": "checkin",  "location": "office"},
+    {"datetime": "2026-05-12 18:00", "action": "checkout", "location": "office"},
+    {"datetime": "2026-05-13 09:00", "action": "checkin",  "location": "office"},
+    {"datetime": "2026-05-13 18:00", "action": "checkout", "location": "office"},
+    {"datetime": "2026-05-14 09:00", "action": "checkin",  "location": "office"},
+    {"datetime": "2026-05-14 18:00", "action": "checkout", "location": "office"},
+    {"datetime": "2026-05-15 09:00", "action": "checkin",  "location": "office"},
+    {"datetime": "2026-05-15 18:00", "action": "checkout", "location": "office"},
+
+    {"datetime": "2026-05-16 22:00", "action": "checkin",  "location": "home", "note": "Sat OT night"},
+    {"datetime": "2026-05-17 03:30", "action": "checkout", "location": "home", "note": "May16 OT CO"},
+
+    {"datetime": "2026-05-17 15:30", "action": "checkin",  "location": "home", "note": "Sun OT full"},
+    {"datetime": "2026-05-18 04:30", "action": "checkout", "location": "home", "note": "May17 OT CO +1h break"},
+
+    {"datetime": "2026-05-18 09:00", "action": "checkin",  "location": "office"},
+    {"datetime": "2026-05-19 03:30", "action": "checkout", "location": "home", "note": "May18 OT night CO"},
+
+    {"datetime": "2026-05-19 09:00", "action": "checkin",  "location": "office"},
+    {"datetime": "2026-05-20 03:30", "action": "checkout", "location": "home", "note": "May19 OT night CO"},
+
+    {"datetime": "2026-05-20 09:00", "action": "checkin",  "location": "office"},
+    {"datetime": "2026-05-20 18:00", "action": "checkout", "location": "office"},
+
+    {"datetime": "2026-05-21 09:00", "action": "checkin",  "location": "office"},
+    {"datetime": "2026-05-22 03:30", "action": "checkout", "location": "home", "note": "May21 OT night CO"},
+
+    {"datetime": "2026-05-22 09:00", "action": "checkin",  "location": "office"},
+    {"datetime": "2026-05-22 18:00", "action": "checkout", "location": "office"},
+
+    {"datetime": "2026-05-23 22:00", "action": "checkin",  "location": "home", "note": "Sat OT night"},
+    {"datetime": "2026-05-24 03:30", "action": "checkout", "location": "home", "note": "May23 OT CO"},
+
+    {"datetime": "2026-05-24 15:30", "action": "checkin",  "location": "home", "note": "Sun OT full"},
+    {"datetime": "2026-05-25 04:30", "action": "checkout", "location": "home", "note": "May24 OT CO +1h break"},
+
+    {"datetime": "2026-05-25 09:00", "action": "checkin",  "location": "office"},
+    {"datetime": "2026-05-25 18:00", "action": "checkout", "location": "office"},
+    {"datetime": "2026-05-26 09:00", "action": "checkin",  "location": "office"},
+    {"datetime": "2026-05-26 18:00", "action": "checkout", "location": "office"},
+    {"datetime": "2026-05-27 09:00", "action": "checkin",  "location": "office"},
+    {"datetime": "2026-05-27 18:00", "action": "checkout", "location": "office"},
+    {"datetime": "2026-05-28 09:00", "action": "checkin",  "location": "office"},
+    {"datetime": "2026-05-28 18:00", "action": "checkout", "location": "office"},
+    {"datetime": "2026-05-29 09:00", "action": "checkin",  "location": "office"},
+    {"datetime": "2026-05-29 18:00", "action": "checkout", "location": "office"},
+
+    {"datetime": "2026-05-30 22:00", "action": "checkin",  "location": "home", "note": "Sat OT night"},
+    {"datetime": "2026-05-31 03:30", "action": "checkout", "location": "home", "note": "May30 OT CO"},
+
+    {"datetime": "2026-05-31 15:30", "action": "checkin",  "location": "home", "note": "Sun OT full"},
+    {"datetime": "2026-06-01 04:30", "action": "checkout", "location": "home", "note": "May31 OT CO +1h break"}
+  ]
+}

@@ -1,0 +1,11 @@
+.env
+.env.local
+*.pdf
+__pycache__/
+*.pyc
+node_modules/
+.venv/
+
+# Sensitive token files
+.azure_tokens.json
+.dokokin_sms_token.json

@@ -1,0 +1,78 @@
+name: Auto Checkin/Checkout
+
+on:
+  schedule:
+    # All times UTC. JST = UTC+9
+    - cron: '0 0 * * 1-5'     # 09:00 JST Mon-Fri (workday CI)
+    - cron: '0 9 * * 1-5'     # 18:00 JST Mon-Fri (workday CO)
+    - cron: '0 13 * * *'      # 22:00 JST (night OT CI)
+    - cron: '0 15 * * *'      # 00:00 JST (midnight CO)
+    - cron: '30 18 * * *'     # 03:30 JST (night OT CO)
+    - cron: '30 19 * * *'     # 04:30 JST (Sunday OT CO)
+    - cron: '30 6 * * 0'      # 15:30 JST Sunday (Sunday OT CI)
+
+  workflow_dispatch:
+    inputs:
+      action:
+        description: Force action
+        required: true
+        type: choice
+        default: auto
+        options:
+          - auto
+          - checkin
+          - checkout
+      location:
+        description: Location
+        required: true
+        type: choice
+        default: office
+        options:
+          - office
+          - home
+
+permissions:
+  contents: read
+
+env:
+  TZ: Asia/Tokyo
+
+jobs:
+  checkin:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            .github/scripts
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Run checkin script
+        env:
+          AZURE_REFRESH_TOKEN: ${{ secrets.AZURE_REFRESH_TOKEN }}
+          FORCE_ACTION: ${{ inputs.action == 'auto' && '' || inputs.action }}
+          FORCE_LOCATION: ${{ inputs.location || 'office' }}
+        run: python .github/scripts/gh_checkin.py
+
+      - name: Update secret if token rotated
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          if [ -f "$GITHUB_OUTPUT" ] && grep -q "token_rotated=true" "$GITHUB_OUTPUT" 2>/dev/null; then
+            NEW_TOKEN=$(grep "new_refresh_token=" "$GITHUB_OUTPUT" | cut -d= -f2-)
+            if [ -n "$NEW_TOKEN" ] && [ -n "$GH_TOKEN" ]; then
+              gh secret set AZURE_REFRESH_TOKEN --body "$NEW_TOKEN" --repo "$GITHUB_REPOSITORY"
+              echo "Secret updated"
+            else
+              echo "Token rotated but GH_PAT not set"
+            fi
+          else
+            echo "No token rotation"
+          fi
