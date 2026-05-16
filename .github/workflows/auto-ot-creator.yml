@@ -1,0 +1,51 @@
+name: Auto OT Creator
+
+on:
+  schedule:
+    - cron: '0 1 * * *'    # 10:00 JST daily
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  TZ: Asia/Tokyo
+
+jobs:
+  create-ot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            .github/scripts
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Run OT creator
+        id: ot_creator
+        env:
+          AZURE_REFRESH_TOKEN: ${{ secrets.AZURE_REFRESH_TOKEN }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          NOTIFY_EMAIL: ${{ secrets.NOTIFY_EMAIL }}
+        run: python .github/scripts/gh_ot_creator.py
+
+      - name: Update secret if token rotated
+        if: always() && steps.ot_creator.outputs.token_rotated == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+          NEW_REFRESH_TOKEN: ${{ steps.ot_creator.outputs.new_refresh_token }}
+        run: |
+          if [ -n "$NEW_REFRESH_TOKEN" ] && [ -n "$GH_TOKEN" ]; then
+            gh secret set AZURE_REFRESH_TOKEN --body "$NEW_REFRESH_TOKEN" --repo "$GITHUB_REPOSITORY"
+            echo "✅ Secret updated with rotated token"
+          else
+            echo "⚠️ Token rotated but GH_PAT not set or new token empty"
+          fi

@@ -69,5 +69,18 @@
 
     {"datetime": "2026-05-31 15:30", "action": "checkin",  "location": "home", "note": "Sun OT full"},
     {"datetime": "2026-06-01 04:30", "action": "checkout", "location": "home", "note": "May31 OT CO +1h break"}
+  ],
+
+  "pending_ot": [
+    {"date": "2026-05-11", "start": "18:00", "end": "00:00", "hours": 6.0, "reason": "task shishin"},
+    {"date": "2026-05-16", "start": "22:00", "end": "03:30", "hours": 5.5, "reason": "task shishin"},
+    {"date": "2026-05-17", "start": "15:30", "end": "03:30", "hours": 12.0, "reason": "task shishin"},
+    {"date": "2026-05-18", "start": "22:00", "end": "03:30", "hours": 5.5, "reason": "task shishin"},
+    {"date": "2026-05-19", "start": "22:00", "end": "03:30", "hours": 5.5, "reason": "task shishin"},
+    {"date": "2026-05-21", "start": "22:00", "end": "03:30", "hours": 5.5, "reason": "task shishin"},
+    {"date": "2026-05-23", "start": "22:00", "end": "03:30", "hours": 5.5, "reason": "task shishin"},
+    {"date": "2026-05-24", "start": "15:30", "end": "03:30", "hours": 12.0, "reason": "task shishin"},
+    {"date": "2026-05-30", "start": "22:00", "end": "03:30", "hours": 5.5, "reason": "task shishin"},
+    {"date": "2026-05-31", "start": "15:30", "end": "03:30", "hours": 12.0, "reason": "task shishin"}
   ]
 }
