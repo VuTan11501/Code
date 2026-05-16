@@ -159,6 +159,8 @@ def main():
 
     # ── Check for manual override via env ──
     force_action = os.environ.get("FORCE_ACTION")  # "checkin" or "checkout"
+    if force_action == "auto" or force_action == "":
+        force_action = None
     force_location = os.environ.get("FORCE_LOCATION", "office")
 
     # ── Load schedule and find action ──
