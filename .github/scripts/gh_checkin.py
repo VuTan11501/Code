@@ -110,17 +110,24 @@ def get_dakoku_status(token, date_str):
 #  CHECKIN / CHECKOUT
 # ═══════════════════════════════════════════════════════════
 
-def do_dakoku(token, checkin_type, lat, lon):
+def do_dakoku(token, checkin_type, lat, lon, is_checkout=False):
     """POST dakoku. checkin_type: 1=checkin, 2=checkout."""
     now = datetime.now(JST)
+    body = {
+        "employeeId": 8883,
+        "appId": "com.fjp.portal",
+        "logTime": now.strftime("%Y-%m-%dT%H:%M:%S"),
+        "isCheckoutYesterday": False,
+        "TotalOfBreakTime": 0,
+    }
+    if is_checkout:
+        body.update(checkoutType=checkin_type, checkoutLongitute=lon, checkoutLatitude=lat)
+    else:
+        body.update(checkinType=checkin_type, checkinLongitute=lon, checkinLatitude=lat)
+
     status, data = http_post(
         API_BASE + "dakoku",
-        json_data={
-            "checkinType": checkin_type,
-            "checkinDate": now.strftime("%Y-%m-%dT%H:%M:%S"),
-            "checkinLatitude": lat,
-            "checkinLongitute": lon,  # API typo is intentional
-        },
+        json_data=body,
         headers={
             "Authorization": f"Bearer {token}",
             "Module": "KINTAI",
@@ -306,9 +313,10 @@ def main():
             log("⚠️ No checkin record found for today or yesterday. Checkout may fail.")
 
         # ── Execute ──
-        checkin_type = 1 if action == "checkin" else 2
+        checkin_type = 1  # GPS-based checkin type
+        is_checkout = action == "checkout"
         emoji = "📥" if action == "checkin" else "📤"
-        status, result = do_dakoku(dokokin_token, checkin_type, loc["lat"], loc["lon"])
+        status, result = do_dakoku(dokokin_token, checkin_type, loc["lat"], loc["lon"], is_checkout)
 
         if status == 200:
             log(f"{emoji} {action.upper()} SUCCESS at {loc['name']}")
