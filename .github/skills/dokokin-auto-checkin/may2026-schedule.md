@@ -24,21 +24,21 @@
 
 | Date | Day | Type | CI Time | CI Location | CO Time | CO Location | OT Request | OT Hours | Note |
 |------|-----|------|---------|-------------|---------|-------------|------------|----------|------|
-| 05/01 | Thu | Work | 09:00 | office | 18:00 | office | — | — | |
-| 05/02 | Fri | Work | 09:00 | office | 18:00 | office | — | — | |
-| 05/03 | Sat | OFF | — | — | — | — | — | — | 憲法記念日 |
-| 05/04 | Sun | OFF | — | — | — | — | — | — | みどりの日 |
-| 05/05 | Mon | OFF | — | — | — | — | — | — | こどもの日 |
-| 05/06 | Tue | OFF | — | — | — | — | — | — | 振替休日 |
-| 05/07 | Wed | Work | 09:00 | office | 18:00 | office | — | — | |
-| 05/08 | Thu | Work | 09:00 | office | 18:00 | office | — | — | |
-| 05/09 | Fri | Work | 09:00 | office | 18:00 | office | — | — | |
-| 05/10 | Sat | OFF | — | — | — | — | — | — | |
-| 05/11 | Sun | OFF | — | — | — | — | — | — | |
-| 05/12 | Mon | Work+OT | 09:00 | office | 00:00+1 | home | #724475 | 6.0h | OT 18:00→00:00 |
-| 05/13 | Tue | Work | 09:00 | office | 18:00 | office | — | — | |
-| 05/14 | Wed | Work | 09:00 | office | 18:00 | office | — | — | |
-| 05/15 | Thu | Work | 09:00 | office | 18:00 | office | — | — | |
+| 05/01 | Fri | Work | 09:00 | office | 18:00 | office | — | — | |
+| 05/02 | Sat | OFF | — | — | — | — | — | — | |
+| 05/03 | Sun | OFF | — | — | — | — | — | — | 憲法記念日 |
+| 05/04 | Mon | OFF | — | — | — | — | — | — | みどりの日 |
+| 05/05 | Tue | OFF | — | — | — | — | — | — | こどもの日 |
+| 05/06 | Wed | OFF | — | — | — | — | — | — | 振替休日 |
+| 05/07 | Thu | Work | 09:00 | office | 18:00 | office | — | — | |
+| 05/08 | Fri | Work | 09:00 | office | 18:00 | office | — | — | |
+| 05/09 | Sat | OFF | — | — | — | — | — | — | |
+| 05/10 | Sun | OFF | — | — | — | — | — | — | |
+| 05/11 | Mon | Work+OT | 09:00 | office | 00:00+1 | home | #724475 | 6.0h | OT 18:00→00:00 |
+| 05/12 | Tue | Work | 09:00 | office | 18:00 | office | — | — | |
+| 05/13 | Wed | Work | 09:00 | office | 18:00 | office | — | — | |
+| 05/14 | Thu | Work | 09:00 | office | 18:00 | office | — | — | |
+| 05/15 | Fri | Work | 09:00 | office | 18:00 | office | — | — | |
 | 05/16 | Sat | OT Night | 22:00 | home | 03:30+1 | home | #725072 | 5.5h | 🌙 全night |
 | 05/17 | Sun | OT Full | 15:30 | home | 04:30+1 | home | #725073 | 12.0h | ☀️🌙 day+night, break 1h |
 | 05/18 | Mon | Work+OT | 09:00 | office | 03:30+1 | home | ⏳ PENDING | 5.5h | 🌙 OT 22:00→03:30 |
