@@ -47,9 +47,16 @@ def http_post(url, data=None, json_data=None, headers=None):
     req = urllib.request.Request(url, data=body, headers=headers or {}, method="POST")
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
-            return resp.status, json.loads(resp.read())
+            raw = resp.read()
+            if not raw or not raw.strip():
+                return resp.status, {}
+            return resp.status, json.loads(raw)
     except urllib.error.HTTPError as e:
-        return e.code, {"error": e.read().decode(errors="replace")}
+        raw = e.read().decode(errors="replace")
+        try:
+            return e.code, json.loads(raw)
+        except (json.JSONDecodeError, ValueError):
+            return e.code, {"error": raw}
 
 
 def http_get(url, headers=None):
@@ -57,9 +64,16 @@ def http_get(url, headers=None):
     req = urllib.request.Request(url, headers=headers or {}, method="GET")
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
-            return resp.status, json.loads(resp.read())
+            raw = resp.read()
+            if not raw or not raw.strip():
+                return resp.status, {}
+            return resp.status, json.loads(raw)
     except urllib.error.HTTPError as e:
-        return e.code, {"error": e.read().decode(errors="replace")}
+        raw = e.read().decode(errors="replace")
+        try:
+            return e.code, json.loads(raw)
+        except (json.JSONDecodeError, ValueError):
+            return e.code, {"error": raw}
 
 
 def refresh_azure_token(refresh_token):
@@ -320,6 +334,7 @@ def main():
 
         if status == 200:
             log(f"{emoji} {action.upper()} SUCCESS at {loc['name']}")
+            log(f"  API response: {result}")
             result_status = "success"
             result_detail = f"{action} at {loc['name']} ({location_key})"
 
