@@ -289,6 +289,8 @@ def main():
         # Handle token rotation
         if new_refresh != refresh_token:
             log("⚠️ Azure refresh token rotated!")
+            # Mask token in GitHub Actions logs
+            print(f"::add-mask::{new_refresh}")
             output_file = os.environ.get("GITHUB_OUTPUT")
             if output_file:
                 with open(output_file, "a") as f:

@@ -362,6 +362,8 @@ def main():
         # ── Handle token rotation ──
         if new_refresh != refresh_token:
             log("⚠️ Refresh token rotated!")
+            # Mask token in GitHub Actions logs
+            print(f"::add-mask::{new_refresh}")
             set_output("token_rotated", "true")
             set_output("new_refresh_token", new_refresh)
         else:
