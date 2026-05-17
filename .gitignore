@@ -13,5 +13,5 @@ node_modules/
 # Finance tool data
 finance/data/*.db
 finance/data/*.html
-finance/data/models/
+finance/data/models/*.pkl
 copilot-session-*.md
