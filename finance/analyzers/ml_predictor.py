@@ -37,7 +37,8 @@ except ImportError:
     HAS_XGB = False
 
 from analyzers.technical_features import (
-    fetch_ohlc, build_features, FEATURE_COLUMNS,
+    fetch_ohlc, build_features, fetch_cross_asset_history,
+    build_cross_asset_indicators, FEATURE_COLUMNS,
 )
 
 logger = logging.getLogger("jpy_forecast")
@@ -116,7 +117,7 @@ def _train_and_evaluate(X: np.ndarray, y: np.ndarray,
 
     # ── Walk-forward evaluation ──
     n_splits = 5
-    tscv = TimeSeriesSplit(n_splits=n_splits)
+    tscv = TimeSeriesSplit(n_splits=n_splits, gap=1)  # gap=1 prevents label leakage
 
     results = {"logistic": [], "xgboost": []}
     baselines = {"majority": [], "momentum": []}
@@ -268,25 +269,47 @@ def train_model() -> dict:
     """
     logger.info("[ml] Starting model training...")
 
-    # Fetch 5Y OHLC
+    # Fetch 5Y OHLC for USDJPY
     df = fetch_ohlc("USDJPY=X", years=5)
 
-    # Compute features
+    # Compute USDJPY technical features
     features = build_features(df)
 
+    # Fetch and merge cross-asset data (VIX, DXY, gold, oil, yields, Nikkei, FX pairs)
+    try:
+        cross_df = fetch_cross_asset_history(years=5)
+        if not cross_df.empty:
+            cross_features = build_cross_asset_indicators(cross_df, df.index)
+            features = features.join(cross_features, how="left")
+            logger.info(f"[ml] Added {len(cross_features.columns)} cross-asset features")
+    except Exception as e:
+        logger.warning(f"[ml] Cross-asset fetch failed (non-fatal): {e}")
+
     # Target: next-day direction (1 = USD/JPY goes up = JPY weaker)
+    features = features.copy()
     features["target"] = (df["Close"].shift(-1) > df["Close"]).astype(int)
 
-    # Drop NaN rows (from indicators warmup + target shift)
-    features = features.dropna()
+    # Drop rows where core USDJPY features have NaN (warmup period ~50 days)
+    # For cross-asset features, fill remaining NaN with 0 (data may start later)
+    core_cols = [c for c in FEATURE_COLUMNS if c in features.columns]
+    features = features.dropna(subset=core_cols + ["target"])
+    features = features.fillna(0.0)
 
-    # Select feature columns
+    # Select feature columns: USDJPY technicals + any cross-asset columns found
     available_cols = [c for c in FEATURE_COLUMNS if c in features.columns]
-    X = features[available_cols].values
+    # Auto-discover cross-asset columns
+    cross_cols = [c for c in features.columns
+                  if c not in FEATURE_COLUMNS and c != "target"]
+    all_cols = available_cols + sorted(cross_cols)
+
+    logger.info(f"[ml] Total features: {len(all_cols)} "
+                f"({len(available_cols)} technical + {len(cross_cols)} cross-asset)")
+
+    X = features[all_cols].values
     y = features["target"].values
 
     # Train and evaluate
-    result = _train_and_evaluate(X, y, available_cols)
+    result = _train_and_evaluate(X, y, all_cols)
 
     # Save model + metadata
     model_path = MODEL_DIR / "usdjpy_model.pkl"
@@ -301,7 +324,7 @@ def train_model() -> dict:
     metadata = ModelMetadata(
         trained_at=datetime.now(timezone.utc).isoformat(),
         training_date_range=f"{features.index[0].date()} → {features.index[-1].date()}",
-        feature_columns=available_cols,
+        feature_columns=all_cols,
         model_type=result["model_type"],
         n_samples=result["n_samples"],
         walk_forward_auc=round(result["metrics"]["auc"], 4),
@@ -377,17 +400,31 @@ def predict_next_day() -> MLPrediction:
     try:
         df = fetch_ohlc("USDJPY=X", years=1)
         features = build_features(df)
-        features = features.dropna()
+
+        # Add cross-asset features for prediction too
+        try:
+            cross_df = fetch_cross_asset_history(years=1)
+            if not cross_df.empty:
+                cross_features = build_cross_asset_indicators(cross_df, df.index)
+                features = features.join(cross_features, how="left")
+        except Exception as e:
+            logger.warning(f"[ml] Cross-asset prediction fetch failed: {e}")
+
+        # Drop rows with NaN in core features, fill rest with 0
+        core_cols = [c for c in FEATURE_COLUMNS if c in features.columns]
+        features = features.dropna(subset=core_cols)
+        features = features.fillna(0.0)
 
         # Get the latest row
         latest = features.iloc[-1:]
-        available_cols = [c for c in feature_cols if c in latest.columns]
 
-        if len(available_cols) < len(feature_cols):
-            # Fill missing columns with 0
-            for c in feature_cols:
-                if c not in latest.columns:
-                    latest[c] = 0.0
+        if len(latest) == 0:
+            raise ValueError("No valid feature rows after dropna")
+
+        # Fill missing columns with 0
+        for c in feature_cols:
+            if c not in latest.columns:
+                latest[c] = 0.0
 
         X = latest[feature_cols].values
         X_scaled = scaler.transform(X)
