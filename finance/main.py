@@ -28,6 +28,7 @@ from analyzers.gemini_analyzer import analyze_with_gemini
 from analyzers.factor_scorer import compute_factor_scores
 from analyzers.outcome_verifier import verify_past_predictions
 from analyzers.accuracy_tracker import compute_accuracy_stats, auto_calibrate_weights
+from analyzers.ml_predictor import predict_next_day as ml_predict_next_day
 from reporters.email_reporter import send_email
 from data.db import (
     init_db, create_run, finish_run,
@@ -182,9 +183,19 @@ def run_pipeline(dry_run: bool = False):
             errors.append("Gemini analysis failed - using market data only")
             logger.warning("Gemini analysis failed, generating degraded report")
 
-        # 5. Score factors (with calibrated weights)
-        logger.info("Step 4/7: Computing factor scores...")
-        forecast = compute_factor_scores(gemini_result, market_data, calibrated_weights)
+        # 5. ML Prediction (technical analysis)
+        logger.info("Step 4/7: ML prediction (technical analysis)...")
+        ml_prediction = None
+        try:
+            ml_prediction = ml_predict_next_day()
+            logger.info(f"  ML: {ml_prediction.direction} (prob={ml_prediction.probability:.3f}, "
+                        f"model={ml_prediction.model_type}, AUC={ml_prediction.walk_forward_auc:.3f})")
+        except Exception as e:
+            logger.warning(f"  ML prediction failed (non-fatal): {e}")
+
+        # 6. Score factors (with calibrated weights + ML prediction)
+        logger.info("Step 5/7: Computing factor scores...")
+        forecast = compute_factor_scores(gemini_result, market_data, calibrated_weights, ml_prediction)
 
         # Save factor scores to DB
         for f in forecast.factors:
@@ -207,8 +218,8 @@ def run_pipeline(dry_run: bool = False):
         if usdjpy_now > 0:
             insert_outcome_at_forecast(forecast_id, usdjpy_now, jpyvnd_now)
 
-        # 6. Send email
-        logger.info("Step 5/7: Sending email report...")
+        # 7. Send email
+        logger.info("Step 6/7: Sending email report...")
         if dry_run:
             logger.info("[DRY RUN] Skipping email send")
             from reporters.email_reporter import render_report

@@ -369,6 +369,39 @@
 <tr><td height="14" style="font-size:0; line-height:0;">&nbsp;</td></tr>
 {% endif %}
 
+<!-- ═══════════════ ML PREDICTION ═══════════════ -->
+{% if forecast.ml_model_type %}
+<tr><td style="background-color:#161b2e; border-radius:14px; padding:16px 12px; border:1px solid #252d45;">
+  <div style="font-size:11px; font-weight:700; color:#94a3b8; text-transform:uppercase; letter-spacing:1.5px; margin-bottom:12px;">🤖 Dự Đoán ML (Technical Analysis)</div>
+  <table width="100%" cellpadding="0" cellspacing="0" border="0">
+    <tr>
+      <td width="50%" style="padding:8px; background-color:#1a1f35; border-radius:10px;">
+        <div style="font-size:10px; color:#64748b; margin-bottom:4px;">Model</div>
+        <div style="font-size:14px; font-weight:700; color:#e2e8f0;">{{ forecast.ml_model_type|upper }}</div>
+      </td>
+      <td width="4"></td>
+      <td width="50%" style="padding:8px; background-color:#1a1f35; border-radius:10px;">
+        <div style="font-size:10px; color:#64748b; margin-bottom:4px;">Walk-forward AUC</div>
+        <div style="font-size:14px; font-weight:700; color:{% if forecast.ml_auc > 0.55 %}#34d399{% elif forecast.ml_auc > 0.52 %}#fbbf24{% else %}#f87171{% endif %};">{{ (forecast.ml_auc * 100)|round(1) }}%</div>
+      </td>
+    </tr>
+    <tr><td height="6" colspan="3"></td></tr>
+    <tr>
+      <td width="50%" style="padding:8px; background-color:#1a1f35; border-radius:10px;">
+        <div style="font-size:10px; color:#64748b; margin-bottom:4px;">P(USD/JPY tăng)</div>
+        <div style="font-size:14px; font-weight:700; color:{% if forecast.ml_probability > 0.57 %}#f87171{% elif forecast.ml_probability < 0.43 %}#34d399{% else %}#fbbf24{% endif %};">{{ (forecast.ml_probability * 100)|round(1) }}%</div>
+      </td>
+      <td width="4"></td>
+      <td width="50%" style="padding:8px; background-color:#1a1f35; border-radius:10px;">
+        <div style="font-size:10px; color:#64748b; margin-bottom:4px;">ML Weight</div>
+        <div style="font-size:14px; font-weight:700; color:#e2e8f0;">{{ (forecast.ml_weight_used * 100)|round|int }}%</div>
+      </td>
+    </tr>
+  </table>
+</td></tr>
+<tr><td height="14" style="font-size:0; line-height:0;">&nbsp;</td></tr>
+{% endif %}
+
 <!-- ═══════════════ KEY RISKS ═══════════════ -->
 {% if forecast.key_risks %}
 <tr><td style="background-color:#161b2e; border-radius:14px; padding:16px 12px; border:1px solid #252d45;">

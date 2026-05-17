@@ -65,6 +65,11 @@ class ForecastResult:
     usdjpy_forecast_high: float = 0.0
     jpyvnd_forecast_low: float = 0.0
     jpyvnd_forecast_high: float = 0.0
+    # ML prediction metadata
+    ml_model_type: str = ""
+    ml_probability: float = 0.5
+    ml_auc: float = 0.5
+    ml_weight_used: float = 0.0
 
 
 def _score_from_signals(signals: list[dict]) -> tuple[float, float, list[str]]:
@@ -150,10 +155,12 @@ def compute_factor_scores(
     gemini_result: Optional[dict],
     market_data: list[MarketDataPoint],
     weight_overrides: Optional[dict[str, float]] = None,
+    ml_prediction=None,
 ) -> ForecastResult:
     """
     Compute deterministic factor scores from Gemini signals and market data.
     Accepts optional weight_overrides from auto-calibrator.
+    Accepts optional ml_prediction from ML predictor for ensemble blending.
     Returns complete ForecastResult.
     """
     signals_by_factor = {k: [] for k in FACTOR_GROUPS}
@@ -217,11 +224,32 @@ def compute_factor_scores(
     gemini_bias = gemini_result.get("overall_bias", "neutral") if gemini_result else "neutral"
     gemini_confidence = gemini_result.get("confidence", 0.3) if gemini_result else 0.3
 
-    # Blend: 70% deterministic + 30% Gemini overall
+    # Blend: 70% deterministic + 30% Gemini overall + optional ML
     gemini_score_map = {"stronger": 2.0, "weaker": -2.0, "neutral": 0.0}
     gemini_score = gemini_score_map.get(gemini_bias, 0.0) * gemini_confidence
-    blended = round(overall * 0.7 + gemini_score * 0.3, 2)
-    blended = max(-5.0, min(5.0, blended))
+
+    # ML ensemble blending
+    ml_weight_used = 0.0
+    ml_model_type = ""
+    ml_probability = 0.5
+    ml_auc = 0.5
+
+    if ml_prediction and ml_prediction.model_type != "unavailable":
+        from analyzers.ml_predictor import get_ml_weight
+        ml_weight_used = get_ml_weight(ml_prediction)
+        ml_model_type = ml_prediction.model_type
+        ml_probability = ml_prediction.probability
+        ml_auc = ml_prediction.walk_forward_auc
+
+        # Blend: (1-ml_weight)*news_score + ml_weight*ml_score
+        news_score = overall * 0.7 + gemini_score * 0.3
+        blended = round(news_score * (1 - ml_weight_used) + ml_prediction.ml_score * ml_weight_used, 2)
+        blended = max(-5.0, min(5.0, blended))
+        logger.info(f"  ML ensemble: news={news_score:+.2f} * {1-ml_weight_used:.0%} + "
+                     f"ml={ml_prediction.ml_score:+.2f} * {ml_weight_used:.0%} = {blended:+.2f}")
+    else:
+        blended = round(overall * 0.7 + gemini_score * 0.3, 2)
+        blended = max(-5.0, min(5.0, blended))
 
     # Determine directions
     if blended > 0.5:
@@ -297,6 +325,10 @@ def compute_factor_scores(
         usdjpy_forecast_high=usdjpy_forecast_high,
         jpyvnd_forecast_low=jpyvnd_forecast_low,
         jpyvnd_forecast_high=jpyvnd_forecast_high,
+        ml_model_type=ml_model_type,
+        ml_probability=ml_probability,
+        ml_auc=ml_auc,
+        ml_weight_used=ml_weight_used,
     )
 
 

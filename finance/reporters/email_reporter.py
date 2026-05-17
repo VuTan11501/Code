@@ -108,6 +108,10 @@ def render_report(
         "usdjpy_forecast_high": forecast.usdjpy_forecast_high,
         "jpyvnd_forecast_low": forecast.jpyvnd_forecast_low,
         "jpyvnd_forecast_high": forecast.jpyvnd_forecast_high,
+        "ml_model_type": forecast.ml_model_type,
+        "ml_probability": forecast.ml_probability,
+        "ml_auc": forecast.ml_auc,
+        "ml_weight_used": forecast.ml_weight_used,
         "factors": [
             {
                 "name": f.name,
