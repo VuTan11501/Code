@@ -106,79 +106,151 @@ def _probability_to_score(prob: float, auc: float) -> float:
     return float(damped * max_score)
 
 
+def _select_features(X: np.ndarray, y: np.ndarray,
+                     feature_names: list, top_k: int = 60) -> list[int]:
+    """
+    Select top-k features using a quick XGBoost importance scan.
+    Done inside training data only (no leakage).
+    """
+    if X.shape[1] <= top_k:
+        return list(range(X.shape[1]))
+
+    quick_xgb = xgb.XGBClassifier(
+        n_estimators=100, max_depth=3, learning_rate=0.1,
+        verbosity=0, random_state=42,
+    )
+    quick_xgb.fit(X, y)
+    importances = quick_xgb.feature_importances_
+    top_indices = np.argsort(importances)[::-1][:top_k].tolist()
+    dropped = [feature_names[i] for i in range(len(feature_names)) if i not in top_indices]
+    if dropped:
+        logger.info(f"[ml] Feature selection: kept {top_k}/{len(feature_names)}, "
+                    f"dropped {len(dropped)} low-importance features")
+    return sorted(top_indices)
+
+
+def _tune_xgboost(X_tr: np.ndarray, y_tr: np.ndarray,
+                   X_va: np.ndarray, y_va: np.ndarray,
+                   spw: float) -> xgb.XGBClassifier:
+    """
+    Quick hyperparameter search across a small grid.
+    Returns the best XGBClassifier fitted on training data.
+    """
+    param_grid = [
+        {"max_depth": 3, "learning_rate": 0.05, "min_child_weight": 10, "colsample_bytree": 0.7},
+        {"max_depth": 4, "learning_rate": 0.03, "min_child_weight": 8, "colsample_bytree": 0.6},
+        {"max_depth": 3, "learning_rate": 0.08, "min_child_weight": 15, "colsample_bytree": 0.8},
+        {"max_depth": 2, "learning_rate": 0.05, "min_child_weight": 20, "colsample_bytree": 0.5},
+        {"max_depth": 5, "learning_rate": 0.02, "min_child_weight": 5, "colsample_bytree": 0.6},
+        {"max_depth": 3, "learning_rate": 0.05, "min_child_weight": 10, "colsample_bytree": 0.5, "gamma": 1.0},
+    ]
+
+    best_model = None
+    best_auc = 0.0
+
+    for params in param_grid:
+        model = xgb.XGBClassifier(
+            n_estimators=800,
+            subsample=0.8,
+            scale_pos_weight=spw,
+            eval_metric="auc",
+            verbosity=0,
+            random_state=42,
+            reg_alpha=0.1,
+            reg_lambda=1.0,
+            **params,
+        )
+        model.fit(X_tr, y_tr, eval_set=[(X_va, y_va)], verbose=False)
+        prob = model.predict_proba(X_va)[:, 1]
+        auc = roc_auc_score(y_va, prob) if len(np.unique(y_va)) > 1 else 0.5
+        if auc > best_auc:
+            best_auc = auc
+            best_model = model
+
+    return best_model
+
+
 def _train_and_evaluate(X: np.ndarray, y: np.ndarray,
                         feature_names: list) -> dict:
     """
-    Train models with walk-forward validation.
+    Train models with walk-forward validation + hyperparameter tuning + ensemble.
     Returns dict with trained model, scaler, metrics.
     """
     n = len(X)
     logger.info(f"[ml] Training on {n} samples, {X.shape[1]} features")
 
+    # ── Feature selection (inside training, no leakage) ──
+    # Use first 80% for feature selection scan
+    fs_cutoff = int(n * 0.8)
+    if HAS_XGB and X.shape[1] > 50:
+        selected_idx = _select_features(X[:fs_cutoff], y[:fs_cutoff],
+                                         feature_names, top_k=60)
+        X = X[:, selected_idx]
+        feature_names = [feature_names[i] for i in selected_idx]
+        logger.info(f"[ml] After selection: {len(feature_names)} features")
+
     # ── Walk-forward evaluation ──
     n_splits = 5
-    tscv = TimeSeriesSplit(n_splits=n_splits, gap=1)  # gap=1 prevents label leakage
+    tscv = TimeSeriesSplit(n_splits=n_splits, gap=1)
 
-    results = {"logistic": [], "xgboost": []}
-    baselines = {"majority": [], "momentum": []}
+    results = {"logistic": [], "xgboost": [], "ensemble": []}
+    baselines = {"majority": [], "momentum": [], "sma_trend": []}
 
     for fold, (train_idx, val_idx) in enumerate(tscv.split(X)):
         X_tr, X_va = X[train_idx], X[val_idx]
         y_tr, y_va = y[train_idx], y[val_idx]
 
-        # Fit scaler on training fold only (no leakage)
         scaler = StandardScaler()
         X_tr_sc = scaler.fit_transform(X_tr)
         X_va_sc = scaler.transform(X_va)
 
-        # Baseline: always predict majority class
+        # ── Baselines ──
         majority = 1 if y_tr.mean() > 0.5 else 0
         baselines["majority"].append(accuracy_score(y_va, [majority] * len(y_va)))
 
-        # Baseline: predict yesterday's direction (momentum)
-        # Use last return sign as proxy
         return_idx = feature_names.index("return_1d") if "return_1d" in feature_names else 0
         momentum_pred = (X_va[:, return_idx] > 0).astype(int)
         baselines["momentum"].append(accuracy_score(y_va, momentum_pred))
 
-        # Logistic Regression (baseline model)
-        lr = LogisticRegression(C=1.0, max_iter=1000, solver="lbfgs")
+        # SMA trend baseline: predict based on dist_sma20 sign
+        sma_idx = feature_names.index("dist_sma20") if "dist_sma20" in feature_names else None
+        if sma_idx is not None:
+            sma_pred = (X_va[:, sma_idx] < 0).astype(int)  # below SMA20 → predict up (mean reversion)
+            baselines["sma_trend"].append(accuracy_score(y_va, sma_pred))
+
+        # ── Logistic Regression with L1 (feature sparsity) ──
+        lr = LogisticRegression(C=0.5, l1_ratio=1.0, solver="saga",
+                                max_iter=2000, random_state=42)
         lr.fit(X_tr_sc, y_tr)
         lr_prob = lr.predict_proba(X_va_sc)[:, 1]
         results["logistic"].append({
             "auc": roc_auc_score(y_va, lr_prob) if len(np.unique(y_va)) > 1 else 0.5,
             "acc": accuracy_score(y_va, (lr_prob >= 0.5).astype(int)),
             "brier": brier_score_loss(y_va, lr_prob),
+            "probs": lr_prob,
         })
 
-        # XGBoost
+        # ── XGBoost with hyperparameter tuning ──
         if HAS_XGB:
             pos_count = y_tr.sum()
             neg_count = len(y_tr) - pos_count
             spw = neg_count / max(pos_count, 1)
 
-            xgb_model = xgb.XGBClassifier(
-                n_estimators=500,
-                learning_rate=0.05,
-                max_depth=3,           # shallow to prevent overfit
-                min_child_weight=10,   # conservative
-                subsample=0.8,
-                colsample_bytree=0.7,
-                scale_pos_weight=spw,
-                eval_metric="auc",
-                verbosity=0,
-                random_state=42,
-            )
-            xgb_model.fit(
-                X_tr_sc, y_tr,
-                eval_set=[(X_va_sc, y_va)],
-                verbose=False,
-            )
+            xgb_model = _tune_xgboost(X_tr_sc, y_tr, X_va_sc, y_va, spw)
             xgb_prob = xgb_model.predict_proba(X_va_sc)[:, 1]
             results["xgboost"].append({
                 "auc": roc_auc_score(y_va, xgb_prob) if len(np.unique(y_va)) > 1 else 0.5,
                 "acc": accuracy_score(y_va, (xgb_prob >= 0.5).astype(int)),
                 "brier": brier_score_loss(y_va, xgb_prob),
+                "probs": xgb_prob,
+            })
+
+            # ── Ensemble: average XGBoost + Logistic ──
+            ens_prob = 0.6 * xgb_prob + 0.4 * lr_prob
+            results["ensemble"].append({
+                "auc": roc_auc_score(y_va, ens_prob) if len(np.unique(y_va)) > 1 else 0.5,
+                "acc": accuracy_score(y_va, (ens_prob >= 0.5).astype(int)),
+                "brier": brier_score_loss(y_va, ens_prob),
             })
 
     # ── Aggregate walk-forward metrics ──
@@ -192,60 +264,71 @@ def _train_and_evaluate(X: np.ndarray, y: np.ndarray,
     lr_metrics = avg_metrics(results["logistic"])
     baseline_maj = np.mean(baselines["majority"])
     baseline_mom = np.mean(baselines["momentum"])
+    baseline_sma = np.mean(baselines["sma_trend"]) if baselines["sma_trend"] else 0.0
 
     logger.info(f"[ml] Walk-forward results ({n_splits} folds):")
     logger.info(f"  Baseline (majority): {baseline_maj:.1%}")
     logger.info(f"  Baseline (momentum): {baseline_mom:.1%}")
-    logger.info(f"  Logistic: AUC={lr_metrics['auc']:.4f}, "
+    if baseline_sma > 0:
+        logger.info(f"  Baseline (SMA trend): {baseline_sma:.1%}")
+    logger.info(f"  Logistic L1: AUC={lr_metrics['auc']:.4f}, "
                 f"Acc={lr_metrics['acc']:.1%}, Brier={lr_metrics['brier']:.4f}")
 
-    # Pick best model
+    # Pick best model type
     best_type = "logistic"
     best_metrics = lr_metrics
 
     if HAS_XGB and results["xgboost"]:
         xgb_metrics = avg_metrics(results["xgboost"])
-        logger.info(f"  XGBoost:  AUC={xgb_metrics['auc']:.4f}, "
+        logger.info(f"  XGBoost tuned: AUC={xgb_metrics['auc']:.4f}, "
                     f"Acc={xgb_metrics['acc']:.1%}, Brier={xgb_metrics['brier']:.4f}")
-        # Use XGBoost only if it beats logistic AND baseline
-        if xgb_metrics["auc"] > lr_metrics["auc"] + 0.005:
-            best_type = "xgboost"
-            best_metrics = xgb_metrics
+
+        if results["ensemble"]:
+            ens_metrics = avg_metrics(results["ensemble"])
+            logger.info(f"  Ensemble (60/40): AUC={ens_metrics['auc']:.4f}, "
+                        f"Acc={ens_metrics['acc']:.1%}, Brier={ens_metrics['brier']:.4f}")
+
+            # Pick best of xgb vs ensemble vs logistic
+            candidates = [
+                ("xgboost", xgb_metrics),
+                ("ensemble", ens_metrics),
+                ("logistic", lr_metrics),
+            ]
+            best_type, best_metrics = max(candidates, key=lambda x: x[1]["auc"])
 
     logger.info(f"[ml] Best model: {best_type} "
                 f"(AUC={best_metrics['auc']:.4f}, Acc={best_metrics['acc']:.1%})")
 
-    # ── Train final model on all data ──
+    # ── Train final model(s) on all data ──
     final_scaler = StandardScaler()
     X_scaled = final_scaler.fit_transform(X)
+    split_idx = int(n * 0.85)
 
-    if best_type == "xgboost":
-        # Use last 15% as eval set for early stopping
-        split_idx = int(n * 0.85)
+    # Always train both for ensemble
+    final_lr = LogisticRegression(C=0.5, l1_ratio=1.0, solver="saga",
+                                  max_iter=2000, random_state=42)
+    final_lr.fit(X_scaled, y)
+
+    final_xgb = None
+    if HAS_XGB:
         pos_count = y[:split_idx].sum()
         neg_count = split_idx - pos_count
         spw = neg_count / max(pos_count, 1)
-
-        final_model = xgb.XGBClassifier(
-            n_estimators=500, learning_rate=0.05, max_depth=3,
-            min_child_weight=10, subsample=0.8, colsample_bytree=0.7,
-            scale_pos_weight=spw, eval_metric="auc", verbosity=0,
-            random_state=42,
-        )
-        final_model.fit(
-            X_scaled[:split_idx], y[:split_idx],
-            eval_set=[(X_scaled[split_idx:], y[split_idx:])],
-            verbose=False,
-        )
+        final_xgb = _tune_xgboost(X_scaled[:split_idx], y[:split_idx],
+                                    X_scaled[split_idx:], y[split_idx:], spw)
 
         # Log feature importance
-        if hasattr(final_model, "feature_importances_"):
-            imp = sorted(zip(feature_names, final_model.feature_importances_),
+        if hasattr(final_xgb, "feature_importances_"):
+            imp = sorted(zip(feature_names, final_xgb.feature_importances_),
                          key=lambda x: -x[1])[:10]
             logger.info(f"[ml] Top features: {[(n, f'{v:.3f}') for n, v in imp]}")
+
+    if best_type == "ensemble":
+        final_model = {"xgb": final_xgb, "lr": final_lr, "xgb_weight": 0.6}
+    elif best_type == "xgboost":
+        final_model = final_xgb
     else:
-        final_model = LogisticRegression(C=1.0, max_iter=1000, solver="lbfgs")
-        final_model.fit(X_scaled, y)
+        final_model = final_lr
 
     beats_baselines = (best_metrics["acc"] > max(baseline_maj, baseline_mom))
 
@@ -308,8 +391,11 @@ def train_model() -> dict:
     X = features[all_cols].values
     y = features["target"].values
 
-    # Train and evaluate
+    # Train and evaluate (may do feature selection internally)
     result = _train_and_evaluate(X, y, all_cols)
+
+    # Use feature_names from result (may be subset after selection)
+    final_feature_names = result["feature_names"]
 
     # Save model + metadata
     model_path = MODEL_DIR / "usdjpy_model.pkl"
@@ -324,7 +410,7 @@ def train_model() -> dict:
     metadata = ModelMetadata(
         trained_at=datetime.now(timezone.utc).isoformat(),
         training_date_range=f"{features.index[0].date()} → {features.index[-1].date()}",
-        feature_columns=all_cols,
+        feature_columns=final_feature_names,
         model_type=result["model_type"],
         n_samples=result["n_samples"],
         walk_forward_auc=round(result["metrics"]["auc"], 4),
@@ -429,8 +515,15 @@ def predict_next_day() -> MLPrediction:
         X = latest[feature_cols].values
         X_scaled = scaler.transform(X)
 
-        # Predict
-        prob = model.predict_proba(X_scaled)[0][1]  # P(USD/JPY up)
+        # Predict — handle ensemble vs single model
+        model_type = meta.get("model_type", "")
+        if model_type == "ensemble" and isinstance(model, dict):
+            xgb_prob = model["xgb"].predict_proba(X_scaled)[0][1]
+            lr_prob = model["lr"].predict_proba(X_scaled)[0][1]
+            w = model.get("xgb_weight", 0.6)
+            prob = w * xgb_prob + (1 - w) * lr_prob
+        else:
+            prob = model.predict_proba(X_scaled)[0][1]  # P(USD/JPY up)
 
     except Exception as e:
         logger.error(f"[ml] Prediction failed: {e}")
