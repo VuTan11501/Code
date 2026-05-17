@@ -29,8 +29,8 @@
     {"datetime": "2026-05-16 22:00", "action": "checkin",  "location": "home", "note": "Sat OT night"},
     {"datetime": "2026-05-17 03:30", "action": "checkout", "location": "home", "note": "May16 OT CO"},
 
-    {"datetime": "2026-05-17 15:30", "action": "checkin",  "location": "home", "note": "Sun OT full"},
-    {"datetime": "2026-05-18 04:30", "action": "checkout", "location": "home", "note": "May17 OT CO +1h break"},
+    {"datetime": "2026-05-17 14:30", "action": "checkin",  "location": "home", "note": "Sun OT full (CI early 1h for break)"},
+    {"datetime": "2026-05-18 03:30", "action": "checkout", "location": "home", "note": "May17 OT CO"},
 
     {"datetime": "2026-05-18 09:00", "action": "checkin",  "location": "office"},
     {"datetime": "2026-05-19 03:30", "action": "checkout", "location": "home", "note": "May18 OT night CO"},
@@ -50,8 +50,8 @@
     {"datetime": "2026-05-23 22:00", "action": "checkin",  "location": "home", "note": "Sat OT night"},
     {"datetime": "2026-05-24 03:30", "action": "checkout", "location": "home", "note": "May23 OT CO"},
 
-    {"datetime": "2026-05-24 15:30", "action": "checkin",  "location": "home", "note": "Sun OT full"},
-    {"datetime": "2026-05-25 04:30", "action": "checkout", "location": "home", "note": "May24 OT CO +1h break"},
+    {"datetime": "2026-05-24 14:30", "action": "checkin",  "location": "home", "note": "Sun OT full (CI early 1h for break)"},
+    {"datetime": "2026-05-25 03:30", "action": "checkout", "location": "home", "note": "May24 OT CO"},
 
     {"datetime": "2026-05-25 09:00", "action": "checkin",  "location": "office"},
     {"datetime": "2026-05-25 18:00", "action": "checkout", "location": "office"},
@@ -67,20 +67,20 @@
     {"datetime": "2026-05-30 22:00", "action": "checkin",  "location": "home", "note": "Sat OT night"},
     {"datetime": "2026-05-31 03:30", "action": "checkout", "location": "home", "note": "May30 OT CO"},
 
-    {"datetime": "2026-05-31 15:30", "action": "checkin",  "location": "home", "note": "Sun OT full"},
-    {"datetime": "2026-06-01 04:30", "action": "checkout", "location": "home", "note": "May31 OT CO +1h break"}
+    {"datetime": "2026-05-31 14:30", "action": "checkin",  "location": "home", "note": "Sun OT full (CI early 1h for break)"},
+    {"datetime": "2026-06-01 03:30", "action": "checkout", "location": "home", "note": "May31 OT CO"}
   ],
 
   "pending_ot": [
     {"date": "2026-05-11", "start": "18:00", "end": "00:00", "hours": 6.0, "reason": "task shishin"},
     {"date": "2026-05-16", "start": "22:00", "end": "03:30", "hours": 5.5, "reason": "task shishin"},
-    {"date": "2026-05-17", "start": "15:30", "end": "03:30", "hours": 12.0, "reason": "task shishin"},
+    {"date": "2026-05-17", "start": "14:30", "end": "03:30", "hours": 12.0, "reason": "task shishin"},
     {"date": "2026-05-18", "start": "22:00", "end": "03:30", "hours": 5.5, "reason": "task shishin"},
     {"date": "2026-05-19", "start": "22:00", "end": "03:30", "hours": 5.5, "reason": "task shishin"},
     {"date": "2026-05-21", "start": "22:00", "end": "03:30", "hours": 5.5, "reason": "task shishin"},
     {"date": "2026-05-23", "start": "22:00", "end": "03:30", "hours": 5.5, "reason": "task shishin"},
-    {"date": "2026-05-24", "start": "15:30", "end": "03:30", "hours": 12.0, "reason": "task shishin"},
+    {"date": "2026-05-24", "start": "14:30", "end": "03:30", "hours": 12.0, "reason": "task shishin"},
     {"date": "2026-05-30", "start": "22:00", "end": "03:30", "hours": 5.5, "reason": "task shishin"},
-    {"date": "2026-05-31", "start": "15:30", "end": "03:30", "hours": 12.0, "reason": "task shishin"}
+    {"date": "2026-05-31", "start": "14:30", "end": "03:30", "hours": 12.0, "reason": "task shishin"}
   ]
 }

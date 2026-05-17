@@ -7,9 +7,8 @@ on:
     - cron: '0 9 * * 1-5'     # 18:00 JST Mon-Fri (workday CO)
     - cron: '0 13 * * *'      # 22:00 JST (night OT CI)
     - cron: '0 15 * * *'      # 00:00 JST (midnight CO)
-    - cron: '30 18 * * *'     # 03:30 JST (night OT CO)
-    - cron: '30 19 * * *'     # 04:30 JST (Sunday OT CO)
-    - cron: '30 6 * * 0'      # 15:30 JST Sunday (Sunday OT CI)
+    - cron: '30 18 * * *'     # 03:30 JST (night OT CO + Sunday OT CO)
+    - cron: '30 5 * * 0'      # 14:30 JST Sunday (Sunday OT CI, 1h early for break)
 
   workflow_dispatch:
     inputs:

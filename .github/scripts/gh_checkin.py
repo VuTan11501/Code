@@ -199,9 +199,8 @@ CRON_TYPE_MAP = {
     "0 9 * * 1-5":  "checkout",  # 18:00 JST Mon-Fri workday CO
     "0 13 * * *":   "checkin",   # 22:00 JST night OT CI
     "0 15 * * *":   "checkout",  # 00:00 JST midnight CO
-    "30 18 * * *":  "checkout",  # 03:30 JST night OT CO
-    "30 19 * * *":  "checkout",  # 04:30 JST Sunday OT CO
-    "30 6 * * 0":   "checkin",   # 15:30 JST Sunday OT CI
+    "30 18 * * *":  "checkout",  # 03:30 JST night OT CO + Sunday OT CO
+    "30 5 * * 0":   "checkin",   # 14:30 JST Sunday OT CI
 }
 
 
