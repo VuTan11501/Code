@@ -125,15 +125,16 @@ def get_dakoku_status(token, date_str):
 #  CHECKIN / CHECKOUT
 # ═══════════════════════════════════════════════════════════
 
-def do_dakoku(token, checkin_type, lat, lon, is_checkout=False):
+def do_dakoku(token, checkin_type, lat, lon, is_checkout=False,
+              is_checkout_yesterday=False, break_minutes=0):
     """POST dakoku. checkin_type: 1=checkin, 2=checkout."""
     now = datetime.now(JST)
     body = {
         "employeeId": 8883,
         "appId": "com.fjp.portal",
         "logTime": now.strftime("%Y-%m-%dT%H:%M:%S"),
-        "isCheckoutYesterday": False,
-        "TotalOfBreakTime": 0,
+        "isCheckoutYesterday": is_checkout_yesterday,
+        "TotalOfBreakTime": break_minutes,
     }
     if is_checkout:
         body.update(checkoutType=checkin_type, checkoutLongitute=lon, checkoutLatitude=lat)
@@ -440,8 +441,40 @@ def main():
         # ── Execute ──
         checkin_type = 1  # GPS-based checkin type
         is_checkout = action == "checkout"
+
+        # Bug #1 fix: detect overnight checkout using schedule time + API state
+        is_checkout_yesterday = False
+        break_minutes = 0
+        if is_checkout:
+            # Use schedule entry time if available; for force_action use current time
+            if action_entry.get("datetime"):
+                entry_dt = datetime.strptime(action_entry["datetime"], "%Y-%m-%d %H:%M").replace(tzinfo=JST)
+                is_overnight_time = 0 <= entry_dt.hour < 6
+            else:
+                is_overnight_time = 0 <= now_jst.hour < 6
+            is_checkout_yesterday = bool(is_overnight_time and ci_yest and not co_yest)
+            if is_checkout_yesterday:
+                log("  🌙 Overnight checkout → isCheckoutYesterday=True")
+
+            # Bug #4 fix: calculate break time from shift duration
+            ci_ref = ci_yest if is_checkout_yesterday else ci_today
+            if ci_ref:
+                try:
+                    ci_dt = datetime.fromisoformat(str(ci_ref).replace("Z", "+00:00"))
+                    if ci_dt.tzinfo is None:
+                        ci_dt = ci_dt.replace(tzinfo=JST)
+                    shift_h = (now_jst - ci_dt).total_seconds() / 3600
+                    if shift_h > 8:
+                        break_minutes = 60
+                    elif shift_h > 6:
+                        break_minutes = 45
+                    log(f"  Shift ~{shift_h:.1f}h → break {break_minutes}min")
+                except (ValueError, TypeError):
+                    log(f"  ⚠️ Could not parse CI time for break calc: {ci_ref}")
+
         emoji = "📥" if action == "checkin" else "📤"
-        status, result = do_dakoku(dokokin_token, checkin_type, loc["lat"], loc["lon"], is_checkout)
+        status, result = do_dakoku(dokokin_token, checkin_type, loc["lat"], loc["lon"],
+                                   is_checkout, is_checkout_yesterday, break_minutes)
 
         if status == 200:
             log(f"{emoji} {action.upper()} SUCCESS at {loc['name']}")
@@ -449,9 +482,10 @@ def main():
             result_status = "success"
             result_detail = f"{action} at {loc['name']} ({location_key})"
 
-            # Post-action verification
-            log("Verifying status after action...")
-            ci_after, co_after = get_dakoku_status(dokokin_token, today_str)
+            # Post-action verification (check correct date for overnight CO)
+            verify_date = yesterday_str if is_checkout_yesterday else today_str
+            log(f"Verifying status after action (date={verify_date})...")
+            ci_after, co_after = get_dakoku_status(dokokin_token, verify_date)
             if ci_after:
                 log(f"  Verified: CI={ci_after}, CO={co_after or 'pending'}")
 

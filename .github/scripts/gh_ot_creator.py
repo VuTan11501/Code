@@ -124,6 +124,17 @@ def search_ot_requests(token, year, month):
     return []
 
 
+def calculate_night_hours(start_dt, end_dt):
+    """Count OT hours overlapping with the 22:00-05:00 late-night window."""
+    total_min = int((end_dt - start_dt).total_seconds() / 60)
+    night_min = 0
+    for m in range(total_min):
+        h = (start_dt + timedelta(minutes=m)).hour
+        if h >= 22 or h < 5:
+            night_min += 1
+    return round(night_min / 60, 2)
+
+
 def create_ot_request(token, entry):
     """Create a single OT request from a pending_ot entry."""
     d = date.fromisoformat(entry["date"])
@@ -141,14 +152,18 @@ def create_ot_request(token, entry):
     is_sun = d.weekday() == 6
     is_sat = d.weekday() == 5
 
+    # Bug #2-3 fix: split OT into normal and late-night (22:00-05:00)
+    late_night = min(calculate_night_hours(start_dt, end_dt), ot_hours)
+    normal_ot = round(ot_hours - late_night, 2)
+
     payload = [{
         "employeeId": EMPLOYEE_ID,
         "requestDate": f"{d}T00:00:00",
         "startTime": start_dt.strftime("%Y-%m-%dT%H:%M:%S"),
         "endTime": end_dt.strftime("%Y-%m-%dT%H:%M:%S"),
         "totalOvertime": ot_hours,
-        "normalOvertime": ot_hours,
-        "lateNightOvertime": 0.0,
+        "normalOvertime": normal_ot,
+        "lateNightOvertime": late_night,
         "holidayOvertime": 0.0,
         "sundayWorkingtime": ot_hours if is_sun else 0.0,
         "saturdayWorkingtime": ot_hours if is_sat else 0.0,
