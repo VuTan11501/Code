@@ -162,26 +162,46 @@ def load_schedule():
         return json.load(f)
 
 
-def find_matching_action(schedule, now_jst):
-    """Find the closest scheduled action within tolerance.
+def find_matching_action(schedule, now_jst, expected_type=None):
+    """Find the closest *past* scheduled action within tolerance.
 
-    Uses full datetime comparison (not just time-of-day) so cross-midnight
-    delays from GitHub Actions cron are handled correctly.  Returns the
-    single closest match rather than the first one found.
+    Only matches actions whose scheduled time has already passed (with 5-min
+    grace for early triggers).  This prevents a delayed cron from jumping
+    forward to the next action (e.g. a CO cron accidentally triggering a CI).
+    If expected_type is set (from TRIGGER_CRON), only matches that action type.
+    Returns the single closest past match.
     """
     tolerance = schedule.get("tolerance_minutes", 180)
     best_entry = None
     best_diff = float("inf")
 
     for entry in schedule["actions"]:
+        if expected_type and entry["action"] != expected_type:
+            continue
+
         dt = datetime.strptime(entry["datetime"], "%Y-%m-%d %H:%M").replace(tzinfo=JST)
-        diff_minutes = abs((now_jst - dt).total_seconds()) / 60
+        diff_minutes = (now_jst - dt).total_seconds() / 60  # positive = past
+
+        if diff_minutes < -5:  # skip future actions (allow 5min early)
+            continue
 
         if diff_minutes <= tolerance and diff_minutes < best_diff:
             best_diff = diff_minutes
             best_entry = entry
 
     return best_entry
+
+
+# Cron expression → expected action type
+CRON_TYPE_MAP = {
+    "0 0 * * 1-5":  "checkin",   # 09:00 JST Mon-Fri workday CI
+    "0 9 * * 1-5":  "checkout",  # 18:00 JST Mon-Fri workday CO
+    "0 13 * * *":   "checkin",   # 22:00 JST night OT CI
+    "0 15 * * *":   "checkout",  # 00:00 JST midnight CO
+    "30 18 * * *":  "checkout",  # 03:30 JST night OT CO
+    "30 19 * * *":  "checkout",  # 04:30 JST Sunday OT CO
+    "30 6 * * 0":   "checkin",   # 15:30 JST Sunday OT CI
+}
 
 
 # ═══════════════════════════════════════════════════════════
@@ -356,7 +376,12 @@ def main():
             }
             log(f"FORCE mode: {force_action} at {force_location}")
         else:
-            action_entry = find_matching_action(schedule, now_jst)
+            # Use TRIGGER_CRON to filter by expected action type
+            trigger_cron = os.environ.get("TRIGGER_CRON", "")
+            expected_type = CRON_TYPE_MAP.get(trigger_cron)
+            if trigger_cron:
+                log(f"Trigger cron: '{trigger_cron}' → expected type: {expected_type or 'any'}")
+            action_entry = find_matching_action(schedule, now_jst, expected_type)
 
         if not action_entry:
             log("No scheduled action for current time. Skipping.")

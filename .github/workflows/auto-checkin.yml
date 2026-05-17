@@ -59,6 +59,7 @@ jobs:
           AZURE_REFRESH_TOKEN: ${{ secrets.AZURE_REFRESH_TOKEN }}
           FORCE_ACTION: ${{ inputs.action == 'auto' && '' || inputs.action }}
           FORCE_LOCATION: ${{ inputs.location || 'office' }}
+          TRIGGER_CRON: ${{ github.event.schedule }}
           SMTP_USER: ${{ secrets.SMTP_USER }}
           SMTP_PASS: ${{ secrets.SMTP_PASS }}
           NOTIFY_EMAIL: ${{ secrets.NOTIFY_EMAIL }}
