@@ -11,6 +11,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
 
+import css_inline
 from jinja2 import Environment, FileSystemLoader
 
 from config import (
@@ -23,6 +24,14 @@ from crawlers.base import Article, MarketDataPoint, CrawlerHealth
 logger = logging.getLogger("jpy_forecast")
 
 JST = timezone(timedelta(hours=9))
+
+# CSS inliner: inlines <style> rules into style="" attrs for email client compatibility
+# Keeps <style> block as fallback + preserves @import/@media at-rules
+_css_inliner = css_inline.CSSInliner(
+    keep_style_tags=True,
+    keep_link_tags=True,
+    load_remote_stylesheets=False,
+)
 
 
 def render_report(
@@ -95,6 +104,10 @@ def render_report(
         "vnd_analysis": forecast.vnd_analysis,
         "vnd_direction": forecast.vnd_direction,
         "jpyvnd_rate": forecast.jpyvnd_rate,
+        "usdjpy_forecast_low": forecast.usdjpy_forecast_low,
+        "usdjpy_forecast_high": forecast.usdjpy_forecast_high,
+        "jpyvnd_forecast_low": forecast.jpyvnd_forecast_low,
+        "jpyvnd_forecast_high": forecast.jpyvnd_forecast_high,
         "factors": [
             {
                 "name": f.name,
@@ -158,6 +171,12 @@ def render_report(
         source_health=health_dicts,
         accuracy=accuracy_dict,
     )
+
+    # Inline CSS into style="" attributes for email client compatibility
+    try:
+        html = _css_inliner.inline(html)
+    except Exception as e:
+        logger.warning(f"[email] CSS inlining failed, sending raw HTML: {e}")
 
     return html
 

@@ -60,6 +60,11 @@ class ForecastResult:
     vnd_analysis: str = ""
     vnd_direction: str = "sideways"  # up=1JPY buys more VND, down=less
     jpyvnd_rate: float = 0.0
+    # Next-day price forecast
+    usdjpy_forecast_low: float = 0.0
+    usdjpy_forecast_high: float = 0.0
+    jpyvnd_forecast_low: float = 0.0
+    jpyvnd_forecast_high: float = 0.0
 
 
 def _score_from_signals(signals: list[dict]) -> tuple[float, float, list[str]]:
@@ -235,10 +240,34 @@ def compute_factor_scores(
 
     # Get JPY/VND rate from market data
     jpyvnd_rate = 0.0
+    usdjpy_current = 0.0
     for md in market_data:
         if md.symbol == "jpyvnd":
             jpyvnd_rate = md.value
-            break
+        elif md.symbol == "usdjpy":
+            usdjpy_current = md.value
+
+    # Compute next-day USD/JPY forecast range from score + current price
+    # Score -5 to +5 maps to roughly ±2% expected move
+    # Negative score = JPY weaker = USD/JPY goes UP
+    usdjpy_forecast_low = 0.0
+    usdjpy_forecast_high = 0.0
+    jpyvnd_forecast_low = 0.0
+    jpyvnd_forecast_high = 0.0
+    if usdjpy_current > 0:
+        base_move_pct = -blended * 0.25  # score → expected % change (inverted: neg score → positive USD/JPY)
+        volatility = max(0.15, (1 - overall_confidence) * 0.5)  # uncertainty band
+        move_low = (base_move_pct - volatility) / 100
+        move_high = (base_move_pct + volatility) / 100
+        usdjpy_forecast_low = round(usdjpy_current * (1 + move_low), 2)
+        usdjpy_forecast_high = round(usdjpy_current * (1 + move_high), 2)
+        # JPY/VND forecast: derive from USD/JPY forecast + current USDVND
+        if jpyvnd_rate > 0:
+            # When USD/JPY goes up (JPY weaker), JPY/VND goes down
+            # jpyvnd = usdvnd / usdjpy → higher usdjpy = lower jpyvnd
+            usdvnd_current = jpyvnd_rate * usdjpy_current
+            jpyvnd_forecast_high = round(usdvnd_current / usdjpy_forecast_low, 1)
+            jpyvnd_forecast_low = round(usdvnd_current / usdjpy_forecast_high, 1)
 
     # If no Gemini VND analysis, infer from JPY direction
     if not vnd_analysis:
@@ -264,6 +293,10 @@ def compute_factor_scores(
         vnd_analysis=vnd_analysis,
         vnd_direction=vnd_direction,
         jpyvnd_rate=jpyvnd_rate,
+        usdjpy_forecast_low=usdjpy_forecast_low,
+        usdjpy_forecast_high=usdjpy_forecast_high,
+        jpyvnd_forecast_low=jpyvnd_forecast_low,
+        jpyvnd_forecast_high=jpyvnd_forecast_high,
     )
 
 

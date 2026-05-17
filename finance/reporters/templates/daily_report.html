@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>JPY Forecast - {{ report_date }}</title>
 <!--suppress ALL -->
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;700;800&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.googleapis.com" data-css-inline="ignore">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin data-css-inline="ignore">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;700;800&display=swap" rel="stylesheet" data-css-inline="ignore">
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: 'Inter', -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background: #0b0b1e; color: #e2e8f0; line-height: 1.65; padding: 20px 16px; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
@@ -173,7 +173,12 @@
         {% if forecast.jpy_direction == 'stronger' %}Yên Tăng Giá{% elif forecast.jpy_direction == 'weaker' %}Yên Giảm Giá{% else %}Đi Ngang{% endif %}
       </div>
       <div class="signal-sub">
-        USD/JPY dự kiến: <strong>{{ forecast.usdjpy_direction|upper }}</strong>
+        {% set dir_vi_map = {'up': 'TĂNG', 'down': 'GIẢM', 'sideways': 'ĐI NGANG'} %}
+        {% set vnd_dir_vi = {'up': 'TĂNG', 'down': 'GIẢM', 'sideways': 'ĐI NGANG'} %}
+        JPY/VND dự kiến: <strong>{{ vnd_dir_vi.get(forecast.vnd_direction, 'N/A') }}</strong>
+        {% if forecast.jpyvnd_forecast_low > 0 %}
+        · Ngày mai: <strong class="mono" style="color:#60a5fa">{{ '%.1f'|format(forecast.jpyvnd_forecast_low) }}₫ – {{ '%.1f'|format(forecast.jpyvnd_forecast_high) }}₫</strong>
+        {% endif %}
       </div>
     </div>
     <div class="score-row">
