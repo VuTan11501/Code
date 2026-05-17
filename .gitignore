@@ -9,3 +9,7 @@ node_modules/
 # Sensitive token files
 .azure_tokens.json
 .dokokin_sms_token.json
+
+# Finance tool data
+finance/data/*.db
+finance/data/*.html

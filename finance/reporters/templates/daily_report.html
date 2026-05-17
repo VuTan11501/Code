@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JPY Forecast - {{ report_date }}</title>
+<!--suppress ALL -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;700;800&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Inter', -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background: #0b0b1e; color: #e2e8f0; line-height: 1.65; padding: 20px 16px; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+  .container { max-width: 680px; margin: 0 auto; }
+  .mono { font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', Consolas, monospace; }
+
+  /* ── Hero Card ── */
+  .hero { background: linear-gradient(135deg, #1e293b 0%, #0f172a 40%, #1a1547 100%); border-radius: 24px; padding: 36px 32px; margin-bottom: 20px; border: 1px solid #2d3a52; position: relative; overflow: hidden; box-shadow: 0 8px 32px rgba(0,0,0,0.3); }
+  .hero::before { content: ''; position: absolute; top: -50%; right: -30%; width: 350px; height: 350px; border-radius: 50%; background: radial-gradient(circle, rgba(99,102,241,0.12), transparent 70%); }
+  .hero::after { content: ''; position: absolute; bottom: -40%; left: -20%; width: 250px; height: 250px; border-radius: 50%; background: radial-gradient(circle, rgba(59,130,246,0.08), transparent 70%); }
+  .hero-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; position: relative; z-index: 1; }
+  .hero-badge { display: inline-flex; align-items: center; gap: 6px; background: rgba(99,102,241,0.12); border: 1px solid rgba(99,102,241,0.25); padding: 5px 14px; border-radius: 100px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 2.5px; color: #a5b4fc; }
+  .hero-date { font-size: 12px; color: #64748b; text-align: right; line-height: 1.5; font-weight: 500; }
+  .hero-main { text-align: center; padding: 20px 0; position: relative; z-index: 1; }
+  .signal-icon { font-size: 56px; margin-bottom: 12px; filter: drop-shadow(0 4px 12px rgba(0,0,0,0.3)); }
+  .signal-text { font-size: 32px; font-weight: 900; letter-spacing: 2px; margin-bottom: 6px; text-transform: uppercase; }
+  .signal-stronger { color: #34d399; text-shadow: 0 0 40px rgba(52,211,153,0.3); }
+  .signal-weaker { color: #f87171; text-shadow: 0 0 40px rgba(248,113,113,0.3); }
+  .signal-neutral { color: #fbbf24; text-shadow: 0 0 40px rgba(251,191,36,0.3); }
+  .signal-sub { font-size: 13px; color: #94a3b8; font-weight: 500; letter-spacing: 0.5px; }
+  .signal-sub strong { color: #cbd5e1; font-weight: 700; }
+  .score-row { display: flex; justify-content: center; gap: 32px; margin-top: 20px; position: relative; z-index: 1; }
+  .score-item { text-align: center; }
+  .score-value { font-family: 'JetBrains Mono', monospace; font-size: 22px; font-weight: 800; }
+  .score-label { font-size: 10px; color: #64748b; text-transform: uppercase; letter-spacing: 1px; font-weight: 600; margin-top: 2px; }
+  .confidence-bar { width: 80px; height: 5px; background: #1e293b; border-radius: 3px; margin: 6px auto 0; overflow: hidden; }
+  .confidence-fill { height: 100%; border-radius: 3px; background: linear-gradient(90deg, #6366f1, #8b5cf6); }
+
+  /* ── VND Hero Section ── */
+  .vnd-hero { background: linear-gradient(135deg, #172240 0%, #0d1a33 50%, #162447 100%); border-radius: 20px; padding: 28px; margin-bottom: 20px; border: 1px solid #1e3a5f; box-shadow: 0 4px 20px rgba(0,0,0,0.2); }
+  .vnd-header { display: flex; align-items: center; gap: 14px; margin-bottom: 20px; }
+  .vnd-flag { font-size: 36px; filter: drop-shadow(0 2px 8px rgba(0,0,0,0.3)); }
+  .vnd-title { font-size: 20px; font-weight: 800; color: #f1f5f9; letter-spacing: 0.3px; }
+  .vnd-subtitle { font-size: 12px; color: #64748b; font-weight: 500; margin-top: 2px; }
+  .vnd-rates { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 18px; }
+  .vnd-rate-card { background: rgba(255,255,255,0.04); border-radius: 14px; padding: 16px; text-align: center; border: 1px solid rgba(255,255,255,0.06); }
+  .vnd-rate-label { font-size: 10px; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; font-weight: 600; }
+  .vnd-rate-value { font-family: 'JetBrains Mono', monospace; font-size: 24px; font-weight: 800; color: #60a5fa; margin: 6px 0; }
+  .vnd-rate-change { font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 600; }
+  .vnd-analysis { background: rgba(99,102,241,0.06); border-radius: 14px; padding: 18px; border-left: 3px solid #6366f1; }
+  .vnd-analysis-title { font-size: 11px; font-weight: 700; color: #a5b4fc; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 10px; }
+  .vnd-analysis-text { font-size: 14px; color: #cbd5e1; line-height: 1.75; }
+  .vnd-direction-badge { display: inline-block; padding: 5px 14px; border-radius: 100px; font-size: 12px; font-weight: 700; margin-top: 8px; letter-spacing: 0.5px; }
+  .vnd-dir-up { background: rgba(52,211,153,0.15); color: #34d399; border: 1px solid rgba(52,211,153,0.2); }
+  .vnd-dir-down { background: rgba(248,113,113,0.15); color: #f87171; border: 1px solid rgba(248,113,113,0.2); }
+  .vnd-dir-sideways { background: rgba(251,191,36,0.15); color: #fbbf24; border: 1px solid rgba(251,191,36,0.2); }
+
+  /* ── Cards ── */
+  .card { background: #161b2e; border-radius: 18px; padding: 24px; margin-bottom: 20px; border: 1px solid #252d45; box-shadow: 0 2px 12px rgba(0,0,0,0.15); }
+  .card-title { font-size: 13px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 18px; display: flex; align-items: center; gap: 10px; }
+  .card-title .icon { font-size: 18px; }
+
+  /* ── Market Grid ── */
+  .market-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .market-cell { background: rgba(255,255,255,0.025); border-radius: 14px; padding: 14px; border: 1px solid rgba(255,255,255,0.05); transition: background 0.2s; }
+  .market-cell.highlight { background: rgba(99,102,241,0.07); border-color: rgba(99,102,241,0.18); }
+  .market-icon { font-size: 16px; margin-bottom: 3px; }
+  .market-name { font-size: 10px; color: #64748b; text-transform: uppercase; letter-spacing: 0.8px; font-weight: 600; }
+  .market-value { font-family: 'JetBrains Mono', monospace; font-size: 20px; font-weight: 800; color: #f1f5f9; margin: 3px 0; }
+  .market-change { font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 600; }
+  .up { color: #34d399; }
+  .down { color: #f87171; }
+  .flat { color: #64748b; }
+
+  /* ── Factor Bars ── */
+  .factor-item { margin-bottom: 16px; }
+  .factor-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 7px; }
+  .factor-name { font-size: 13px; font-weight: 600; color: #e2e8f0; letter-spacing: 0.2px; }
+  .factor-score-badge { font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 800; padding: 3px 12px; border-radius: 8px; }
+  .factor-bar-bg { height: 7px; background: #1e293b; border-radius: 4px; position: relative; overflow: hidden; }
+  .factor-bar-center { position: absolute; left: 50%; top: 0; width: 2px; height: 100%; background: #374151; }
+  .factor-bar-fill { position: absolute; top: 0; height: 100%; border-radius: 4px; transition: width 0.3s; }
+  .factor-bar-pos { background: linear-gradient(90deg, #059669, #34d399); right: 50%; }
+  .factor-bar-neg { background: linear-gradient(90deg, #f87171, #dc2626); left: 50%; }
+  .factor-detail { font-size: 12px; color: #64748b; margin-top: 5px; line-height: 1.6; }
+
+  /* ── Summary Box ── */
+  .summary-box { background: rgba(99,102,241,0.05); border-radius: 16px; padding: 22px; border-left: 4px solid #6366f1; margin-bottom: 20px; box-shadow: 0 2px 12px rgba(0,0,0,0.1); }
+  .summary-text { font-size: 14px; color: #cbd5e1; line-height: 1.85; }
+
+  /* ── News List ── */
+  .news-item { padding: 14px 0; border-bottom: 1px solid rgba(255,255,255,0.04); }
+  .news-item:last-child { border-bottom: none; }
+  .news-vi { font-size: 14px; font-weight: 600; color: #e2e8f0; margin-bottom: 3px; line-height: 1.5; }
+  .news-vi a { color: #93c5fd; text-decoration: none; transition: color 0.15s; }
+  .news-vi a:hover { color: #60a5fa; text-decoration: underline; }
+  .news-en { font-size: 11px; color: #64748b; font-style: italic; line-height: 1.4; }
+  .news-meta { font-size: 10px; color: #475569; margin-top: 5px; font-weight: 500; letter-spacing: 0.3px; }
+  .news-badge { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 10px; font-weight: 700; margin-right: 6px; letter-spacing: 0.3px; }
+  .badge-stronger { background: rgba(52,211,153,0.15); color: #34d399; }
+  .badge-weaker { background: rgba(248,113,113,0.15); color: #f87171; }
+  .badge-neutral { background: rgba(148,163,184,0.12); color: #94a3b8; }
+  .badge-high { border: 1px solid currentColor; }
+
+  /* ── Calendar ── */
+  .cal-item { display: flex; align-items: center; padding: 10px 0; gap: 12px; border-bottom: 1px solid rgba(255,255,255,0.03); }
+  .cal-item:last-child { border-bottom: none; }
+  .cal-badge { min-width: 52px; text-align: center; padding: 5px 10px; border-radius: 10px; background: rgba(99,102,241,0.1); font-size: 11px; font-weight: 700; color: #a5b4fc; letter-spacing: 0.3px; }
+  .cal-name { font-size: 13px; color: #e2e8f0; font-weight: 500; }
+
+  /* ── Risks ── */
+  .risk-item { padding: 12px 16px; background: rgba(248,113,113,0.04); border-radius: 12px; margin-bottom: 8px; font-size: 13px; color: #fca5a5; border: 1px solid rgba(248,113,113,0.1); line-height: 1.6; }
+  .risk-item::before { content: '⚡ '; }
+
+  /* ── Health ── */
+  .health-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+  .health-pill { padding: 5px 14px; border-radius: 100px; font-size: 11px; font-weight: 600; letter-spacing: 0.3px; }
+  .h-ok { background: rgba(52,211,153,0.1); color: #34d399; }
+  .h-stale { background: rgba(251,191,36,0.1); color: #fbbf24; }
+  .h-failed { background: rgba(248,113,113,0.1); color: #f87171; }
+  .h-disabled { background: rgba(148,163,184,0.06); color: #64748b; }
+
+  /* ── Footer ── */
+  .footer { text-align: center; padding: 24px 16px; font-size: 11px; color: #475569; font-weight: 500; }
+  .footer a { color: #6366f1; }
+  .disclaimer { margin-top: 10px; font-size: 10px; color: #334155; line-height: 1.5; }
+
+  /* ── Accuracy Section ── */
+  .accuracy-badges { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+  .acc-badge { flex: 1; min-width: 80px; text-align: center; background: rgba(255,255,255,0.025); border-radius: 14px; padding: 14px 8px; border: 1px solid rgba(255,255,255,0.05); }
+  .acc-badge-label { font-size: 10px; color: #64748b; text-transform: uppercase; letter-spacing: 0.8px; font-weight: 600; }
+  .acc-badge-value { font-family: 'JetBrains Mono', monospace; font-size: 24px; font-weight: 800; margin: 5px 0; }
+  .acc-badge-count { font-size: 10px; color: #475569; font-weight: 500; }
+  .acc-good { color: #34d399; }
+  .acc-ok { color: #fbbf24; }
+  .acc-bad { color: #f87171; }
+  .acc-na { color: #64748b; }
+  .streak-badge { display: inline-block; padding: 5px 16px; border-radius: 100px; font-size: 12px; font-weight: 700; margin-bottom: 12px; letter-spacing: 0.3px; }
+  .streak-win { background: rgba(52,211,153,0.12); color: #34d399; border: 1px solid rgba(52,211,153,0.2); }
+  .streak-loss { background: rgba(248,113,113,0.12); color: #f87171; border: 1px solid rgba(248,113,113,0.2); }
+  .acc-factor-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.03); }
+  .acc-factor-row:last-child { border-bottom: none; }
+  .acc-factor-name { font-size: 12px; color: #e2e8f0; font-weight: 500; }
+  .acc-factor-bar-bg { flex: 1; height: 5px; background: #1e293b; border-radius: 3px; margin: 0 12px; max-width: 120px; }
+  .acc-factor-bar { height: 100%; border-radius: 3px; }
+  .acc-factor-rate { font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 700; min-width: 40px; text-align: right; }
+  .history-row { display: flex; align-items: center; padding: 7px 0; gap: 10px; border-bottom: 1px solid rgba(255,255,255,0.03); font-size: 12px; }
+  .history-row:last-child { border-bottom: none; }
+  .history-date { font-family: 'JetBrains Mono', monospace; color: #64748b; min-width: 75px; font-size: 11px; font-weight: 500; }
+  .history-result { min-width: 22px; text-align: center; font-size: 16px; }
+  .history-dir { min-width: 65px; font-weight: 500; }
+  .history-move { font-family: 'JetBrains Mono', monospace; color: #94a3b8; font-size: 11px; }
+  .baseline-row { display: flex; justify-content: space-between; align-items: center; padding: 5px 0; font-size: 12px; }
+  .baseline-label { color: #94a3b8; font-weight: 500; }
+  .baseline-result { font-weight: 700; }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- ═══ HERO ═══ -->
+  <div class="hero">
+    <div class="hero-top">
+      <div class="hero-badge">🇯🇵 Dự Báo Yên Nhật</div>
+      <div class="hero-date">{{ report_date }}<br>⏱ {{ cutoff_time }} JST</div>
+    </div>
+    <div class="hero-main">
+      {% set signal_class = 'signal-stronger' if forecast.jpy_direction == 'stronger' else 'signal-weaker' if forecast.jpy_direction == 'weaker' else 'signal-neutral' %}
+      <div class="signal-icon">
+        {% if forecast.jpy_direction == 'stronger' %}💹{% elif forecast.jpy_direction == 'weaker' %}📉{% else %}➡️{% endif %}
+      </div>
+      <div class="signal-text {{ signal_class }}">
+        {% if forecast.jpy_direction == 'stronger' %}Yên Tăng Giá{% elif forecast.jpy_direction == 'weaker' %}Yên Giảm Giá{% else %}Đi Ngang{% endif %}
+      </div>
+      <div class="signal-sub">
+        USD/JPY dự kiến: <strong>{{ forecast.usdjpy_direction|upper }}</strong>
+      </div>
+    </div>
+    <div class="score-row">
+      <div class="score-item">
+        <div class="score-value mono {{ signal_class }}">{{ '%+.1f'|format(forecast.overall_score) }}</div>
+        <div class="score-label">Điểm / ±5</div>
+      </div>
+      <div class="score-item">
+        <div class="score-value mono">{{ (forecast.confidence * 100)|round|int }}%</div>
+        <div class="score-label">Độ tin cậy</div>
+        <div class="confidence-bar"><div class="confidence-fill" style="width:{{ (forecast.confidence * 100)|round|int }}%"></div></div>
+      </div>
+      {% for md in market_data if md.symbol == 'usdjpy' %}
+      <div class="score-item">
+        <div class="score-value mono" style="color:#60a5fa">¥{{ md.value }}</div>
+        <div class="score-label">USD/JPY</div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- ═══ VND SECTION ═══ -->
+  <div class="vnd-hero">
+    <div class="vnd-header">
+      <div class="vnd-flag">🇻🇳🇯🇵</div>
+      <div>
+        <div class="vnd-title">Tỷ Giá JPY ↔ VND</div>
+        <div class="vnd-subtitle">Dành cho người Việt tại Nhật</div>
+      </div>
+    </div>
+    <div class="vnd-rates">
+      {% for md in market_data if md.symbol == 'jpyvnd' %}
+      <div class="vnd-rate-card">
+        <div class="vnd-rate-label">1 Yên = ? Đồng</div>
+        <div class="vnd-rate-value">{{ '%.1f'|format(md.value) }} ₫</div>
+        {% set change_class = 'up' if md.change_pct > 0 else 'down' if md.change_pct < 0 else 'flat' %}
+        <div class="vnd-rate-change {{ change_class }}">{{ '%+.2f'|format(md.change_pct) }}%</div>
+      </div>
+      {% endfor %}
+      {% for md in market_data if md.symbol == 'usdjpy' %}
+      <div class="vnd-rate-card">
+        <div class="vnd-rate-label">USD/JPY</div>
+        <div class="vnd-rate-value" style="color:#fbbf24">{{ md.value }}</div>
+        {% set change_class = 'up' if md.change_pct > 0 else 'down' if md.change_pct < 0 else 'flat' %}
+        <div class="vnd-rate-change {{ change_class }}">{{ '%+.2f'|format(md.change_pct) }}%</div>
+      </div>
+      {% endfor %}
+      {% for md in market_data if md.symbol == 'usdvnd' %}
+      <div class="vnd-rate-card">
+        <div class="vnd-rate-label">USD/VND</div>
+        <div class="vnd-rate-value" style="color:#94a3b8; font-size:18px;">{{ "{:,.0f}".format(md.value|int) }} ₫</div>
+        {% set change_class = 'up' if md.change_pct > 0 else 'down' if md.change_pct < 0 else 'flat' %}
+        <div class="vnd-rate-change {{ change_class }}">{{ '%+.2f'|format(md.change_pct) }}%</div>
+      </div>
+      {% endfor %}
+      <div class="vnd-rate-card">
+        <div class="vnd-rate-label">JPY/VND Dự Báo</div>
+        {% set vnd_class = 'vnd-dir-up' if forecast.vnd_direction == 'up' else 'vnd-dir-down' if forecast.vnd_direction == 'down' else 'vnd-dir-sideways' %}
+        <div class="vnd-direction-badge {{ vnd_class }}" style="font-size:14px; margin-top:6px;">
+          {% if forecast.vnd_direction == 'up' %}↑ TĂNG{% elif forecast.vnd_direction == 'down' %}↓ GIẢM{% else %}→ ĐI NGANG{% endif %}
+        </div>
+      </div>
+    </div>
+    {% if forecast.vnd_analysis %}
+    <div class="vnd-analysis">
+      <div class="vnd-analysis-title">📊 Phân Tích JPY/VND</div>
+      <div class="vnd-analysis-text">{{ forecast.vnd_analysis }}</div>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- ═══ MARKET SUMMARY ═══ -->
+  {% if forecast.market_summary %}
+  <div class="summary-box">
+    <div style="font-size:11px; font-weight:700; color:#a5b4fc; text-transform:uppercase; letter-spacing:1.5px; margin-bottom:10px;">📝 Tổng Quan Thị Trường</div>
+    <div class="summary-text">{{ forecast.market_summary }}</div>
+  </div>
+  {% endif %}
+
+  <!-- ═══ MARKET DATA ═══ -->
+  <div class="card">
+    <div class="card-title"><span class="icon">📊</span> Dữ Liệu Thị Trường</div>
+    <div class="market-grid">
+      {% for md in market_data if md.symbol not in ['jpyvnd'] %}
+      {% set display = symbol_display.get(md.symbol, {}) %}
+      <div class="market-cell {{ 'highlight' if md.symbol in ['usdjpy', 'usdvnd'] }}">
+        <div class="market-icon">{{ display.get('icon', '📊') }}</div>
+        <div class="market-name">{{ display.get('name', md.symbol) }}</div>
+        <div class="market-value">
+          {% if md.symbol == 'usdvnd' %}{{ "{:,.0f}".format(md.value|int) }}{% else %}{{ md.value }}{% endif %}
+        </div>
+        {% set change_class = 'up' if md.change_pct > 0 else 'down' if md.change_pct < 0 else 'flat' %}
+        <div class="market-change {{ change_class }}">
+          {{ '%+.2f'|format(md.change_pct) }}%
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- ═══ FACTOR ANALYSIS ═══ -->
+  <div class="card">
+    <div class="card-title"><span class="icon">🎯</span> Phân Tích 5 Nhóm Yếu Tố</div>
+    {% for factor in forecast.factors %}
+    <div class="factor-item">
+      <div class="factor-header">
+        <div class="factor-name">{{ factor.name_vi }}</div>
+        {% set score_color = '#34d399' if factor.score > 0 else '#f87171' if factor.score < 0 else '#94a3b8' %}
+        <div class="factor-score-badge" style="color:{{ score_color }}; background:{{ score_color }}15;">
+          {{ '%+.1f'|format(factor.score) }}
+        </div>
+      </div>
+      <div class="factor-bar-bg">
+        <div class="factor-bar-center"></div>
+        {% if factor.score > 0 %}
+        <div class="factor-bar-fill factor-bar-pos" style="width:{{ (factor.score / 5 * 50)|abs }}%; right:50%;"></div>
+        {% elif factor.score < 0 %}
+        <div class="factor-bar-fill factor-bar-neg" style="width:{{ (factor.score / 5 * 50)|abs }}%; left:50%;"></div>
+        {% endif %}
+      </div>
+      {% if factor.rationale and factor.rationale != 'No relevant signals detected.' %}
+      <div class="factor-detail">{{ factor.rationale[:250] }}</div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- ═══ ACCURACY TRACKING ═══ -->
+  {% if accuracy %}
+  <div class="card">
+    <div class="card-title"><span class="icon">📊</span> Độ Chính Xác Dự Đoán</div>
+
+    <!-- Streak -->
+    {% if accuracy.current_streak != 0 %}
+    <div style="margin-bottom: 12px;">
+      {% if accuracy.streak_type == 'win' %}
+      <span class="streak-badge streak-win">🔥 Chuỗi đúng: {{ accuracy.current_streak }}</span>
+      {% else %}
+      <span class="streak-badge streak-loss">❄️ Chuỗi sai: {{ -accuracy.current_streak }}</span>
+      {% endif %}
+      <span style="font-size: 11px; color: #64748b; margin-left: 8px;">
+        {{ accuracy.calibration_mode|upper }}
+        {% if accuracy.calibration_mode == 'active' %}⚡{% elif accuracy.calibration_mode == 'shadow' %}👁️{% else %}📈{% endif %}
+      </span>
+    </div>
+    {% endif %}
+
+    <!-- Accuracy badges by horizon -->
+    <div class="accuracy-badges">
+      {% for label, val, count in [('1 Ngày', accuracy.accuracy_1d, accuracy.verified_forecasts), ('7 Ngày', accuracy.accuracy_7day, accuracy.count_7day), ('30 Ngày', accuracy.accuracy_30day, accuracy.count_30day)] %}
+      <div class="acc-badge">
+        <div class="acc-badge-label">{{ label }}</div>
+        <div class="acc-badge-value {% if val >= 0.6 %}acc-good{% elif val >= 0.4 %}acc-ok{% elif count > 0 %}acc-bad{% else %}acc-na{% endif %}">
+          {% if count > 0 %}{{ (val * 100)|round|int }}%{% else %}—{% endif %}
+        </div>
+        <div class="acc-badge-count">{{ count }} dự đoán</div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <!-- Per-factor accuracy -->
+    {% if accuracy.factor_accuracy %}
+    <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.05);">
+      <div style="font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">Độ chính xác theo nhân tố</div>
+      {% for fa in accuracy.factor_accuracy %}
+      <div class="acc-factor-row">
+        <span class="acc-factor-name">{{ fa.name_vi }}</span>
+        <div class="acc-factor-bar-bg">
+          <div class="acc-factor-bar" style="width: {{ (fa.hit_rate * 100)|round|int }}%; background: {% if fa.hit_rate >= 0.6 %}#34d399{% elif fa.hit_rate >= 0.4 %}#fbbf24{% else %}#f87171{% endif %};"></div>
+        </div>
+        <span class="acc-factor-rate {% if fa.hit_rate >= 0.6 %}acc-good{% elif fa.hit_rate >= 0.4 %}acc-ok{% else %}acc-bad{% endif %}">{{ (fa.hit_rate * 100)|round|int }}%</span>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Recent prediction history -->
+    {% if accuracy.recent_history %}
+    <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.05);">
+      <div style="font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">Lịch sử gần đây</div>
+      {% for h in accuracy.recent_history %}
+      <div class="history-row">
+        <span class="history-date">{{ h.date }}</span>
+        <span class="history-result">{% if h.hit == 1 %}✅{% elif h.hit == 0 %}❌{% else %}➖{% endif %}</span>
+        <span class="history-dir">
+          {% if h.predicted == 'stronger' %}↑ Tăng{% elif h.predicted == 'weaker' %}↓ Giảm{% else %}→ Ngang{% endif %}
+        </span>
+        <span class="history-move">
+          {% if h.move_pct %}{{ '%+.2f'|format(h.move_pct) }}%{% endif %}
+        </span>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Baseline comparison -->
+    {% if accuracy.verified_forecasts >= 10 %}
+    <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.05);">
+      <div style="font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">So sánh với baseline</div>
+      <div class="baseline-row">
+        <span class="baseline-label">vs. Luôn dự đoán "đi ngang"</span>
+        <span class="baseline-result {% if accuracy.beats_always_neutral %}acc-good{% else %}acc-bad{% endif %}">
+          {% if accuracy.beats_always_neutral %}✅ Tốt hơn{% else %}❌ Kém hơn{% endif %}
+        </span>
+      </div>
+      <div class="baseline-row">
+        <span class="baseline-label">vs. Dự đoán theo xu hướng hôm trước</span>
+        <span class="baseline-result {% if accuracy.beats_momentum %}acc-good{% else %}acc-bad{% endif %}">
+          {% if accuracy.beats_momentum %}✅ Tốt hơn{% else %}❌ Kém hơn{% endif %}
+        </span>
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- VND accuracy -->
+    {% if accuracy.vnd_total > 0 %}
+    <div style="margin-top: 8px; font-size: 12px; color: #64748b;">
+      🇻🇳 JPY/VND accuracy: <span style="font-weight: 700; color: {% if accuracy.vnd_accuracy_1d >= 0.5 %}#34d399{% else %}#f87171{% endif %};">{{ (accuracy.vnd_accuracy_1d * 100)|round|int }}%</span>
+      ({{ accuracy.vnd_total }} dự đoán)
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <!-- ═══ KEY RISKS ═══ -->
+  {% if forecast.key_risks %}
+  <div class="card">
+    <div class="card-title"><span class="icon">⚠️</span> Rủi Ro Cần Lưu Ý</div>
+    {% for risk in forecast.key_risks %}
+    <div class="risk-item">{{ risk }}</div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <!-- ═══ TOP NEWS ═══ -->
+  {% if top_news %}
+  <div class="card">
+    <div class="card-title"><span class="icon">📰</span> Tin Tức Nổi Bật ({{ top_news|length }})</div>
+    {% for news in top_news[:20] %}
+    <div class="news-item">
+      {% if news.direction %}
+      <span class="news-badge badge-{{ news.direction }} {{ 'badge-high' if news.magnitude == 'high' }}">
+        {% if news.direction == 'stronger' %}↑ JPY{% elif news.direction == 'weaker' %}↓ JPY{% else %}— {% endif %}
+      </span>
+      {% endif %}
+      <div class="news-vi">
+        {% if news.url %}<a href="{{ news.url }}">{{ news.title_vi or news.title }}</a>{% else %}{{ news.title_vi or news.title }}{% endif %}
+      </div>
+      {% if news.title_vi and news.title_vi != news.title %}
+      <div class="news-en">{{ news.title }}</div>
+      {% endif %}
+      <div class="news-meta">{{ news.source }} · {{ news.published_at[:16] if news.published_at else '' }}</div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <!-- ═══ CALENDAR ═══ -->
+  {% if calendar_events %}
+  <div class="card">
+    <div class="card-title"><span class="icon">📅</span> Lịch Kinh Tế (7 ngày tới)</div>
+    {% for evt in calendar_events %}
+    <div class="cal-item">
+      <div class="cal-badge">{{ evt.title.split(':')[0] if ':' in evt.title else '📋' }}</div>
+      <div class="cal-name">{{ evt.title.split(': ', 1)[1] if ': ' in evt.title else evt.title }}</div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <!-- ═══ SOURCE HEALTH ═══ -->
+  <div class="card">
+    <div class="card-title"><span class="icon">🔧</span> Trạng Thái Nguồn Dữ Liệu</div>
+    <div class="health-grid">
+      {% for source in source_health %}
+      <span class="health-pill h-{{ source.status }}">
+        {{ source.name }} {{ '✓' if source.status == 'ok' else '⏳' if source.status == 'stale' else '✗' if source.status == 'failed' else '○' }}
+        {% if source.articles_count %} ({{ source.articles_count }}){% endif %}
+      </span>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- ═══ FOOTER ═══ -->
+  <div class="footer">
+    <div style="margin-bottom: 4px;">⚙️ <strong>JPY Forecast Tool</strong> v2.1 · AI-Powered by Gemini</div>
+    <div>{{ generated_at }} JST · {{ source_health|length }} nguồn dữ liệu</div>
+    <div class="disclaimer">⚠️ Đây là công cụ phân tích tự động, KHÔNG phải tư vấn tài chính.<br>Luôn tự nghiên cứu trước khi ra quyết định đầu tư.</div>
+  </div>
+
+</div>
+</body>
+</html>
