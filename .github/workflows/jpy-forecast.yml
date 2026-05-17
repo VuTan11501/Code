@@ -15,6 +15,7 @@ on:
 
 env:
   GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+  FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
   SMTP_SERVER: smtp.gmail.com
   SMTP_PORT: "587"
   SMTP_USER: ${{ secrets.SMTP_USER }}

@@ -4,6 +4,7 @@ All indicators computed with pure pandas/numpy (no external TA lib needed).
 Used by ml_predictor.py for training and daily prediction.
 """
 import logging
+import os
 from datetime import datetime, timedelta
 
 import numpy as np
@@ -11,6 +12,13 @@ import pandas as pd
 import yfinance as yf
 
 logger = logging.getLogger("jpy_forecast")
+
+# ── FRED API (optional — macro fundamentals) ──
+try:
+    from fredapi import Fred
+    HAS_FRED = True
+except ImportError:
+    HAS_FRED = False
 
 # ── Cross-asset symbols for historical training ──
 CROSS_ASSET_SYMBOLS = {
@@ -36,7 +44,7 @@ CROSS_ASSET_SYMBOLS = {
 }
 
 
-def fetch_ohlc(symbol: str = "USDJPY=X", years: int = 5) -> pd.DataFrame:
+def fetch_ohlc(symbol: str = "USDJPY=X", years: int = 10) -> pd.DataFrame:
     """Fetch daily OHLC from Yahoo Finance."""
     end = datetime.now()
     start = end - timedelta(days=years * 365 + 60)
@@ -56,7 +64,7 @@ def fetch_ohlc(symbol: str = "USDJPY=X", years: int = 5) -> pd.DataFrame:
     return df
 
 
-def fetch_cross_asset_history(years: int = 5) -> pd.DataFrame:
+def fetch_cross_asset_history(years: int = 10) -> pd.DataFrame:
     """
     Fetch historical close prices for all cross-asset symbols.
     Returns DataFrame with date index, columns = symbol keys.
@@ -343,3 +351,194 @@ FEATURE_COLUMNS = [
 # Cross-asset feature columns (auto-discovered during training)
 # These are generated dynamically by build_cross_asset_indicators()
 CROSS_ASSET_COLUMNS = []  # populated at runtime
+
+
+# ── FRED Macro Features ──
+FRED_SERIES = {
+    # US-Japan rate differential (most important JPY driver)
+    "us_ffr": "FEDFUNDS",          # Fed funds rate (monthly)
+    "us_10y_yield": "DGS10",       # US 10Y Treasury (daily)
+    "us_2y_yield": "DGS2",         # US 2Y Treasury (daily)
+    "jp_rate": "IRSTCI01JPM156N",  # Japan short-term rate (monthly)
+    # Inflation
+    "us_cpi_yoy": "CPIAUCSL",      # US CPI (monthly, need YoY calc)
+    "jp_cpi_yoy": "JPNCPIALLMINMEI",  # Japan CPI (monthly)
+    # Labor market
+    "us_unemployment": "UNRATE",   # US unemployment (monthly)
+    # Trade
+    "jp_trade_balance": "JPNXTEXVA01NCMLM",  # Japan exports (monthly)
+    # Dollar strength
+    "us_dxy": "DTWEXBGS",          # Trade-weighted USD broad (daily)
+}
+
+
+def fetch_fred_macro(years: int = 10) -> pd.DataFrame:
+    """
+    Fetch macro fundamentals from FRED API.
+    Point-in-time: forward-fill monthly data to daily,
+    lagged by 30 days for publication delay.
+    """
+    fred_key = os.environ.get("FRED_API_KEY", "")
+    if not HAS_FRED or not fred_key:
+        logger.info("[features] FRED API not available (no key or fredapi not installed)")
+        return pd.DataFrame()
+
+    fred = Fred(api_key=fred_key)
+    end = datetime.now()
+    start = end - timedelta(days=years * 365 + 180)
+
+    frames = {}
+    for name, series_id in FRED_SERIES.items():
+        try:
+            s = fred.get_series(series_id, observation_start=start, observation_end=end)
+            if s is not None and len(s) > 0:
+                frames[name] = s
+        except Exception as e:
+            logger.warning(f"[features] FRED {name} ({series_id}) failed: {e}")
+
+    if not frames:
+        return pd.DataFrame()
+
+    combined = pd.DataFrame(frames)
+    combined.index = pd.to_datetime(combined.index)
+    combined = combined.sort_index()
+
+    # CPI → YoY change
+    if "us_cpi_yoy" in combined.columns:
+        combined["us_cpi_yoy"] = combined["us_cpi_yoy"].pct_change(12) * 100
+    if "jp_cpi_yoy" in combined.columns:
+        combined["jp_cpi_yoy"] = combined["jp_cpi_yoy"].pct_change(12) * 100
+
+    # Forward-fill to daily (monthly data is sparse)
+    date_range = pd.date_range(start=combined.index[0], end=end, freq="B")
+    combined = combined.reindex(date_range).ffill()
+
+    # Publication delay: shift by 30 days (point-in-time)
+    combined = combined.shift(30)
+
+    logger.info(f"[features] FRED macro: {len(combined)} rows, "
+                f"{len(combined.columns)} series: {list(combined.columns)}")
+    return combined
+
+
+def build_macro_features(macro_df: pd.DataFrame,
+                         usdjpy_index: pd.DatetimeIndex) -> pd.DataFrame:
+    """
+    Build macro features from FRED data.
+    All features are point-in-time safe (30-day publication lag applied).
+    """
+    if macro_df.empty:
+        return pd.DataFrame(index=usdjpy_index)
+
+    feat = pd.DataFrame(index=macro_df.index)
+
+    # US-Japan rate differential (THE key driver)
+    if "us_ffr" in macro_df.columns and "jp_rate" in macro_df.columns:
+        feat["rate_diff_us_jp"] = macro_df["us_ffr"] - macro_df["jp_rate"]
+        feat["rate_diff_change"] = feat["rate_diff_us_jp"].diff()
+        feat["rate_diff_3m_change"] = feat["rate_diff_us_jp"].diff(63)
+
+    # Yield curve (2Y-10Y spread)
+    if "us_10y_yield" in macro_df.columns and "us_2y_yield" in macro_df.columns:
+        feat["us_yield_curve"] = macro_df["us_10y_yield"] - macro_df["us_2y_yield"]
+        feat["us_yield_curve_change"] = feat["us_yield_curve"].diff()
+
+    # Inflation differential
+    if "us_cpi_yoy" in macro_df.columns and "jp_cpi_yoy" in macro_df.columns:
+        feat["inflation_diff"] = macro_df["us_cpi_yoy"] - macro_df["jp_cpi_yoy"]
+
+    # US CPI momentum
+    if "us_cpi_yoy" in macro_df.columns:
+        feat["us_cpi_level"] = macro_df["us_cpi_yoy"]
+        feat["us_cpi_change"] = macro_df["us_cpi_yoy"].diff()
+
+    # Japan CPI momentum
+    if "jp_cpi_yoy" in macro_df.columns:
+        feat["jp_cpi_level"] = macro_df["jp_cpi_yoy"]
+        feat["jp_cpi_change"] = macro_df["jp_cpi_yoy"].diff()
+
+    # US unemployment
+    if "us_unemployment" in macro_df.columns:
+        feat["us_unemployment"] = macro_df["us_unemployment"]
+        feat["us_unemp_change"] = macro_df["us_unemployment"].diff()
+
+    # Japan trade balance
+    if "jp_trade_balance" in macro_df.columns:
+        feat["jp_trade_balance"] = macro_df["jp_trade_balance"]
+        feat["jp_trade_change"] = macro_df["jp_trade_balance"].pct_change()
+
+    # Dollar index level & momentum
+    if "us_dxy" in macro_df.columns:
+        feat["dxy_fred"] = macro_df["us_dxy"]
+        feat["dxy_fred_ret5d"] = macro_df["us_dxy"].pct_change(5)
+
+    # Align to USDJPY index
+    feat = feat.reindex(usdjpy_index, method="ffill")
+
+    return feat
+
+
+def build_regime_features(usdjpy_df: pd.DataFrame,
+                          cross_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Build regime/market-state features.
+    Uses rolling windows of past data only (no leakage).
+    """
+    c = usdjpy_df["Close"]
+    feat = pd.DataFrame(index=usdjpy_df.index)
+
+    # ATR percentile (volatility regime)
+    atr = compute_atr(usdjpy_df["High"], usdjpy_df["Low"], c, 14)
+    feat["atr_pctile_60d"] = atr.rolling(60).apply(
+        lambda x: pd.Series(x).rank(pct=True).iloc[-1], raw=False)
+    feat["atr_pctile_120d"] = atr.rolling(120).apply(
+        lambda x: pd.Series(x).rank(pct=True).iloc[-1], raw=False)
+
+    # High volatility flag
+    feat["high_vol_regime"] = (feat["atr_pctile_60d"] > 0.75).astype(float)
+
+    # Trend regime: SMA50 > SMA200 (golden cross) flag
+    sma50 = c.rolling(50).mean()
+    sma200 = c.rolling(200).mean()
+    feat["golden_cross_flag"] = (sma50 > sma200).astype(float)
+
+    # Mean reversion z-score (20d)
+    sma20 = c.rolling(20).mean()
+    std20 = c.rolling(20).std()
+    feat["zscore_20d"] = (c - sma20) / std20.replace(0, 1e-9)
+
+    # Price acceleration (2nd derivative)
+    ret = c.pct_change()
+    feat["price_acceleration"] = ret.diff()
+
+    # Rolling correlation with VIX (risk regime)
+    if not cross_df.empty and "vix" in cross_df.columns:
+        usdjpy_ret = c.pct_change()
+        vix_aligned = cross_df["vix"].reindex(c.index, method="ffill")
+        vix_ret = vix_aligned.pct_change()
+        feat["usdjpy_vix_corr_20d"] = usdjpy_ret.rolling(20).corr(vix_ret)
+        feat["usdjpy_vix_corr_60d"] = usdjpy_ret.rolling(60).corr(vix_ret)
+
+    # Rolling beta to DXY
+    if not cross_df.empty and "dxy" in cross_df.columns:
+        usdjpy_ret = c.pct_change()
+        dxy_aligned = cross_df["dxy"].reindex(c.index, method="ffill")
+        dxy_ret = dxy_aligned.pct_change()
+        # 20d rolling beta
+        cov_20 = usdjpy_ret.rolling(20).cov(dxy_ret)
+        var_20 = dxy_ret.rolling(20).var()
+        feat["usdjpy_dxy_beta_20d"] = cov_20 / var_20.replace(0, 1e-9)
+
+    # Month/quarter seasonality (sin/cos)
+    month = usdjpy_df.index.month
+    feat["month_sin"] = np.sin(2 * np.pi * month / 12)
+    feat["month_cos"] = np.cos(2 * np.pi * month / 12)
+    feat["is_month_end"] = usdjpy_df.index.is_month_end.astype(float)
+    feat["is_quarter_end"] = usdjpy_df.index.is_quarter_end.astype(float)
+    # Japan fiscal year end (March)
+    feat["jp_fiscal_yearend"] = (month == 3).astype(float)
+
+    # Lag all by 1 day for safety
+    feat = feat.shift(1)
+
+    return feat

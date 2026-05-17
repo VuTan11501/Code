@@ -1,32 +1,37 @@
 """
-ML Predictor — XGBoost-based next-day USD/JPY direction predictor.
+ML Predictor — Multi-model next-day USD/JPY direction predictor.
 
-Architecture:
-  1. Fetch 5Y OHLC → compute 30+ technical features
-  2. Train logistic regression baseline + XGBoost
-  3. Walk-forward validation (TimeSeriesSplit)
-  4. Ensemble with existing news-based score
-  5. Auto-retrain when model is stale
+Architecture v4:
+  1. Fetch 10Y OHLC → 48 technical + 60 cross-asset + macro + regime features
+  2. Walk-forward validation with NESTED feature selection per fold
+  3. XGBoost + LightGBM + Logistic → 3-model ensemble
+  4. Holdout test (last 12 months) for honest evaluation
+  5. Label shuffle sanity check to detect leakage
+  6. Yearly performance breakdown
+  7. Conservative probability→score with AUC dampening
 
-Key design decisions (from rubber-duck critique):
-  - Start with LOW ML weight (0.15), performance-gated increase
-  - Conservative probability→score mapping with dampening
-  - Walk-forward validation as primary evaluation
-  - Must beat baselines (always-neutral, momentum, logistic)
-  - Model metadata saved alongside weights
+Key design decisions (from rubber-duck critique v2):
+  - Feature selection INSIDE each fold (no global leakage)
+  - Holdout + label shuffle = mandatory validation
+  - Point-in-time macro features (30-day publication lag)
+  - Regime features for non-stationarity
+  - LightGBM as diversity addition to ensemble
+  - Performance-gated ML weight (0.05–0.30)
 """
 import json
 import logging
 import pickle
+import warnings
 from dataclasses import dataclass, asdict
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
+warnings.filterwarnings("ignore", message="X does not have valid feature names")
+
 import numpy as np
 import pandas as pd
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import (accuracy_score, roc_auc_score, brier_score_loss,
-                             log_loss, balanced_accuracy_score)
+from sklearn.metrics import (accuracy_score, roc_auc_score, brier_score_loss)
 from sklearn.model_selection import TimeSeriesSplit
 from sklearn.preprocessing import StandardScaler
 
@@ -36,9 +41,16 @@ try:
 except ImportError:
     HAS_XGB = False
 
+try:
+    import lightgbm as lgbm
+    HAS_LGBM = True
+except ImportError:
+    HAS_LGBM = False
+
 from analyzers.technical_features import (
     fetch_ohlc, build_features, fetch_cross_asset_history,
     build_cross_asset_indicators, FEATURE_COLUMNS,
+    fetch_fred_macro, build_macro_features, build_regime_features,
 )
 
 logger = logging.getLogger("jpy_forecast")
@@ -46,28 +58,28 @@ logger = logging.getLogger("jpy_forecast")
 MODEL_DIR = Path(__file__).resolve().parent.parent / "data" / "models"
 MODEL_DIR.mkdir(parents=True, exist_ok=True)
 
-# Stale threshold: retrain if model older than this
 RETRAIN_DAYS = 7
-# Minimum walk-forward AUC to trust the model
 MIN_AUC_THRESHOLD = 0.52
-# ML weight in ensemble (conservative start)
 DEFAULT_ML_WEIGHT = 0.15
 MAX_ML_WEIGHT = 0.30
+DATA_YEARS = 10                # Extended from 5Y to 10Y
+HOLDOUT_DAYS = 252             # ~12 months for holdout test
+FEATURE_TOP_K = 60
 
 
 @dataclass
 class MLPrediction:
     """Result from the ML predictor."""
-    direction: str          # "up" / "down" / "neutral"
-    probability: float      # raw probability of USD/JPY going up (0-1)
-    confidence: float       # calibrated confidence (0-1)
-    ml_score: float         # converted to [-5, +5] scale
-    model_type: str         # "xgboost" / "logistic" / "unavailable"
-    walk_forward_auc: float # out-of-sample AUC from walk-forward
-    walk_forward_acc: float # out-of-sample accuracy
-    features_used: int      # number of features
-    training_samples: int   # number of training samples
-    model_age_days: int     # days since last training
+    direction: str
+    probability: float
+    confidence: float
+    ml_score: float
+    model_type: str
+    walk_forward_auc: float
+    walk_forward_acc: float
+    features_used: int
+    training_samples: int
+    model_age_days: int
 
 
 @dataclass
@@ -81,61 +93,58 @@ class ModelMetadata:
     walk_forward_auc: float
     walk_forward_accuracy: float
     walk_forward_brier: float
-    baseline_accuracy: float   # always-predict-majority baseline
-    momentum_accuracy: float   # predict-yesterday's-direction baseline
+    holdout_auc: float
+    holdout_accuracy: float
+    baseline_accuracy: float
+    momentum_accuracy: float
     beats_baselines: bool
+    label_shuffle_auc: float     # sanity: should be ~0.50
+    yearly_performance: dict     # {year: {auc, acc}}
+    total_features: int
+    selected_features: int
 
 
 def _probability_to_score(prob: float, auc: float) -> float:
-    """
-    Convert probability to [-5, +5] score with dampening.
-    Only generates meaningful scores when model has decent AUC.
-    """
-    # Center around 0.5
+    """Convert probability to [-5, +5] score with AUC dampening."""
     raw = prob - 0.5
-
-    # Dampen: divide by 0.15 and clip to [-1, 1], then scale
-    # This means prob=0.65 → raw=0.15 → damped=1.0 → score=2.0
-    # And prob=0.55 → raw=0.05 → damped=0.33 → score=0.67
     damped = np.clip(raw / 0.15, -1.0, 1.0)
-
-    # Scale by model quality: low AUC → smaller scores
     quality_factor = np.clip((auc - 0.50) / 0.15, 0.0, 1.0)
-    max_score = 2.0 + 3.0 * quality_factor  # range [2, 5] based on AUC
-
+    max_score = 2.0 + 3.0 * quality_factor
     return float(damped * max_score)
 
 
-def _select_features(X: np.ndarray, y: np.ndarray,
-                     feature_names: list, top_k: int = 60) -> list[int]:
+def _select_features_for_fold(X_tr: np.ndarray, y_tr: np.ndarray,
+                              feature_names: list, top_k: int = FEATURE_TOP_K) -> list[int]:
     """
-    Select top-k features using a quick XGBoost importance scan.
-    Done inside training data only (no leakage).
+    Select top-k features INSIDE a fold's training set only.
+    This prevents feature selection leakage.
     """
-    if X.shape[1] <= top_k:
-        return list(range(X.shape[1]))
+    if X_tr.shape[1] <= top_k:
+        return list(range(X_tr.shape[1]))
 
-    quick_xgb = xgb.XGBClassifier(
-        n_estimators=100, max_depth=3, learning_rate=0.1,
-        verbosity=0, random_state=42,
-    )
-    quick_xgb.fit(X, y)
-    importances = quick_xgb.feature_importances_
+    if HAS_XGB:
+        quick = xgb.XGBClassifier(
+            n_estimators=100, max_depth=3, learning_rate=0.1,
+            verbosity=0, random_state=42,
+        )
+        quick.fit(X_tr, y_tr)
+        importances = quick.feature_importances_
+    else:
+        # Fallback: mutual information proxy via correlation
+        importances = np.array([
+            abs(np.corrcoef(X_tr[:, i], y_tr)[0, 1])
+            if np.std(X_tr[:, i]) > 1e-9 else 0.0
+            for i in range(X_tr.shape[1])
+        ])
+
     top_indices = np.argsort(importances)[::-1][:top_k].tolist()
-    dropped = [feature_names[i] for i in range(len(feature_names)) if i not in top_indices]
-    if dropped:
-        logger.info(f"[ml] Feature selection: kept {top_k}/{len(feature_names)}, "
-                    f"dropped {len(dropped)} low-importance features")
     return sorted(top_indices)
 
 
 def _tune_xgboost(X_tr: np.ndarray, y_tr: np.ndarray,
                    X_va: np.ndarray, y_va: np.ndarray,
-                   spw: float) -> xgb.XGBClassifier:
-    """
-    Quick hyperparameter search across a small grid.
-    Returns the best XGBClassifier fitted on training data.
-    """
+                   spw: float) -> "xgb.XGBClassifier":
+    """Quick hyperparameter search. Returns best XGBClassifier."""
     param_grid = [
         {"max_depth": 3, "learning_rate": 0.05, "min_child_weight": 10, "colsample_bytree": 0.7},
         {"max_depth": 4, "learning_rate": 0.03, "min_child_weight": 8, "colsample_bytree": 0.6},
@@ -145,60 +154,154 @@ def _tune_xgboost(X_tr: np.ndarray, y_tr: np.ndarray,
         {"max_depth": 3, "learning_rate": 0.05, "min_child_weight": 10, "colsample_bytree": 0.5, "gamma": 1.0},
     ]
 
-    best_model = None
-    best_auc = 0.0
-
+    best_model, best_auc = None, 0.0
     for params in param_grid:
         model = xgb.XGBClassifier(
-            n_estimators=800,
-            subsample=0.8,
-            scale_pos_weight=spw,
-            eval_metric="auc",
-            verbosity=0,
-            random_state=42,
-            reg_alpha=0.1,
-            reg_lambda=1.0,
-            **params,
+            n_estimators=800, subsample=0.8, scale_pos_weight=spw,
+            eval_metric="auc", verbosity=0, random_state=42,
+            reg_alpha=0.1, reg_lambda=1.0, **params,
         )
         model.fit(X_tr, y_tr, eval_set=[(X_va, y_va)], verbose=False)
         prob = model.predict_proba(X_va)[:, 1]
         auc = roc_auc_score(y_va, prob) if len(np.unique(y_va)) > 1 else 0.5
         if auc > best_auc:
-            best_auc = auc
-            best_model = model
-
+            best_auc, best_model = auc, model
     return best_model
 
 
-def _train_and_evaluate(X: np.ndarray, y: np.ndarray,
-                        feature_names: list) -> dict:
+def _tune_lightgbm(X_tr: np.ndarray, y_tr: np.ndarray,
+                    X_va: np.ndarray, y_va: np.ndarray,
+                    spw: float) -> "lgbm.LGBMClassifier":
+    """Quick LightGBM hyperparameter search."""
+    param_grid = [
+        {"max_depth": 3, "learning_rate": 0.05, "num_leaves": 15, "colsample_bytree": 0.7},
+        {"max_depth": 4, "learning_rate": 0.03, "num_leaves": 20, "colsample_bytree": 0.6},
+        {"max_depth": 3, "learning_rate": 0.08, "num_leaves": 12, "colsample_bytree": 0.8},
+        {"max_depth": 2, "learning_rate": 0.05, "num_leaves": 8, "colsample_bytree": 0.5},
+    ]
+
+    best_model, best_auc = None, 0.0
+    for params in param_grid:
+        model = lgbm.LGBMClassifier(
+            n_estimators=800, subsample=0.8, scale_pos_weight=spw,
+            metric="auc", verbosity=-1, random_state=42,
+            reg_alpha=0.1, reg_lambda=1.0,
+            min_child_samples=max(10, int(len(y_tr) * 0.01)),
+            **params,
+        )
+        model.fit(X_tr, y_tr, eval_set=[(X_va, y_va)],
+                  callbacks=[lgbm.log_evaluation(period=0)])
+        prob = model.predict_proba(X_va)[:, 1]
+        auc = roc_auc_score(y_va, prob) if len(np.unique(y_va)) > 1 else 0.5
+        if auc > best_auc:
+            best_auc, best_model = auc, model
+    return best_model
+
+
+def _run_label_shuffle_test(X: np.ndarray, y: np.ndarray,
+                            feature_names: list, n_shuffles: int = 3) -> float:
     """
-    Train models with walk-forward validation + hyperparameter tuning + ensemble.
-    Returns dict with trained model, scaler, metrics.
+    Sanity check: shuffle labels and retrain. AUC should drop to ~0.50.
+    If it doesn't, there's likely leakage.
+    """
+    logger.info("[ml] Running label shuffle sanity check...")
+    shuffle_aucs = []
+
+    tscv = TimeSeriesSplit(n_splits=3, gap=1)
+
+    for i in range(n_shuffles):
+        rng = np.random.RandomState(i)
+        y_shuffled = rng.permutation(y)
+        fold_aucs = []
+
+        for train_idx, val_idx in tscv.split(X):
+            X_tr, X_va = X[train_idx], X[val_idx]
+            y_tr, y_va = y_shuffled[train_idx], y_shuffled[val_idx]
+
+            scaler = StandardScaler()
+            X_tr_sc = scaler.fit_transform(X_tr)
+            X_va_sc = scaler.transform(X_va)
+
+            lr = LogisticRegression(C=0.5, l1_ratio=1.0, solver="saga",
+                                    max_iter=1000, random_state=42)
+            lr.fit(X_tr_sc, y_tr)
+            prob = lr.predict_proba(X_va_sc)[:, 1]
+            auc = roc_auc_score(y_va, prob) if len(np.unique(y_va)) > 1 else 0.5
+            fold_aucs.append(auc)
+
+        shuffle_aucs.append(np.mean(fold_aucs))
+
+    avg_shuffle_auc = np.mean(shuffle_aucs)
+    logger.info(f"[ml] Label shuffle AUC: {avg_shuffle_auc:.4f} "
+                f"(expected ~0.50, got {shuffle_aucs})")
+
+    if avg_shuffle_auc > 0.55:
+        logger.warning("[ml] ⚠️ Label shuffle AUC > 0.55 — possible leakage!")
+    else:
+        logger.info("[ml] ✅ Label shuffle test passed (no obvious leakage)")
+
+    return float(avg_shuffle_auc)
+
+
+def _compute_yearly_performance(dates: np.ndarray, y_true: np.ndarray,
+                                y_prob: np.ndarray) -> dict:
+    """Compute AUC/accuracy per calendar year for stability analysis."""
+    yearly = {}
+    years = pd.Series(dates).dt.year.values
+
+    for yr in sorted(set(years)):
+        mask = years == yr
+        if mask.sum() < 20:
+            continue
+        yt = y_true[mask]
+        yp = y_prob[mask]
+        if len(np.unique(yt)) < 2:
+            continue
+        yearly[int(yr)] = {
+            "auc": round(float(roc_auc_score(yt, yp)), 4),
+            "acc": round(float(accuracy_score(yt, (yp >= 0.5).astype(int))), 4),
+            "n": int(mask.sum()),
+        }
+
+    return yearly
+
+
+def _train_and_evaluate(X: np.ndarray, y: np.ndarray,
+                        feature_names: list, dates: np.ndarray = None) -> dict:
+    """
+    Train with walk-forward validation, nested feature selection, 3-model ensemble.
     """
     n = len(X)
-    logger.info(f"[ml] Training on {n} samples, {X.shape[1]} features")
+    total_features = X.shape[1]
+    logger.info(f"[ml] Training on {n} samples, {total_features} features")
 
-    # ── Feature selection (inside training, no leakage) ──
-    # Use first 80% for feature selection scan
-    fs_cutoff = int(n * 0.8)
-    if HAS_XGB and X.shape[1] > 50:
-        selected_idx = _select_features(X[:fs_cutoff], y[:fs_cutoff],
-                                         feature_names, top_k=60)
-        X = X[:, selected_idx]
-        feature_names = [feature_names[i] for i in selected_idx]
-        logger.info(f"[ml] After selection: {len(feature_names)} features")
-
-    # ── Walk-forward evaluation ──
+    # ── Walk-forward evaluation with nested feature selection ──
     n_splits = 5
     tscv = TimeSeriesSplit(n_splits=n_splits, gap=1)
 
-    results = {"logistic": [], "xgboost": [], "ensemble": []}
+    results = {"logistic": [], "xgboost": [], "lightgbm": [], "ensemble": []}
     baselines = {"majority": [], "momentum": [], "sma_trend": []}
+    all_val_dates, all_val_y, all_val_probs = [], [], []
+
+    # Track which features are consistently selected across folds
+    feature_selection_counts = np.zeros(total_features)
 
     for fold, (train_idx, val_idx) in enumerate(tscv.split(X)):
-        X_tr, X_va = X[train_idx], X[val_idx]
+        X_tr_raw, X_va_raw = X[train_idx], X[val_idx]
         y_tr, y_va = y[train_idx], y[val_idx]
+
+        # ── Nested feature selection (inside this fold only) ──
+        if total_features > FEATURE_TOP_K:
+            sel_idx = _select_features_for_fold(X_tr_raw, y_tr, feature_names, FEATURE_TOP_K)
+            X_tr = X_tr_raw[:, sel_idx]
+            X_va = X_va_raw[:, sel_idx]
+            fold_feature_names = [feature_names[i] for i in sel_idx]
+            for i in sel_idx:
+                feature_selection_counts[i] += 1
+        else:
+            X_tr, X_va = X_tr_raw, X_va_raw
+            fold_feature_names = feature_names
+            feature_selection_counts += 1
 
         scaler = StandardScaler()
         X_tr_sc = scaler.fit_transform(X_tr)
@@ -208,17 +311,16 @@ def _train_and_evaluate(X: np.ndarray, y: np.ndarray,
         majority = 1 if y_tr.mean() > 0.5 else 0
         baselines["majority"].append(accuracy_score(y_va, [majority] * len(y_va)))
 
-        return_idx = feature_names.index("return_1d") if "return_1d" in feature_names else 0
+        return_idx = fold_feature_names.index("return_1d") if "return_1d" in fold_feature_names else 0
         momentum_pred = (X_va[:, return_idx] > 0).astype(int)
         baselines["momentum"].append(accuracy_score(y_va, momentum_pred))
 
-        # SMA trend baseline: predict based on dist_sma20 sign
-        sma_idx = feature_names.index("dist_sma20") if "dist_sma20" in feature_names else None
+        sma_idx = fold_feature_names.index("dist_sma20") if "dist_sma20" in fold_feature_names else None
         if sma_idx is not None:
-            sma_pred = (X_va[:, sma_idx] < 0).astype(int)  # below SMA20 → predict up (mean reversion)
+            sma_pred = (X_va[:, sma_idx] < 0).astype(int)
             baselines["sma_trend"].append(accuracy_score(y_va, sma_pred))
 
-        # ── Logistic Regression with L1 (feature sparsity) ──
+        # ── Logistic Regression with L1 ──
         lr = LogisticRegression(C=0.5, l1_ratio=1.0, solver="saga",
                                 max_iter=2000, random_state=42)
         lr.fit(X_tr_sc, y_tr)
@@ -230,12 +332,12 @@ def _train_and_evaluate(X: np.ndarray, y: np.ndarray,
             "probs": lr_prob,
         })
 
-        # ── XGBoost with hyperparameter tuning ──
+        # ── XGBoost ──
+        xgb_prob = None
         if HAS_XGB:
             pos_count = y_tr.sum()
             neg_count = len(y_tr) - pos_count
             spw = neg_count / max(pos_count, 1)
-
             xgb_model = _tune_xgboost(X_tr_sc, y_tr, X_va_sc, y_va, spw)
             xgb_prob = xgb_model.predict_proba(X_va_sc)[:, 1]
             results["xgboost"].append({
@@ -245,20 +347,54 @@ def _train_and_evaluate(X: np.ndarray, y: np.ndarray,
                 "probs": xgb_prob,
             })
 
-            # ── Ensemble: average XGBoost + Logistic ──
-            ens_prob = 0.6 * xgb_prob + 0.4 * lr_prob
-            results["ensemble"].append({
-                "auc": roc_auc_score(y_va, ens_prob) if len(np.unique(y_va)) > 1 else 0.5,
-                "acc": accuracy_score(y_va, (ens_prob >= 0.5).astype(int)),
-                "brier": brier_score_loss(y_va, ens_prob),
+        # ── LightGBM ──
+        lgbm_prob = None
+        if HAS_LGBM:
+            pos_count = y_tr.sum()
+            neg_count = len(y_tr) - pos_count
+            spw = neg_count / max(pos_count, 1)
+            lgbm_model = _tune_lightgbm(X_tr_sc, y_tr, X_va_sc, y_va, spw)
+            lgbm_prob = lgbm_model.predict_proba(X_va_sc)[:, 1]
+            results["lightgbm"].append({
+                "auc": roc_auc_score(y_va, lgbm_prob) if len(np.unique(y_va)) > 1 else 0.5,
+                "acc": accuracy_score(y_va, (lgbm_prob >= 0.5).astype(int)),
+                "brier": brier_score_loss(y_va, lgbm_prob),
+                "probs": lgbm_prob,
             })
 
-    # ── Aggregate walk-forward metrics ──
-    def avg_metrics(results_list):
+        # ── 3-model ensemble ──
+        model_probs = [lr_prob]
+        model_weights = [0.2]
+        if xgb_prob is not None:
+            model_probs.append(xgb_prob)
+            model_weights.append(0.4)
+        if lgbm_prob is not None:
+            model_probs.append(lgbm_prob)
+            model_weights.append(0.4)
+
+        # Normalize weights
+        w_sum = sum(model_weights)
+        model_weights = [w / w_sum for w in model_weights]
+
+        ens_prob = sum(w * p for w, p in zip(model_weights, model_probs))
+        results["ensemble"].append({
+            "auc": roc_auc_score(y_va, ens_prob) if len(np.unique(y_va)) > 1 else 0.5,
+            "acc": accuracy_score(y_va, (ens_prob >= 0.5).astype(int)),
+            "brier": brier_score_loss(y_va, ens_prob),
+        })
+
+        # Collect for yearly analysis
+        if dates is not None:
+            all_val_dates.extend(dates[val_idx])
+            all_val_y.extend(y_va)
+            all_val_probs.extend(ens_prob)
+
+    # ── Aggregate metrics ──
+    def avg_metrics(rl):
         return {
-            "auc": np.mean([r["auc"] for r in results_list]),
-            "acc": np.mean([r["acc"] for r in results_list]),
-            "brier": np.mean([r["brier"] for r in results_list]),
+            "auc": np.mean([r["auc"] for r in rl]),
+            "acc": np.mean([r["acc"] for r in rl]),
+            "brier": np.mean([r["brier"] for r in rl]),
         }
 
     lr_metrics = avg_metrics(results["logistic"])
@@ -274,37 +410,63 @@ def _train_and_evaluate(X: np.ndarray, y: np.ndarray,
     logger.info(f"  Logistic L1: AUC={lr_metrics['auc']:.4f}, "
                 f"Acc={lr_metrics['acc']:.1%}, Brier={lr_metrics['brier']:.4f}")
 
-    # Pick best model type
     best_type = "logistic"
     best_metrics = lr_metrics
 
+    candidates = [("logistic", lr_metrics)]
+
     if HAS_XGB and results["xgboost"]:
         xgb_metrics = avg_metrics(results["xgboost"])
-        logger.info(f"  XGBoost tuned: AUC={xgb_metrics['auc']:.4f}, "
+        logger.info(f"  XGBoost: AUC={xgb_metrics['auc']:.4f}, "
                     f"Acc={xgb_metrics['acc']:.1%}, Brier={xgb_metrics['brier']:.4f}")
+        candidates.append(("xgboost", xgb_metrics))
 
-        if results["ensemble"]:
-            ens_metrics = avg_metrics(results["ensemble"])
-            logger.info(f"  Ensemble (60/40): AUC={ens_metrics['auc']:.4f}, "
-                        f"Acc={ens_metrics['acc']:.1%}, Brier={ens_metrics['brier']:.4f}")
+    if HAS_LGBM and results["lightgbm"]:
+        lgbm_metrics = avg_metrics(results["lightgbm"])
+        logger.info(f"  LightGBM: AUC={lgbm_metrics['auc']:.4f}, "
+                    f"Acc={lgbm_metrics['acc']:.1%}, Brier={lgbm_metrics['brier']:.4f}")
+        candidates.append(("lightgbm", lgbm_metrics))
 
-            # Pick best of xgb vs ensemble vs logistic
-            candidates = [
-                ("xgboost", xgb_metrics),
-                ("ensemble", ens_metrics),
-                ("logistic", lr_metrics),
-            ]
-            best_type, best_metrics = max(candidates, key=lambda x: x[1]["auc"])
+    if results["ensemble"]:
+        ens_metrics = avg_metrics(results["ensemble"])
+        logger.info(f"  Ensemble (3-model): AUC={ens_metrics['auc']:.4f}, "
+                    f"Acc={ens_metrics['acc']:.1%}, Brier={ens_metrics['brier']:.4f}")
+        candidates.append(("ensemble", ens_metrics))
 
-    logger.info(f"[ml] Best model: {best_type} "
-                f"(AUC={best_metrics['auc']:.4f}, Acc={best_metrics['acc']:.1%})")
+    best_type, best_metrics = max(candidates, key=lambda x: x[1]["auc"])
+    logger.info(f"[ml] Best: {best_type} (AUC={best_metrics['auc']:.4f})")
 
-    # ── Train final model(s) on all data ──
+    # ── Yearly performance ──
+    yearly_perf = {}
+    if all_val_dates:
+        yearly_perf = _compute_yearly_performance(
+            np.array(all_val_dates), np.array(all_val_y), np.array(all_val_probs))
+        for yr, p in yearly_perf.items():
+            logger.info(f"  Year {yr}: AUC={p['auc']:.3f}, Acc={p['acc']:.1%} (n={p['n']})")
+
+    # ── Feature stability: consistently selected features ──
+    if total_features > FEATURE_TOP_K:
+        stable_features = [(feature_names[i], int(c))
+                           for i, c in enumerate(feature_selection_counts) if c >= 3]
+        stable_features.sort(key=lambda x: -x[1])
+        logger.info(f"[ml] Features selected in ≥3/5 folds: {len(stable_features)}")
+        # Use features selected in majority of folds for final model
+        final_sel_idx = [i for i, c in enumerate(feature_selection_counts)
+                         if c >= max(2, n_splits // 2)]
+        if len(final_sel_idx) < 20:
+            final_sel_idx = list(np.argsort(feature_selection_counts)[::-1][:FEATURE_TOP_K])
+        final_sel_idx = sorted(final_sel_idx)
+    else:
+        final_sel_idx = list(range(total_features))
+
+    selected_feature_names = [feature_names[i] for i in final_sel_idx]
+    X_sel = X[:, final_sel_idx]
+
+    # ── Train final model(s) on all data (with selected features) ──
     final_scaler = StandardScaler()
-    X_scaled = final_scaler.fit_transform(X)
+    X_scaled = final_scaler.fit_transform(X_sel)
     split_idx = int(n * 0.85)
 
-    # Always train both for ensemble
     final_lr = LogisticRegression(C=0.5, l1_ratio=1.0, solver="saga",
                                   max_iter=2000, random_state=42)
     final_lr.fit(X_scaled, y)
@@ -316,17 +478,38 @@ def _train_and_evaluate(X: np.ndarray, y: np.ndarray,
         spw = neg_count / max(pos_count, 1)
         final_xgb = _tune_xgboost(X_scaled[:split_idx], y[:split_idx],
                                     X_scaled[split_idx:], y[split_idx:], spw)
-
-        # Log feature importance
         if hasattr(final_xgb, "feature_importances_"):
-            imp = sorted(zip(feature_names, final_xgb.feature_importances_),
+            imp = sorted(zip(selected_feature_names, final_xgb.feature_importances_),
                          key=lambda x: -x[1])[:10]
             logger.info(f"[ml] Top features: {[(n, f'{v:.3f}') for n, v in imp]}")
 
+    final_lgbm = None
+    if HAS_LGBM:
+        pos_count = y[:split_idx].sum()
+        neg_count = split_idx - pos_count
+        spw = neg_count / max(pos_count, 1)
+        final_lgbm = _tune_lightgbm(X_scaled[:split_idx], y[:split_idx],
+                                      X_scaled[split_idx:], y[split_idx:], spw)
+
+    # Build final model dict
     if best_type == "ensemble":
-        final_model = {"xgb": final_xgb, "lr": final_lr, "xgb_weight": 0.6}
+        model_dict = {"lr": final_lr}
+        weights = {"lr": 0.2}
+        if final_xgb:
+            model_dict["xgb"] = final_xgb
+            weights["xgb"] = 0.4
+        if final_lgbm:
+            model_dict["lgbm"] = final_lgbm
+            weights["lgbm"] = 0.4
+        # Normalize
+        w_sum = sum(weights.values())
+        weights = {k: v / w_sum for k, v in weights.items()}
+        model_dict["weights"] = weights
+        final_model = model_dict
     elif best_type == "xgboost":
         final_model = final_xgb
+    elif best_type == "lightgbm":
+        final_model = final_lgbm
     else:
         final_model = final_lr
 
@@ -341,26 +524,75 @@ def _train_and_evaluate(X: np.ndarray, y: np.ndarray,
         "baseline_momentum": baseline_mom,
         "beats_baselines": beats_baselines,
         "n_samples": n,
-        "feature_names": feature_names,
+        "feature_names": selected_feature_names,
+        "yearly_performance": yearly_perf,
+        "total_features": total_features,
+        "selected_features": len(selected_feature_names),
     }
+
+
+def _run_holdout_test(X: np.ndarray, y: np.ndarray,
+                      feature_names: list, holdout_size: int = HOLDOUT_DAYS) -> dict:
+    """
+    Honest out-of-sample evaluation on last 12 months.
+    NO data from holdout period used in training/selection/tuning.
+    """
+    if len(X) <= holdout_size + 500:
+        logger.warning("[ml] Not enough data for holdout test")
+        return {"auc": 0.0, "acc": 0.0, "n": 0}
+
+    cutoff = len(X) - holdout_size
+    X_train, X_holdout = X[:cutoff], X[cutoff:]
+    y_train, y_holdout = y[:cutoff], y[cutoff:]
+
+    logger.info(f"[ml] Holdout test: train={cutoff}, holdout={holdout_size}")
+
+    # Feature selection on train only
+    if X_train.shape[1] > FEATURE_TOP_K and HAS_XGB:
+        sel_idx = _select_features_for_fold(X_train, y_train, feature_names, FEATURE_TOP_K)
+        X_train = X_train[:, sel_idx]
+        X_holdout = X_holdout[:, sel_idx]
+
+    scaler = StandardScaler()
+    X_tr_sc = scaler.fit_transform(X_train)
+    X_ho_sc = scaler.transform(X_holdout)
+
+    # Train XGBoost on train set
+    if HAS_XGB:
+        split = int(len(X_train) * 0.85)
+        pos = y_train[:split].sum()
+        neg = split - pos
+        spw = neg / max(pos, 1)
+        model = _tune_xgboost(X_tr_sc[:split], y_train[:split],
+                               X_tr_sc[split:], y_train[split:], spw)
+        prob = model.predict_proba(X_ho_sc)[:, 1]
+    else:
+        lr = LogisticRegression(C=0.5, l1_ratio=1.0, solver="saga",
+                                max_iter=2000, random_state=42)
+        lr.fit(X_tr_sc, y_train)
+        prob = lr.predict_proba(X_ho_sc)[:, 1]
+
+    auc = roc_auc_score(y_holdout, prob) if len(np.unique(y_holdout)) > 1 else 0.5
+    acc = accuracy_score(y_holdout, (prob >= 0.5).astype(int))
+
+    logger.info(f"[ml] Holdout: AUC={auc:.4f}, Acc={acc:.1%} (n={holdout_size})")
+    return {"auc": round(float(auc), 4), "acc": round(float(acc), 4), "n": holdout_size}
 
 
 def train_model() -> dict:
     """
-    Full training pipeline: fetch data → features → train → save.
-    Returns training results dict.
+    Full training pipeline: fetch data → features → validate → train → save.
     """
-    logger.info("[ml] Starting model training...")
+    logger.info("[ml] Starting model training (v4 — 10Y data, 3 models, validation)...")
 
-    # Fetch 5Y OHLC for USDJPY
-    df = fetch_ohlc("USDJPY=X", years=5)
-
-    # Compute USDJPY technical features
+    # ── 1. Fetch 10Y OHLC for USDJPY ──
+    df = fetch_ohlc("USDJPY=X", years=DATA_YEARS)
     features = build_features(df)
 
-    # Fetch and merge cross-asset data (VIX, DXY, gold, oil, yields, Nikkei, FX pairs)
+    # ── 2. Cross-asset features (VIX, DXY, gold, oil, yields, etc.) ──
+    cross_df = pd.DataFrame()
     try:
-        cross_df = fetch_cross_asset_history(years=5)
+        cross_df = fetch_cross_asset_history(years=DATA_YEARS)
         if not cross_df.empty:
             cross_features = build_cross_asset_indicators(cross_df, df.index)
             features = features.join(cross_features, how="left")
@@ -368,36 +600,57 @@ def train_model() -> dict:
     except Exception as e:
         logger.warning(f"[ml] Cross-asset fetch failed (non-fatal): {e}")
 
-    # Target: next-day direction (1 = USD/JPY goes up = JPY weaker)
+    # ── 3. FRED macro features (rate differentials, CPI, unemployment) ──
+    try:
+        macro_df = fetch_fred_macro(years=DATA_YEARS)
+        if not macro_df.empty:
+            macro_features = build_macro_features(macro_df, df.index)
+            features = features.join(macro_features, how="left")
+            logger.info(f"[ml] Added {len(macro_features.columns)} macro features")
+    except Exception as e:
+        logger.warning(f"[ml] FRED macro fetch failed (non-fatal): {e}")
+
+    # ── 4. Regime features (volatility regime, rolling correlations, seasonality) ──
+    try:
+        regime_features = build_regime_features(df, cross_df)
+        features = features.join(regime_features, how="left")
+        logger.info(f"[ml] Added {len(regime_features.columns)} regime features")
+    except Exception as e:
+        logger.warning(f"[ml] Regime features failed (non-fatal): {e}")
+
+    # ── 5. Target ──
     features = features.copy()
     features["target"] = (df["Close"].shift(-1) > df["Close"]).astype(int)
 
-    # Drop rows where core USDJPY features have NaN (warmup period ~50 days)
-    # For cross-asset features, fill remaining NaN with 0 (data may start later)
+    # Drop rows where core USDJPY features have NaN
     core_cols = [c for c in FEATURE_COLUMNS if c in features.columns]
     features = features.dropna(subset=core_cols + ["target"])
     features = features.fillna(0.0)
 
-    # Select feature columns: USDJPY technicals + any cross-asset columns found
+    # Collect all feature columns
     available_cols = [c for c in FEATURE_COLUMNS if c in features.columns]
-    # Auto-discover cross-asset columns
-    cross_cols = [c for c in features.columns
+    extra_cols = [c for c in features.columns
                   if c not in FEATURE_COLUMNS and c != "target"]
-    all_cols = available_cols + sorted(cross_cols)
+    all_cols = available_cols + sorted(extra_cols)
 
     logger.info(f"[ml] Total features: {len(all_cols)} "
-                f"({len(available_cols)} technical + {len(cross_cols)} cross-asset)")
+                f"({len(available_cols)} technical + {len(extra_cols)} extra)")
 
     X = features[all_cols].values
     y = features["target"].values
+    dates = features.index.values
 
-    # Train and evaluate (may do feature selection internally)
-    result = _train_and_evaluate(X, y, all_cols)
+    # ── 6. Label shuffle sanity check ──
+    shuffle_auc = _run_label_shuffle_test(X, y, all_cols)
 
-    # Use feature_names from result (may be subset after selection)
+    # ── 7. Holdout test (last 12 months) ──
+    holdout_result = _run_holdout_test(X, y, all_cols)
+
+    # ── 8. Train and evaluate (walk-forward with nested feature selection) ──
+    result = _train_and_evaluate(X, y, all_cols, dates)
     final_feature_names = result["feature_names"]
 
-    # Save model + metadata
+    # ── 9. Save model + metadata ──
     model_path = MODEL_DIR / "usdjpy_model.pkl"
     meta_path = MODEL_DIR / "usdjpy_meta.json"
 
@@ -416,16 +669,26 @@ def train_model() -> dict:
         walk_forward_auc=round(result["metrics"]["auc"], 4),
         walk_forward_accuracy=round(result["metrics"]["acc"], 4),
         walk_forward_brier=round(result["metrics"]["brier"], 4),
+        holdout_auc=holdout_result.get("auc", 0.0),
+        holdout_accuracy=holdout_result.get("acc", 0.0),
         baseline_accuracy=round(float(result["baseline_majority"]), 4),
         momentum_accuracy=round(float(result["baseline_momentum"]), 4),
         beats_baselines=bool(result["beats_baselines"]),
+        label_shuffle_auc=round(shuffle_auc, 4),
+        yearly_performance=result.get("yearly_performance", {}),
+        total_features=result.get("total_features", len(all_cols)),
+        selected_features=result.get("selected_features", len(final_feature_names)),
     )
     with open(meta_path, "w") as f:
-        json.dump(asdict(metadata), f, indent=2)
+        json.dump(asdict(metadata), f, indent=2, default=str)
 
     logger.info(f"[ml] Model saved to {model_path}")
     logger.info(f"[ml] Beats baselines: {metadata.beats_baselines}")
+    logger.info(f"[ml] Holdout AUC: {holdout_result.get('auc', 'N/A')}")
+    logger.info(f"[ml] Label shuffle AUC: {shuffle_auc:.4f}")
 
+    result["holdout"] = holdout_result
+    result["label_shuffle_auc"] = shuffle_auc
     return result
 
 
@@ -463,7 +726,6 @@ def predict_next_day() -> MLPrediction:
     Predict next-day USD/JPY direction.
     Auto-trains if no model exists or model is stale.
     """
-    # Load or train model
     model_dict, meta = load_model()
     if model_dict is None or _needs_retrain(meta):
         try:
@@ -482,12 +744,12 @@ def predict_next_day() -> MLPrediction:
     scaler = model_dict["scaler"]
     feature_cols = meta["feature_columns"]
 
-    # Fetch recent OHLC (need ~60 days for indicator warmup)
     try:
         df = fetch_ohlc("USDJPY=X", years=1)
         features = build_features(df)
 
-        # Add cross-asset features for prediction too
+        # Cross-asset features
+        cross_df = pd.DataFrame()
         try:
             cross_df = fetch_cross_asset_history(years=1)
             if not cross_df.empty:
@@ -496,18 +758,30 @@ def predict_next_day() -> MLPrediction:
         except Exception as e:
             logger.warning(f"[ml] Cross-asset prediction fetch failed: {e}")
 
-        # Drop rows with NaN in core features, fill rest with 0
+        # Macro features
+        try:
+            macro_df = fetch_fred_macro(years=2)
+            if not macro_df.empty:
+                macro_features = build_macro_features(macro_df, df.index)
+                features = features.join(macro_features, how="left")
+        except Exception as e:
+            logger.warning(f"[ml] FRED prediction fetch failed: {e}")
+
+        # Regime features
+        try:
+            regime_features = build_regime_features(df, cross_df)
+            features = features.join(regime_features, how="left")
+        except Exception as e:
+            logger.warning(f"[ml] Regime prediction features failed: {e}")
+
         core_cols = [c for c in FEATURE_COLUMNS if c in features.columns]
         features = features.dropna(subset=core_cols)
         features = features.fillna(0.0)
 
-        # Get the latest row
         latest = features.iloc[-1:]
-
         if len(latest) == 0:
             raise ValueError("No valid feature rows after dropna")
 
-        # Fill missing columns with 0
         for c in feature_cols:
             if c not in latest.columns:
                 latest[c] = 0.0
@@ -518,12 +792,13 @@ def predict_next_day() -> MLPrediction:
         # Predict — handle ensemble vs single model
         model_type = meta.get("model_type", "")
         if model_type == "ensemble" and isinstance(model, dict):
-            xgb_prob = model["xgb"].predict_proba(X_scaled)[0][1]
-            lr_prob = model["lr"].predict_proba(X_scaled)[0][1]
-            w = model.get("xgb_weight", 0.6)
-            prob = w * xgb_prob + (1 - w) * lr_prob
+            weights = model.get("weights", {"lr": 0.2, "xgb": 0.4, "lgbm": 0.4})
+            prob = 0.0
+            for key, w in weights.items():
+                if key in model and hasattr(model[key], "predict_proba"):
+                    prob += w * model[key].predict_proba(X_scaled)[0][1]
         else:
-            prob = model.predict_proba(X_scaled)[0][1]  # P(USD/JPY up)
+            prob = model.predict_proba(X_scaled)[0][1]
 
     except Exception as e:
         logger.error(f"[ml] Prediction failed: {e}")
@@ -536,11 +811,9 @@ def predict_next_day() -> MLPrediction:
             model_age_days=0,
         )
 
-    # Convert probability to direction and score
     auc = meta.get("walk_forward_auc", 0.5)
     ml_score = _probability_to_score(prob, auc)
 
-    # Direction with confidence threshold
     if prob > 0.57:
         direction = "up"
     elif prob < 0.43:
@@ -548,10 +821,8 @@ def predict_next_day() -> MLPrediction:
     else:
         direction = "neutral"
 
-    # Confidence: based on distance from 0.5 and model quality
     confidence = min(abs(prob - 0.5) * 2, 1.0) * np.clip((auc - 0.48) / 0.20, 0, 1)
 
-    # Model age
     trained_at = datetime.fromisoformat(meta["trained_at"])
     age_days = (datetime.now(timezone.utc) - trained_at).days
 
@@ -576,43 +847,43 @@ def predict_next_day() -> MLPrediction:
 
 
 def get_ml_weight(prediction: MLPrediction) -> float:
-    """
-    Compute dynamic ML weight for ensemble.
-    Performance-gated: higher weight only if model is proven.
-    """
+    """Dynamic ML weight, performance-gated."""
     if prediction.model_type == "unavailable":
         return 0.0
-
     auc = prediction.walk_forward_auc
-
-    # Base weight: 0.15
-    weight = DEFAULT_ML_WEIGHT
-
-    # Increase if model is strong (AUC > 0.55)
     if auc > 0.58:
-        weight = MAX_ML_WEIGHT  # 0.30
+        return MAX_ML_WEIGHT
     elif auc > 0.55:
-        weight = 0.20
+        return 0.20
     elif auc < MIN_AUC_THRESHOLD:
-        weight = 0.05  # barely trust it
-
-    return weight
+        return 0.05
+    return DEFAULT_ML_WEIGHT
 
 
 if __name__ == "__main__":
     """Run standalone training + prediction test."""
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     print("=" * 60)
-    print("ML Predictor — Training & Evaluation")
+    print("ML Predictor v4 — Training & Evaluation")
     print("=" * 60)
 
     result = train_model()
     print(f"\nModel type: {result['model_type']}")
     print(f"Walk-forward AUC: {result['metrics']['auc']:.4f}")
     print(f"Walk-forward Acc: {result['metrics']['acc']:.1%}")
+    print(f"Holdout AUC: {result['holdout'].get('auc', 'N/A')}")
+    print(f"Holdout Acc: {result['holdout'].get('acc', 'N/A')}")
+    print(f"Label shuffle AUC: {result['label_shuffle_auc']:.4f}")
     print(f"Baseline (majority): {result['baseline_majority']:.1%}")
     print(f"Baseline (momentum): {result['baseline_momentum']:.1%}")
     print(f"Beats baselines: {result['beats_baselines']}")
+    print(f"Total features: {result.get('total_features', '?')}")
+    print(f"Selected features: {result.get('selected_features', '?')}")
+
+    if result.get("yearly_performance"):
+        print("\nYearly performance:")
+        for yr, p in result["yearly_performance"].items():
+            print(f"  {yr}: AUC={p['auc']:.3f}, Acc={p['acc']:.1%} (n={p['n']})")
 
     print("\n--- Predicting next day ---")
     pred = predict_next_day()
