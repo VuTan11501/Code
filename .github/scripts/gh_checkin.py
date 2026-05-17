@@ -163,27 +163,25 @@ def load_schedule():
 
 
 def find_matching_action(schedule, now_jst):
-    """Find action matching current time within tolerance."""
-    tolerance = schedule.get("tolerance_minutes", 30)
-    now_minutes = now_jst.hour * 60 + now_jst.minute
-    now_date = now_jst.date()
+    """Find the closest scheduled action within tolerance.
+
+    Uses full datetime comparison (not just time-of-day) so cross-midnight
+    delays from GitHub Actions cron are handled correctly.  Returns the
+    single closest match rather than the first one found.
+    """
+    tolerance = schedule.get("tolerance_minutes", 180)
+    best_entry = None
+    best_diff = float("inf")
 
     for entry in schedule["actions"]:
-        dt = datetime.strptime(entry["datetime"], "%Y-%m-%d %H:%M")
-        entry_date = dt.date()
-        entry_minutes = dt.hour * 60 + dt.minute
+        dt = datetime.strptime(entry["datetime"], "%Y-%m-%d %H:%M").replace(tzinfo=JST)
+        diff_minutes = abs((now_jst - dt).total_seconds()) / 60
 
-        if entry_date != now_date:
-            continue
+        if diff_minutes <= tolerance and diff_minutes < best_diff:
+            best_diff = diff_minutes
+            best_entry = entry
 
-        diff = abs(now_minutes - entry_minutes)
-        if diff > 12 * 60:  # handle midnight wrap
-            diff = 24 * 60 - diff
-
-        if diff <= tolerance:
-            return entry
-
-    return None
+    return best_entry
 
 
 # ═══════════════════════════════════════════════════════════

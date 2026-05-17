@@ -1,6 +1,6 @@
 {
   "timezone": "Asia/Tokyo",
-  "tolerance_minutes": 30,
+  "tolerance_minutes": 180,
   "locations": {
     "office": {"lat": 35.5202417, "lon": 139.620325, "name": "NEC Tamagawa"},
     "home": {"lat": 35.51386, "lon": 139.6749183, "name": "FPT Residence Tsurumi"}
