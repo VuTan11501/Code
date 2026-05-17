@@ -62,9 +62,9 @@ RETRAIN_DAYS = 7
 MIN_AUC_THRESHOLD = 0.52
 DEFAULT_ML_WEIGHT = 0.15
 MAX_ML_WEIGHT = 0.30
-DATA_YEARS = 10                # Extended from 5Y to 10Y
-HOLDOUT_DAYS = 252             # ~12 months for holdout test
-FEATURE_TOP_K = 60
+DATA_YEARS = 20                # Extended to 20Y for maximum training data
+HOLDOUT_DAYS = 504             # ~24 months for robust holdout test
+FEATURE_TOP_K = 80             # Increased from 60 for more features
 
 
 @dataclass
@@ -141,10 +141,24 @@ def _select_features_for_fold(X_tr: np.ndarray, y_tr: np.ndarray,
     return sorted(top_indices)
 
 
+def _compute_sample_weights(n_samples: int, half_life_years: float = 3.0) -> np.ndarray:
+    """
+    Exponential decay sample weights: recent data weighted more.
+    Half-life of ~3 years means data from 3 years ago has 50% weight.
+    """
+    days = np.arange(n_samples)
+    # Convert half_life from years to trading days
+    half_life_days = half_life_years * 252
+    weights = np.exp(-np.log(2) * (n_samples - 1 - days) / half_life_days)
+    # Normalize so mean weight = 1
+    weights = weights / weights.mean()
+    return weights
+
+
 def _tune_xgboost(X_tr: np.ndarray, y_tr: np.ndarray,
                    X_va: np.ndarray, y_va: np.ndarray,
-                   spw: float) -> "xgb.XGBClassifier":
-    """Quick hyperparameter search. Returns best XGBClassifier."""
+                   spw: float, sample_weight: np.ndarray = None) -> "xgb.XGBClassifier":
+    """Quick hyperparameter search with optional sample weighting."""
     param_grid = [
         {"max_depth": 3, "learning_rate": 0.05, "min_child_weight": 10, "colsample_bytree": 0.7},
         {"max_depth": 4, "learning_rate": 0.03, "min_child_weight": 8, "colsample_bytree": 0.6},
@@ -161,7 +175,8 @@ def _tune_xgboost(X_tr: np.ndarray, y_tr: np.ndarray,
             eval_metric="auc", verbosity=0, random_state=42,
             reg_alpha=0.1, reg_lambda=1.0, **params,
         )
-        model.fit(X_tr, y_tr, eval_set=[(X_va, y_va)], verbose=False)
+        model.fit(X_tr, y_tr, sample_weight=sample_weight,
+                  eval_set=[(X_va, y_va)], verbose=False)
         prob = model.predict_proba(X_va)[:, 1]
         auc = roc_auc_score(y_va, prob) if len(np.unique(y_va)) > 1 else 0.5
         if auc > best_auc:
@@ -171,8 +186,8 @@ def _tune_xgboost(X_tr: np.ndarray, y_tr: np.ndarray,
 
 def _tune_lightgbm(X_tr: np.ndarray, y_tr: np.ndarray,
                     X_va: np.ndarray, y_va: np.ndarray,
-                    spw: float) -> "lgbm.LGBMClassifier":
-    """Quick LightGBM hyperparameter search."""
+                    spw: float, sample_weight: np.ndarray = None) -> "lgbm.LGBMClassifier":
+    """Quick LightGBM hyperparameter search with optional sample weighting."""
     param_grid = [
         {"max_depth": 3, "learning_rate": 0.05, "num_leaves": 15, "colsample_bytree": 0.7},
         {"max_depth": 4, "learning_rate": 0.03, "num_leaves": 20, "colsample_bytree": 0.6},
@@ -189,7 +204,8 @@ def _tune_lightgbm(X_tr: np.ndarray, y_tr: np.ndarray,
             min_child_samples=max(10, int(len(y_tr) * 0.01)),
             **params,
         )
-        model.fit(X_tr, y_tr, eval_set=[(X_va, y_va)],
+        model.fit(X_tr, y_tr, sample_weight=sample_weight,
+                  eval_set=[(X_va, y_va)],
                   callbacks=[lgbm.log_evaluation(period=0)])
         prob = model.predict_proba(X_va)[:, 1]
         auc = roc_auc_score(y_va, prob) if len(np.unique(y_va)) > 1 else 0.5
@@ -276,7 +292,7 @@ def _train_and_evaluate(X: np.ndarray, y: np.ndarray,
     logger.info(f"[ml] Training on {n} samples, {total_features} features")
 
     # ── Walk-forward evaluation with nested feature selection ──
-    n_splits = 5
+    n_splits = 7 if n > 3000 else 5  # More folds for larger dataset
     tscv = TimeSeriesSplit(n_splits=n_splits, gap=1)
 
     results = {"logistic": [], "xgboost": [], "lightgbm": [], "ensemble": []}
@@ -289,6 +305,9 @@ def _train_and_evaluate(X: np.ndarray, y: np.ndarray,
     for fold, (train_idx, val_idx) in enumerate(tscv.split(X)):
         X_tr_raw, X_va_raw = X[train_idx], X[val_idx]
         y_tr, y_va = y[train_idx], y[val_idx]
+
+        # ── Compute sample weights for this fold's training data ──
+        fold_weights = _compute_sample_weights(len(y_tr), half_life_years=3.0)
 
         # ── Nested feature selection (inside this fold only) ──
         if total_features > FEATURE_TOP_K:
@@ -320,10 +339,10 @@ def _train_and_evaluate(X: np.ndarray, y: np.ndarray,
             sma_pred = (X_va[:, sma_idx] < 0).astype(int)
             baselines["sma_trend"].append(accuracy_score(y_va, sma_pred))
 
-        # ── Logistic Regression with L1 ──
+        # ── Logistic Regression with L1 (sample_weight via fit) ──
         lr = LogisticRegression(C=0.5, l1_ratio=1.0, solver="saga",
                                 max_iter=2000, random_state=42)
-        lr.fit(X_tr_sc, y_tr)
+        lr.fit(X_tr_sc, y_tr, sample_weight=fold_weights)
         lr_prob = lr.predict_proba(X_va_sc)[:, 1]
         results["logistic"].append({
             "auc": roc_auc_score(y_va, lr_prob) if len(np.unique(y_va)) > 1 else 0.5,
@@ -332,13 +351,13 @@ def _train_and_evaluate(X: np.ndarray, y: np.ndarray,
             "probs": lr_prob,
         })
 
-        # ── XGBoost ──
+        # ── XGBoost with sample weighting ──
         xgb_prob = None
         if HAS_XGB:
             pos_count = y_tr.sum()
             neg_count = len(y_tr) - pos_count
             spw = neg_count / max(pos_count, 1)
-            xgb_model = _tune_xgboost(X_tr_sc, y_tr, X_va_sc, y_va, spw)
+            xgb_model = _tune_xgboost(X_tr_sc, y_tr, X_va_sc, y_va, spw, fold_weights)
             xgb_prob = xgb_model.predict_proba(X_va_sc)[:, 1]
             results["xgboost"].append({
                 "auc": roc_auc_score(y_va, xgb_prob) if len(np.unique(y_va)) > 1 else 0.5,
@@ -347,13 +366,13 @@ def _train_and_evaluate(X: np.ndarray, y: np.ndarray,
                 "probs": xgb_prob,
             })
 
-        # ── LightGBM ──
+        # ── LightGBM with sample weighting ──
         lgbm_prob = None
         if HAS_LGBM:
             pos_count = y_tr.sum()
             neg_count = len(y_tr) - pos_count
             spw = neg_count / max(pos_count, 1)
-            lgbm_model = _tune_lightgbm(X_tr_sc, y_tr, X_va_sc, y_va, spw)
+            lgbm_model = _tune_lightgbm(X_tr_sc, y_tr, X_va_sc, y_va, spw, fold_weights)
             lgbm_prob = lgbm_model.predict_proba(X_va_sc)[:, 1]
             results["lightgbm"].append({
                 "auc": roc_auc_score(y_va, lgbm_prob) if len(np.unique(y_va)) > 1 else 0.5,
@@ -462,22 +481,24 @@ def _train_and_evaluate(X: np.ndarray, y: np.ndarray,
     selected_feature_names = [feature_names[i] for i in final_sel_idx]
     X_sel = X[:, final_sel_idx]
 
-    # ── Train final model(s) on all data (with selected features) ──
+    # ── Train final model(s) on all data (with selected features + sample weights) ──
     final_scaler = StandardScaler()
     X_scaled = final_scaler.fit_transform(X_sel)
     split_idx = int(n * 0.85)
+    final_weights = _compute_sample_weights(n, half_life_years=3.0)
 
     final_lr = LogisticRegression(C=0.5, l1_ratio=1.0, solver="saga",
                                   max_iter=2000, random_state=42)
-    final_lr.fit(X_scaled, y)
+    final_lr.fit(X_scaled, y, sample_weight=final_weights)
 
     final_xgb = None
     if HAS_XGB:
         pos_count = y[:split_idx].sum()
         neg_count = split_idx - pos_count
         spw = neg_count / max(pos_count, 1)
+        train_weights = final_weights[:split_idx]
         final_xgb = _tune_xgboost(X_scaled[:split_idx], y[:split_idx],
-                                    X_scaled[split_idx:], y[split_idx:], spw)
+                                    X_scaled[split_idx:], y[split_idx:], spw, train_weights)
         if hasattr(final_xgb, "feature_importances_"):
             imp = sorted(zip(selected_feature_names, final_xgb.feature_importances_),
                          key=lambda x: -x[1])[:10]
@@ -488,8 +509,9 @@ def _train_and_evaluate(X: np.ndarray, y: np.ndarray,
         pos_count = y[:split_idx].sum()
         neg_count = split_idx - pos_count
         spw = neg_count / max(pos_count, 1)
+        train_weights = final_weights[:split_idx]
         final_lgbm = _tune_lightgbm(X_scaled[:split_idx], y[:split_idx],
-                                      X_scaled[split_idx:], y[split_idx:], spw)
+                                      X_scaled[split_idx:], y[split_idx:], spw, train_weights)
 
     # Build final model dict
     if best_type == "ensemble":

@@ -28,19 +28,35 @@ CROSS_ASSET_SYMBOLS = {
     "dxy": "DX-Y.NYB",
     # Safe havens
     "gold": "GC=F",
+    "silver": "SI=F",
     # Energy (Japan import cost)
     "oil_wti": "CL=F",
-    # US yields
+    "natgas": "NG=F",
+    # Commodities (global growth proxy)
+    "copper": "HG=F",
+    # US yield curve
     "us10y": "^TNX",
+    "us5y": "^FVX",
+    "us30y": "^TYX",
     "us2y": "^IRX",       # 3-month as proxy (2Y not always on yfinance)
     # Stock indices
     "nikkei": "^N225",
     "sp500": "^GSPC",
+    "hang_seng": "^HSI",
+    "dax": "^GDAXI",
+    "kospi": "^KS11",
+    # JPY cross pairs (direct JPY sentiment)
+    "eurjpy": "EURJPY=X",
+    "gbpjpy": "GBPJPY=X",
+    "audjpy": "AUDJPY=X",
     # Correlated FX pairs
     "eurusd": "EURUSD=X",
     "gbpusd": "GBPUSD=X",
     "audusd": "AUDUSD=X",
-    "usdcnh": "USDCNH=X",  # CNH = offshore yuan
+    "usdcnh": "USDCNH=X",
+    # Asian EM FX (correlated with JPY flows)
+    "usdkrw": "USDKRW=X",
+    "usdsgd": "USDSGD=X",
 }
 
 
@@ -276,44 +292,70 @@ def build_cross_asset_indicators(cross_df: pd.DataFrame, usdjpy_index: pd.Dateti
     if cross_df.empty:
         return pd.DataFrame(index=usdjpy_index)
 
-    feat = pd.DataFrame(index=cross_df.index)
+    # Build features as dict to avoid DataFrame fragmentation
+    pieces = {}
 
     for col in cross_df.columns:
         s = cross_df[col]
-        # Daily return (lagged 1 day)
-        feat[f"{col}_ret1d"] = s.pct_change()
-        # 5-day return
-        feat[f"{col}_ret5d"] = s.pct_change(5)
-        # Level (for VIX, yields)
-        if col in ("vix", "us10y", "us2y"):
-            feat[f"{col}_level"] = s
-        # RSI
-        feat[f"{col}_rsi14"] = compute_rsi(s, 14)
-        # Distance from 20-day SMA
+        pieces[f"{col}_ret1d"] = s.pct_change()
+        pieces[f"{col}_ret5d"] = s.pct_change(5)
+        if col in ("vix", "us10y", "us2y", "us5y", "us30y"):
+            pieces[f"{col}_level"] = s
+        pieces[f"{col}_rsi14"] = compute_rsi(s, 14)
         sma20 = s.rolling(20).mean()
-        feat[f"{col}_dist_sma20"] = (s - sma20) / sma20.replace(0, 1e-9)
+        pieces[f"{col}_dist_sma20"] = (s - sma20) / sma20.replace(0, 1e-9)
 
-    # ── Yield spread (US10Y - short rate proxy) ──
+    # ── Yield curve features ──
     if "us10y" in cross_df.columns and "us2y" in cross_df.columns:
-        feat["yield_spread_10y_3m"] = cross_df["us10y"] - cross_df["us2y"]
-        feat["yield_spread_change"] = feat["yield_spread_10y_3m"].diff()
+        pieces["yield_spread_10y_3m"] = cross_df["us10y"] - cross_df["us2y"]
+        pieces["yield_spread_change"] = pieces["yield_spread_10y_3m"].diff()
+    if "us10y" in cross_df.columns and "us5y" in cross_df.columns:
+        pieces["yield_spread_10y_5y"] = cross_df["us10y"] - cross_df["us5y"]
+    if "us30y" in cross_df.columns and "us10y" in cross_df.columns:
+        pieces["yield_spread_30y_10y"] = cross_df["us30y"] - cross_df["us10y"]
 
-    # ── VIX term structure proxy ──
+    # ── VIX features ──
     if "vix" in cross_df.columns:
-        feat["vix_sma5"] = cross_df["vix"].rolling(5).mean()
-        feat["vix_above_avg"] = (cross_df["vix"] > cross_df["vix"].rolling(60).mean()).astype(float)
+        pieces["vix_sma5"] = cross_df["vix"].rolling(5).mean()
+        pieces["vix_above_avg"] = (cross_df["vix"] > cross_df["vix"].rolling(60).mean()).astype(float)
+        pieces["vix_spike"] = (cross_df["vix"].pct_change() > 0.15).astype(float)
 
     # ── FX correlation features ──
-    if "eurusd" in cross_df.columns:
-        feat["eurusd_ret1d"] = cross_df["eurusd"].pct_change()
     if "dxy" in cross_df.columns and "gold" in cross_df.columns:
-        # DXY-Gold inverse: when both move same direction, unusual
-        feat["dxy_gold_corr_20"] = cross_df["dxy"].pct_change().rolling(20).corr(
+        pieces["dxy_gold_corr_20"] = cross_df["dxy"].pct_change().rolling(20).corr(
             cross_df["gold"].pct_change())
+
+    # ── JPY cross momentum (direct yen sentiment) ──
+    for jpy_cross in ["eurjpy", "gbpjpy", "audjpy"]:
+        if jpy_cross in cross_df.columns:
+            pieces[f"{jpy_cross}_mom_10d"] = cross_df[jpy_cross].pct_change(10)
+
+    # ── Asian FX cluster ──
+    asian_fx = [c for c in ["usdkrw", "usdsgd"] if c in cross_df.columns]
+    if len(asian_fx) >= 2:
+        asian_rets = pd.DataFrame({c: cross_df[c].pct_change() for c in asian_fx})
+        pieces["asian_fx_mean_ret"] = asian_rets.mean(axis=1)
+
+    # ── Commodity cluster ──
+    commodities = [c for c in ["copper", "oil_wti", "natgas"] if c in cross_df.columns]
+    if commodities:
+        comm_rets = pd.DataFrame({c: cross_df[c].pct_change() for c in commodities})
+        pieces["commodity_mean_ret"] = comm_rets.mean(axis=1)
+
+    # ── Global equity risk ──
+    equity_indices = [c for c in ["sp500", "nikkei", "hang_seng", "dax", "kospi"]
+                      if c in cross_df.columns]
+    if len(equity_indices) >= 2:
+        eq_rets = pd.DataFrame({c: cross_df[c].pct_change() for c in equity_indices})
+        pieces["global_equity_mean_ret"] = eq_rets.mean(axis=1)
+        pieces["global_equity_vol_20"] = eq_rets.mean(axis=1).rolling(20).std()
 
     # ── Nikkei-JPY relationship ──
     if "nikkei" in cross_df.columns:
-        feat["nikkei_vol_20"] = cross_df["nikkei"].pct_change().rolling(20).std()
+        pieces["nikkei_vol_20"] = cross_df["nikkei"].pct_change().rolling(20).std()
+
+    # Assemble at once (avoids fragmentation)
+    feat = pd.DataFrame(pieces, index=cross_df.index)
 
     # LAG everything by 1 day to prevent timing leakage
     feat = feat.shift(1)
