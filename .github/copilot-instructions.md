@@ -93,6 +93,30 @@ Tham khảo SKILL.md trước khi đụng vào lĩnh vực tương ứng:
 - Endpoint chính: `POST api/token`, `POST api/dakoku`, `GET api/dakoku/me/{date}`, `GET api/dakoku/workplace`
 - `checkin_type`: 1=office GPS, 2=direct customer, 3=noGPS, 5=WFH, 6=WFH noGPS
 
+### 🚨 Kintai business rules — RẤT QUAN TRỌNG (đừng vi phạm khi sửa schedule)
+
+**Rule 1 — 1 ngày chỉ checkin được 1 lần.** DokoKin không cho phép 2 lần checkin cùng ngày. CI buổi sáng đã "mở phiên làm việc" cho cả ngày, **bao gồm cả OT đêm cùng ngày** (vd CI 09:00 cover OT 22:00-03:30).
+
+  → Khi workday đó có OT đêm: **CHỈ có 1 CI lúc 09:00**, KHÔNG được thêm CI lúc 22:00.
+  → `generate_schedule.py` đã làm đúng (xem line 93-104: workday+OT → 1 CI + 1 CO next-day 03:30).
+  → Khi review/sửa schedule, nếu thấy 2 entries `action: checkin` cùng ngày → **BUG**.
+
+**Rule 2 — Checkout phải xảy ra trước khi DokoKin coi đó là "ngày mới".** Mốc cut-off thực tế ~04:00 JST sáng hôm sau. Trong khoảng (00:00, 04:00) checkout vẫn attribute về workday hôm trước. Sau ~04:00 → ngày mới → fail (không có CI cho ngày mới).
+
+  → OT đêm: checkout ở 03:30 ngày-sau là an toàn (đang trong cửa sổ attribute-về-workday-trước).
+  → ❌ **KHÔNG được dispatch checkout TRƯỚC giờ OT kết thúc** (vd 18:00 trên ngày có OT đến 03:30) — sẽ đóng phiên sớm, mất giờ OT.
+  → ❌ **KHÔNG được dispatch checkout SAU ~04:00 sáng hôm sau** — sẽ fail vì cross-day boundary.
+  → Khi schedule recurring checkout vào ngày làm OT, **disable hoặc skip** entry checkout 18:00 mặc định.
+
+**Rule 3 — Saturday/Sunday OT là exception cho Rule 1**: cuối tuần KHÔNG có CI sáng mặc định, nên OT cuối tuần CẦN có CI riêng tại giờ bắt đầu OT (Sat 22:00, Sun 14:30). Đây không phải "CI lần 2".
+
+**Rule 4 — Checkout idempotency**: cho phép re-run nếu `now > previous_CO` (update giờ ra muộn hơn). Checkin thì skip nếu đã có (Rule 1).
+
+**Implications cho UI/automation**:
+- Schedule grid không cảnh báo về double-CI vì generator đã đúng — nhưng nếu user tự thêm recurring CI 22:00 weekly trên cùng workday đã có CI 09:00, sẽ fail tại API. UI cân nhắc warning (TODO).
+- OT auto-creator (`gh_ot_creator.py`) chỉ tạo OT **request** (申請), KHÔNG tạo CI/CO → không ảnh hưởng Rule 1.
+- Dispatcher self-loop không hiểu domain rules — nó dispatch đúng giờ trong Gist. Trách nhiệm "không tạo entry sai" thuộc về generator + người tạo schedule thủ công.
+
 ### Azure AD
 - App ID `f5be0f68-7285-4365-b979-10af0f3f4106`
 - Tenant `f01e930a-b52e-42b1-b70f-a8882b5d043b`
