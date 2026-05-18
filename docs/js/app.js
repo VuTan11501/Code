@@ -564,3 +564,87 @@ if (document.readyState === 'loading') {
   // so any remaining <script> tags after this one finish executing first.
   setTimeout(bootstrap, 0);
 }
+
+// ─── Global tooltip portal (shadcn-style) ───
+// Any element with [data-tooltip] gets a floating tooltip on hover/focus.
+(function initTooltipPortal() {
+  let tip = null;
+  let currentTrigger = null;
+  let hideTimer = null;
+
+  function ensureTip() {
+    if (!tip) {
+      tip = document.createElement('div');
+      tip.className = 'tooltip-portal';
+      tip.setAttribute('role', 'tooltip');
+      document.body.appendChild(tip);
+    }
+    return tip;
+  }
+
+  function position(trigger) {
+    const el = ensureTip();
+    const r = trigger.getBoundingClientRect();
+    // measure
+    el.style.left = '0px';
+    el.style.top = '0px';
+    el.classList.remove('below');
+    const tr = el.getBoundingClientRect();
+    const margin = 8;
+    let top = r.top - tr.height - 6;
+    let below = false;
+    if (top < margin) {
+      top = r.bottom + 6;
+      below = true;
+    }
+    let left = r.left + r.width / 2 - tr.width / 2;
+    left = Math.max(margin, Math.min(left, window.innerWidth - tr.width - margin));
+    const arrowX = (r.left + r.width / 2) - left;
+    el.style.left = left + 'px';
+    el.style.top = top + 'px';
+    el.style.setProperty('--arrow-x', arrowX + 'px');
+    if (below) el.classList.add('below');
+  }
+
+  function show(trigger) {
+    const text = trigger.getAttribute('data-tooltip');
+    if (!text) return;
+    clearTimeout(hideTimer);
+    currentTrigger = trigger;
+    const el = ensureTip();
+    el.textContent = text;
+    el.classList.remove('visible');
+    requestAnimationFrame(() => {
+      position(trigger);
+      el.classList.add('visible');
+    });
+  }
+
+  function hide() {
+    if (!tip) return;
+    currentTrigger = null;
+    tip.classList.remove('visible');
+  }
+
+  document.addEventListener('mouseover', (e) => {
+    const t = e.target.closest('[data-tooltip]');
+    if (t && t !== currentTrigger) show(t);
+  });
+  document.addEventListener('mouseout', (e) => {
+    const t = e.target.closest('[data-tooltip]');
+    if (t && t === currentTrigger) {
+      hideTimer = setTimeout(hide, 80);
+    }
+  });
+  document.addEventListener('focusin', (e) => {
+    const t = e.target.closest('[data-tooltip]');
+    if (t) show(t);
+  });
+  document.addEventListener('focusout', (e) => {
+    const t = e.target.closest('[data-tooltip]');
+    if (t && t === currentTrigger) hide();
+  });
+  window.addEventListener('scroll', hide, true);
+  window.addEventListener('resize', hide);
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') hide(); });
+})();

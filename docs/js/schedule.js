@@ -1321,7 +1321,12 @@ function renderScheduleTable() {
       <td data-label="Type"><span class="badge-${entry.type}">${isOnce ? 'Once' : 'Recurring'}</span></td>
       <td data-label="Workflow" class="font-medium">${wfName}</td>
       <td data-label="Schedule" class="font-mono text-xs">${schedDesc}</td>
-      <td data-label="Note" class="text-muted-foreground">${entry.note || '—'}</td>
+      <td data-label="Note" class="text-muted-foreground">${(() => {
+        const n = entry.note || '';
+        if (!n) return '—';
+        if (n.length <= 30) return escapeHtml(n);
+        return `<span class="tooltip-trigger" tabindex="0" data-tooltip="${escapeHtml(n)}" aria-label="${escapeHtml(n)}">${escapeHtml(n.slice(0, 30))}…</span>`;
+      })()}</td>
       <td data-label="Status">${statusBadge}</td>
       <td data-label="Created" class="text-muted-foreground text-xs">${created}</td>
       <td class="actions-cell"><div class="actions-cell">
