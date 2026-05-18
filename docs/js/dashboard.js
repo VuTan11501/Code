@@ -132,7 +132,7 @@ function renderHealthBar(workflowResults) {
         <span class="health-pct" style="color:${color}">${display}</span>
       </div>
       <div class="health-info">
-        <div class="health-name">${wf.icon} ${wf.name}</div>
+        <div class="health-name">${ICON(wf.iconName || 'play', 14)} ${wf.name}</div>
         <div class="health-detail">${passed}/${completed.length} passed (7d)</div>
       </div>
     </div>`;
@@ -166,7 +166,7 @@ function renderWorkflowCard(wf, runs) {
   return `
     <div class="card">
       <div class="card-header">
-        <h2>${wf.icon} ${wf.name}</h2>
+        <h2>${ICON(wf.iconName || 'play', 18)} ${wf.name}</h2>
         ${statusBadge(runs)}
       </div>
       <div class="card-body">
@@ -385,7 +385,7 @@ async function refresh() {
     if (grid) {
       grid.innerHTML = `<div class="card" style="grid-column:1/-1">
         <div class="card-body" style="text-align:center;padding:var(--sp-8)">
-          <div style="font-size:32px;margin-bottom:var(--sp-3)">⚠️</div>
+          <div style="margin-bottom:var(--sp-3);display:flex;justify-content:center">${ICON('alert', 32)}</div>
           <div style="font-weight:600;margin-bottom:var(--sp-2)">${e.message}</div>
           <div class="text-muted" style="font-size:var(--fs-sm)">Retrying automatically… (attempt ${consecutiveErrors})</div>
         </div>

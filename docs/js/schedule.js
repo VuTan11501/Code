@@ -441,7 +441,7 @@ function renderScheduledQueue(entries) {
   queue.innerHTML = entries.map((entry, i) => {
     const wf = WORKFLOWS.find(w => w.file === entry.workflow);
     const wfName = wf?.name || entry.workflow.replace('.yml', '');
-    const icon = wf?.icon || '⚙️';
+    const iconName = wf?.iconName || 'settings';
     const isOnce = entry.type === 'once';
     const enabled = entry.enabled !== false;
     const toggleCls = enabled ? 'sched-toggle active' : 'sched-toggle';
@@ -470,19 +470,19 @@ function renderScheduledQueue(entries) {
       }
 
       if (ranToday) {
-        nextInfo = '<span class="sched-status done">✓ Done today</span>';
+        nextInfo = `<span class="sched-status done">${ICON('check', 11)} Done today</span>`;
       } else if (alreadyPassed) {
-        nextInfo = '<span class="sched-status overdue">⏳ Pending</span>';
+        nextInfo = `<span class="sched-status overdue">${ICON('hourglass', 11)} Pending</span>`;
       } else {
         const diff = Math.round((schedToday - nowJST) / 60000);
         nextInfo = `<span class="sched-status upcoming">In ${diff}m</span>`;
       }
     } else if (isOnce) {
       if (entry.dispatched) {
-        nextInfo = '<span class="sched-status done">✓ Dispatched</span>';
+        nextInfo = `<span class="sched-status done">${ICON('check', 11)} Dispatched</span>`;
       } else {
         const runAt = new Date(entry.run_at);
-        if (runAt < nowJST) nextInfo = '<span class="sched-status overdue">⏳ Pending dispatch</span>';
+        if (runAt < nowJST) nextInfo = `<span class="sched-status overdue">${ICON('hourglass', 11)} Pending dispatch</span>`;
         else {
           const diff = Math.round((runAt - nowJST) / 60000);
           const label2 = diff < 60 ? `In ${diff}m` : diff < 1440 ? `In ${Math.round(diff/60)}h` : `In ${Math.round(diff/1440)}d`;
@@ -493,7 +493,7 @@ function renderScheduledQueue(entries) {
 
     return `<div class="sched-item${!enabled ? ' disabled' : ''}">
       <div class="sched-item-main">
-        <span class="sched-icon">${icon}</span>
+        <span class="sched-icon">${ICON(iconName, 18)}</span>
         <div class="sched-item-info">
           <span class="sched-label">${label}</span>
           <span class="sched-sublabel">${sublabel}</span>
@@ -502,7 +502,7 @@ function renderScheduledQueue(entries) {
       </div>
       <div class="sched-item-actions">
         ${!isOnce ? `<div class="${toggleCls}" role="switch" aria-checked="${enabled}" tabindex="0" onclick="toggleScheduleEntry(${i})" title="${enabled ? 'Disable' : 'Enable'}"></div>` : ''}
-        <button class="btn danger sm" onclick="deleteScheduledRun(${i})" title="Delete">🗑</button>
+        <button class="btn danger sm" onclick="deleteScheduledRun(${i})" title="Delete">${ICON('trash', 14)}</button>
       </div>
     </div>`;
   }).join('');
@@ -643,7 +643,7 @@ function renderScheduleTable() {
   if (filterWf !== 'all') filtered = filtered.filter(e => e.workflow === filterWf);
 
   if (!filtered.length) {
-    tbody.innerHTML = '<tr><td colspan="8" class="text-center py-8"><div class="text-muted-foreground text-sm">📋 No schedules found</div><div class="text-xs text-muted-foreground mt-1 opacity-60">Create your first automated workflow run above</div></td></tr>';
+    tbody.innerHTML = `<tr><td colspan="8" class="text-center py-8"><div class="text-muted-foreground text-sm flex items-center justify-center gap-2">${ICON('clipboard', 16)} No schedules found</div><div class="text-xs text-muted-foreground mt-1 opacity-60">Create your first automated workflow run above</div></td></tr>`;
     if (countEl) countEl.textContent = '0 entries';
     return;
   }
@@ -653,7 +653,7 @@ function renderScheduleTable() {
   tbody.innerHTML = filtered.map((entry, filteredIdx) => {
     const realIdx = scheduleTableData.indexOf(entry);
     const wf = WORKFLOWS.find(w => w.file === entry.workflow);
-    const wfName = wf ? `${wf.icon} ${wf.name}` : entry.workflow;
+    const wfName = wf ? `<span class="inline-flex items-center gap-1.5">${ICON(wf.iconName || 'play', 14)} ${wf.name}</span>` : entry.workflow;
     const isOnce = entry.type === 'once';
 
     // Schedule description
@@ -674,11 +674,11 @@ function renderScheduleTable() {
     let statusBadge = '';
     if (isOnce) {
       if (entry.dispatched) {
-        statusBadge = '<span class="badge-enabled">✓ Dispatched</span>';
+        statusBadge = `<span class="badge-enabled">${ICON('check', 11)} Dispatched</span>`;
       } else {
         const isPast = entry.run_at && new Date(entry.run_at) < new Date();
         statusBadge = isPast
-          ? '<span class="badge-warning">⏳ Pending dispatch</span>'
+          ? `<span class="badge-warning">${ICON('hourglass', 11)} Pending dispatch</span>`
           : '<span class="badge-enabled">Pending</span>';
       }
     } else {
@@ -699,8 +699,8 @@ function renderScheduleTable() {
       <td data-label="Status">${statusBadge}</td>
       <td data-label="Created" class="text-muted-foreground text-xs">${created}</td>
       <td class="actions-cell"><div class="actions-cell">
-        <button class="btn sm" onclick="openEditSchedModal(${realIdx})" title="Edit">✏️</button>
-        <button class="btn danger sm" onclick="deleteScheduledRun(${realIdx})" title="Delete">🗑</button>
+        <button class="btn sm" onclick="openEditSchedModal(${realIdx})" title="Edit">${ICON('edit', 14)}</button>
+        <button class="btn danger sm" onclick="deleteScheduledRun(${realIdx})" title="Delete">${ICON('trash', 14)}</button>
       </div></td>
     </tr>`;
   }).join('');

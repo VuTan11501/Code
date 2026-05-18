@@ -76,7 +76,7 @@ tailwind.config = {
   <div class="card auth-card bg-card border border-border rounded-xl p-10 max-w-[400px] w-full text-center">
     <div class="card-header flex flex-col items-center gap-2 pb-5 border-b border-border mb-5">
       <div class="auth-icon w-14 h-14 rounded-full grid place-items-center mb-2" aria-hidden="true">
-        <span class="text-[28px]">🔐</span>
+        <span data-icon="lockKeyhole" data-size="28"></span>
       </div>
       <div class="card-title text-base font-semibold tracking-tight"><h2>Workflow Dashboard</h2></div>
       <div class="card-description text-sm text-muted-foreground" id="authDesc">Enter passphrase to unlock</div>
@@ -92,7 +92,7 @@ tailwind.config = {
         <div class="field flex flex-col gap-2 mb-3">
           <input type="password" class="input" id="passphrase" placeholder="Passphrase" autocomplete="current-password" aria-label="Passphrase">
         </div>
-        <button type="submit" class="btn primary w-full px-4 py-2.5 mt-2">🔓 Unlock</button>
+        <button type="submit" class="btn primary w-full px-4 py-2.5 mt-2"><span data-icon="unlock" data-size="16"></span> Unlock</button>
         <div class="error" id="unlockError" role="alert">Wrong passphrase</div>
       </form>
 
@@ -107,7 +107,7 @@ tailwind.config = {
         <div class="field flex flex-col gap-2 mb-3">
           <input type="password" class="input" id="confirmPass" placeholder="Confirm passphrase" autocomplete="new-password" aria-label="Confirm passphrase">
         </div>
-        <button type="submit" class="btn primary w-full px-4 py-2.5 mt-2">🔑 Encrypt & Save</button>
+        <button type="submit" class="btn primary w-full px-4 py-2.5 mt-2"><span data-icon="key" data-size="16"></span> Encrypt & Save</button>
         <div class="error" id="setupError" role="alert"></div>
         <p class="text-xs text-muted-foreground mt-4 leading-relaxed opacity-70">
           PAT is encrypted with AES-256-GCM using your passphrase.<br>
@@ -122,7 +122,7 @@ tailwind.config = {
 <main id="dashboard" style="display:none" role="main" aria-label="Dashboard">
   <div class="container max-w-[1200px] mx-auto px-5 py-6 pb-8">
     <header class="flex items-center justify-between mb-6 gap-3">
-      <h1 class="text-xl font-semibold flex items-center gap-2 tracking-tight"><span class="text-[22px]" aria-hidden="true">⚡</span> Workflow Dashboard</h1>
+      <h1 class="text-xl font-semibold flex items-center gap-2 tracking-tight"><span data-icon="zap" data-size="22" aria-hidden="true"></span> Workflow Dashboard</h1>
       <div class="header-actions flex gap-2 items-center">
         <div class="live-indicator active" id="liveIndicator" role="status" aria-live="polite">
           <span class="live-dot" aria-hidden="true"></span>
@@ -130,8 +130,8 @@ tailwind.config = {
           <span class="live-interval" id="liveInterval">30s</span>
         </div>
         <span class="text-xs text-muted-foreground" id="lastUpdate" aria-live="polite"></span>
-        <button class="btn btn-icon p-2 min-w-[36px] min-h-[36px]" id="notifBtn" onclick="requestNotifPermission()" title="Notifications" aria-label="Toggle notifications">🔔</button>
-        <button class="btn danger sm" onclick="lock()" aria-label="Lock dashboard">🔒 Lock</button>
+        <button class="btn btn-icon p-2 min-w-[36px] min-h-[36px]" id="notifBtn" onclick="requestNotifPermission()" title="Notifications" aria-label="Toggle notifications"><span data-icon="bell" data-size="16"></span></button>
+        <button class="btn danger sm" onclick="lock()" aria-label="Lock dashboard"><span data-icon="lock" data-size="14"></span> Lock</button>
       </div>
     </header>
 
@@ -184,23 +184,23 @@ tailwind.config = {
     <!-- PAGE: SCHEDULE -->
     <div class="page" id="page-schedule" role="tabpanel" aria-label="Schedule page">
       <section aria-label="Weekly schedule">
-        <div class="section-title text-sm font-medium text-muted-foreground mb-4 flex items-center gap-2">📅 Weekly Schedule (JST)</div>
+        <div class="section-title text-sm font-medium text-muted-foreground mb-4 flex items-center gap-2"><span data-icon="calendar" data-size="16"></span> Weekly Schedule (JST)</div>
         <div id="scheduleCalendar"></div>
       </section>
 
       <div class="separator h-px w-full bg-border mt-6 mb-4"></div>
 
       <section aria-label="Scheduled runs">
-        <div class="section-title text-sm font-medium text-muted-foreground mb-4 flex items-center gap-2">⏰ Scheduled Runs</div>
+        <div class="section-title text-sm font-medium text-muted-foreground mb-4 flex items-center gap-2"><span data-icon="clock" data-size="16"></span> Scheduled Runs</div>
         <div class="scheduler-panel">
           <div class="scheduler-form" role="form" aria-label="Create scheduled run">
             <div class="field scheduler-field">
               <label class="field-label text-xs text-muted-foreground font-medium block mb-1" for="schedWorkflow">Workflow</label>
               <select class="input select-trigger" id="schedWorkflow">
-                <option value="auto-checkin.yml">📥 Auto Checkin</option>
-                <option value="auto-checkout.yml">📤 Auto Checkout</option>
-                <option value="auto-ot-creator.yml">⏰ Auto OT Creator</option>
-                <option value="jpy-forecast.yml">💹 JPY Forecast</option>
+                <option value="auto-checkin.yml">Auto Checkin</option>
+                <option value="auto-checkout.yml">Auto Checkout</option>
+                <option value="auto-ot-creator.yml">Auto OT Creator</option>
+                <option value="jpy-forecast.yml">JPY Forecast</option>
               </select>
             </div>
             <div class="field scheduler-field">
@@ -302,7 +302,7 @@ tailwind.config = {
       <!-- Schedule Data Table -->
       <section aria-label="All schedules table">
         <div class="flex items-center justify-between mb-4">
-          <div class="section-title text-sm font-medium text-muted-foreground flex items-center gap-2 mb-0">📋 All Schedules</div>
+          <div class="section-title text-sm font-medium text-muted-foreground flex items-center gap-2 mb-0"><span data-icon="clipboard" data-size="16"></span> All Schedules</div>
           <div class="flex items-center gap-2">
             <select id="tableFilterType" class="input input-sm select-trigger" onchange="renderScheduleTable()">
               <option value="all">All Types</option>
@@ -339,19 +339,19 @@ tailwind.config = {
         </div>
         <div class="flex items-center justify-between mt-3 text-xs text-muted-foreground" id="tableFooter">
           <span id="tableCount">0 entries</span>
-          <button class="btn sm" onclick="loadScheduledRuns()" title="Refresh">🔄 Refresh</button>
+          <button class="btn sm" onclick="loadScheduledRuns()" title="Refresh"><span data-icon="refresh" data-size="14"></span> Refresh</button>
         </div>
       </section>
     </div>
 
     <!-- PAGE: SETTINGS -->
     <div class="page" id="page-settings" role="tabpanel" aria-label="Settings page">
-      <div class="section-title text-sm font-medium text-muted-foreground mb-4 flex items-center gap-2">⚙️ Settings</div>
+      <div class="section-title text-sm font-medium text-muted-foreground mb-4 flex items-center gap-2"><span data-icon="settings" data-size="16"></span> Settings</div>
       <div class="settings-body">
         <!-- Change Passphrase -->
         <div class="card settings-card">
           <div class="card-header">
-            <div class="card-title">🔑 Change Passphrase</div>
+            <div class="card-title"><span data-icon="key" data-size="16"></span> Change Passphrase</div>
             <div class="card-description">Re-encrypt vault with a new passphrase.</div>
           </div>
           <div class="card-content">
@@ -372,14 +372,14 @@ tailwind.config = {
         <!-- Export / Import Vault -->
         <div class="card settings-card">
           <div class="card-header">
-            <div class="card-title">💾 Export / Import Vault</div>
+            <div class="card-title"><span data-icon="save" data-size="16"></span> Export / Import Vault</div>
             <div class="card-description">Transfer encrypted vault between devices.</div>
           </div>
           <div class="card-content">
-            <button class="btn btn-outline sm mb-2.5" onclick="exportVault()">📥 Export Vault (.json)</button>
+            <button class="btn btn-outline sm mb-2.5" onclick="exportVault()"><span data-icon="download" data-size="14"></span> Export Vault (.json)</button>
             <br>
             <label class="file-input-label inline-flex items-center gap-2 px-4 py-2 rounded-md border border-border bg-secondary text-foreground cursor-pointer text-sm font-medium transition-all hover:bg-[#262626] hover:border-white/15">
-              📤 Import Vault (.json)
+              <span data-icon="upload" data-size="14"></span> Import Vault (.json)
               <input type="file" accept=".json" onchange="importVault(event)" class="hidden" aria-label="Import vault file">
             </label>
           </div>
@@ -388,7 +388,7 @@ tailwind.config = {
         <!-- Notifications -->
         <div class="card settings-card">
           <div class="card-header">
-            <div class="card-title">🔔 Notifications</div>
+            <div class="card-title"><span data-icon="bell" data-size="16"></span> Notifications</div>
             <div class="card-description">Get browser notifications when workflows fail or complete.</div>
           </div>
           <div class="card-content">
@@ -399,11 +399,11 @@ tailwind.config = {
         <!-- About -->
         <div class="card settings-card">
           <div class="card-header">
-            <div class="card-title">ℹ️ About</div>
+            <div class="card-title"><span data-icon="info" data-size="16"></span> About</div>
             <div class="card-description">Workflow Dashboard v3.0 — Multi-page SPA with encrypted vault. Data refreshes every 10-30s automatically.</div>
           </div>
           <div class="card-content">
-            <button class="btn danger sm" onclick="if(confirm('Delete vault and all data?')){localStorage.removeItem(STORAGE_KEY);lock();toast('Vault deleted','warning')}">🗑 Delete Vault</button>
+            <button class="btn danger sm" onclick="if(confirm('Delete vault and all data?')){localStorage.removeItem(STORAGE_KEY);lock();toast('Vault deleted','warning')}"><span data-icon="trash" data-size="14"></span> Delete Vault</button>
           </div>
         </div>
       </div>
@@ -438,10 +438,10 @@ tailwind.config = {
         <div class="field">
           <label class="field-label text-xs text-muted-foreground font-medium block mb-1">Workflow</label>
           <select class="input select-trigger" id="editSchedWorkflow">
-            <option value="auto-checkin.yml">📥 Auto Checkin</option>
-            <option value="auto-checkout.yml">📤 Auto Checkout</option>
-            <option value="auto-ot-creator.yml">⏰ Auto OT Creator</option>
-            <option value="jpy-forecast.yml">💹 JPY Forecast</option>
+            <option value="auto-checkin.yml">Auto Checkin</option>
+            <option value="auto-checkout.yml">Auto Checkout</option>
+            <option value="auto-ot-creator.yml">Auto OT Creator</option>
+            <option value="jpy-forecast.yml">JPY Forecast</option>
           </select>
         </div>
         <div class="field">
@@ -495,7 +495,7 @@ tailwind.config = {
         </div>
 
         <div class="flex gap-3 pt-2">
-          <button class="btn primary flex-1" onclick="saveEditSchedule()">💾 Save</button>
+          <button class="btn primary flex-1" onclick="saveEditSchedule()"><span data-icon="save" data-size="14"></span> Save</button>
           <button class="btn flex-1" onclick="closeEditSchedModal()">Cancel</button>
         </div>
       </div>
@@ -509,6 +509,7 @@ tailwind.config = {
 </div>
 
 <!-- Scripts (order matters) -->
+<script src="js/icons.js"></script>
 <script src="js/app.js"></script>
 <script src="js/dashboard.js"></script>
 <script src="js/schedule.js"></script>

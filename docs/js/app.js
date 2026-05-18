@@ -6,10 +6,10 @@ const REPO = 'Code';
 const API = 'https://api.github.com';
 const GIST_ID = 'abc2a47c0a396025a72a6580227ff493';
 const WORKFLOWS = [
-  { id: 277782817, name: 'Auto Checkin', icon: '📥', file: 'auto-checkin.yml' },
-  { id: 278639767, name: 'Auto Checkout', icon: '📤', file: 'auto-checkout.yml' },
-  { id: 277802136, name: 'Auto OT Creator', icon: '⏰', file: 'auto-ot-creator.yml' },
-  { id: 278223037, name: 'JPY Forecast', icon: '💹', file: 'jpy-forecast.yml' },
+  { id: 277782817, name: 'Auto Checkin', icon: '📥', iconName: 'logIn', file: 'auto-checkin.yml' },
+  { id: 278639767, name: 'Auto Checkout', icon: '📤', iconName: 'logOut', file: 'auto-checkout.yml' },
+  { id: 277802136, name: 'Auto OT Creator', icon: '⏰', iconName: 'hourglass', file: 'auto-ot-creator.yml' },
+  { id: 278223037, name: 'JPY Forecast', icon: '💹', iconName: 'barChart', file: 'jpy-forecast.yml' },
 ];
 const AUTO_LOCK_MS = 15 * 60 * 1000;
 
@@ -362,9 +362,9 @@ let notifPermission = (typeof Notification !== 'undefined') ? Notification.permi
 function updateNotifBtn() {
   const btn = document.getElementById('notifBtn');
   if (!btn) return;
-  if (notifPermission === 'granted') { btn.textContent = '🔔'; btn.title = 'Notifications: ON'; }
-  else if (notifPermission === 'denied') { btn.textContent = '🔕'; btn.title = 'Notifications: Blocked'; }
-  else { btn.textContent = '🔔'; btn.title = 'Enable notifications'; }
+  if (notifPermission === 'granted') { btn.innerHTML = ICON('bell', 18); btn.title = 'Notifications: ON'; }
+  else if (notifPermission === 'denied') { btn.innerHTML = ICON('bell', 18); btn.title = 'Notifications: Blocked'; btn.style.opacity = '0.4'; }
+  else { btn.innerHTML = ICON('bell', 18); btn.title = 'Enable notifications'; }
 }
 
 async function requestNotifPermission() {
