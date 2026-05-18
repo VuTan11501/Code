@@ -178,6 +178,24 @@ a:hover { text-decoration: underline; }
 .sched-item .sched-note { color: var(--muted); font-size: 11px; }
 .sched-item .btn.danger.sm { padding: 2px 8px; font-size: 11px; }
 
+/* Day picker for weekly recurrence */
+.day-picker { display: flex; gap: 4px; flex-wrap: wrap; }
+.day-chip { cursor: pointer; }
+.day-chip input { display: none; }
+.day-chip span { display: inline-block; padding: 4px 10px; border-radius: 16px; font-size: 11px; border: 1px solid var(--border); background: var(--bg); color: var(--muted); transition: all 0.15s; }
+.day-chip input:checked + span { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.day-chip:hover span { border-color: var(--accent); }
+
+/* Schedule type badges */
+.sched-type { font-size: 10px; padding: 1px 6px; border-radius: 8px; font-weight: 500; }
+.sched-type.once { background: rgba(88,166,255,0.15); color: var(--accent); }
+.sched-type.recurring { background: rgba(163,113,247,0.15); color: var(--purple); }
+.sched-item .sched-pattern { font-size: 11px; color: var(--purple); }
+.sched-toggle { width: 36px; height: 20px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg); cursor: pointer; position: relative; transition: all 0.2s; flex-shrink: 0; }
+.sched-toggle.active { background: var(--green); border-color: var(--green); }
+.sched-toggle::after { content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: var(--text); transition: transform 0.2s; }
+.sched-toggle.active::after { transform: translateX(16px); background: #fff; }
+
 @media (max-width: 600px) {
   .grid { grid-template-columns: 1fr; }
   header { flex-direction: column; align-items: flex-start; }
@@ -278,18 +296,68 @@ a:hover { text-decoration: underline; }
             </select>
           </div>
           <div class="scheduler-field">
-            <label>Date (JST)</label>
-            <input type="date" id="schedDate">
+            <label>Type</label>
+            <select id="schedType" onchange="toggleRecurrenceUI()">
+              <option value="once">🔹 One-time</option>
+              <option value="recurring">🔁 Recurring</option>
+            </select>
           </div>
+
+          <!-- One-time fields -->
+          <div id="onceFields">
+            <div class="scheduler-field">
+              <label>Date (JST)</label>
+              <input type="date" id="schedDate">
+            </div>
+          </div>
+
+          <!-- Recurring fields -->
+          <div id="recurFields" style="display:none">
+            <div class="scheduler-field">
+              <label>Pattern</label>
+              <select id="schedPattern" onchange="togglePatternUI()">
+                <option value="daily">Every day</option>
+                <option value="weekdays">Weekdays (Mon-Fri)</option>
+                <option value="weekly">Weekly (pick days)</option>
+                <option value="monthly">Monthly (pick dates)</option>
+              </select>
+            </div>
+            <div class="scheduler-field" id="weeklyDaysField" style="display:none">
+              <label>Days of week</label>
+              <div class="day-picker">
+                <label class="day-chip"><input type="checkbox" value="0"><span>Sun</span></label>
+                <label class="day-chip"><input type="checkbox" value="1" checked><span>Mon</span></label>
+                <label class="day-chip"><input type="checkbox" value="2" checked><span>Tue</span></label>
+                <label class="day-chip"><input type="checkbox" value="3" checked><span>Wed</span></label>
+                <label class="day-chip"><input type="checkbox" value="4" checked><span>Thu</span></label>
+                <label class="day-chip"><input type="checkbox" value="5" checked><span>Fri</span></label>
+                <label class="day-chip"><input type="checkbox" value="6"><span>Sat</span></label>
+              </div>
+            </div>
+            <div class="scheduler-field" id="monthlyDatesField" style="display:none">
+              <label>Days of month</label>
+              <input type="text" id="schedMonthDates" placeholder="e.g. 1,15,28">
+            </div>
+            <div class="scheduler-field">
+              <label>Start from</label>
+              <input type="date" id="schedStartDate">
+            </div>
+            <div class="scheduler-field">
+              <label>End date (optional)</label>
+              <input type="date" id="schedEndDate">
+            </div>
+          </div>
+
+          <!-- Common fields -->
           <div class="scheduler-field">
             <label>Time (JST)</label>
             <input type="time" id="schedTime" value="09:00">
           </div>
           <div class="scheduler-field">
             <label>Note (optional)</label>
-            <input type="text" id="schedNote" placeholder="e.g. makeup run">
+            <input type="text" id="schedNote" placeholder="e.g. makeup run, daily report">
           </div>
-          <button class="btn primary" onclick="addScheduledRun()">➕ Schedule Run</button>
+          <button class="btn primary" onclick="addScheduledRun()">➕ Add Schedule</button>
         </div>
         <div class="scheduler-queue" id="schedulerQueue">
           <div class="empty" style="padding:16px">Loading scheduled runs...</div>
@@ -704,9 +772,43 @@ function renderScheduleCalendar() {
 }
 
 // ═══════════════════════════════════════════════════
-//  SCHEDULED RUNS (user-defined timed dispatches)
+//  SCHEDULED RUNS — One-time & Recurring
 // ═══════════════════════════════════════════════════
 const SCHED_FILE = '.github/scheduled-runs.json';
+
+const WF_NAMES = {
+  'auto-checkin.yml': '🕐 Auto Checkin',
+  'auto-ot-creator.yml': '⏰ Auto OT',
+  'jpy-forecast.yml': '💹 JPY Forecast',
+};
+
+function toggleRecurrenceUI() {
+  const type = document.getElementById('schedType').value;
+  document.getElementById('onceFields').style.display = type === 'once' ? 'block' : 'none';
+  document.getElementById('recurFields').style.display = type === 'recurring' ? 'block' : 'none';
+}
+
+function togglePatternUI() {
+  const pattern = document.getElementById('schedPattern').value;
+  document.getElementById('weeklyDaysField').style.display = pattern === 'weekly' ? 'block' : 'none';
+  document.getElementById('monthlyDatesField').style.display = pattern === 'monthly' ? 'block' : 'none';
+}
+
+function getSelectedDays() {
+  return [...document.querySelectorAll('#weeklyDaysField input:checked')].map(el => parseInt(el.value));
+}
+
+function describeRecurrence(r) {
+  if (!r || !r.pattern) return '';
+  const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  switch (r.pattern) {
+    case 'daily': return `Every day at ${r.time}`;
+    case 'weekdays': return `Weekdays at ${r.time}`;
+    case 'weekly': return `${(r.days||[]).map(d => dayNames[d]).join(', ')} at ${r.time}`;
+    case 'monthly': return `${(r.dates||[]).map(d => d+'日').join(', ')} at ${r.time}`;
+    default: return r.pattern;
+  }
+}
 
 async function loadScheduledRuns() {
   const container = document.getElementById('schedulerQueue');
@@ -725,60 +827,106 @@ async function loadScheduledRuns() {
 
 function renderScheduledRuns(runs, sha) {
   const container = document.getElementById('schedulerQueue');
-  // Store sha for updates
   container.dataset.sha = sha || '';
 
   if (!runs.length) {
-    container.innerHTML = '<h4>📋 Pending Queue</h4><div class="empty" style="padding:12px;font-size:13px">No scheduled runs. Use the form to add one.</div>';
+    container.innerHTML = '<h4>📋 Schedule Queue</h4><div class="empty" style="padding:12px;font-size:13px">No schedules configured. Use the form to add one.</div>';
     return;
   }
 
-  // Sort by datetime
-  runs.sort((a, b) => new Date(a.run_at) - new Date(b.run_at));
+  // Separate recurring and one-time
+  const recurring = runs.filter(r => r.type === 'recurring');
+  const onetime = runs.filter(r => r.type !== 'recurring');
+  onetime.sort((a, b) => new Date(a.run_at) - new Date(b.run_at));
 
-  const wfNames = {
-    'auto-checkin.yml': '🕐 Auto Checkin',
-    'auto-ot-creator.yml': '⏰ Auto OT',
-    'jpy-forecast.yml': '💹 JPY Forecast',
-  };
+  let html = `<h4>📋 Schedule Queue (${runs.length})</h4>`;
 
-  container.innerHTML = `<h4>📋 Pending Queue (${runs.length})</h4>` + runs.map((r, i) => {
-    const dt = new Date(r.run_at);
-    const dateStr = dt.toLocaleDateString('ja-JP', { timeZone: 'Asia/Tokyo', month: 'short', day: 'numeric', weekday: 'short' });
-    const timeStr = dt.toLocaleTimeString('ja-JP', { timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit' });
-    const isPast = dt.getTime() < Date.now();
-    return `<div class="sched-item${isPast ? ' past' : ''}">
-      <span class="sched-wf">${wfNames[r.workflow] || r.workflow}</span>
-      <span class="sched-time">${dateStr} ${timeStr}</span>
-      ${r.note ? `<span class="sched-note">${r.note}</span>` : ''}
-      <button class="btn danger sm" onclick="removeScheduledRun(${i})" title="Cancel">✕</button>
-    </div>`;
-  }).join('');
+  if (recurring.length) {
+    html += '<div style="margin-bottom:8px;font-size:11px;color:var(--purple);font-weight:600">🔁 RECURRING</div>';
+    html += recurring.map((r, i) => {
+      const idx = runs.indexOf(r);
+      const enabledCls = r.enabled !== false ? 'active' : '';
+      return `<div class="sched-item">
+        <div class="sched-toggle ${enabledCls}" onclick="toggleScheduleEnabled(${idx})" title="${r.enabled !== false ? 'Enabled — click to pause' : 'Paused — click to resume'}"></div>
+        <span class="sched-wf">${WF_NAMES[r.workflow] || r.workflow}</span>
+        <span class="sched-pattern">${describeRecurrence(r.recurrence)}</span>
+        ${r.note ? `<span class="sched-note">${r.note}</span>` : ''}
+        ${r.recurrence && r.recurrence.end_date ? `<span class="sched-note">until ${r.recurrence.end_date}</span>` : ''}
+        <button class="btn danger sm" onclick="removeScheduledRun(${idx})" title="Delete">✕</button>
+      </div>`;
+    }).join('');
+  }
+
+  if (onetime.length) {
+    html += '<div style="margin:8px 0;font-size:11px;color:var(--accent);font-weight:600">🔹 ONE-TIME</div>';
+    html += onetime.map(r => {
+      const idx = runs.indexOf(r);
+      const dt = new Date(r.run_at);
+      const dateStr = dt.toLocaleDateString('ja-JP', { timeZone: 'Asia/Tokyo', month: 'short', day: 'numeric', weekday: 'short' });
+      const timeStr = dt.toLocaleTimeString('ja-JP', { timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit' });
+      const isPast = dt.getTime() < Date.now();
+      return `<div class="sched-item${isPast ? ' past' : ''}">
+        <span class="sched-type once">once</span>
+        <span class="sched-wf">${WF_NAMES[r.workflow] || r.workflow}</span>
+        <span class="sched-time">${dateStr} ${timeStr}</span>
+        ${r.note ? `<span class="sched-note">${r.note}</span>` : ''}
+        <button class="btn danger sm" onclick="removeScheduledRun(${idx})" title="Cancel">✕</button>
+      </div>`;
+    }).join('');
+  }
+
+  container.innerHTML = html;
 }
 
 async function addScheduledRun() {
   const workflow = document.getElementById('schedWf').value;
-  const date = document.getElementById('schedDate').value;
+  const type = document.getElementById('schedType').value;
   const time = document.getElementById('schedTime').value;
   const note = document.getElementById('schedNote').value.trim();
 
-  if (!date) { toast('⚠️ Please select a date'); return; }
   if (!time) { toast('⚠️ Please select a time'); return; }
   if (!sessionToken) { toast('⚠️ Not authenticated'); return; }
 
-  // Convert JST date+time to ISO string (JST = UTC+9)
-  const jstDateTime = `${date}T${time}:00+09:00`;
-  const runAt = new Date(jstDateTime).toISOString();
+  let entry;
 
-  // Check if in the past
-  if (new Date(runAt) < new Date()) {
-    toast('⚠️ Cannot schedule in the past'); return;
+  if (type === 'once') {
+    const date = document.getElementById('schedDate').value;
+    if (!date) { toast('⚠️ Please select a date'); return; }
+
+    const jstDateTime = `${date}T${time}:00+09:00`;
+    const runAt = new Date(jstDateTime).toISOString();
+    if (new Date(runAt) < new Date()) { toast('⚠️ Cannot schedule in the past'); return; }
+
+    entry = { type: 'once', workflow, run_at: runAt, note: note || undefined, created: new Date().toISOString() };
+  } else {
+    // Recurring
+    const pattern = document.getElementById('schedPattern').value;
+    const startDate = document.getElementById('schedStartDate').value;
+    const endDate = document.getElementById('schedEndDate').value;
+
+    const recurrence = { pattern, time };
+
+    if (pattern === 'weekly') {
+      const days = getSelectedDays();
+      if (!days.length) { toast('⚠️ Select at least one day'); return; }
+      recurrence.days = days;
+    } else if (pattern === 'weekdays') {
+      recurrence.days = [1, 2, 3, 4, 5];
+    } else if (pattern === 'monthly') {
+      const datesStr = document.getElementById('schedMonthDates').value.trim();
+      if (!datesStr) { toast('⚠️ Enter day-of-month numbers'); return; }
+      const dates = datesStr.split(',').map(s => parseInt(s.trim())).filter(n => n >= 1 && n <= 31);
+      if (!dates.length) { toast('⚠️ Invalid dates'); return; }
+      recurrence.dates = dates;
+    }
+
+    if (startDate) recurrence.start_date = startDate;
+    if (endDate) recurrence.end_date = endDate;
+
+    entry = { type: 'recurring', workflow, recurrence, enabled: true, note: note || undefined, created: new Date().toISOString() };
   }
 
-  const entry = { workflow, run_at: runAt, note: note || undefined, created: new Date().toISOString() };
-
   try {
-    // Load current file
     let runs = [];
     let sha = null;
     try {
@@ -789,9 +937,12 @@ async function addScheduledRun() {
 
     runs.push(entry);
 
-    // Write back via GitHub API
+    const commitMsg = type === 'once'
+      ? `sched: add ${workflow} one-time`
+      : `sched: add ${workflow} recurring (${entry.recurrence.pattern})`;
+
     const body = {
-      message: `sched: add ${workflow} at ${date} ${time} JST`,
+      message: commitMsg,
       content: btoa(unescape(encodeURIComponent(JSON.stringify(runs, null, 2)))),
       branch: 'main',
     };
@@ -804,7 +955,8 @@ async function addScheduledRun() {
     });
 
     if (res.ok) {
-      toast(`✅ Scheduled ${workflow.replace('.yml','')} for ${date} ${time} JST`);
+      const desc = type === 'once' ? `${document.getElementById('schedDate').value} ${time} JST` : describeRecurrence(entry.recurrence);
+      toast(`✅ Added: ${workflow.replace('.yml','')} — ${desc}`);
       document.getElementById('schedNote').value = '';
       loadScheduledRuns();
     } else {
@@ -816,18 +968,18 @@ async function addScheduledRun() {
   }
 }
 
-async function removeScheduledRun(index) {
+async function toggleScheduleEnabled(index) {
   if (!sessionToken) { toast('⚠️ Not authenticated'); return; }
-
   try {
     const data = await apiFetch(`/repos/${OWNER}/${REPO}/contents/${SCHED_FILE}`);
     const runs = JSON.parse(atob(data.content));
+    if (index < 0 || index >= runs.length) return;
 
-    if (index < 0 || index >= runs.length) { toast('⚠️ Invalid index'); return; }
-    const removed = runs.splice(index, 1)[0];
+    runs[index].enabled = !runs[index].enabled;
+    const status = runs[index].enabled ? 'enabled' : 'paused';
 
     const body = {
-      message: `sched: remove ${removed.workflow} at ${removed.run_at}`,
+      message: `sched: ${status} ${runs[index].workflow}`,
       content: btoa(unescape(encodeURIComponent(JSON.stringify(runs, null, 2)))),
       sha: data.sha,
       branch: 'main',
@@ -840,7 +992,37 @@ async function removeScheduledRun(index) {
     });
 
     if (res.ok) {
-      toast('🗑️ Scheduled run removed');
+      toast(`${runs[index].enabled ? '▶️ Resumed' : '⏸️ Paused'}: ${WF_NAMES[runs[index].workflow] || runs[index].workflow}`);
+      loadScheduledRuns();
+    }
+  } catch (e) {
+    toast(`❌ ${e.message}`);
+  }
+}
+
+async function removeScheduledRun(index) {
+  if (!sessionToken) { toast('⚠️ Not authenticated'); return; }
+  try {
+    const data = await apiFetch(`/repos/${OWNER}/${REPO}/contents/${SCHED_FILE}`);
+    const runs = JSON.parse(atob(data.content));
+    if (index < 0 || index >= runs.length) { toast('⚠️ Invalid index'); return; }
+
+    const removed = runs.splice(index, 1)[0];
+    const body = {
+      message: `sched: remove ${removed.workflow} (${removed.type})`,
+      content: btoa(unescape(encodeURIComponent(JSON.stringify(runs, null, 2)))),
+      sha: data.sha,
+      branch: 'main',
+    };
+
+    const res = await fetch(`${API}/repos/${OWNER}/${REPO}/contents/${SCHED_FILE}`, {
+      method: 'PUT',
+      headers: { 'Authorization': `Bearer ${sessionToken}`, 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+    if (res.ok) {
+      toast('🗑️ Schedule removed');
       loadScheduledRuns();
     } else {
       toast(`❌ Failed to remove`);
