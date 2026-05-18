@@ -2,7 +2,7 @@ name: Token Health Monitor
 
 on:
   schedule:
-    - cron: '0 21 * * *'  # 06:00 JST daily
+    - cron: '0 */6 * * *'  # every 6 hours
   workflow_dispatch:
 
 permissions:
@@ -31,7 +31,9 @@ jobs:
         id: token_check
         env:
           AZURE_REFRESH_TOKEN: ${{ secrets.AZURE_REFRESH_TOKEN }}
-        run: python .github/scripts/token_monitor.py
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+          GIST_ID: 'abc2a47c0a396025a72a6580227ff493'
+        run: python .github/scripts/token_monitor.py --gist
 
       - name: Update secret if token rotated
         if: always() && steps.token_check.outputs.token_rotated == 'true'

@@ -1,0 +1,37 @@
+name: Azure Re-authenticate
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  TZ: Asia/Tokyo
+
+concurrency:
+  group: azure-reauth
+  cancel-in-progress: true
+
+jobs:
+  reauth:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            .github/scripts
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Run device-code flow
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+          GIST_ID: 'abc2a47c0a396025a72a6580227ff493'
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: python .github/scripts/azure_reauth.py

@@ -66,7 +66,7 @@ tailwind.config = {
   },
 }
 </script>
-<link rel="stylesheet" href="css/style.css?v=3">
+<link rel="stylesheet" href="css/style.css?v=4">
 <link rel="preconnect" href="https://api.github.com">
 </head>
 <body class="bg-background text-foreground font-sans text-sm antialiased min-h-dvh overflow-x-hidden">
@@ -418,6 +418,30 @@ tailwind.config = {
           </div>
         </div>
 
+        <!-- Azure AD Token -->
+        <div class="card settings-card">
+          <div class="card-header">
+            <div class="card-title"><span data-icon="lockKeyhole" data-size="16"></span> Azure AD Token</div>
+            <div class="card-description">DokoKin authentication token used by Auto Checkin/Checkout/OT workflows.</div>
+          </div>
+          <div class="card-content">
+            <div id="azureTokenBox" class="vault-info-box flex flex-col gap-2.5 mb-3 px-3 py-3 rounded-md border border-border bg-muted/30 text-xs">
+              <div class="text-muted-foreground">Loading token status…</div>
+            </div>
+            <div class="flex flex-wrap gap-2">
+              <button class="btn btn-outline sm" id="btnCheckToken" onclick="triggerTokenCheck()" type="button">
+                <span data-icon="refresh" data-size="14"></span> Check now
+              </button>
+              <button class="btn btn-outline sm" onclick="startAzureReauth()" type="button">
+                <span data-icon="key" data-size="14"></span> Re-authenticate (SSO)
+              </button>
+            </div>
+            <p class="text-xs text-muted-foreground mt-3 leading-relaxed opacity-70">
+              Status auto-refreshes every 6h via <code>token-monitor.yml</code>. Click "Re-authenticate" if the token is expired or you switch Microsoft account.
+            </p>
+          </div>
+        </div>
+
         <!-- Location Settings -->
         <div class="card settings-card">
           <div class="card-header">
@@ -640,18 +664,31 @@ tailwind.config = {
   </div>
 </div>
 
+<!-- Azure Re-auth Modal -->
+<div class="dialog-overlay modal-overlay" id="azureReauthModal" role="dialog" aria-modal="true" aria-labelledby="azureReauthTitle">
+  <div class="dialog-content modal" style="max-width:480px;">
+    <div class="dialog-header modal-header">
+      <h3 class="dialog-title text-lg font-semibold" id="azureReauthTitle">Azure AD Sign-in</h3>
+      <button class="btn btn-ghost btn-icon modal-close" onclick="closeAzureReauthModal()" aria-label="Close">&times;</button>
+    </div>
+    <div class="dialog-body modal-body" id="azureReauthBody">
+      <div class="empty text-muted-foreground text-sm p-5 text-center">Initializing…</div>
+    </div>
+  </div>
+</div>
+
 <!-- Toast -->
 <div class="toast-container">
   <div class="toast" id="toast" role="alert" aria-live="assertive"></div>
 </div>
 
 <!-- Scripts (order matters) -->
-<script src="js/icons.js?v=3"></script>
-<script src="js/no-autofill.js?v=3"></script>
-<script src="js/locations.js?v=3"></script>
-<script src="js/app.js?v=3"></script>
-<script src="js/dashboard.js?v=3"></script>
-<script src="js/schedule.js?v=3"></script>
-<script src="js/settings.js?v=3"></script>
+<script src="js/icons.js?v=4"></script>
+<script src="js/no-autofill.js?v=4"></script>
+<script src="js/locations.js?v=4"></script>
+<script src="js/app.js?v=4"></script>
+<script src="js/dashboard.js?v=4"></script>
+<script src="js/schedule.js?v=4"></script>
+<script src="js/settings.js?v=4"></script>
 </body>
 </html>

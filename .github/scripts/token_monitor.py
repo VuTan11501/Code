@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """Monitor Azure AD token health for DokoKin.
 
-Makes a test API call to verify the token is still valid.
-Exits with code 1 if the token is expired or unhealthy.
+Refreshes the Azure AD token, exchanges for a KINTAI token, makes a test
+API call, and (optionally with --gist) writes a structured status JSON to
+the shared Gist so the dashboard can display it.
 
-Requires: AZURE_REFRESH_TOKEN env var.
-Zero external dependencies (stdlib only).
+Requires: AZURE_REFRESH_TOKEN env var. For --gist also requires GH_TOKEN
+or GH_PAT with `gist` scope. Zero external deps (stdlib only).
 """
 import json
 import os
@@ -21,6 +22,9 @@ AZURE_APP_ID = "f5be0f68-7285-4365-b979-10af0f3f4106"
 AZURE_TENANT = "f01e930a-b52e-42b1-b70f-a8882b5d043b"
 AZURE_SCOPE = f"api://{AZURE_APP_ID}/openid user.read offline_access"
 API_BASE = "https://api.fjpservice.com/api/"
+
+GIST_ID = os.environ.get("GIST_ID", "abc2a47c0a396025a72a6580227ff493")
+STATUS_FILE = "token-status.json"
 
 
 def http_post(url, data=None, headers=None):
@@ -58,13 +62,12 @@ def http_get(url, headers=None):
 
 
 def decode_jwt_payload(token):
-    """Decode JWT payload without verification (for expiry check only)."""
+    """Decode JWT payload without verification (for expiry/user info only)."""
     import base64
     parts = token.split(".")
     if len(parts) != 3:
         return None
     payload = parts[1]
-    # Fix padding
     payload += "=" * (4 - len(payload) % 4)
     try:
         decoded = base64.urlsafe_b64decode(payload)
@@ -73,8 +76,67 @@ def decode_jwt_payload(token):
         return None
 
 
+def write_status_to_gist(status):
+    """PATCH the shared Gist with current token status JSON."""
+    token = os.environ.get("GH_TOKEN") or os.environ.get("GH_PAT")
+    if not token:
+        print("  (skip gist write: GH_TOKEN/GH_PAT not set)")
+        return
+    url = f"https://api.github.com/gists/{GIST_ID}"
+    payload = json.dumps({
+        "files": {STATUS_FILE: {"content": json.dumps(status, indent=2, ensure_ascii=False)}}
+    }).encode()
+    req = urllib.request.Request(url, data=payload, method="PATCH")
+    req.add_header("Authorization", f"Bearer {token}")
+    req.add_header("Accept", "application/vnd.github+json")
+    req.add_header("Content-Type", "application/json")
+    try:
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            print(f"  ✅ Gist updated ({resp.status}): {STATUS_FILE}")
+    except Exception as e:
+        print(f"  ⚠️ Gist update failed: {e}")
+
+
+def load_existing_status():
+    """Read previous status from Gist to preserve last_rotation_at across runs."""
+    token = os.environ.get("GH_TOKEN") or os.environ.get("GH_PAT")
+    if not token:
+        return {}
+    url = f"https://api.github.com/gists/{GIST_ID}"
+    req = urllib.request.Request(url)
+    req.add_header("Authorization", f"Bearer {token}")
+    req.add_header("Accept", "application/vnd.github+json")
+    try:
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            data = json.loads(resp.read())
+            content = (data.get("files", {}).get(STATUS_FILE, {}) or {}).get("content")
+            return json.loads(content) if content else {}
+    except Exception:
+        return {}
+
+
 def main():
+    write_gist = "--gist" in sys.argv
     now = datetime.now(JST)
+    prev = load_existing_status() if write_gist else {}
+
+    status = {
+        "checked_at": now.isoformat(),
+        "status": "error",
+        "user": None,
+        "access_token_expires_at": None,
+        "refresh_token_rotated": False,
+        "last_rotation_at": prev.get("last_rotation_at"),
+        "error": None,
+    }
+
+    def finish(exit_code=0):
+        if write_gist:
+            print()
+            print("Writing status to Gist...")
+            write_status_to_gist(status)
+        sys.exit(exit_code)
+
     print(f"=== Token Health Monitor ===")
     print(f"Time: {now.strftime('%Y-%m-%d %H:%M JST')}")
     print()
@@ -82,11 +144,13 @@ def main():
     refresh_token = os.environ.get("AZURE_REFRESH_TOKEN")
     if not refresh_token:
         print("CRITICAL: AZURE_REFRESH_TOKEN not set!")
-        sys.exit(1)
+        status["status"] = "missing"
+        status["error"] = "AZURE_REFRESH_TOKEN secret not set"
+        finish(1)
 
-    # Step 1: Try to refresh the Azure AD token
+    # Step 1: Refresh Azure AD token
     print("Step 1: Refreshing Azure AD token...")
-    status, data = http_post(
+    st, data = http_post(
         f"https://login.microsoftonline.com/{AZURE_TENANT}/oauth2/v2.0/token",
         data={
             "client_id": AZURE_APP_ID,
@@ -96,85 +160,97 @@ def main():
         },
     )
 
-    if status != 200:
+    if st != 200:
         error_desc = data.get("error_description", data.get("error", "unknown"))
-        print(f"CRITICAL: Azure AD token refresh failed (HTTP {status})")
+        print(f"CRITICAL: Azure AD token refresh failed (HTTP {st})")
         print(f"  Error: {error_desc}")
-        print()
         if "AADSTS700082" in str(error_desc):
             print("  → Refresh token has EXPIRED (>90 days)")
-            print("  → Action: Run `dokokin_auth_login` to re-authenticate")
+            status["status"] = "expired"
         elif "AADSTS50173" in str(error_desc):
             print("  → Refresh token has been REVOKED")
-            print("  → Action: Run `dokokin_auth_login` to re-authenticate")
+            status["status"] = "revoked"
         else:
-            print("  → Action: Check Azure AD app registration and token")
-        sys.exit(1)
+            status["status"] = "error"
+        status["error"] = str(error_desc)[:500]
+        finish(1)
 
     azure_token = data.get("access_token", "")
     new_refresh = data.get("refresh_token", "")
     print("  ✅ Azure AD token refresh successful")
 
-    # Check JWT expiry of the access token
+    # Decode JWT for expiry + user info
     payload = decode_jwt_payload(azure_token)
-    if payload and "exp" in payload:
-        exp_dt = datetime.fromtimestamp(payload["exp"], tz=JST)
-        remaining = exp_dt - now
-        print(f"  Access token expires: {exp_dt.strftime('%Y-%m-%d %H:%M JST')} ({remaining})")
+    if payload:
+        if "exp" in payload:
+            exp_dt = datetime.fromtimestamp(payload["exp"], tz=JST)
+            status["access_token_expires_at"] = exp_dt.isoformat()
+            print(f"  Access token expires: {exp_dt.strftime('%Y-%m-%d %H:%M JST')}")
+        user = {
+            "name": payload.get("name") or payload.get("given_name"),
+            "email": payload.get("upn") or payload.get("preferred_username") or payload.get("email"),
+            "oid": payload.get("oid"),
+        }
+        status["user"] = user
+        if user.get("name") or user.get("email"):
+            print(f"  User: {user.get('name')} <{user.get('email')}>")
 
     # Step 2: Exchange for KINTAI token
     print()
     print("Step 2: Exchanging for KINTAI token...")
-    status, data = http_post(
+    st, data = http_post(
         API_BASE + "token",
         data={"module": "KINTAI", "grant_type": "azure_ad_token", "token": azure_token},
     )
 
-    if status != 200 or not data.get("access_token"):
-        print(f"WARNING: KINTAI token exchange failed (HTTP {status})")
+    if st != 200 or not data.get("access_token"):
+        print(f"WARNING: KINTAI token exchange failed (HTTP {st})")
         print(f"  Response: {data}")
-        print("  → The Azure AD token is valid but KINTAI API rejected it")
-        sys.exit(1)
+        status["status"] = "error"
+        status["error"] = f"KINTAI token exchange failed: HTTP {st}"
+        finish(1)
 
     kintai_token = data["access_token"]
     print("  ✅ KINTAI token exchange successful")
 
-    # Step 3: Test API call (get today's dakoku status)
+    # Step 3: Test API call (today's dakoku)
     print()
     print("Step 3: Testing API call (dakoku status)...")
     today_str = now.date().isoformat()
-    status, data = http_get(
+    st, data = http_get(
         API_BASE + f"dakoku/me/{today_str}",
         headers={"Authorization": f"Bearer {kintai_token}", "Module": "KINTAI"},
     )
 
-    if status == 401:
+    if st == 401:
         print(f"CRITICAL: API returned 401 Unauthorized")
-        print("  → Token is expired or invalid")
-        sys.exit(1)
-    elif status == 200:
-        ci = data.get("checkinDate") or data.get("checkinTime")
-        co = data.get("checkoutDate") or data.get("checkoutTime")
+        status["status"] = "error"
+        status["error"] = "KINTAI API returned 401"
+        finish(1)
+    elif st == 200:
+        ci = data.get("displayStartWorkingTime") or data.get("startWorkingTime")
+        co = data.get("displayEndWorkingTime") or data.get("endWorkingTime")
         print(f"  ✅ API call successful (CI: {ci or '—'}, CO: {co or '—'})")
     else:
-        print(f"  ⚠️ API returned HTTP {status} (non-critical)")
-        print(f"  Response: {data}")
+        print(f"  ⚠️ API returned HTTP {st} (non-critical)")
 
-    # Step 4: Check if refresh token was rotated
+    # Step 4: Refresh-token rotation
     if new_refresh and new_refresh != refresh_token:
         print()
         print("⚠️ Refresh token was ROTATED by Azure AD")
-        print("  → The AZURE_REFRESH_TOKEN secret needs updating")
-        # Output for GitHub Actions to update the secret
-        output_file = os.environ.get("GITHUB_OUTPUT")
-        if output_file:
+        status["refresh_token_rotated"] = True
+        status["last_rotation_at"] = now.isoformat()
+        out = os.environ.get("GITHUB_OUTPUT")
+        if out:
             print(f"::add-mask::{new_refresh}")
-            with open(output_file, "a") as f:
-                f.write(f"token_rotated=true\n")
+            with open(out, "a") as f:
+                f.write("token_rotated=true\n")
                 f.write(f"new_refresh_token={new_refresh}\n")
 
+    status["status"] = "healthy"
     print()
     print("=== Token Health: ✅ HEALTHY ===")
+    finish(0)
 
 
 if __name__ == "__main__":

@@ -8,6 +8,7 @@ let cachedGithubUser = null;
 function initSettingsPage() {
   settingsInitialized = true;
   renderVaultInfo();
+  loadTokenStatus();
 }
 
 // ═══════════════════════════════════════════════════
@@ -156,4 +157,234 @@ function importVault(event) {
   };
   reader.readAsText(file);
   event.target.value = '';
+}
+
+
+// ═══════════════════════════════════════════════════
+//  AZURE AD TOKEN STATUS + RE-AUTH
+// ═══════════════════════════════════════════════════
+const TOKEN_STATUS_FILE = 'token-status.json';
+const REAUTH_STATUS_FILE = 'reauth-status.json';
+let azureReauthPollTimer = null;
+
+function _fmtJST(iso) {
+  if (!iso) return '—';
+  try {
+    return new Date(iso).toLocaleString('en-GB', {
+      day: '2-digit', month: 'short', year: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+      timeZone: 'Asia/Tokyo'
+    }) + ' JST';
+  } catch { return iso; }
+}
+
+function _fmtRelative(iso) {
+  if (!iso) return '';
+  const diff = Date.now() - new Date(iso).getTime();
+  const abs = Math.abs(diff);
+  const m = Math.floor(abs / 60000);
+  const h = Math.floor(m / 60);
+  const d = Math.floor(h / 24);
+  let s;
+  if (d > 0) s = `${d}d`;
+  else if (h > 0) s = `${h}h ${m % 60}m`;
+  else s = `${m}m`;
+  return diff >= 0 ? `${s} ago` : `in ${s}`;
+}
+
+async function loadTokenStatus() {
+  const box = document.getElementById('azureTokenBox');
+  if (!box) return;
+  if (!sessionToken) {
+    box.innerHTML = '<div class="text-muted-foreground">Unlock vault first to load token status.</div>';
+    return;
+  }
+  box.innerHTML = '<div class="text-muted-foreground">Loading…</div>';
+  try {
+    const r = await fetch(`${API}/gists/${GIST_ID}`, {
+      headers: { 'Authorization': `Bearer ${sessionToken}`, 'Accept': 'application/vnd.github+json' }
+    });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const gist = await r.json();
+    const file = (gist.files || {})[TOKEN_STATUS_FILE];
+    if (!file || !file.content) {
+      box.innerHTML = `
+        <div class="text-muted-foreground">No status yet. Click "Check now" to run the monitor.</div>`;
+      return;
+    }
+    const s = JSON.parse(file.content);
+    renderTokenStatus(s);
+  } catch (e) {
+    box.innerHTML = `<div class="text-red-400">Failed to load: ${e.message}</div>`;
+  }
+}
+
+function renderTokenStatus(s) {
+  const box = document.getElementById('azureTokenBox');
+  if (!box) return;
+  const statusColors = {
+    healthy: { dot: '#22c55e', label: 'Healthy', cls: 'text-green-400' },
+    expired: { dot: '#ef4444', label: 'Expired', cls: 'text-red-400' },
+    revoked: { dot: '#ef4444', label: 'Revoked', cls: 'text-red-400' },
+    missing: { dot: '#eab308', label: 'Not configured', cls: 'text-yellow-400' },
+    error:   { dot: '#ef4444', label: 'Error', cls: 'text-red-400' },
+  };
+  const stat = statusColors[s.status] || statusColors.error;
+  const user = s.user || {};
+  const userLine = user.name || user.email
+    ? `<div><span class="text-muted-foreground">User:</span> <strong>${esc(user.name || '—')}</strong>${user.email ? ` <span class="text-muted-foreground">&lt;${esc(user.email)}&gt;</span>` : ''}</div>`
+    : '';
+  const errLine = s.error
+    ? `<div class="text-red-400 text-xs mt-1">⚠️ ${esc(s.error)}</div>`
+    : '';
+  const expiry = s.access_token_expires_at;
+  const rotated = s.last_rotation_at;
+  box.innerHTML = `
+    <div class="flex items-center gap-2">
+      <span style="width:8px;height:8px;border-radius:50%;background:${stat.dot};display:inline-block;"></span>
+      <strong class="${stat.cls}">${stat.label}</strong>
+      <span class="text-muted-foreground ml-auto text-xs">checked ${_fmtRelative(s.checked_at)}</span>
+    </div>
+    ${userLine}
+    <div><span class="text-muted-foreground">Access token expires:</span> ${_fmtJST(expiry)} ${expiry ? `<span class="text-muted-foreground">(${_fmtRelative(expiry)})</span>` : ''}</div>
+    <div><span class="text-muted-foreground">Last token rotation:</span> ${rotated ? `${_fmtJST(rotated)} <span class="text-muted-foreground">(${_fmtRelative(rotated)})</span>` : 'never (still original)'}</div>
+    ${errLine}
+  `;
+}
+
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+async function triggerTokenCheck() {
+  if (!sessionToken) { toast('🔒 Unlock vault first'); return; }
+  const btn = document.getElementById('btnCheckToken');
+  if (btn) { btn.disabled = true; btn.textContent = 'Checking…'; }
+  try {
+    const r = await fetch(`${API}/repos/${OWNER}/${REPO}/actions/workflows/token-monitor.yml/dispatches`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${sessionToken}`, 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ref: 'main' })
+    });
+    if (r.status !== 204) {
+      const txt = await r.text();
+      throw new Error(`HTTP ${r.status}: ${txt.slice(0,120)}`);
+    }
+    toast('✅ Token check dispatched. Status will refresh in ~30s.');
+    setTimeout(loadTokenStatus, 30000);
+    setTimeout(loadTokenStatus, 60000);
+  } catch (e) {
+    toast(`❌ Dispatch failed: ${e.message}`, 'error');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '<span data-icon="refresh" data-size="14"></span> Check now';
+      if (typeof renderIcons === 'function') renderIcons();
+    }
+  }
+}
+
+// ─── Device-code re-auth flow ───────────────────────────────
+function openAzureReauthModal() {
+  const m = document.getElementById('azureReauthModal');
+  if (m) m.classList.add('open');
+}
+function closeAzureReauthModal() {
+  const m = document.getElementById('azureReauthModal');
+  if (m) m.classList.remove('open');
+  if (azureReauthPollTimer) { clearInterval(azureReauthPollTimer); azureReauthPollTimer = null; }
+}
+
+async function startAzureReauth() {
+  if (!sessionToken) { toast('🔒 Unlock vault first'); return; }
+  if (!confirm('Start Azure AD re-authentication?\n\nA workflow will run a device-code login. You will see a code to enter on microsoft.com/devicelogin from any device.')) return;
+  openAzureReauthModal();
+  const body = document.getElementById('azureReauthBody');
+  body.innerHTML = '<div class="text-sm text-muted-foreground p-4 text-center">Starting workflow…</div>';
+  try {
+    const r = await fetch(`${API}/repos/${OWNER}/${REPO}/actions/workflows/azure-reauth.yml/dispatches`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${sessionToken}`, 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ref: 'main' })
+    });
+    if (r.status !== 204) throw new Error(`HTTP ${r.status}`);
+    body.innerHTML = `
+      <div class="text-sm text-muted-foreground p-4 text-center">
+        <div class="mb-2">⏳ Workflow dispatched. Waiting for device code…</div>
+        <div class="text-xs opacity-60">This usually takes 20–40 seconds (Actions cold start).</div>
+      </div>`;
+    // Poll reauth-status.json every 3s
+    let lastState = null;
+    azureReauthPollTimer = setInterval(async () => {
+      try {
+        const gr = await fetch(`${API}/gists/${GIST_ID}?_=${Date.now()}`, {
+          headers: { 'Authorization': `Bearer ${sessionToken}`, 'Accept': 'application/vnd.github+json' }
+        });
+        if (!gr.ok) return;
+        const g = await gr.json();
+        const f = (g.files || {})[REAUTH_STATUS_FILE];
+        if (!f || !f.content) return;
+        const s = JSON.parse(f.content);
+        if (s.state === lastState && s.state !== 'waiting_code') return;
+        lastState = s.state;
+        renderReauthState(s);
+        if (['success', 'error', 'expired'].includes(s.state)) {
+          clearInterval(azureReauthPollTimer);
+          azureReauthPollTimer = null;
+          if (s.state === 'success') {
+            toast('✅ Re-authenticated. Refreshing status…');
+            setTimeout(loadTokenStatus, 5000);
+          }
+        }
+      } catch {}
+    }, 3000);
+  } catch (e) {
+    body.innerHTML = `<div class="text-red-400 p-4 text-center">❌ ${e.message}</div>`;
+  }
+}
+
+function renderReauthState(s) {
+  const body = document.getElementById('azureReauthBody');
+  if (!body) return;
+  if (s.state === 'waiting_code') {
+    const expiresMs = s.expires_at ? new Date(s.expires_at).getTime() - Date.now() : 0;
+    const mins = Math.max(0, Math.floor(expiresMs / 60000));
+    body.innerHTML = `
+      <div class="p-4 text-center">
+        <div class="text-xs text-muted-foreground mb-2">1. Open this URL on any device:</div>
+        <a href="${esc(s.verification_uri)}" target="_blank" rel="noopener" class="text-blue-400 underline text-sm break-all">${esc(s.verification_uri)}</a>
+        <div class="text-xs text-muted-foreground mt-4 mb-2">2. Enter this code:</div>
+        <div class="font-mono text-3xl font-bold tracking-wider my-3 select-all" style="letter-spacing:0.2em;">${esc(s.user_code)}</div>
+        <button class="btn btn-outline sm" onclick="navigator.clipboard.writeText('${esc(s.user_code)}').then(()=>toast('Copied'))">
+          <span data-icon="copy" data-size="14"></span> Copy code
+        </button>
+        <div class="text-xs text-muted-foreground mt-4">3. Sign in with Microsoft → grant DokoKin access.</div>
+        <div class="text-xs text-muted-foreground mt-2 opacity-70">Code expires in ~${mins} min. This modal will auto-update.</div>
+      </div>`;
+    if (typeof renderIcons === 'function') renderIcons();
+  } else if (s.state === 'success') {
+    body.innerHTML = `
+      <div class="p-6 text-center">
+        <div class="text-4xl mb-2">✅</div>
+        <div class="text-base font-medium text-green-400 mb-2">Re-authentication successful</div>
+        <div class="text-xs text-muted-foreground mb-4">${esc(s.message || 'Token has been updated.')}</div>
+        <button class="btn primary sm" onclick="closeAzureReauthModal()">Close</button>
+      </div>`;
+  } else if (s.state === 'expired') {
+    body.innerHTML = `
+      <div class="p-6 text-center">
+        <div class="text-4xl mb-2">⏰</div>
+        <div class="text-base font-medium text-yellow-400 mb-2">Code expired</div>
+        <div class="text-xs text-muted-foreground mb-4">You did not complete sign-in in time.</div>
+        <button class="btn primary sm" onclick="closeAzureReauthModal();startAzureReauth()">Try again</button>
+      </div>`;
+  } else if (s.state === 'error') {
+    body.innerHTML = `
+      <div class="p-6 text-center">
+        <div class="text-4xl mb-2">❌</div>
+        <div class="text-base font-medium text-red-400 mb-2">Re-auth failed</div>
+        <div class="text-xs text-muted-foreground mb-4 break-words">${esc(s.message || 'Unknown error')}</div>
+        <button class="btn sm" onclick="closeAzureReauthModal()">Close</button>
+      </div>`;
+  }
 }
