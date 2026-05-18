@@ -235,7 +235,7 @@ function renderScheduleCalendar(gistEntries) {
   for (const t of PIP_TYPES) {
     const count = typeCounts[t.key] || 0;
     const hidden = isHidden(t.key);
-    html += `<button type="button" class="filter-chip filter-${t.key}${hidden ? ' off' : ''}" onclick="togglePipFilter('${t.key}')" title="${hidden ? 'Show' : 'Hide'} ${t.label}">
+    html += `<button type="button" class="filter-chip filter-${t.key}${hidden ? ' off' : ''}" onclick="togglePipFilter('${t.key}')" data-tooltip="${hidden ? 'Show' : 'Hide'} ${t.label}">
       <span class="filter-dot"></span>${t.label}<span class="filter-count">${count}</span>
     </button>`;
   }
@@ -251,7 +251,7 @@ function renderScheduleCalendar(gistEntries) {
   for (let ti = 0; ti < times.length; ti++) {
     const time = times[ti];
     const rowCls = ti === nextTimeIdx ? 'time-label next-time' : 'time-label';
-    html += `<div class="schedule-cell ${rowCls}" title="${ti === nextTimeIdx ? 'Next upcoming slot' : ''}">${time}</div>`;
+    html += `<div class="schedule-cell ${rowCls}"${ti === nextTimeIdx ? ' data-tooltip="Next upcoming slot"' : ''}>${time}</div>`;
     for (let day = 0; day < 7; day++) {
       const cellPips = visiblePips.filter(p => p.dayIdx === day && p.time === time);
       const isToday = day === todayDow;
@@ -263,10 +263,10 @@ function renderScheduleCalendar(gistEntries) {
       const onclick = cellPips.length === 0
         ? `ondblclick="quickAddRecurring(${day}, '${time}')"`
         : '';
-      html += `<div class="${classes.join(' ')}" ${onclick} title="${cellPips.length === 0 ? 'Double-tap to add' : ''}">`;
+      html += `<div class="${classes.join(' ')}" ${onclick}${cellPips.length === 0 ? ' data-tooltip="Double-tap to add"' : ''}>`;
       for (const p of cellPips) {
         const dimmed = p.enabled ? '' : ' disabled';
-        html += `<span class="schedule-pip ${p.typeKey}${dimmed}" data-entry="${p.entryIdx}" title="${p.name}${p.enabled ? '' : ' (disabled)'}">${p.name.split(' ').slice(-1)[0]}</span>`;
+        html += `<span class="schedule-pip ${p.typeKey}${dimmed}" data-entry="${p.entryIdx}" data-tooltip="${p.name}${p.enabled ? '' : ' (disabled)'}">${p.name.split(' ').slice(-1)[0]}</span>`;
       }
       html += '</div>';
     }
@@ -1007,8 +1007,8 @@ function renderScheduledQueue(entries) {
         ${nextInfo}
       </div>
       <div class="sched-item-actions">
-        ${!isOnce ? `<div class="${toggleCls}" role="switch" aria-checked="${enabled}" tabindex="0" onclick="toggleScheduleEntry(${i})" title="${enabled ? 'Disable' : 'Enable'}"></div>` : ''}
-        <button class="btn danger sm" onclick="deleteScheduledRun(${i})" title="Delete">${ICON('trash', 14)}</button>
+        ${!isOnce ? `<div class="${toggleCls}" role="switch" aria-checked="${enabled}" tabindex="0" onclick="toggleScheduleEntry(${i})" data-tooltip="${enabled ? 'Disable' : 'Enable'}"></div>` : ''}
+        <button class="btn danger sm" onclick="deleteScheduledRun(${i})" data-tooltip="Delete">${ICON('trash', 14)}</button>
       </div>
     </div>`;
   }).join('');
@@ -1330,8 +1330,8 @@ function renderScheduleTable() {
       <td data-label="Status">${statusBadge}</td>
       <td data-label="Created" class="text-muted-foreground text-xs">${created}</td>
       <td class="actions-cell"><div class="actions-cell">
-        <button class="btn sm" onclick="openEditSchedModal(${realIdx})" title="Edit">${ICON('edit', 14)}</button>
-        <button class="btn danger sm" onclick="deleteScheduledRun(${realIdx})" title="Delete">${ICON('trash', 14)}</button>
+        <button class="btn sm" onclick="openEditSchedModal(${realIdx})" data-tooltip="Edit">${ICON('edit', 14)}</button>
+        <button class="btn danger sm" onclick="deleteScheduledRun(${realIdx})" data-tooltip="Delete">${ICON('trash', 14)}</button>
       </div></td>
     </tr>`;
   }).join('');

@@ -125,7 +125,7 @@ function renderLocationList() {
     const isDefault = loc.isDefault;
     const deleteBtn = isDefault
       ? `<span class="badge badge-sm" style="font-size:0.7em;padding:2px 8px;background:var(--primary);color:#fff;border-radius:999px;">Default</span>`
-      : `<button class="btn danger sm" onclick="confirmDeleteLocation('${loc.key}')" title="Delete">${typeof ICON !== 'undefined' ? ICON('trash', 14) : '🗑'}</button>`;
+      : `<button class="btn danger sm" onclick="confirmDeleteLocation('${loc.key}')" data-tooltip="Delete">${typeof ICON !== 'undefined' ? ICON('trash', 14) : '🗑'}</button>`;
     return `
       <div class="location-item" style="display:flex;align-items:center;gap:10px;padding:10px 14px;border:1px solid var(--border);border-radius:8px;background:var(--card);">
         <span style="font-size:1.3em;">${loc.icon || '📍'}</span>
