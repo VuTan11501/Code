@@ -461,7 +461,50 @@ const DEFAULT_NOTIF_PREFS = {
   onSuccess: false,        // 🟢 alert when a run completes successfully
   onStart: false,          // 🟡 alert when a run starts/is queued
   requireInteraction: true,  // failure stays on screen until dismissed
+  sound: true,             // 🔊 play a sound with the notification
 };
+
+// ─── Notification sound (WebAudio synth, no external files) ───
+let _notifAudioCtx = null;
+function _getAudioCtx() {
+  if (_notifAudioCtx) return _notifAudioCtx;
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return null;
+    _notifAudioCtx = new Ctx();
+  } catch { return null; }
+  return _notifAudioCtx;
+}
+// kind: 'failure' | 'success' | 'start' | 'test'
+function playNotifSound(kind = 'test') {
+  const prefs = getNotifPrefs();
+  if (!prefs.sound) return;
+  const ctx = _getAudioCtx();
+  if (!ctx) return;
+  if (ctx.state === 'suspended') { try { ctx.resume(); } catch {} }
+  // Sequence of {freq, start, dur, gain} notes
+  let seq;
+  if (kind === 'failure')      seq = [{f: 520, t: 0,    d: 0.18, g: 0.18}, {f: 330, t: 0.20, d: 0.30, g: 0.18}];
+  else if (kind === 'success') seq = [{f: 660, t: 0,    d: 0.12, g: 0.16}, {f: 880, t: 0.13, d: 0.12, g: 0.16}, {f: 1175, t: 0.26, d: 0.20, g: 0.16}];
+  else if (kind === 'start')   seq = [{f: 780, t: 0,    d: 0.10, g: 0.14}];
+  else                         seq = [{f: 880, t: 0,    d: 0.12, g: 0.16}, {f: 1175, t: 0.13, d: 0.18, g: 0.16}];
+  const now = ctx.currentTime;
+  for (const n of seq) {
+    try {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(n.f, now + n.t);
+      // simple ADSR-ish envelope
+      gain.gain.setValueAtTime(0.0001, now + n.t);
+      gain.gain.exponentialRampToValueAtTime(n.g, now + n.t + 0.015);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + n.t + n.d);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(now + n.t);
+      osc.stop(now + n.t + n.d + 0.02);
+    } catch {}
+  }
+}
 function getNotifPrefs() {
   try {
     const raw = localStorage.getItem(NOTIF_PREFS_KEY);
@@ -527,9 +570,11 @@ function renderNotifSettings() {
         ${sw('onSuccess', 'Success alerts',  'Notify when a workflow run completes successfully.',             'check',  'var(--green)')}
         ${sw('onStart',   'Start alerts',    'Notify when a new workflow run starts (queued or in_progress).', 'play',   'var(--blue, #3b82f6)')}
         ${sw('requireInteraction', 'Sticky failure alerts', 'Failure notifications stay on screen until dismissed.', 'lockKeyhole', 'var(--yellow)')}
+        ${sw('sound',              'Sound',                  'Play a short tone with each notification.',             'bell',    'var(--purple)')}
       </div>
       <div class="flex gap-2 mt-3 pt-3 border-t border-border">
         <button class="btn btn-outline sm" onclick="testNotification()" type="button"><span data-icon="bell" data-size="14"></span> Send test</button>
+        <button class="btn btn-outline sm" onclick="playNotifSound('test')" type="button" data-tooltip="Preview notification sound"><span data-icon="bell" data-size="14"></span> Test sound</button>
       </div>`;
   } else if (notifPermission === 'denied') {
     inner = `<div class="text-xs text-muted-foreground leading-relaxed">Notifications were blocked. To re-enable, open your browser's site settings for this page (lock icon in address bar) and set <strong>Notifications</strong> to <em>Allow</em>, then reload.</div>`;
@@ -546,6 +591,7 @@ function testNotification() {
     title: '🔔 Test notification',
     body: 'If you can see this, notifications are working correctly.',
     tag: 'notif-test-' + Date.now(),
+    soundKind: 'test',
   });
   toast('Test notification sent');
 }
@@ -574,7 +620,9 @@ async function requestNotifPermission() {
 // Unified notification API. opts: { title, body, tag, url, requireInteraction }
 async function showNotification(opts) {
   if (notifPermission !== 'granted') return;
-  const { title, body, tag, url, requireInteraction } = opts;
+  const { title, body, tag, url, requireInteraction, soundKind } = opts;
+  // Play our own synthesized tone (independent of OS notification sound)
+  try { playNotifSound(soundKind || 'test'); } catch {}
   const options = {
     body,
     tag: tag || ('wf-' + Date.now()),
@@ -686,6 +734,7 @@ function checkForNewFailures(allRuns) {
       tag: `wf-${kind}-${wf.id || 'unknown'}`,
       url: r.html_url,
       requireInteraction: kind === 'failure' && prefs.requireInteraction,
+      soundKind: kind,
     });
     notified++;
   };
