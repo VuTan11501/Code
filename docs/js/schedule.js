@@ -553,7 +553,7 @@ function renderScheduleTable() {
   if (filterWf !== 'all') filtered = filtered.filter(e => e.workflow === filterWf);
 
   if (!filtered.length) {
-    tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted-foreground py-8">No schedules found</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" class="text-center py-8"><div class="text-muted-foreground text-sm">📋 No schedules found</div><div class="text-xs text-muted-foreground mt-1 opacity-60">Create your first automated workflow run above</div></td></tr>';
     if (countEl) countEl.textContent = '0 entries';
     return;
   }
@@ -597,14 +597,14 @@ function renderScheduleTable() {
     const created = entry.created ? new Date(entry.created).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' }) : '—';
 
     return `<tr>
-      <td class="text-muted-foreground font-mono">${realIdx + 1}</td>
-      <td><span class="badge-${entry.type}">${isOnce ? 'Once' : 'Recurring'}</span></td>
-      <td class="font-medium">${wfName}</td>
-      <td class="font-mono text-xs">${schedDesc}</td>
-      <td class="text-muted-foreground">${entry.note || '—'}</td>
-      <td>${statusBadge}</td>
-      <td class="text-muted-foreground text-xs">${created}</td>
-      <td><div class="actions-cell">
+      <td data-label="#" class="text-muted-foreground font-mono">${realIdx + 1}</td>
+      <td data-label="Type"><span class="badge-${entry.type}">${isOnce ? 'Once' : 'Recurring'}</span></td>
+      <td data-label="Workflow" class="font-medium">${wfName}</td>
+      <td data-label="Schedule" class="font-mono text-xs">${schedDesc}</td>
+      <td data-label="Note" class="text-muted-foreground">${entry.note || '—'}</td>
+      <td data-label="Status">${statusBadge}</td>
+      <td data-label="Created" class="text-muted-foreground text-xs">${created}</td>
+      <td class="actions-cell"><div class="actions-cell">
         <button class="btn sm" onclick="openEditSchedModal(${realIdx})" title="Edit">✏️</button>
         <button class="btn danger sm" onclick="deleteScheduledRun(${realIdx})" title="Delete">🗑</button>
       </div></td>

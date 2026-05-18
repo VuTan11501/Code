@@ -85,13 +85,14 @@ html { touch-action: manipulation; }
 
 /* ─── CARD (JS-generated) ─── */
 .card {
-  background: var(--card);
+  background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.005)), var(--card);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   overflow: hidden;
-  transition: border-color var(--duration-normal);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
+  transition: border-color var(--duration-normal), transform var(--duration-fast);
 }
-.card:hover { border-color: rgba(255,255,255,0.14); }
+@media (hover: hover) { .card:hover { border-color: rgba(255,255,255,0.16); transform: translateY(-1px); } }
 .card.updating { opacity: 0.6; }
 .card-header {
   display: flex; flex-direction: column; gap: 4px;
@@ -128,7 +129,7 @@ html { touch-action: manipulation; }
   min-height: 36px; touch-action: manipulation; user-select: none;
 }
 .btn:hover { background: #262626; border-color: rgba(255,255,255,0.15); }
-.btn:active { opacity: 0.85; }
+.btn:active { opacity: 0.85; transform: scale(0.97); }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; pointer-events: none; }
 .btn.primary { background: var(--green); border-color: var(--green); color: #fff; font-weight: 600; }
 .btn.primary:hover { background: #16a34a; border-color: #16a34a; }
@@ -267,25 +268,31 @@ html { touch-action: manipulation; }
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
 }
 .settings-card {
-  background: var(--card); border: 1px solid var(--border);
+  background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.005)), var(--card);
+  border: 1px solid var(--border);
   border-radius: var(--radius-lg); padding: 20px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
   transition: border-color var(--duration-normal);
 }
-.settings-card:hover { border-color: rgba(255,255,255,0.14); }
+.settings-card:hover { border-color: rgba(255,255,255,0.16); }
 .settings-card .card-header { padding: 0; border-bottom: none; margin-bottom: 16px; }
 .settings-card .card-content { padding: 0; }
 
 /* ─── SCHEDULER PANEL ─── */
 .scheduler-panel { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .scheduler-form {
-  background: var(--card); border: 1px solid var(--border);
+  background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.005)), var(--card);
+  border: 1px solid var(--border);
   border-radius: var(--radius-lg); padding: 20px;
   display: flex; flex-direction: column; gap: 16px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
 }
 .scheduler-queue {
-  background: var(--card); border: 1px solid var(--border);
+  background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.005)), var(--card);
+  border: 1px solid var(--border);
   border-radius: var(--radius-lg); padding: 16px 20px;
   max-height: 420px; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
 }
 
 /* ─── SCHEDULE ITEMS (JS-generated) ─── */
@@ -326,6 +333,22 @@ html { touch-action: manipulation; }
   transition: transform var(--duration-normal) var(--ease-out);
 }
 .sched-toggle.active::after { transform: translateX(20px); }
+
+/* ─── INPUT (centralized — use .input class alone in HTML) ─── */
+.input {
+  width: 100%;
+  min-height: 40px;
+  padding: 0.625rem 0.875rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--input);
+  background: transparent;
+  color: var(--foreground);
+  font-size: var(--fs-sm);
+  transition: border-color var(--duration-fast), box-shadow var(--duration-fast);
+}
+.input:focus { outline: none; border-color: var(--ring); box-shadow: var(--shadow-glow); }
+.input::placeholder { color: var(--muted-foreground); }
+.input-sm { min-height: 32px; padding: 0.25rem 0.5rem; font-size: var(--fs-xs); width: auto; }
 
 /* ─── SELECT (shadcn style) ─── */
 select, .select-trigger {
@@ -504,6 +527,17 @@ select option { background: var(--card); color: var(--foreground); }
 /* ─── ERROR DISPLAY ─── */
 .error { color: var(--red); font-size: var(--fs-sm); margin-top: 8px; display: none; }
 
+/* ─── AUTH ICON ─── */
+.auth-icon {
+  background: radial-gradient(circle at top, rgba(34,197,94,0.15), rgba(255,255,255,0.03));
+  border: 1px solid var(--border);
+}
+
+/* ─── BUTTON VARIANTS (additional) ─── */
+.btn-outline { background: transparent; border-color: var(--input); }
+.btn-outline:hover { background: var(--accent); border-color: rgba(255,255,255,0.15); }
+.btn-icon { background: var(--secondary); border-color: transparent; padding: 0.5rem; border-radius: var(--radius-md); }
+
 /* ─── TEXT UTILITIES (used by JS) ─── */
 .text-muted { color: var(--muted-foreground); }
 
@@ -530,7 +564,12 @@ select option { background: var(--card); color: var(--foreground); }
     flex-direction: column; gap: 2px; padding: 8px 4px;
     font-size: 10px; min-height: 48px; flex: 1;
   }
-  .nav-item.active, .tabs-trigger.active { box-shadow: none; background: rgba(255,255,255,0.06); }
+  .nav-item.active, .tabs-trigger.active {
+    box-shadow: none;
+    background: rgba(255,255,255,0.06);
+    border-top: 2px solid var(--primary);
+    padding-top: 6px;
+  }
 
   /* Cards */
   .grid { grid-template-columns: 1fr; gap: 12px; margin-bottom: 20px; }
@@ -572,6 +611,35 @@ select option { background: var(--card); color: var(--foreground); }
     transform: translateX(0) translateY(16px); max-width: 100%; border-radius: var(--radius-md);
   }
   .toast.show { transform: translateX(0) translateY(0); }
+
+  /* Header: hide lastUpdate, compact live indicator */
+  #lastUpdate { display: none; }
+  .live-interval { display: none; }
+
+  /* Schedule table → card layout on mobile */
+  .sched-table-wrap { border: none; overflow: visible; }
+  .sched-table, .sched-table thead, .sched-table tbody, .sched-table tr, .sched-table td { display: block; }
+  .sched-table thead { display: none; }
+  .sched-table tbody tr {
+    background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.005)), var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 14px;
+    margin-bottom: 12px;
+  }
+  .sched-table tbody tr:last-child { border-bottom: 1px solid var(--border); }
+  .sched-table td { padding: 4px 0; white-space: normal; border: none; }
+  .sched-table td::before {
+    content: attr(data-label);
+    display: inline-block;
+    width: 80px;
+    font-size: var(--fs-xs);
+    color: var(--muted-foreground);
+    font-weight: 500;
+  }
+  .sched-table td.actions-cell::before { display: none; }
+  .sched-table .actions-cell { justify-content: stretch; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+  .sched-table .actions-cell .btn { flex: 1; min-height: 38px; }
 }
 
 /* iPhone Pro / Dynamic Island */

@@ -74,8 +74,10 @@ tailwind.config = {
 <!-- Auth Screen -->
 <section id="authScreen" class="auth-screen flex items-center justify-center min-h-dvh p-5" role="main" aria-label="Authentication">
   <div class="card auth-card bg-card border border-border rounded-xl p-10 max-w-[400px] w-full text-center">
-    <div class="card-header flex flex-col items-center gap-2 pb-5 border-b border-border mb-5" style="text-align:center">
-      <div class="text-[40px] mb-4" aria-hidden="true">🔐</div>
+    <div class="card-header flex flex-col items-center gap-2 pb-5 border-b border-border mb-5">
+      <div class="auth-icon w-14 h-14 rounded-full grid place-items-center mb-2" aria-hidden="true">
+        <span class="text-[28px]">🔐</span>
+      </div>
       <div class="card-title text-base font-semibold tracking-tight"><h2>Workflow Dashboard</h2></div>
       <div class="card-description text-sm text-muted-foreground" id="authDesc">Enter passphrase to unlock</div>
     </div>
@@ -88,24 +90,24 @@ tailwind.config = {
       <!-- Unlock form -->
       <form id="unlockForm" onsubmit="event.preventDefault();unlock()" role="tabpanel" aria-labelledby="authTabs">
         <div class="field flex flex-col gap-2 mb-3">
-          <input type="password" class="input w-full px-3.5 py-2.5 rounded-md border border-input bg-transparent text-foreground text-sm transition-colors focus:outline-none focus:border-ring focus:ring-2 focus:ring-ring/25 placeholder:text-muted-foreground" id="passphrase" placeholder="Passphrase" autocomplete="current-password" aria-label="Passphrase">
+          <input type="password" class="input" id="passphrase" placeholder="Passphrase" autocomplete="current-password" aria-label="Passphrase">
         </div>
-        <button type="submit" class="btn primary w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-md bg-success border border-success text-white font-semibold text-sm transition-all hover:bg-green-600 active:opacity-85 mt-2">🔓 Unlock</button>
+        <button type="submit" class="btn primary w-full px-4 py-2.5 mt-2">🔓 Unlock</button>
         <div class="error" id="unlockError" role="alert">Wrong passphrase</div>
       </form>
 
       <!-- Setup form -->
       <form id="setupForm" style="display:none" onsubmit="event.preventDefault();setup()" role="tabpanel" aria-labelledby="authTabs">
         <div class="field flex flex-col gap-2 mb-3">
-          <input type="password" class="input w-full px-3.5 py-2.5 rounded-md border border-input bg-transparent text-foreground text-sm transition-colors focus:outline-none focus:border-ring focus:ring-2 focus:ring-ring/25 placeholder:text-muted-foreground" id="newToken" placeholder="GitHub PAT (ghp_... or github_pat_...)" autocomplete="off" aria-label="GitHub Personal Access Token">
+          <input type="password" class="input" id="newToken" placeholder="GitHub PAT (ghp_... or github_pat_...)" autocomplete="off" aria-label="GitHub Personal Access Token">
         </div>
         <div class="field flex flex-col gap-2 mb-3">
-          <input type="password" class="input w-full px-3.5 py-2.5 rounded-md border border-input bg-transparent text-foreground text-sm transition-colors focus:outline-none focus:border-ring focus:ring-2 focus:ring-ring/25 placeholder:text-muted-foreground" id="newPass" placeholder="Create passphrase (6+ chars)" autocomplete="new-password" aria-label="New passphrase">
+          <input type="password" class="input" id="newPass" placeholder="Create passphrase (6+ chars)" autocomplete="new-password" aria-label="New passphrase">
         </div>
         <div class="field flex flex-col gap-2 mb-3">
-          <input type="password" class="input w-full px-3.5 py-2.5 rounded-md border border-input bg-transparent text-foreground text-sm transition-colors focus:outline-none focus:border-ring focus:ring-2 focus:ring-ring/25 placeholder:text-muted-foreground" id="confirmPass" placeholder="Confirm passphrase" autocomplete="new-password" aria-label="Confirm passphrase">
+          <input type="password" class="input" id="confirmPass" placeholder="Confirm passphrase" autocomplete="new-password" aria-label="Confirm passphrase">
         </div>
-        <button type="submit" class="btn primary w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-md bg-success border border-success text-white font-semibold text-sm transition-all hover:bg-green-600 active:opacity-85 mt-2">🔑 Encrypt & Save</button>
+        <button type="submit" class="btn primary w-full px-4 py-2.5 mt-2">🔑 Encrypt & Save</button>
         <div class="error" id="setupError" role="alert"></div>
         <p class="text-xs text-muted-foreground mt-4 leading-relaxed opacity-70">
           PAT is encrypted with AES-256-GCM using your passphrase.<br>
@@ -128,8 +130,8 @@ tailwind.config = {
           <span class="live-interval" id="liveInterval">30s</span>
         </div>
         <span class="text-xs text-muted-foreground" id="lastUpdate" aria-live="polite"></span>
-        <button class="btn btn-icon inline-flex items-center justify-center p-2 min-w-[36px] min-h-[36px] rounded-md border border-transparent bg-secondary text-foreground text-base transition-all hover:bg-[#262626] hover:border-white/15" id="notifBtn" onclick="requestNotifPermission()" title="Notifications" aria-label="Toggle notifications">🔔</button>
-        <button class="btn btn-destructive danger inline-flex items-center justify-center gap-2 px-4 py-2 rounded-md bg-red-500/10 border border-red-500/30 text-red-500 text-sm font-medium transition-all hover:bg-red-500/15 hover:border-red-500" onclick="lock()" aria-label="Lock dashboard">🔒 Lock</button>
+        <button class="btn btn-icon p-2 min-w-[36px] min-h-[36px]" id="notifBtn" onclick="requestNotifPermission()" title="Notifications" aria-label="Toggle notifications">🔔</button>
+        <button class="btn danger sm" onclick="lock()" aria-label="Lock dashboard">🔒 Lock</button>
       </div>
     </header>
 
@@ -269,9 +271,9 @@ tailwind.config = {
             </div>
             <div class="field scheduler-field">
               <label class="field-label text-xs text-muted-foreground font-medium block mb-1" for="schedNote">Note (optional)</label>
-              <input type="text" class="input w-full px-3.5 py-2.5 rounded-md border border-input bg-transparent text-foreground text-sm transition-colors focus:outline-none focus:border-ring focus:ring-2 focus:ring-ring/25 placeholder:text-muted-foreground" id="schedNote" placeholder="e.g. makeup run, daily report">
+              <input type="text" class="input" id="schedNote" placeholder="e.g. makeup run, daily report">
             </div>
-            <button class="btn primary w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-md bg-success border border-success text-white font-semibold text-sm transition-all hover:bg-green-600 active:opacity-85" onclick="addScheduledRun()">➕ Add Schedule</button>
+            <button class="btn primary w-full px-4 py-2.5" onclick="addScheduledRun()">➕ Add Schedule</button>
           </div>
           <div class="scheduler-queue" id="schedulerQueue" aria-label="Scheduled runs queue">
             <div class="empty text-muted-foreground text-sm p-4 text-center">Loading scheduled runs...</div>
@@ -286,12 +288,12 @@ tailwind.config = {
         <div class="flex items-center justify-between mb-4">
           <div class="section-title text-sm font-medium text-muted-foreground flex items-center gap-2 mb-0">📋 All Schedules</div>
           <div class="flex items-center gap-2">
-            <select id="tableFilterType" class="input select-trigger text-xs !w-auto !h-8 !px-2 !py-1" onchange="renderScheduleTable()">
+            <select id="tableFilterType" class="input input-sm select-trigger" onchange="renderScheduleTable()">
               <option value="all">All Types</option>
               <option value="once">One-time</option>
               <option value="recurring">Recurring</option>
             </select>
-            <select id="tableFilterWf" class="input select-trigger text-xs !w-auto !h-8 !px-2 !py-1" onchange="renderScheduleTable()">
+            <select id="tableFilterWf" class="input input-sm select-trigger" onchange="renderScheduleTable()">
               <option value="all">All Workflows</option>
               <option value="auto-checkin.yml">Checkin/Checkout</option>
               <option value="auto-ot.yml">Auto OT</option>
@@ -337,15 +339,15 @@ tailwind.config = {
           </div>
           <div class="card-content">
             <div class="field flex flex-col gap-2 mb-2">
-              <input type="password" class="input w-full px-3.5 py-2.5 rounded-md border border-input bg-transparent text-foreground text-sm transition-colors focus:outline-none focus:border-ring focus:ring-2 focus:ring-ring/25 placeholder:text-muted-foreground" id="cpOldPass" placeholder="Current passphrase" autocomplete="current-password" aria-label="Current passphrase">
+              <input type="password" class="input" id="cpOldPass" placeholder="Current passphrase" autocomplete="current-password" aria-label="Current passphrase">
             </div>
             <div class="field flex flex-col gap-2 mb-2">
-              <input type="password" class="input w-full px-3.5 py-2.5 rounded-md border border-input bg-transparent text-foreground text-sm transition-colors focus:outline-none focus:border-ring focus:ring-2 focus:ring-ring/25 placeholder:text-muted-foreground" id="cpNewPass" placeholder="New passphrase (6+ chars)" autocomplete="new-password" aria-label="New passphrase">
+              <input type="password" class="input" id="cpNewPass" placeholder="New passphrase (6+ chars)" autocomplete="new-password" aria-label="New passphrase">
             </div>
             <div class="field flex flex-col gap-2 mb-2">
-              <input type="password" class="input w-full px-3.5 py-2.5 rounded-md border border-input bg-transparent text-foreground text-sm transition-colors focus:outline-none focus:border-ring focus:ring-2 focus:ring-ring/25 placeholder:text-muted-foreground" id="cpConfirmPass" placeholder="Confirm new passphrase" autocomplete="new-password" aria-label="Confirm new passphrase">
+              <input type="password" class="input" id="cpConfirmPass" placeholder="Confirm new passphrase" autocomplete="new-password" aria-label="Confirm new passphrase">
             </div>
-            <button class="btn primary inline-flex items-center justify-center gap-2 px-3 py-1.5 rounded-sm bg-success border border-success text-white font-semibold text-xs transition-all hover:bg-green-600 active:opacity-85 mt-2" onclick="changePassphrase()">Change Passphrase</button>
+            <button class="btn primary sm mt-2" onclick="changePassphrase()">Change Passphrase</button>
             <div class="error" id="cpError" role="alert"></div>
           </div>
         </div>
@@ -357,7 +359,7 @@ tailwind.config = {
             <div class="card-description">Transfer encrypted vault between devices.</div>
           </div>
           <div class="card-content">
-            <button class="btn btn-outline inline-flex items-center justify-center gap-2 px-3 py-1.5 rounded-sm border border-input bg-transparent text-foreground text-xs font-medium transition-all hover:bg-accent hover:border-white/15 mb-2.5" onclick="exportVault()">📥 Export Vault (.json)</button>
+            <button class="btn btn-outline sm mb-2.5" onclick="exportVault()">📥 Export Vault (.json)</button>
             <br>
             <label class="file-input-label inline-flex items-center gap-2 px-4 py-2 rounded-md border border-border bg-secondary text-foreground cursor-pointer text-sm font-medium transition-all hover:bg-[#262626] hover:border-white/15">
               📤 Import Vault (.json)
@@ -373,7 +375,7 @@ tailwind.config = {
             <div class="card-description">Get browser notifications when workflows fail or complete.</div>
           </div>
           <div class="card-content">
-            <button class="btn btn-outline inline-flex items-center justify-center gap-2 px-3 py-1.5 rounded-sm border border-input bg-transparent text-foreground text-xs font-medium transition-all hover:bg-accent hover:border-white/15" onclick="requestNotifPermission()">Enable Notifications</button>
+            <button class="btn btn-outline sm" onclick="requestNotifPermission()">Enable Notifications</button>
           </div>
         </div>
 
@@ -384,7 +386,7 @@ tailwind.config = {
             <div class="card-description">Workflow Dashboard v3.0 — Multi-page SPA with encrypted vault. Data refreshes every 10-30s automatically.</div>
           </div>
           <div class="card-content">
-            <button class="btn btn-destructive danger inline-flex items-center justify-center gap-2 px-3 py-1.5 rounded-sm bg-red-500/10 border border-red-500/30 text-red-500 text-xs font-medium transition-all hover:bg-red-500/15 hover:border-red-500" onclick="if(confirm('Delete vault and all data?')){localStorage.removeItem(STORAGE_KEY);lock();toast('Vault deleted','warning')}">🗑 Delete Vault</button>
+            <button class="btn danger sm" onclick="if(confirm('Delete vault and all data?')){localStorage.removeItem(STORAGE_KEY);lock();toast('Vault deleted','warning')}">🗑 Delete Vault</button>
           </div>
         </div>
       </div>
