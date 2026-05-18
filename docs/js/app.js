@@ -519,7 +519,7 @@ function renderNotifSettings() {
             <div class="text-xs text-muted-foreground mt-0.5">${desc}</div>
           </div>
         </div>
-        <div class="switch ${p[key] ? 'active' : ''}" role="switch" aria-checked="${p[key]}" tabindex="0" onclick="toggleNotifPref('${key}')" onkeydown="if(event.key===' '||event.key==='Enter'){event.preventDefault();toggleNotifPref('${key}')}"></div>
+        <div class="sched-toggle ${p[key] ? 'active' : ''}" role="switch" aria-checked="${p[key]}" tabindex="0" onclick="toggleNotifPref('${key}')" onkeydown="if(event.key===' '||event.key==='Enter'){event.preventDefault();toggleNotifPref('${key}')}" data-tooltip="${p[key] ? 'Disable' : 'Enable'}"></div>
       </div>`;
     inner = `
       <div>
