@@ -321,35 +321,17 @@ async function refresh() {
   const recentEl = document.getElementById('recentRuns');
 
   try {
-    let results;
-
-    if (hasRunningWorkflows) {
-      // Fast path: single API call for all runs (saves rate limit)
-      const data = await apiFetch(`/repos/${OWNER}/${REPO}/actions/runs?per_page=20&status=in_progress`);
-      const completedData = await apiFetch(`/repos/${OWNER}/${REPO}/actions/runs?per_page=20`);
-      const allRecentRuns = completedData.workflow_runs || [];
-      const runningRuns = data.workflow_runs || [];
-      // Merge: running first, then recent (dedup by id)
-      const seen = new Set();
-      const merged = [];
-      for (const r of [...runningRuns, ...allRecentRuns]) {
-        if (!seen.has(r.id)) { seen.add(r.id); merged.push(r); }
-      }
-      // Group by workflow
-      results = WORKFLOWS.map(wf => ({
-        wf,
-        runs: merged.filter(r => r.workflow_id === wf.id).slice(0, 10)
-      }));
-    } else {
-      // Normal path: per-workflow fetch
-      results = await Promise.all(
-        WORKFLOWS.map(wf =>
-          apiFetch(`/repos/${OWNER}/${REPO}/actions/workflows/${wf.id}/runs?per_page=10`)
-            .then(data => ({ wf, runs: data.workflow_runs || [] }))
-            .catch(() => ({ wf, runs: [] }))
-        )
-      );
-    }
+    // Per-workflow fetch — ETag conditional GETs keep this cheap (304 not counted heavily).
+    // Previously had a "fast path" using global /actions/runs?per_page=20, but high-frequency
+    // workflows (scheduled-dispatch self-loop) dominated the 20-slot pool, leaving other
+    // cards empty whenever a trigger happened. Per-workflow guarantees each card has its data.
+    const results = await Promise.all(
+      WORKFLOWS.map(wf =>
+        apiFetch(`/repos/${OWNER}/${REPO}/actions/workflows/${wf.id}/runs?per_page=10`)
+          .then(data => ({ wf, runs: data.workflow_runs || [] }))
+          .catch(() => ({ wf, runs: [] }))
+      )
+    );
 
     const allRuns = [];
     if (grid) {
