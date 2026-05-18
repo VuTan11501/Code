@@ -6,14 +6,14 @@ const REPO = 'Code';
 const API = 'https://api.github.com';
 const GIST_ID = 'abc2a47c0a396025a72a6580227ff493';
 const WORKFLOWS = [
-  { id: 277782817, name: 'Auto Checkin/Checkout', icon: '🕐', file: 'auto-checkin.yml' },
-  { id: 277802136, name: 'Auto OT Creator', icon: '⏰', file: 'auto-ot.yml' },
-  { id: 278223037, name: 'JPY Forecast Daily Report', icon: '💹', file: 'jpy-forecast.yml' },
+  { id: 277782817, name: 'Auto Checkin', icon: '📥', file: 'auto-checkin.yml' },
+  { id: 277802136, name: 'Auto OT Creator', icon: '⏰', file: 'auto-ot-creator.yml' },
+  { id: 278223037, name: 'JPY Forecast', icon: '💹', file: 'jpy-forecast.yml' },
 ];
 const AUTO_LOCK_MS = 15 * 60 * 1000;
 
 const SCHEDULE = {
-  'Auto Checkin/Checkout': [
+  'Auto Checkin': [
     { days: [1,2,3,4,5], time: '09:00', label: 'Workday CI' },
     { days: [1,2,3,4,5], time: '18:00', label: 'Workday CO' },
     { days: [0,1,2,3,4,5,6], time: '22:00', label: 'Night OT CI' },
@@ -21,7 +21,7 @@ const SCHEDULE = {
     { days: [0,1,2,3,4,5,6], time: '03:30', label: 'Night OT CO' },
     { days: [0], time: '14:30', label: 'Sunday OT CI' },
   ],
-  'JPY Forecast Daily Report': [
+  'JPY Forecast': [
     { days: [1,2,3,4,5], time: '07:30', label: 'Daily Report' },
   ],
   'Auto OT Creator': [

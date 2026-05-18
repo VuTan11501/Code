@@ -449,21 +449,72 @@ function renderScheduledQueue(entries) {
   const queue = document.getElementById('schedulerQueue');
   if (!entries.length) { queue.innerHTML = '<div class="empty">No scheduled runs</div>'; renderScheduleTable(); return; }
 
+  // Compute next fire time for each entry
+  const nowJST = jstNow();
+  const todayDow = nowJST.getDay(); // 0=Sun
+
   queue.innerHTML = entries.map((entry, i) => {
-    const wfName = WORKFLOWS.find(w => w.file === entry.workflow)?.name || entry.workflow;
-    const icon = WORKFLOWS.find(w => w.file === entry.workflow)?.icon || '⚙️';
+    const wf = WORKFLOWS.find(w => w.file === entry.workflow);
+    const wfName = wf?.name || entry.workflow.replace('.yml', '');
+    const icon = wf?.icon || '⚙️';
     const isOnce = entry.type === 'once';
-    const desc = isOnce ? `${entry.run_at?.slice(0,16).replace('T',' ')} JST` : describeRecurrence(entry.recurrence);
     const enabled = entry.enabled !== false;
     const toggleCls = enabled ? 'sched-toggle active' : 'sched-toggle';
 
-    return `<div class="sched-item">
-      <span class="sched-type ${entry.type}">${isOnce ? 'Once' : 'Recurring'}</span>
-      <span class="sched-wf">${icon} ${wfName}</span>
-      <span class="sched-time">${desc}</span>
-      ${entry.note ? `<span class="sched-note">${entry.note}</span>` : ''}
-      ${!isOnce ? `<div class="${toggleCls}" onclick="toggleScheduleEntry(${i})"></div>` : ''}
-      <button class="btn danger sm" onclick="deleteScheduledRun(${i})">🗑</button>
+    // Build display label: use note as primary label if available
+    const label = entry.note || wfName;
+    const sublabel = isOnce
+      ? `${entry.run_at?.slice(0,16).replace('T',' ')} JST`
+      : describeRecurrence(entry.recurrence);
+
+    // Compute next fire info
+    let nextInfo = '';
+    if (!isOnce && enabled) {
+      const r = entry.recurrence || {};
+      const [h, m] = (r.time || '00:00').split(':').map(Number);
+      const schedToday = new Date(nowJST);
+      schedToday.setHours(h, m, 0, 0);
+      const alreadyPassed = nowJST > schedToday;
+
+      // Check if already ran today
+      const lastRun = entry.last_run;
+      let ranToday = false;
+      if (lastRun) {
+        const lrJST = new Date(new Date(lastRun).toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
+        ranToday = lrJST.toDateString() === nowJST.toDateString();
+      }
+
+      if (ranToday) {
+        nextInfo = '<span class="sched-status done">✓ Done today</span>';
+      } else if (alreadyPassed) {
+        nextInfo = '<span class="sched-status overdue">⏳ Pending</span>';
+      } else {
+        const diff = Math.round((schedToday - nowJST) / 60000);
+        nextInfo = `<span class="sched-status upcoming">In ${diff}m</span>`;
+      }
+    } else if (isOnce) {
+      const runAt = new Date(entry.run_at);
+      if (runAt < nowJST) nextInfo = '<span class="sched-status done">Expired</span>';
+      else {
+        const diff = Math.round((runAt - nowJST) / 60000);
+        const label2 = diff < 60 ? `In ${diff}m` : diff < 1440 ? `In ${Math.round(diff/60)}h` : `In ${Math.round(diff/1440)}d`;
+        nextInfo = `<span class="sched-status upcoming">${label2}</span>`;
+      }
+    }
+
+    return `<div class="sched-item${!enabled ? ' disabled' : ''}">
+      <div class="sched-item-main">
+        <span class="sched-icon">${icon}</span>
+        <div class="sched-item-info">
+          <span class="sched-label">${label}</span>
+          <span class="sched-sublabel">${sublabel}</span>
+        </div>
+        ${nextInfo}
+      </div>
+      <div class="sched-item-actions">
+        ${!isOnce ? `<div class="${toggleCls}" onclick="toggleScheduleEntry(${i})" title="${enabled ? 'Disable' : 'Enable'}"></div>` : ''}
+        <button class="btn danger sm" onclick="deleteScheduledRun(${i})" title="Delete">🗑</button>
+      </div>
     </div>`;
   }).join('');
 

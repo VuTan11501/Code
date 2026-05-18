@@ -297,15 +297,24 @@ html { touch-action: manipulation; }
 
 /* ─── SCHEDULE ITEMS (JS-generated) ─── */
 .sched-item {
-  display: flex; align-items: center; gap: 8px;
-  padding: 12px 0; border-bottom: 1px solid var(--border);
-  font-size: var(--fs-sm); flex-wrap: wrap;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 12px; border-bottom: 1px solid var(--border);
+  font-size: var(--fs-sm); gap: 8px;
+  border-radius: var(--radius-sm); transition: background var(--duration-fast);
 }
+.sched-item:hover { background: rgba(255,255,255,0.02); }
 .sched-item:last-child { border-bottom: none; }
-.sched-item .sched-wf { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sched-item .sched-time { color: var(--primary); font-family: var(--font-mono); font-size: var(--fs-xs); }
-.sched-item .sched-note { color: var(--muted-foreground); font-size: var(--fs-xs); }
-.sched-item .sched-pattern { font-size: var(--fs-xs); color: var(--purple); }
+.sched-item.disabled { opacity: 0.5; }
+.sched-item-main { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
+.sched-item-info { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.sched-item-info .sched-label { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sched-item-info .sched-sublabel { color: var(--muted-foreground); font-size: var(--fs-xs); font-family: var(--font-mono); }
+.sched-item-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.sched-icon { font-size: 18px; flex-shrink: 0; width: 24px; text-align: center; }
+.sched-status { font-size: 10px; padding: 2px 8px; border-radius: var(--radius-full); font-weight: 500; white-space: nowrap; }
+.sched-status.done { background: var(--green-subtle, rgba(34,197,94,0.1)); color: var(--green, #22c55e); }
+.sched-status.overdue { background: var(--yellow-subtle, rgba(234,179,8,0.1)); color: var(--yellow, #eab308); }
+.sched-status.upcoming { background: var(--blue-subtle, rgba(59,130,246,0.1)); color: var(--blue, #3b82f6); }
 .sched-type { font-size: 10px; padding: 2px 8px; border-radius: var(--radius-full); font-weight: 500; }
 .sched-type.once { background: var(--blue-subtle); color: var(--blue); }
 .sched-type.recurring { background: var(--purple-subtle); color: var(--purple); }

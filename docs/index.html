@@ -182,8 +182,8 @@ tailwind.config = {
             <div class="field scheduler-field">
               <label class="field-label text-xs text-muted-foreground font-medium block mb-1" for="schedWorkflow">Workflow</label>
               <select class="input select-trigger" id="schedWorkflow">
-                <option value="auto-checkin.yml">🕐 Auto Checkin/Checkout</option>
-                <option value="auto-ot.yml">⏰ Auto OT Creator</option>
+                <option value="auto-checkin.yml">📥 Auto Checkin</option>
+                <option value="auto-ot-creator.yml">⏰ Auto OT Creator</option>
                 <option value="jpy-forecast.yml">💹 JPY Forecast</option>
               </select>
             </div>
@@ -295,8 +295,8 @@ tailwind.config = {
             </select>
             <select id="tableFilterWf" class="input input-sm select-trigger" onchange="renderScheduleTable()">
               <option value="all">All Workflows</option>
-              <option value="auto-checkin.yml">Checkin/Checkout</option>
-              <option value="auto-ot.yml">Auto OT</option>
+              <option value="auto-checkin.yml">Auto Checkin</option>
+              <option value="auto-ot-creator.yml">Auto OT Creator</option>
               <option value="jpy-forecast.yml">JPY Forecast</option>
             </select>
           </div>
@@ -421,8 +421,8 @@ tailwind.config = {
         <div class="field">
           <label class="field-label text-xs text-muted-foreground font-medium block mb-1">Workflow</label>
           <select class="input select-trigger" id="editSchedWorkflow">
-            <option value="auto-checkin.yml">🕐 Auto Checkin/Checkout</option>
-            <option value="auto-ot.yml">⏰ Auto OT Creator</option>
+            <option value="auto-checkin.yml">📥 Auto Checkin</option>
+            <option value="auto-ot-creator.yml">⏰ Auto OT Creator</option>
             <option value="jpy-forecast.yml">💹 JPY Forecast</option>
           </select>
         </div>
