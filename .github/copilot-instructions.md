@@ -269,3 +269,203 @@ Dashboard là một **PWA dark-mode-only** (`<html class="dark">`), mobile-first
 | `https://cdn.tailwindcss.com` | Tailwind runtime |
 | `https://fonts.googleapis.com/css2?family=Inter…JetBrains+Mono…` | Web fonts |
 | `https://api.github.com/*` | GitHub REST API (workflows, runs, gists) |
+
+---
+
+## 9. System Design — core components & flows
+
+### 9.1 Vai trò các thành phần (separation of concerns)
+
+| Layer | Trách nhiệm | KHÔNG được làm |
+|---|---|---|
+| **PWA (`docs/`)** | UI, CRUD Gist schedule, dispatch workflow on-demand qua GitHub API, hiển thị status | Gọi DokoKin API trực tiếp (PAT không có quyền), giữ state ngoài Gist/sessionStorage |
+| **Gist** | Source of truth cho lịch chạy + history | Lưu secret/PII (chỉ public Gist) |
+| **`scheduled-dispatch.yml`** | Trigger worker đúng giờ (server-side) | Thực thi business logic (chỉ dispatch) |
+| **Worker workflows** | 1 nghiệp vụ duy nhất / 1 lần chạy, idempotent, exit code rõ ràng | Phụ thuộc state từ run trước (mỗi run là ephemeral) |
+| **Skill scripts** (`.github/skills/*/scripts`) | Reference impl chạy local, **không được import trực tiếp** bởi workflow | Auto-trigger từ Actions (chỉ chạy thủ công local) |
+
+### 9.2 Core flow #1 — User tạo Once Schedule trên UI
+
+```
+User clicks "Add Schedule"
+  └─► docs/js/schedule.js: addScheduledRun()
+        ├─ Validate form (datetime > now, workflow chosen, location nếu cần)
+        ├─ Fetch Gist hiện tại (apiFetch với ETag cache)
+        ├─ Append entry { id, type:'once', workflow, datetime, location, ... }
+        ├─ PATCH Gist với JSON mới
+        └─ scheduleNextDispatch(entries)   ← precision setTimeout client-side
+              └─ Nếu entry sẽ fire trong < 5 phút:
+                  setTimeout(clientSideDispatchOverdue, delay_ms)
+                  → dispatch chính xác đến milisecond khi user mở dashboard
+```
+
+**Đảm bảo đúng giờ qua 3 cơ chế chồng nhau** (redundancy):
+1. **Client setTimeout** — dispatch chính xác tại millisecond nếu user đang mở tab
+2. **Server self-loop** (`scheduled-dispatch.yml` 5h loop, check Gist mỗi 30s) — không cần user mở browser
+3. **Backup cron `*/15`** + **watchdog `*/20`** — phòng cả 2 cái trên chết
+
+→ **Worst case latency**: ~30 giây (server loop interval). **Best case**: 0ms (client setTimeout).
+
+### 9.3 Core flow #2 — Scheduled dispatch loop (heart of system)
+
+```
+[T=0] scheduled-dispatch.yml triggered (cron */15 hoặc workflow_dispatch hoặc self-chain)
+  │
+  ├─► Job timeout 350 phút (loop chạy 300 phút = 5h)
+  │
+  ├─► LOOP (every 30s):
+  │     ├─ GET Gist (If-None-Match: <etag>)
+  │     │    └─ 304 → dùng cached
+  │     │    └─ 200 → parse, save etag
+  │     ├─ For each entry:
+  │     │    ├─ Compute next_fire_time (theo type: once/daily/weekly/monthly)
+  │     │    ├─ If now >= next_fire_time AND not yet dispatched in this cycle:
+  │     │    │    ├─ POST /repos/{owner}/{repo}/actions/workflows/{wf}/dispatches
+  │     │    │    │     with inputs: { location, latitude, longitude }
+  │     │    │    ├─ Mark once-entry: dispatched=true, last_run=now
+  │     │    │    └─ PATCH Gist với updated entries (KHÔNG xóa entry)
+  │     │    └─ Daily/weekly/monthly: chỉ update last_run, không mark dispatched
+  │     └─ sleep 30s
+  │
+  └─► [T=5h] Loop kết thúc → gh workflow run scheduled-dispatch.yml (self re-chain)
+        → Chain liên tục, "trái tim" không bao giờ ngưng
+```
+
+**Lý do dùng self-loop thay vì cron `*/1`**:
+- Cron GitHub thường trễ 5-30 phút khi workflow ít được sử dụng
+- Self-loop = 1 process duy nhất, đảm bảo check liên tục mỗi 30s
+- Tiết kiệm minute (1 run 5h ≈ 300 min, vs 300 cron run riêng cũng = 300 min nhưng có overhead startup mỗi lần)
+
+**Caveat quan trọng**: code Python được load tại t=0 của loop. **Fix mới push KHÔNG áp dụng** cho loop đang chạy. Phải cancel run + manual trigger nếu fix gấp.
+
+### 9.4 Core flow #3 — Worker (checkin example)
+
+```
+auto-checkin.yml triggered (workflow_dispatch)
+  │
+  ├─ inputs: { location, latitude, longitude }
+  ├─ env.TZ=Asia/Tokyo, secrets injected
+  │
+  └─► gh_checkin.py main():
+        ├─ Refresh Azure AD token (POST oauth2/v2.0/token, grant=refresh_token)
+        │    └─ Nếu refresh_token rotate → set GITHUB_OUTPUT token_rotated=true
+        ├─ Exchange Azure token → DokoKin API token (POST api/token)
+        ├─ Resolve location → GPS coordinates (override > schedule.json > default)
+        ├─ Get current dakoku status (GET api/dakoku/me/{today})
+        │    └─ Đọc startWorkingTime / endWorkingTime ⚠️ (không phải checkinTime)
+        ├─ Idempotency check:
+        │    ├─ Checkin: skip nếu đã có CI hôm nay
+        │    └─ Checkout: skip CHỈ KHI prev_CO >= now (cho phép update)
+        ├─ POST api/dakoku với { lat, lng, type: checkin_type }
+        ├─ Verify status sau khi action
+        ├─ send_email(subject với emoji status, body=LOG_LINES + HTML)
+        └─ Nếu fail → exit 1 → step "LINE Notify on failure" fire
+        
+  Post-job:
+    ├─ Nếu token_rotated → gh secret set AZURE_REFRESH_TOKEN <new>
+    └─ Workflow run logs hiển thị trong PWA dashboard qua GH API
+```
+
+### 9.5 Core flow #4 — Dashboard live polling (adaptive)
+
+```
+showDashboard() (sau auth/restore session)
+  ├─► startPolling() → schedulePoll() (setTimeout pollInterval=15s)
+  └─► refresh() (immediate first call)
+        │
+        ├─ if isPolling: return    ← re-entrancy guard
+        ├─ isPolling = true
+        ├─ try:
+        │    ├─ if hasRunningWorkflows:
+        │    │    └─ FAST PATH: 2 API calls (in_progress + recent), merge
+        │    │       → POLL_FAST=1s khi có run đang chạy
+        │    └─ else:
+        │       └─ NORMAL: per-workflow fetch (4 calls Promise.all)
+        │          → POLL_NORMAL=15s
+        ├─ Render workflowGrid + recentRuns
+        ├─ hasRunningWorkflows = any(run.status in [in_progress, queued])
+        ├─ adjustPollRate() → reschedule với interval mới
+        ├─ detectStatusChanges() → toast khi workflow chuyển trạng thái
+        └─ finally: isPolling = false
+
+Visibility events:
+  ├─ document.hidden → POLL_SLOW=60s, indicator='paused'
+  ├─ visible again → restore tốc độ + refresh ngay
+  └─ window.focus → refresh ngay (kể cả khi đang isPolling chạy)
+```
+
+**Tối ưu**: dùng **ETag cache trong-memory** (`Map<url, {etag, data}>`). GitHub API 304 không trả body → trả cached data → tiết kiệm rate limit (5000 req/h cho authenticated).
+
+### 9.6 Core flow #5 — Resilience (watchdog)
+
+```
+dispatcher-watchdog.yml (cron */20)
+  │
+  ├─ Fetch recent runs của scheduled-dispatch.yml
+  ├─ Check:
+  │    ├─ Có run nào status=in_progress?
+  │    └─ Run mới nhất created_at có trong vòng 10 phút?
+  │
+  └─► If KHÔNG có run live AND no recent activity:
+        └─ POST /actions/workflows/scheduled-dispatch.yml/dispatches
+           → Hồi sinh trái tim
+        └─ Gửi mail alert "Dispatcher was dead, resurrected"
+```
+
+→ Hệ thống self-healing, không cần monitor thủ công.
+
+### 9.7 Data model — Gist `scheduled-runs.json`
+
+```jsonc
+{
+  "entries": [
+    {
+      "id": "uuid-1",
+      "type": "once",                     // once | daily | weekly | monthly
+      "workflow": "auto-checkin.yml",
+      "datetime": "2026-05-19T09:00:00+09:00",  // ISO với tz
+      "location": "office",               // optional
+      "latitude": "35.649213",            // optional override
+      "longitude": "139.7...",            // optional override
+      "note": "test schedule",
+      "created_at": "2026-05-18T19:25:00+09:00",
+      "dispatched": false,                // chỉ với type=once
+      "last_run": null                    // ISO timestamp khi dispatch lần cuối
+    },
+    {
+      "id": "uuid-2",
+      "type": "weekly",
+      "workflow": "auto-checkout.yml",
+      "time": "18:00",                    // HH:MM JST
+      "days_of_week": [1, 2, 3, 4, 5],   // JS convention: Sun=0
+      ...
+    }
+  ],
+  "locations": {                          // user-defined (built-in trong locations.js)
+    "client-A": { "name": "Client A office", "lat": "...", "lng": "..." }
+  }
+}
+```
+
+### 9.8 Security model
+
+| Asset | Storage | Encryption |
+|---|---|---|
+| GitHub PAT | `localStorage` của browser | AES-GCM với key derive từ passphrase qua PBKDF2 (100k iterations) |
+| Active session token | `sessionStorage` | Plain (survive reload, clear tab close) |
+| Azure refresh token | GitHub Secrets | GitHub native encryption, auto-rotate via `gh secret set` |
+| API tokens (Azure, DokoKin) | Memory only trong worker run | Không persist |
+| Gist content | Public Gist | Không lưu PII/secret (chỉ schedule metadata) |
+
+**Auto-lock**: dashboard tự logout sau 30 phút idle (clear `sessionToken`).
+
+### 9.9 Tại sao thiết kế "weird" như này?
+
+| Decision | Lý do |
+|---|---|
+| Không backend / không DB | Tận dụng GitHub free tier 100%, repo public = unlimited Actions minutes |
+| Gist làm storage | API có sẵn, có ETag, có version history, miễn phí |
+| Self-loop thay vì cron */1 | Cron GitHub trễ + min interval 5 min cho new workflow |
+| Worker tách riêng từng nghiệp vụ | Dễ debug, retry độc lập, idempotent dễ verify |
+| PWA dark-only zero-build | Triển khai 1 click qua GH Pages, không cần CI build |
+| Skill local + Worker GH Actions song song | Skill = reference impl + emergency manual; Worker = production automation |
