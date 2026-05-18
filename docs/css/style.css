@@ -768,8 +768,10 @@ header h1 .icon { font-size: 24px; }
 }
 .cal-grid .cal-day:hover { background: var(--accent-subtle); }
 .cal-grid .cal-day:active { transform: scale(0.85); }
-.cal-grid .cal-day.selected { background: var(--accent); color: #fff; font-weight: 700; box-shadow: 0 2px 8px rgba(88,166,255,0.3); }
-.cal-grid .cal-day.today { border: 2px solid var(--accent); }
+.cal-grid .cal-day.selected { background: var(--accent); color: #fff; font-weight: 700; box-shadow: 0 3px 12px rgba(88,166,255,0.35); transform: scale(1.05); }
+.cal-grid .cal-day.today { border: 2px solid var(--accent); position: relative; }
+.cal-grid .cal-day.today::after { content: ''; position: absolute; bottom: 4px; left: 50%; transform: translateX(-50%); width: 4px; height: 4px; border-radius: 50%; background: var(--accent); }
+.cal-grid .cal-day.today.selected::after { background: #fff; }
 .cal-grid .cal-day.disabled { color: var(--border); cursor: default; }
 .cal-grid .cal-day.disabled:hover { background: none; }
 .cal-grid .cal-day.empty { cursor: default; }
