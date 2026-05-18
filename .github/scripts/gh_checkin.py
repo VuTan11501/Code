@@ -203,6 +203,59 @@ CRON_TYPE_MAP = {
     "30 5 * * 0":   "checkin",   # 14:30 JST Sunday OT CI
 }
 
+# Cron → intended JST (hour, minute) for delay-resilient matching.
+# GitHub Actions cron can be delayed by hours; this map lets us compute
+# the *intended* fire time and match schedule entries against that
+# instead of the (late) current time.
+CRON_JST_TIME = {
+    "0 0 * * 1-5":  (9, 0),     # 00:00 UTC → 09:00 JST
+    "0 9 * * 1-5":  (18, 0),    # 09:00 UTC → 18:00 JST
+    "0 13 * * *":   (22, 0),    # 13:00 UTC → 22:00 JST
+    "0 15 * * *":   (0, 0),     # 15:00 UTC → 00:00 JST (+1 day)
+    "30 18 * * *":  (3, 30),    # 18:30 UTC → 03:30 JST (+1 day)
+    "30 5 * * 0":   (14, 30),   # 05:30 UTC → 14:30 JST
+}
+
+
+def find_action_by_cron(schedule, trigger_cron, now_jst):
+    """Delay-resilient matching: use cron identity to find intended action.
+
+    GitHub Actions scheduled cron can be delayed by hours. Instead of
+    matching by current time (which fails when delayed past tolerance),
+    compute the intended fire time from the cron expression and find
+    the schedule entry closest to that intended time.
+    """
+    expected_type = CRON_TYPE_MAP.get(trigger_cron)
+    jst_time = CRON_JST_TIME.get(trigger_cron)
+    if not expected_type or not jst_time:
+        return None
+
+    intended_hour, intended_min = jst_time
+
+    # Build the intended JST datetime (start from today)
+    intended = now_jst.replace(hour=intended_hour, minute=intended_min,
+                               second=0, microsecond=0)
+
+    # If intended is >12h in the future, the cron was for yesterday
+    if (intended - now_jst).total_seconds() > 12 * 3600:
+        intended -= timedelta(days=1)
+
+    # Find schedule entry matching intended time + action type
+    best_entry = None
+    best_diff = float("inf")
+    max_diff_min = 360  # 6h window (dated entries prevent false matches)
+
+    for entry in schedule["actions"]:
+        if entry["action"] != expected_type:
+            continue
+        dt = datetime.strptime(entry["datetime"], "%Y-%m-%d %H:%M").replace(tzinfo=JST)
+        diff = abs((intended - dt).total_seconds() / 60)
+        if diff <= max_diff_min and diff < best_diff:
+            best_diff = diff
+            best_entry = entry
+
+    return best_entry
+
 
 # ═══════════════════════════════════════════════════════════
 #  NOTIFICATION
@@ -381,7 +434,15 @@ def main():
             expected_type = CRON_TYPE_MAP.get(trigger_cron)
             if trigger_cron:
                 log(f"Trigger cron: '{trigger_cron}' → expected type: {expected_type or 'any'}")
-            action_entry = find_matching_action(schedule, now_jst, expected_type)
+                # Delay-resilient: match by cron's intended time, not current time
+                action_entry = find_action_by_cron(schedule, trigger_cron, now_jst)
+                if action_entry:
+                    log(f"Cron-matched (delay-resilient): {action_entry['datetime']} {action_entry['action']}")
+                else:
+                    log("No cron-match, falling back to time-based matching")
+                    action_entry = find_matching_action(schedule, now_jst, expected_type)
+            else:
+                action_entry = find_matching_action(schedule, now_jst)
 
         if not action_entry:
             log("No scheduled action for current time. Skipping.")
