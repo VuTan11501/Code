@@ -194,26 +194,40 @@ def find_matching_action(schedule, now_jst, expected_type=None):
 
 
 # Cron expression → expected action type
+# Includes both primary and backup (+30min) crons.
 CRON_TYPE_MAP = {
-    "0 0 * * 1-5":  "checkin",   # 09:00 JST Mon-Fri workday CI
-    "0 9 * * 1-5":  "checkout",  # 18:00 JST Mon-Fri workday CO
-    "0 13 * * *":   "checkin",   # 22:00 JST night OT CI
-    "0 15 * * *":   "checkout",  # 00:00 JST midnight CO
-    "30 18 * * *":  "checkout",  # 03:30 JST night OT CO + Sunday OT CO
-    "30 5 * * 0":   "checkin",   # 14:30 JST Sunday OT CI
+    "0 0 * * 1-5":   "checkin",   # 09:00 JST Mon-Fri workday CI
+    "30 0 * * 1-5":  "checkin",   # 09:30 JST backup
+    "0 9 * * 1-5":   "checkout",  # 18:00 JST Mon-Fri workday CO
+    "30 9 * * 1-5":  "checkout",  # 18:30 JST backup
+    "0 13 * * *":    "checkin",   # 22:00 JST night OT CI
+    "30 13 * * *":   "checkin",   # 22:30 JST backup
+    "0 15 * * *":    "checkout",  # 00:00 JST midnight CO
+    "30 15 * * *":   "checkout",  # 00:30 JST backup
+    "30 18 * * *":   "checkout",  # 03:30 JST night OT CO + Sunday OT CO
+    "0 19 * * *":    "checkout",  # 04:00 JST backup
+    "30 5 * * 0":    "checkin",   # 14:30 JST Sunday OT CI
+    "0 6 * * 0":     "checkin",   # 15:00 JST Sunday backup
 }
 
 # Cron → intended JST (hour, minute) for delay-resilient matching.
 # GitHub Actions cron can be delayed by hours; this map lets us compute
 # the *intended* fire time and match schedule entries against that
 # instead of the (late) current time.
+# Backup crons map to the SAME intended time as their primary.
 CRON_JST_TIME = {
-    "0 0 * * 1-5":  (9, 0),     # 00:00 UTC → 09:00 JST
-    "0 9 * * 1-5":  (18, 0),    # 09:00 UTC → 18:00 JST
-    "0 13 * * *":   (22, 0),    # 13:00 UTC → 22:00 JST
-    "0 15 * * *":   (0, 0),     # 15:00 UTC → 00:00 JST (+1 day)
-    "30 18 * * *":  (3, 30),    # 18:30 UTC → 03:30 JST (+1 day)
-    "30 5 * * 0":   (14, 30),   # 05:30 UTC → 14:30 JST
+    "0 0 * * 1-5":   (9, 0),     # 00:00 UTC → 09:00 JST
+    "30 0 * * 1-5":  (9, 0),     # backup → same 09:00 JST
+    "0 9 * * 1-5":   (18, 0),    # 09:00 UTC → 18:00 JST
+    "30 9 * * 1-5":  (18, 0),    # backup → same 18:00 JST
+    "0 13 * * *":    (22, 0),    # 13:00 UTC → 22:00 JST
+    "30 13 * * *":   (22, 0),    # backup → same 22:00 JST
+    "0 15 * * *":    (0, 0),     # 15:00 UTC → 00:00 JST (+1 day)
+    "30 15 * * *":   (0, 0),     # backup → same 00:00 JST
+    "30 18 * * *":   (3, 30),    # 18:30 UTC → 03:30 JST (+1 day)
+    "0 19 * * *":    (3, 30),    # backup → same 03:30 JST
+    "30 5 * * 0":    (14, 30),   # 05:30 UTC → 14:30 JST
+    "0 6 * * 0":     (14, 30),   # backup → same 14:30 JST
 }
 
 
@@ -498,7 +512,7 @@ def main():
         elif action == "checkout" and not ci_today and not ci_yest:
             log("⚠️ No checkin record found for today or yesterday. Checkout may fail.")
 
-        # ── Execute ──
+        # ── Determine checkout context (overnight, break time) ──
         checkin_type = 1  # GPS-based checkin type
         is_checkout = action == "checkout"
 
@@ -532,6 +546,22 @@ def main():
                 except (ValueError, TypeError):
                     log(f"  ⚠️ Could not parse CI time for break calc: {ci_ref}")
 
+        # ── Idempotent skip: don't re-execute if action already recorded ──
+        if action == "checkin" and ci_today:
+            log(f"⏭️ Already checked in today at {ci_today}. Skipping (idempotent).")
+            set_output("skipped", "true")
+            set_summary(f"⏭️ Already checked in at {ci_today}. Skipping.")
+            return  # No email for idempotent skips
+        if is_checkout:
+            co_ref = co_yest if is_checkout_yesterday else co_today
+            if co_ref:
+                ref_day = "yesterday" if is_checkout_yesterday else "today"
+                log(f"⏭️ Already checked out {ref_day} at {co_ref}. Skipping (idempotent).")
+                set_output("skipped", "true")
+                set_summary(f"⏭️ Already checked out at {co_ref}. Skipping.")
+                return  # No email for idempotent skips
+
+        # ── Execute ──
         emoji = "📥" if action == "checkin" else "📤"
         status, result = do_dakoku(dokokin_token, checkin_type, loc["lat"], loc["lon"],
                                    is_checkout, is_checkout_yesterday, break_minutes)
