@@ -16,6 +16,7 @@ function initSchedulePage() {
   selectedHour = now.getHours();
   selectedMinute = now.getMinutes();
   renderTimePicker();
+  initNativeTimeInput();
   renderMonthDateGrid();
   const todayStr = formatDate(now.getFullYear(), now.getMonth(), now.getDate());
   calSelect('calPicker', todayStr);
@@ -214,6 +215,23 @@ function updateTimeDisplay() {
   document.getElementById('schedTime').value = timeStr;
   const dispInput = document.getElementById('schedTimeInput');
   if (dispInput) dispInput.value = timeStr;
+  const nativeInput = document.getElementById('schedTimeNative');
+  if (nativeInput && nativeInput.value !== timeStr) nativeInput.value = timeStr;
+}
+
+function initNativeTimeInput() {
+  const nativeInput = document.getElementById('schedTimeNative');
+  if (!nativeInput) return;
+  const timeStr = `${String(selectedHour).padStart(2,'0')}:${String(selectedMinute).padStart(2,'0')}`;
+  nativeInput.value = timeStr;
+  nativeInput.addEventListener('change', () => {
+    const v = nativeInput.value;
+    if (!v) return;
+    const [h, m] = v.split(':').map(Number);
+    selectedHour = h;
+    selectedMinute = m;
+    updateTimeDisplay();
+  });
 }
 
 function initWheel(id, count, initialIndex, onChange) {

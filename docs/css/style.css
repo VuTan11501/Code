@@ -537,6 +537,36 @@ select option { background: var(--card); color: var(--foreground); }
 }
 .time-picker-body.open { display: block; }
 
+/* Native time input (mobile fallback for Time JST) */
+.time-input-native {
+  display: none;
+  width: 100%;
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+  padding: 0.625rem 0.875rem;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: var(--fs-sm);
+  -webkit-appearance: none;
+  appearance: none;
+}
+.time-input-native::-webkit-date-and-time-value { text-align: left; }
+
+/* Fix iOS WebKit intrinsic width on <input type="time"> / type="date" inside modals */
+input[type="time"], input[type="date"], input[type="datetime-local"] {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+@media (max-width: 600px) {
+  .time-picker { display: none !important; }
+  .time-input-native { display: block; }
+}
+
 /* Wheel Picker */
 .wheel-picker-container {
   display: flex; align-items: center; justify-content: center;
