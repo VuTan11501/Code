@@ -399,13 +399,26 @@ def main():
             for e in errors:
                 log(f"    • {e}")
 
-        # Send email if anything was created or failed
-        if created_items or errors:
-            emoji = "✅" if not errors else "⚠️"
-            subject = f"{emoji} OT Auto-Creator: {len(created_items)} created, {len(errors)} errors — {today}"
-            plain_body = "\n".join(LOG_LINES)
-            html_body = build_ot_html(created_items, existing_items, skipped_past, outside_items, errors, today)
-            send_email(subject, plain_body, html=html_body)
+        # Always send email summary (matches checkin/checkout behavior)
+        today_str = today if isinstance(today, str) else str(today)
+        if errors:
+            emoji, status_word = "🚨", "ERROR"
+        elif created_items:
+            emoji, status_word = "✅", "CREATED"
+        elif existing_items and not outside_items:
+            emoji, status_word = "ℹ️", "UP-TO-DATE"
+        elif outside_items:
+            emoji, status_word = "⏳", "WAITING"
+        else:
+            emoji, status_word = "💤", "NO-OP"
+        subject = (
+            f"{emoji} OT Auto-Creator [{status_word}]: "
+            f"{len(created_items)} created, {len(existing_items)} exist, "
+            f"{len(outside_items)} pending, {len(errors)} errors — {today_str}"
+        )
+        plain_body = "\n".join(LOG_LINES)
+        html_body = build_ot_html(created_items, existing_items, skipped_past, outside_items, errors, today_str)
+        send_email(subject, plain_body, html=html_body)
 
         if errors:
             sys.exit(1)
