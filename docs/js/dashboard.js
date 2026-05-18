@@ -1,9 +1,9 @@
 // ═══════════════════════════════════════════════════
 //  REALTIME ADAPTIVE POLLING ENGINE
 // ═══════════════════════════════════════════════════
-const POLL_FAST = 10000;
-const POLL_NORMAL = 30000;
-const POLL_SLOW = 120000;
+const POLL_FAST = 1000;
+const POLL_NORMAL = 15000;
+const POLL_SLOW = 60000;
 let pollInterval = POLL_NORMAL;
 let pollTimer = null;
 let isPolling = false;
@@ -316,24 +316,37 @@ async function refresh() {
   const recentEl = document.getElementById('recentRuns');
 
   try {
-    const allRuns = [];
-    let firstError = null;
-    const results = await Promise.all(
-      WORKFLOWS.map(wf =>
-        apiFetch(`/repos/${OWNER}/${REPO}/actions/workflows/${wf.id}/runs?per_page=10`)
-          .then(data => ({ wf, runs: data.workflow_runs || [] }))
-          .catch(err => { if (!firstError) firstError = err; return { wf, runs: [] }; })
-      )
-    );
+    let results;
 
-    // If all workflows returned empty and there was an error, show it
-    const totalRuns = results.reduce((sum, r) => sum + r.runs.length, 0);
-    if (totalRuns === 0 && firstError) {
-      throw firstError;
+    if (hasRunningWorkflows) {
+      // Fast path: single API call for all runs (saves rate limit)
+      const data = await apiFetch(`/repos/${OWNER}/${REPO}/actions/runs?per_page=20&status=in_progress`);
+      const completedData = await apiFetch(`/repos/${OWNER}/${REPO}/actions/runs?per_page=20`);
+      const allRecentRuns = completedData.workflow_runs || [];
+      const runningRuns = data.workflow_runs || [];
+      // Merge: running first, then recent (dedup by id)
+      const seen = new Set();
+      const merged = [];
+      for (const r of [...runningRuns, ...allRecentRuns]) {
+        if (!seen.has(r.id)) { seen.add(r.id); merged.push(r); }
+      }
+      // Group by workflow
+      results = WORKFLOWS.map(wf => ({
+        wf,
+        runs: merged.filter(r => r.workflow_id === wf.id).slice(0, 10)
+      }));
+    } else {
+      // Normal path: per-workflow fetch
+      results = await Promise.all(
+        WORKFLOWS.map(wf =>
+          apiFetch(`/repos/${OWNER}/${REPO}/actions/workflows/${wf.id}/runs?per_page=10`)
+            .then(data => ({ wf, runs: data.workflow_runs || [] }))
+            .catch(() => ({ wf, runs: [] }))
+        )
+      );
     }
 
-    // Health bar removed — no longer rendered
-
+    const allRuns = [];
     if (grid) {
       grid.innerHTML = results.map(({ wf, runs }) => {
         allRuns.push(...runs.map(r => ({ ...r, _wf: wf })));
