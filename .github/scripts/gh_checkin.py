@@ -4,8 +4,8 @@ Zero external dependencies (stdlib only).
 Reads schedule.json, matches current JST time, executes checkin/checkout via API.
 Optionally sends email notification via SMTP.
 """
-import os, sys, json, urllib.request, urllib.parse, traceback
-from datetime import datetime, timezone, timedelta
+import os, sys, json, urllib.request, urllib.parse, traceback, time
+from datetime import datetime, timezone, timedelta, date
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import smtplib
@@ -75,6 +75,45 @@ def http_get(url, headers=None):
             return e.code, json.loads(raw)
         except (json.JSONDecodeError, ValueError):
             return e.code, {"error": raw}
+
+
+def retry(fn, retries=3, backoff=5):
+    """Retry a function up to N times with exponential backoff."""
+    last_err = None
+    for attempt in range(retries):
+        try:
+            return fn()
+        except Exception as e:
+            last_err = e
+            if attempt < retries - 1:
+                wait = backoff * (2 ** attempt)
+                log(f"  ⚠️ Attempt {attempt+1} failed: {e}. Retrying in {wait}s...")
+                time.sleep(wait)
+    raise last_err
+
+
+# ── Japanese public holidays (auto-generated for current + next year) ──
+# Source: 国民の祝日に関する法律
+JAPANESE_HOLIDAYS_2026 = {
+    date(2026, 1, 1), date(2026, 1, 12), date(2026, 2, 11), date(2026, 2, 23),
+    date(2026, 3, 20), date(2026, 4, 29), date(2026, 5, 3), date(2026, 5, 4),
+    date(2026, 5, 5), date(2026, 5, 6),  # 振替休日
+    date(2026, 7, 20), date(2026, 8, 11), date(2026, 9, 21), date(2026, 9, 22),
+    date(2026, 9, 23), date(2026, 10, 12), date(2026, 11, 3), date(2026, 11, 23),
+    date(2026, 12, 23),
+}
+JAPANESE_HOLIDAYS_2027 = {
+    date(2027, 1, 1), date(2027, 1, 11), date(2027, 2, 11), date(2027, 2, 23),
+    date(2027, 3, 21), date(2027, 4, 29), date(2027, 5, 3), date(2027, 5, 4),
+    date(2027, 5, 5), date(2027, 7, 19), date(2027, 8, 11), date(2027, 9, 20),
+    date(2027, 9, 23), date(2027, 10, 11), date(2027, 11, 3), date(2027, 11, 23),
+}
+JAPANESE_HOLIDAYS = JAPANESE_HOLIDAYS_2026 | JAPANESE_HOLIDAYS_2027
+
+
+def is_japanese_holiday(d):
+    """Check if a date is a Japanese public holiday."""
+    return d in JAPANESE_HOLIDAYS
 
 
 def refresh_azure_token(refresh_token):
@@ -464,6 +503,17 @@ def main():
             set_summary(f"⏭️ **Skipped** — no action at {now_jst.strftime('%Y-%m-%d %H:%M')} JST ({now_jst.strftime('%A')})")
             return  # No email for routine skips
 
+        # ── Holiday check: skip workday actions on Japanese holidays ──
+        # OT entries (with "OT"/"Sun" in note or on weekends) are NOT skipped
+        entry_date = datetime.strptime(action_entry["datetime"], "%Y-%m-%d %H:%M").replace(tzinfo=JST).date()
+        entry_note = action_entry.get("note", "").lower()
+        is_ot_entry = any(k in entry_note for k in ("ot", "sun", "night")) or entry_date.isoweekday() >= 6
+        if not is_ot_entry and is_japanese_holiday(entry_date):
+            log(f"🎌 {entry_date} is a Japanese holiday. Skipping workday action.")
+            set_output("skipped", "true")
+            set_summary(f"🎌 **Skipped** — {entry_date} is a Japanese holiday")
+            return
+
         action = action_entry["action"]
         location_key = action_entry["location"]
         loc = schedule["locations"][location_key]
@@ -474,7 +524,7 @@ def main():
         if note:
             log(f"Note: {note}")
 
-        # ── Get tokens ──
+        # ── Get tokens (with retry) ──
         refresh_token = os.environ.get("AZURE_REFRESH_TOKEN")
         if not refresh_token:
             log("ERROR: AZURE_REFRESH_TOKEN secret not set!")
@@ -483,11 +533,11 @@ def main():
             sys.exit(1)
 
         log("Refreshing Azure AD token...")
-        azure_token, new_refresh = refresh_azure_token(refresh_token)
+        azure_token, new_refresh = retry(lambda: refresh_azure_token(refresh_token))
         log("Azure token OK ✓")
 
         log("Exchanging for DokoKin token...")
-        dokokin_token = get_dokokin_token(azure_token)
+        dokokin_token = retry(lambda: get_dokokin_token(azure_token))
         log("DokoKin token OK ✓")
 
         # ── Pre-action status check ──
@@ -561,10 +611,17 @@ def main():
                 set_summary(f"⏭️ Already checked out at {co_ref}. Skipping.")
                 return  # No email for idempotent skips
 
-        # ── Execute ──
+        # ── Execute (with retry on server errors) ──
         emoji = "📥" if action == "checkin" else "📤"
-        status, result = do_dakoku(dokokin_token, checkin_type, loc["lat"], loc["lon"],
-                                   is_checkout, is_checkout_yesterday, break_minutes)
+
+        def _do_dakoku():
+            s, r = do_dakoku(dokokin_token, checkin_type, loc["lat"], loc["lon"],
+                             is_checkout, is_checkout_yesterday, break_minutes)
+            if s >= 500:
+                raise RuntimeError(f"Server error {s}: {r}")
+            return s, r
+
+        status, result = retry(_do_dakoku, retries=3, backoff=10)
 
         if status == 200:
             log(f"{emoji} {action.upper()} SUCCESS at {loc['name']}")

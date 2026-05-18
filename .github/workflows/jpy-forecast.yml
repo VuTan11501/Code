@@ -2,10 +2,10 @@ name: JPY Forecast Daily Report
 
 on:
   schedule:
-    # Chạy 7:30 sáng JST mỗi ngày (22:30 UTC ngày trước)
-    - cron: '30 22 * * *'
+    # 07:30 JST Mon-Fri only (22:30 UTC Sun-Thu). FX market closed on weekends.
+    - cron: '30 22 * * 0-4'
     # Backup cron (+30min) in case primary is delayed
-    - cron: '0 23 * * *'
+    - cron: '0 23 * * 0-4'
 
   workflow_dispatch:
     inputs:
@@ -78,3 +78,24 @@ jobs:
             git commit -m "chore: update ML model metadata [skip ci]" || true
             git push || true
           fi
+
+      - name: Notify on failure
+        if: failure()
+        env:
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          NOTIFY_EMAIL: ${{ secrets.NOTIFY_EMAIL }}
+        run: |
+          python -c "
+          import smtplib, os
+          from email.mime.text import MIMEText
+          msg = MIMEText('JPY Forecast pipeline failed.\n\nRun: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}')
+          msg['Subject'] = '🚨 JPY Forecast FAILED - ${{ github.run_id }}'
+          msg['From'] = os.environ['SMTP_USER']
+          msg['To'] = os.environ['NOTIFY_EMAIL']
+          with smtplib.SMTP('smtp.gmail.com', 587, timeout=15) as s:
+              s.starttls()
+              s.login(os.environ['SMTP_USER'], os.environ['SMTP_PASS'])
+              s.send_message(msg)
+          print('Failure notification sent')
+          "
