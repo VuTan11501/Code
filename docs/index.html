@@ -130,7 +130,7 @@ tailwind.config = {
           <span class="live-interval" id="liveInterval">30s</span>
         </div>
         <span class="text-xs text-muted-foreground" id="lastUpdate" aria-live="polite"></span>
-        <button class="btn btn-icon p-2 min-w-[36px] min-h-[36px]" id="notifBtn" onclick="requestNotifPermission()" data-tooltip="Notifications" aria-label="Toggle notifications"><span data-icon="bell" data-size="16"></span></button>
+        <button class="toggle" id="notifBtn" type="button" onclick="requestNotifPermission()" data-tooltip="Notifications" aria-label="Toggle notifications" aria-pressed="false" data-state="off"><span data-icon="bell" data-size="16"></span></button>
         <button class="btn danger sm" onclick="lock()" aria-label="Lock dashboard"><span data-icon="lock" data-size="14"></span> Lock</button>
       </div>
     </header>
@@ -700,11 +700,11 @@ tailwind.config = {
 
 <!-- Scripts (order matters) -->
 <script src="js/icons.js?v=7"></script>
-<script src="js/no-autofill.js?v=14"></script>
-<script src="js/locations.js?v=14"></script>
-<script src="js/app.js?v=14"></script>
-<script src="js/dashboard.js?v=14"></script>
-<script src="js/schedule.js?v=14"></script>
-<script src="js/settings.js?v=14"></script>
+<script src="js/no-autofill.js?v=15"></script>
+<script src="js/locations.js?v=15"></script>
+<script src="js/app.js?v=15"></script>
+<script src="js/dashboard.js?v=15"></script>
+<script src="js/schedule.js?v=15"></script>
+<script src="js/settings.js?v=15"></script>
 </body>
 </html>

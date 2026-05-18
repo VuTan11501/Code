@@ -526,6 +526,9 @@ function updateNotifBtn() {
   const btn = document.getElementById('notifBtn');
   if (!btn) return;
   btn.innerHTML = ICON('bell', 18);
+  const on = (notifPermission === 'granted');
+  btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+  btn.setAttribute('data-state', on ? 'on' : 'off');
   if (notifPermission === 'granted')      { btn.setAttribute('data-tooltip', 'Notifications: ON');     btn.style.opacity = '1';   }
   else if (notifPermission === 'denied')  { btn.setAttribute('data-tooltip', 'Notifications: Blocked'); btn.style.opacity = '0.4'; }
   else                                    { btn.setAttribute('data-tooltip', 'Enable notifications');   btn.style.opacity = '0.7'; }

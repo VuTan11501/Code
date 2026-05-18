@@ -819,6 +819,44 @@ input[type="time"], input[type="date"], input[type="datetime-local"] {
 .btn-outline.danger-outline:hover { background: rgba(239,68,68,0.1); border-color: var(--red); color: var(--red); }
 .btn-icon { background: var(--secondary); border-color: transparent; padding: 0.5rem; border-radius: var(--radius-md); }
 
+/* ─── TOGGLE (shadcn-style two-state icon button) ─── */
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  height: 36px;
+  min-width: 36px;
+  padding: 0 0.5rem;
+  background: transparent;
+  color: var(--muted-foreground);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-out),
+              color var(--duration-fast) var(--ease-out),
+              border-color var(--duration-fast) var(--ease-out),
+              box-shadow var(--duration-fast) var(--ease-out);
+  user-select: none;
+}
+.toggle:hover { background: var(--muted); color: var(--foreground); }
+.toggle:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ring); }
+.toggle[data-state="on"],
+.toggle[aria-pressed="true"] {
+  background: var(--accent, var(--muted));
+  color: var(--foreground);
+}
+.toggle[data-state="on"]:hover { background: var(--secondary); }
+.toggle[disabled] { opacity: 0.5; pointer-events: none; }
+/* Variant: outline */
+.toggle.outline { border-color: var(--input); background: transparent; }
+.toggle.outline:hover { background: var(--accent, var(--muted)); }
+/* Size variants */
+.toggle.sm { height: 32px; min-width: 32px; padding: 0 0.375rem; font-size: var(--fs-xs); }
+.toggle.lg { height: 40px; min-width: 40px; padding: 0 0.625rem; }
+
 /* ─── TEXT UTILITIES (used by JS) ─── */
 .text-muted { color: var(--muted-foreground); }
 
