@@ -336,7 +336,7 @@ html { touch-action: manipulation; }
   box-shadow: 0 0 0 3px rgba(59,130,246,0.25);
 }
 .switch.active, .sched-toggle.active {
-  background: var(--primary);
+  background: var(--green);
 }
 .switch-thumb {
   display: block;
