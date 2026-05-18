@@ -137,9 +137,15 @@ tailwind.config = {
 
     <!-- Navigation -->
     <nav class="tabs-list nav-bar flex gap-1 bg-muted rounded-lg p-1 mb-6" role="tablist" aria-label="Main navigation">
-      <a class="tabs-trigger nav-item flex-1 text-center px-3 py-2 rounded-md text-sm font-medium text-muted-foreground cursor-pointer transition-all flex items-center justify-center gap-2 no-underline active" data-page="dashboard" href="#dashboard" role="tab" aria-selected="true" onclick="navigate('#dashboard')">📊 Dashboard</a>
-      <a class="tabs-trigger nav-item flex-1 text-center px-3 py-2 rounded-md text-sm font-medium text-muted-foreground cursor-pointer transition-all flex items-center justify-center gap-2 no-underline" data-page="schedule" href="#schedule" role="tab" aria-selected="false" onclick="navigate('#schedule')">📅 Schedule</a>
-      <a class="tabs-trigger nav-item flex-1 text-center px-3 py-2 rounded-md text-sm font-medium text-muted-foreground cursor-pointer transition-all flex items-center justify-center gap-2 no-underline" data-page="settings" href="#settings" role="tab" aria-selected="false" onclick="navigate('#settings')">⚙️ Settings</a>
+      <a class="tabs-trigger nav-item flex-1 text-center px-3 py-2 rounded-md text-sm font-medium text-muted-foreground cursor-pointer transition-all flex items-center justify-center gap-2 no-underline active" data-page="dashboard" href="#dashboard" role="tab" aria-selected="true" onclick="navigate('#dashboard')">
+        <span class="nav-icon">📊</span><span class="nav-label">Dashboard</span>
+      </a>
+      <a class="tabs-trigger nav-item flex-1 text-center px-3 py-2 rounded-md text-sm font-medium text-muted-foreground cursor-pointer transition-all flex items-center justify-center gap-2 no-underline" data-page="schedule" href="#schedule" role="tab" aria-selected="false" onclick="navigate('#schedule')">
+        <span class="nav-icon">📅</span><span class="nav-label">Schedule</span>
+      </a>
+      <a class="tabs-trigger nav-item flex-1 text-center px-3 py-2 rounded-md text-sm font-medium text-muted-foreground cursor-pointer transition-all flex items-center justify-center gap-2 no-underline" data-page="settings" href="#settings" role="tab" aria-selected="false" onclick="navigate('#settings')">
+        <span class="nav-icon">⚙️</span><span class="nav-label">Settings</span>
+      </a>
     </nav>
 
     <!-- PAGE: DASHBOARD -->
@@ -183,6 +189,7 @@ tailwind.config = {
               <label class="field-label text-xs text-muted-foreground font-medium block mb-1" for="schedWorkflow">Workflow</label>
               <select class="input select-trigger" id="schedWorkflow">
                 <option value="auto-checkin.yml">📥 Auto Checkin</option>
+                <option value="auto-checkout.yml">📤 Auto Checkout</option>
                 <option value="auto-ot-creator.yml">⏰ Auto OT Creator</option>
                 <option value="jpy-forecast.yml">💹 JPY Forecast</option>
               </select>
@@ -296,6 +303,7 @@ tailwind.config = {
             <select id="tableFilterWf" class="input input-sm select-trigger" onchange="renderScheduleTable()">
               <option value="all">All Workflows</option>
               <option value="auto-checkin.yml">Auto Checkin</option>
+              <option value="auto-checkout.yml">Auto Checkout</option>
               <option value="auto-ot-creator.yml">Auto OT Creator</option>
               <option value="jpy-forecast.yml">JPY Forecast</option>
             </select>
@@ -422,6 +430,7 @@ tailwind.config = {
           <label class="field-label text-xs text-muted-foreground font-medium block mb-1">Workflow</label>
           <select class="input select-trigger" id="editSchedWorkflow">
             <option value="auto-checkin.yml">📥 Auto Checkin</option>
+            <option value="auto-checkout.yml">📤 Auto Checkout</option>
             <option value="auto-ot-creator.yml">⏰ Auto OT Creator</option>
             <option value="jpy-forecast.yml">💹 JPY Forecast</option>
           </select>
