@@ -479,6 +479,7 @@ def main():
                 "action": force_action,
                 "location": force_location,
                 "note": "manual override",
+                "datetime": now_jst.strftime("%Y-%m-%d %H:%M"),
             }
             log(f"FORCE mode: {force_action} at {force_location}")
         else:
