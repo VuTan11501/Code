@@ -4,6 +4,7 @@
 const OWNER = 'VuTan11501';
 const REPO = 'Code';
 const API = 'https://api.github.com';
+const GIST_ID = 'abc2a47c0a396025a72a6580227ff493';
 const WORKFLOWS = [
   { id: 277782817, name: 'Auto Checkin/Checkout', icon: '🕐', file: 'auto-checkin.yml' },
   { id: 277802136, name: 'Auto OT Creator', icon: '⏰', file: 'auto-ot.yml' },

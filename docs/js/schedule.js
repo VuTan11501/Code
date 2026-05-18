@@ -299,18 +299,18 @@ function togglePatternUI() {
 }
 
 // ═══════════════════════════════════════════════════
-//  SCHEDULED RUNS CRUD
+//  SCHEDULED RUNS CRUD (Gist-based storage)
 // ═══════════════════════════════════════════════════
 async function loadScheduledRuns() {
   const queue = document.getElementById('schedulerQueue');
   if (!queue) return;
   try {
-    const data = await apiFetch(`/repos/${OWNER}/${REPO}/contents/.github/scheduled-runs.json`);
-    const content = JSON.parse(atob(data.content));
-    const entries = Array.isArray(content) ? content : [];
+    const gist = await apiFetch(`/gists/${GIST_ID}`);
+    const file = gist.files['scheduled-runs.json'];
+    const entries = file ? JSON.parse(file.content) : [];
     // Client-side fallback: dispatch overdue one-time runs directly
-    await clientSideDispatchOverdue(entries, data.sha);
-    renderScheduledQueue(entries, data.sha);
+    await clientSideDispatchOverdue(entries);
+    renderScheduledQueue(entries);
   } catch (e) {
     if (e.message.includes('404')) {
       queue.innerHTML = '<div class="empty">No scheduled runs yet</div>';
@@ -319,13 +319,12 @@ async function loadScheduledRuns() {
     }
     // Clear table on error/empty
     scheduleTableData = [];
-    scheduleTableSha = null;
     renderScheduleTable();
   }
 }
 
 // Fallback: if GitHub cron hasn't fired, dispatch overdue runs from the browser
-async function clientSideDispatchOverdue(entries, sha) {
+async function clientSideDispatchOverdue(entries) {
   if (!sessionToken || !entries.length) return;
   const now = new Date();
   const overdue = [];
@@ -364,15 +363,10 @@ async function clientSideDispatchOverdue(entries, sha) {
     }
   }
 
-  // Update the file to remove dispatched entries
+  // Update the Gist to remove dispatched entries
   if (remaining.length !== entries.length) {
-    const content = btoa(unescape(encodeURIComponent(JSON.stringify(remaining, null, 2))));
     try {
-      await fetch(`${API}/repos/${OWNER}/${REPO}/contents/.github/scheduled-runs.json`, {
-        method: 'PUT',
-        headers: { 'Authorization': `Bearer ${sessionToken}`, 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: 'sched: client-side dispatch overdue [skip ci]', content, sha }),
-      });
+      await saveToGist(remaining);
     } catch {}
     // Reload to show updated queue
     entries.length = 0;
@@ -380,16 +374,14 @@ async function clientSideDispatchOverdue(entries, sha) {
   }
 }
 
-function renderScheduledQueue(entries, sha) {
+function renderScheduledQueue(entries) {
   // Store data for table
   scheduleTableData = entries;
-  scheduleTableSha = sha;
 
   // Render queue cards
   const queue = document.getElementById('schedulerQueue');
   if (!entries.length) { queue.innerHTML = '<div class="empty">No scheduled runs</div>'; renderScheduleTable(); return; }
 
-  queue.dataset.sha = sha;
   queue.innerHTML = entries.map((entry, i) => {
     const wfName = WORKFLOWS.find(w => w.file === entry.workflow)?.name || entry.workflow;
     const icon = WORKFLOWS.find(w => w.file === entry.workflow)?.icon || '⚙️';
@@ -421,6 +413,23 @@ function describeRecurrence(r) {
   else if (r.pattern === 'weekly') desc += (r.days || []).map(d => dayNames[d]).join(', ');
   else if (r.pattern === 'monthly') desc += `Day ${(r.dates || []).join(', ')}`;
   return desc;
+}
+
+// ─── Gist Helper ───
+async function saveToGist(entries) {
+  const res = await fetch(`${API}/gists/${GIST_ID}`, {
+    method: 'PATCH',
+    headers: { 'Authorization': `Bearer ${sessionToken}`, 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ files: { 'scheduled-runs.json': { content: JSON.stringify(entries, null, 2) } } }),
+  });
+  if (!res.ok) throw new Error(`Gist update failed (${res.status})`);
+  return res.json();
+}
+
+async function loadEntriesFromGist() {
+  const gist = await apiFetch(`/gists/${GIST_ID}`);
+  const file = gist.files['scheduled-runs.json'];
+  return file ? JSON.parse(file.content) : [];
 }
 
 async function addScheduledRun() {
@@ -468,69 +477,31 @@ async function addScheduledRun() {
 
 async function saveScheduledEntry(newEntry) {
   try {
-    let entries = [];
-    let sha = null;
-    try {
-      const data = await apiFetch(`/repos/${OWNER}/${REPO}/contents/.github/scheduled-runs.json`);
-      entries = JSON.parse(atob(data.content));
-      sha = data.sha;
-    } catch {}
-
+    const entries = await loadEntriesFromGist();
     entries.push(newEntry);
-    const content = btoa(unescape(encodeURIComponent(JSON.stringify(entries, null, 2))));
-
-    const body = { message: `sched: add ${newEntry.type} run`, content };
-    if (sha) body.sha = sha;
-
-    const res = await fetch(`${API}/repos/${OWNER}/${REPO}/contents/.github/scheduled-runs.json`, {
-      method: 'PUT',
-      headers: { 'Authorization': `Bearer ${sessionToken}`, 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-
-    if (res.ok) {
-      toast('✅ Schedule added');
-      loadScheduledRuns();
-    } else {
-      toast(`❌ Failed to save (${res.status})`);
-    }
+    await saveToGist(entries);
+    toast('✅ Schedule added');
+    loadScheduledRuns();
   } catch (e) { toast(`❌ ${e.message}`); }
 }
 
 async function deleteScheduledRun(index) {
   if (!confirm('Delete this scheduled run?')) return;
   try {
-    const data = await apiFetch(`/repos/${OWNER}/${REPO}/contents/.github/scheduled-runs.json`);
-    const entries = JSON.parse(atob(data.content));
+    const entries = await loadEntriesFromGist();
     entries.splice(index, 1);
-
-    const content = btoa(unescape(encodeURIComponent(JSON.stringify(entries, null, 2))));
-    const res = await fetch(`${API}/repos/${OWNER}/${REPO}/contents/.github/scheduled-runs.json`, {
-      method: 'PUT',
-      headers: { 'Authorization': `Bearer ${sessionToken}`, 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: 'sched: remove entry', content, sha: data.sha }),
-    });
-
-    if (res.ok) { toast('🗑 Removed'); loadScheduledRuns(); }
-    else toast(`❌ Failed (${res.status})`);
+    await saveToGist(entries);
+    toast('🗑 Removed');
+    loadScheduledRuns();
   } catch (e) { toast(`❌ ${e.message}`); }
 }
 
 async function toggleScheduleEntry(index) {
   try {
-    const data = await apiFetch(`/repos/${OWNER}/${REPO}/contents/.github/scheduled-runs.json`);
-    const entries = JSON.parse(atob(data.content));
+    const entries = await loadEntriesFromGist();
     entries[index].enabled = !entries[index].enabled;
-
-    const content = btoa(unescape(encodeURIComponent(JSON.stringify(entries, null, 2))));
-    const res = await fetch(`${API}/repos/${OWNER}/${REPO}/contents/.github/scheduled-runs.json`, {
-      method: 'PUT',
-      headers: { 'Authorization': `Bearer ${sessionToken}`, 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: 'sched: toggle entry', content, sha: data.sha }),
-    });
-
-    if (res.ok) { loadScheduledRuns(); }
-    else toast(`❌ Failed (${res.status})`);
+    await saveToGist(entries);
+    loadScheduledRuns();
   } catch (e) { toast(`❌ ${e.message}`); }
 }
 
@@ -538,7 +509,6 @@ async function toggleScheduleEntry(index) {
 //  SCHEDULE DATA TABLE
 // ═══════════════════════════════════════════════════
 let scheduleTableData = [];
-let scheduleTableSha = null;
 
 function renderScheduleTable() {
   const tbody = document.getElementById('scheduleTableBody');
@@ -691,25 +661,13 @@ async function saveEditSchedule() {
     updatedEntry = { type: 'recurring', workflow, recurrence, enabled, note, created: scheduleTableData[index].created || new Date().toISOString() };
   }
 
-  // Save to GitHub
+  // Save to Gist
   try {
-    const data = await apiFetch(`/repos/${OWNER}/${REPO}/contents/.github/scheduled-runs.json`);
-    const entries = JSON.parse(atob(data.content));
+    const entries = await loadEntriesFromGist();
     entries[index] = updatedEntry;
-
-    const content = btoa(unescape(encodeURIComponent(JSON.stringify(entries, null, 2))));
-    const res = await fetch(`${API}/repos/${OWNER}/${REPO}/contents/.github/scheduled-runs.json`, {
-      method: 'PUT',
-      headers: { 'Authorization': `Bearer ${sessionToken}`, 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: 'sched: edit entry', content, sha: data.sha }),
-    });
-
-    if (res.ok) {
-      toast('✅ Schedule updated');
-      closeEditSchedModal();
-      loadScheduledRuns();
-    } else {
-      toast(`❌ Failed (${res.status})`);
-    }
+    await saveToGist(entries);
+    toast('✅ Schedule updated');
+    closeEditSchedModal();
+    loadScheduledRuns();
   } catch (e) { toast(`❌ ${e.message}`); }
 }

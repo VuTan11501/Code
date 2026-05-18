@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
   actions: write
 
 concurrency:
@@ -19,15 +19,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          sparse-checkout: |
-            .github/scheduled-runs.json
-
-      - name: Process scheduled runs
+      - name: Process scheduled runs from Gist
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+          GIST_ID: 'abc2a47c0a396025a72a6580227ff493'
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           python3 << 'EOF'
@@ -36,17 +31,52 @@ jobs:
           import urllib.request
           import urllib.error
 
-          SCHED_FILE = '.github/scheduled-runs.json'
+          GIST_ID = os.environ['GIST_ID']
           REPO = os.environ['GITHUB_REPOSITORY']
           TOKEN = os.environ.get('GH_TOKEN', '')
           JST = timezone(timedelta(hours=9))
 
-          if not os.path.exists(SCHED_FILE):
-              print("No scheduled-runs.json found. Nothing to do.")
-              sys.exit(0)
+          def gist_read():
+              """Read scheduled-runs.json from Gist."""
+              url = f"https://api.github.com/gists/{GIST_ID}"
+              req = urllib.request.Request(url)
+              req.add_header('Authorization', f'Bearer {TOKEN}')
+              req.add_header('Accept', 'application/vnd.github+json')
+              try:
+                  with urllib.request.urlopen(req) as resp:
+                      data = json.loads(resp.read())
+                      file_content = data['files']['scheduled-runs.json']['content']
+                      return json.loads(file_content)
+              except Exception as e:
+                  print(f"❌ Failed to read Gist: {e}")
+                  return None
 
-          with open(SCHED_FILE, 'r') as f:
-              runs = json.load(f)
+          def gist_write(entries):
+              """Write scheduled-runs.json to Gist."""
+              url = f"https://api.github.com/gists/{GIST_ID}"
+              payload = json.dumps({
+                  "files": {
+                      "scheduled-runs.json": {
+                          "content": json.dumps(entries, indent=2)
+                      }
+                  }
+              }).encode()
+              req = urllib.request.Request(url, data=payload, method='PATCH')
+              req.add_header('Authorization', f'Bearer {TOKEN}')
+              req.add_header('Accept', 'application/vnd.github+json')
+              req.add_header('Content-Type', 'application/json')
+              try:
+                  with urllib.request.urlopen(req) as resp:
+                      print(f"  📝 Gist updated (HTTP {resp.status})")
+                      return True
+              except urllib.error.HTTPError as e:
+                  print(f"  ❌ Failed to update Gist: HTTP {e.code}")
+                  return False
+
+          runs = gist_read()
+          if runs is None:
+              print("Failed to read Gist. Exiting.")
+              sys.exit(1)
 
           if not runs:
               print("No scheduled runs pending.")
@@ -155,24 +185,10 @@ jobs:
                       # Not yet time
                       updated.append(entry)
 
-          # Write back updated list
+          # Write back updated list to Gist
           if updated != runs or triggered_count > 0:
-              with open(SCHED_FILE, 'w') as f:
-                  json.dump(updated, f, indent=2)
+              gist_write(updated)
               print(f"\n📝 Queue updated: {len(updated)} entries, {triggered_count} dispatched this run")
           else:
               print(f"\n⏳ No dispatches due. {len(updated)} entries in queue.")
           EOF
-
-      - name: Commit changes
-        run: |
-          cd "$GITHUB_WORKSPACE"
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add .github/scheduled-runs.json
-          if git diff --staged --quiet; then
-            echo "No changes to commit"
-          else
-            git commit -m "sched: dispatch completed runs [skip ci]"
-            git push
-          fi
