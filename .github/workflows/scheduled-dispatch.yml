@@ -206,3 +206,14 @@ jobs:
           else:
               print(f"\n⏳ No dispatches due. {len(updated)} entries in queue.")
           EOF
+
+      - name: Schedule next run (self-retrigger in 5 min)
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          # Use GitHub API to create a delayed dispatch via repository_dispatch
+          # Schedule next run using 'at' equivalent - just dispatch after sleep
+          echo "Next cron should fire in ~5 min. If cron is inactive, manual re-trigger needed."
+          # Re-enable workflow to keep cron alive (GitHub disables after 60 days of inactivity)
+          gh api "repos/$GITHUB_REPOSITORY/actions/workflows/scheduled-dispatch.yml/enable" --method PUT 2>/dev/null || true

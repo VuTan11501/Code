@@ -357,39 +357,46 @@ async function clientSideDispatchOverdue(entries) {
   const now = new Date();
   const nowJST = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
   const todayStr = formatDate(nowJST.getFullYear(), nowJST.getMonth(), nowJST.getDate());
-  const overdue = [];
-  const remaining = [];
+  let dispatched = 0;
 
   for (const entry of entries) {
-    if (entry.type === 'once' && entry.run_at) {
+    if (entry.type === 'once' && entry.run_at && !entry.dispatched) {
       const runAt = new Date(entry.run_at);
-      // If run_at has passed (with 1 min tolerance) and it wasn't dispatched yet
+      // If run_at has passed (with 1 min tolerance)
       if (now - runAt > 60000) {
-        overdue.push(entry);
-      } else {
-        remaining.push(entry);
+        try {
+          const res = await fetch(`${API}/repos/${OWNER}/${REPO}/actions/workflows/${entry.workflow}/dispatches`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${sessionToken}`, 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ref: 'main' }),
+          });
+          if (res.status === 204) {
+            toast(`✅ Dispatched: ${(WORKFLOWS.find(w=>w.file===entry.workflow)||{}).name || entry.workflow.replace('.yml','')}`);
+            entry.dispatched = true;
+            entry.last_run = now.toISOString();
+            dispatched++;
+          }
+        } catch {}
       }
     } else if (entry.type === 'recurring' && entry.enabled !== false) {
-      // Check if recurring entry should have fired today but hasn't
       const r = entry.recurrence || {};
       const schedTime = r.time || '00:00';
       const [h, m] = schedTime.split(':').map(Number);
       const schedDt = new Date(nowJST);
       schedDt.setHours(h, m, 0, 0);
 
-      // Has scheduled time passed today? (with 2 min tolerance)
       const diffMin = (nowJST - schedDt) / 60000;
-      if (diffMin < 2) { remaining.push(entry); continue; }
+      if (diffMin < 2) continue;
 
-      // Already ran today? Check last_run
+      // Already ran today?
       if (entry.last_run) {
         const lastRunJST = new Date(new Date(entry.last_run).toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
         const lastRunDate = formatDate(lastRunJST.getFullYear(), lastRunJST.getMonth(), lastRunJST.getDate());
-        if (lastRunDate === todayStr) { remaining.push(entry); continue; }
+        if (lastRunDate === todayStr) continue;
       }
 
       // Check day-of-week pattern
-      const dow = nowJST.getDay(); // 0=Sun
+      const dow = nowJST.getDay();
       let shouldRun = false;
       if (r.pattern === 'daily') shouldRun = true;
       else if (r.pattern === 'weekdays') shouldRun = [1,2,3,4,5].includes(dow);
@@ -397,47 +404,25 @@ async function clientSideDispatchOverdue(entries) {
       else if (r.pattern === 'monthly') shouldRun = (r.dates || []).includes(nowJST.getDate());
 
       if (shouldRun) {
-        overdue.push(entry);
-      } else {
-        remaining.push(entry);
+        try {
+          const res = await fetch(`${API}/repos/${OWNER}/${REPO}/actions/workflows/${entry.workflow}/dispatches`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${sessionToken}`, 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ref: 'main' }),
+          });
+          if (res.status === 204) {
+            toast(`✅ Dispatched: ${(WORKFLOWS.find(w=>w.file===entry.workflow)||{}).name || entry.workflow.replace('.yml','')}`);
+            entry.last_run = now.toISOString();
+            dispatched++;
+          }
+        } catch {}
       }
-    } else {
-      remaining.push(entry);
     }
   }
 
-  if (!overdue.length) return;
-
-  for (const entry of overdue) {
-    try {
-      const res = await fetch(`${API}/repos/${OWNER}/${REPO}/actions/workflows/${entry.workflow}/dispatches`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${sessionToken}`, 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ref: 'main' }),
-      });
-      if (res.status === 204) {
-        toast(`✅ Dispatched overdue: ${entry.workflow.replace('.yml','')}`);
-        // Update last_run for recurring entries
-        if (entry.type === 'recurring') {
-          entry.last_run = now.toISOString();
-          remaining.push(entry);
-        }
-      } else {
-        remaining.push(entry); // keep for retry
-      }
-    } catch {
-      remaining.push(entry);
-    }
-  }
-
-  // Update the Gist to reflect dispatched entries
-  if (remaining.length !== entries.length || overdue.some(e => e.type === 'recurring')) {
-    try {
-      await saveToGist(remaining);
-    } catch {}
-    // Reload to show updated queue
-    entries.length = 0;
-    remaining.forEach(e => entries.push(e));
+  // Only save if we actually dispatched something (in-place update, no entry removal)
+  if (dispatched > 0) {
+    try { await saveToGist(entries); } catch {}
   }
 }
 
