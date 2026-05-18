@@ -38,6 +38,7 @@ jobs:
 
       - name: Update secret if token rotated
         if: always() && steps.ot_creator.outputs.token_rotated == 'true'
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
           NEW_REFRESH_TOKEN: ${{ steps.ot_creator.outputs.new_refresh_token }}

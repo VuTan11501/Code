@@ -70,6 +70,7 @@ jobs:
 
       - name: Update secret if token rotated
         if: always() && steps.checkin.outputs.token_rotated == 'true'
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
           NEW_REFRESH_TOKEN: ${{ steps.checkin.outputs.new_refresh_token }}
