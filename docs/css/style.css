@@ -1253,12 +1253,42 @@ input[type="time"], input[type="date"], input[type="datetime-local"] {
 .shadcn-checkbox:disabled + .shadcn-label,
 .shadcn-checkbox.peer:disabled ~ .shadcn-label { cursor: not-allowed; opacity: 0.7; }
 
+/* shadcn/ui ScrollArea
+   https://ui.shadcn.com/docs/components/base/scroll-area
+   Wraps a viewport with custom thin scrollbars (auto-hide on idle). */
+.scroll-area {
+  position: relative;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: #050505;
+}
+.scroll-area-viewport {
+  width: 100%;
+  height: 100%;
+  max-height: 420px;
+  overflow: auto;
+  border-radius: inherit;
+  /* Firefox */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.18) transparent;
+}
+/* Webkit (Chrome/Safari/Edge) */
+.scroll-area-viewport::-webkit-scrollbar { width: 10px; height: 10px; }
+.scroll-area-viewport::-webkit-scrollbar-track { background: transparent; }
+.scroll-area-viewport::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.14);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  border-radius: 9999px;
+  transition: background-color var(--duration-fast) var(--ease-out);
+}
+.scroll-area-viewport::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.28); background-clip: padding-box; }
+.scroll-area-viewport::-webkit-scrollbar-corner { background: transparent; }
+
 .log-pre {
-  background: #050505; color: #e0e0e0;
+  background: transparent; color: #e0e0e0;
   font-family: var(--font-mono); font-size: 12px; line-height: 1.55;
   padding: 12px 14px; margin: 0;
-  border-radius: var(--radius-sm);
-  overflow: auto; max-height: 420px;
   white-space: pre; tab-size: 2;
 }
 .log-pre code { font-family: inherit; font-size: inherit; }
@@ -1272,5 +1302,6 @@ input[type="time"], input[type="date"], input[type="datetime-local"] {
 
 @media (max-width: 480px) {
   .step-row { padding: 7px 8px; font-size: var(--fs-xs); }
-  .log-pre { font-size: 11px; max-height: 320px; padding: 10px; }
+  .log-pre { font-size: 11px; padding: 10px; }
+  .scroll-area-viewport { max-height: 320px; }
 }

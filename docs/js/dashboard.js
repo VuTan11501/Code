@@ -510,7 +510,7 @@ function renderStepLog(body, lines, stepName) {
     body.innerHTML = '<div class="log-loading">No log output for this step.</div>';
     return;
   }
-  const html = ['<pre class="log-pre"><code>'];
+  const html = ['<div class="scroll-area" data-slot="scroll-area"><div class="scroll-area-viewport" data-slot="scroll-area-viewport"><pre class="log-pre"><code>'];
   for (const ln of lines) {
     const txt = ln.txt;
     if (!txt && !ln.ts) { html.push('\n'); continue; }
@@ -542,10 +542,10 @@ function renderStepLog(body, lines, stepName) {
     html.push(escapeHtml(clean));
     html.push('</span>\n');
   }
-  html.push('</code></pre>');
+  html.push('</code></pre></div></div>');
   body.innerHTML = html.join('');
-  const pre = body.querySelector('.log-pre');
-  if (pre) pre.scrollTop = pre.scrollHeight;
+  const vp = body.querySelector('.scroll-area-viewport');
+  if (vp) vp.scrollTop = vp.scrollHeight;
 }
 
 function toggleAllTimestamps(cb, jobId) {
