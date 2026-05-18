@@ -1,23 +1,8 @@
 name: Auto Checkin/Checkout
 
 on:
-  schedule:
-    # All times UTC. JST = UTC+9
-    # Primary crons
-    - cron: '0 0 * * 1-5'     # 09:00 JST Mon-Fri (workday CI)
-    - cron: '0 9 * * 1-5'     # 18:00 JST Mon-Fri (workday CO)
-    - cron: '0 13 * * *'      # 22:00 JST (night OT CI)
-    - cron: '0 15 * * *'      # 00:00 JST (midnight CO)
-    - cron: '30 18 * * *'     # 03:30 JST (night OT CO + Sunday OT CO)
-    - cron: '30 5 * * 0'      # 14:30 JST Sunday (Sunday OT CI, 1h early for break)
-    # Backup crons (+30min, idempotent — skip if primary already succeeded)
-    - cron: '30 0 * * 1-5'    # 09:30 JST backup for workday CI
-    - cron: '30 9 * * 1-5'    # 18:30 JST backup for workday CO
-    - cron: '30 13 * * *'     # 22:30 JST backup for night OT CI
-    - cron: '30 15 * * *'     # 00:30 JST backup for midnight CO
-    - cron: '0 19 * * *'      # 04:00 JST backup for night OT CO
-    - cron: '0 6 * * 0'       # 15:00 JST Sunday backup for OT CI
-
+  # Triggered by scheduled-dispatch.yml (Gist-based scheduler) for precise timing.
+  # Native cron removed — uses Gist entries: 09:00, 18:00, 22:00, 00:00, 03:30, 14:30
   workflow_dispatch:
     inputs:
       action:

@@ -1,9 +1,8 @@
 name: Auto OT Creator
 
 on:
-  schedule:
-    - cron: '0 1 * * *'    # 10:00 JST daily
-
+  # Triggered by scheduled-dispatch.yml (Gist-based scheduler) at 10:00 JST daily.
+  # Native cron removed for consistent timing via Gist dispatcher.
   workflow_dispatch:
 
 permissions:

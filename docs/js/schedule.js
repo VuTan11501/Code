@@ -6,7 +6,8 @@ let scheduleInitialized = false;
 function initSchedulePage() {
   if (scheduleInitialized) return;
   scheduleInitialized = true;
-  renderScheduleCalendar();
+  // Calendar will be rendered dynamically when Gist data loads
+  renderScheduleCalendar(null);
   initCalendar('calPicker', 'schedDate', 'schedDateInput', { allowPast: false });
   initCalendar('calPickerStart', 'schedStartDate', 'schedStartDateInput', { allowPast: true });
   initCalendar('calPickerEnd', 'schedEndDate', 'schedEndDateInput', { allowPast: true });
@@ -22,15 +23,40 @@ function initSchedulePage() {
 }
 
 // ═══════════════════════════════════════════════════
-//  SCHEDULE CALENDAR (Weekly overview)
+//  SCHEDULE CALENDAR (Weekly overview — dynamic from Gist)
 // ═══════════════════════════════════════════════════
-function renderScheduleCalendar() {
+function renderScheduleCalendar(gistEntries) {
   const container = document.getElementById('scheduleCalendar');
   if (!container) return;
+
+  // Build schedule map from Gist entries (dynamic) merged with hardcoded fallback
+  const dynamicSchedule = {};
+  const entries = gistEntries || [];
+
+  for (const entry of entries) {
+    if (entry.type !== 'recurring' || entry.enabled === false) continue;
+    const r = entry.recurrence || {};
+    const wf = WORKFLOWS.find(w => w.file === entry.workflow);
+    const name = wf ? wf.name : entry.workflow;
+    if (!dynamicSchedule[name]) dynamicSchedule[name] = [];
+
+    let days = [];
+    if (r.pattern === 'daily') days = [0,1,2,3,4,5,6];
+    else if (r.pattern === 'weekdays') days = [1,2,3,4,5];
+    else if (r.pattern === 'weekly') days = r.days || [];
+
+    if (days.length > 0) {
+      dynamicSchedule[name].push({ days, time: r.time || '00:00', label: entry.note || r.time || '' });
+    }
+  }
+
+  // Use dynamic if available, fallback to hardcoded SCHEDULE
+  const schedule = Object.keys(dynamicSchedule).length > 0 ? dynamicSchedule : SCHEDULE;
+
   const dayNames = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
   const allTimes = new Set();
-  for (const [, entries] of Object.entries(SCHEDULE)) {
-    for (const e of entries) allTimes.add(e.time);
+  for (const [, sched] of Object.entries(schedule)) {
+    for (const e of sched) allTimes.add(e.time);
   }
   const times = [...allTimes].sort();
 
@@ -42,8 +68,8 @@ function renderScheduleCalendar() {
     html += `<div class="schedule-cell time-label">${time}</div>`;
     for (let day = 0; day < 7; day++) {
       html += '<div class="schedule-cell">';
-      for (const [name, entries] of Object.entries(SCHEDULE)) {
-        for (const e of entries) {
+      for (const [name, sched] of Object.entries(schedule)) {
+        for (const e of sched) {
           if (e.time === time && e.days.includes(day)) {
             const cls = name.includes('Checkin') ? 'checkin' : 'forecast';
             html += `<span class="schedule-pip ${cls}" title="${name}">${e.label}</span>`;
@@ -308,8 +334,10 @@ async function loadScheduledRuns() {
     const gist = await apiFetch(`/gists/${GIST_ID}`);
     const file = gist.files['scheduled-runs.json'];
     const entries = file ? JSON.parse(file.content) : [];
-    // Client-side fallback: dispatch overdue one-time runs directly
+    // Client-side fallback: dispatch overdue runs directly
     await clientSideDispatchOverdue(entries);
+    // Update calendar visualization with live data
+    renderScheduleCalendar(entries);
     renderScheduledQueue(entries);
   } catch (e) {
     if (e.message.includes('404')) {
@@ -327,6 +355,8 @@ async function loadScheduledRuns() {
 async function clientSideDispatchOverdue(entries) {
   if (!sessionToken || !entries.length) return;
   const now = new Date();
+  const nowJST = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
+  const todayStr = formatDate(nowJST.getFullYear(), nowJST.getMonth(), nowJST.getDate());
   const overdue = [];
   const remaining = [];
 
@@ -335,6 +365,38 @@ async function clientSideDispatchOverdue(entries) {
       const runAt = new Date(entry.run_at);
       // If run_at has passed (with 1 min tolerance) and it wasn't dispatched yet
       if (now - runAt > 60000) {
+        overdue.push(entry);
+      } else {
+        remaining.push(entry);
+      }
+    } else if (entry.type === 'recurring' && entry.enabled !== false) {
+      // Check if recurring entry should have fired today but hasn't
+      const r = entry.recurrence || {};
+      const schedTime = r.time || '00:00';
+      const [h, m] = schedTime.split(':').map(Number);
+      const schedDt = new Date(nowJST);
+      schedDt.setHours(h, m, 0, 0);
+
+      // Has scheduled time passed today? (with 2 min tolerance)
+      const diffMin = (nowJST - schedDt) / 60000;
+      if (diffMin < 2) { remaining.push(entry); continue; }
+
+      // Already ran today? Check last_run
+      if (entry.last_run) {
+        const lastRunJST = new Date(new Date(entry.last_run).toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
+        const lastRunDate = formatDate(lastRunJST.getFullYear(), lastRunJST.getMonth(), lastRunJST.getDate());
+        if (lastRunDate === todayStr) { remaining.push(entry); continue; }
+      }
+
+      // Check day-of-week pattern
+      const dow = nowJST.getDay(); // 0=Sun
+      let shouldRun = false;
+      if (r.pattern === 'daily') shouldRun = true;
+      else if (r.pattern === 'weekdays') shouldRun = [1,2,3,4,5].includes(dow);
+      else if (r.pattern === 'weekly') shouldRun = (r.days || []).includes(dow);
+      else if (r.pattern === 'monthly') shouldRun = (r.dates || []).includes(nowJST.getDate());
+
+      if (shouldRun) {
         overdue.push(entry);
       } else {
         remaining.push(entry);
@@ -355,6 +417,11 @@ async function clientSideDispatchOverdue(entries) {
       });
       if (res.status === 204) {
         toast(`✅ Dispatched overdue: ${entry.workflow.replace('.yml','')}`);
+        // Update last_run for recurring entries
+        if (entry.type === 'recurring') {
+          entry.last_run = now.toISOString();
+          remaining.push(entry);
+        }
       } else {
         remaining.push(entry); // keep for retry
       }
@@ -363,8 +430,8 @@ async function clientSideDispatchOverdue(entries) {
     }
   }
 
-  // Update the Gist to remove dispatched entries
-  if (remaining.length !== entries.length) {
+  // Update the Gist to reflect dispatched entries
+  if (remaining.length !== entries.length || overdue.some(e => e.type === 'recurring')) {
     try {
       await saveToGist(remaining);
     } catch {}
@@ -422,7 +489,20 @@ async function saveToGist(entries) {
     headers: { 'Authorization': `Bearer ${sessionToken}`, 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json' },
     body: JSON.stringify({ files: { 'scheduled-runs.json': { content: JSON.stringify(entries, null, 2) } } }),
   });
-  if (!res.ok) throw new Error(`Gist update failed (${res.status})`);
+  if (!res.ok) {
+    if (res.status === 403) {
+      const scopes = res.headers.get('X-OAuth-Scopes') || '';
+      if (!scopes.includes('gist')) {
+        throw new Error('PAT thiếu scope "gist". Vào Settings → tokens → thêm scope gist');
+      }
+      const remaining = res.headers.get('X-RateLimit-Remaining');
+      if (remaining === '0') {
+        throw new Error('Rate limit exceeded. Thử lại sau vài phút.');
+      }
+      throw new Error('403 Forbidden — kiểm tra PAT có scope: gist');
+    }
+    throw new Error(`Gist update failed (${res.status})`);
+  }
   return res.json();
 }
 

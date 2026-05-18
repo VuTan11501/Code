@@ -24,7 +24,9 @@ const SCHEDULE = {
   'JPY Forecast Daily Report': [
     { days: [1,2,3,4,5], time: '07:30', label: 'Daily Report' },
   ],
-  'Auto OT Creator': [],
+  'Auto OT Creator': [
+    { days: [0,1,2,3,4,5,6], time: '10:00', label: 'Auto OT' },
+  ],
 };
 
 // ═══════════════════════════════════════════════════
@@ -177,6 +179,22 @@ function showDashboard() {
   startAutoLock();
   startPolling();
   refresh();
+  // Check token scopes (non-blocking)
+  checkTokenScopes();
+}
+
+async function checkTokenScopes() {
+  if (!sessionToken) return;
+  try {
+    const res = await fetch(`${API}/gists/${GIST_ID}`, {
+      method: 'HEAD',
+      headers: { 'Authorization': `Bearer ${sessionToken}`, 'Accept': 'application/vnd.github+json' },
+    });
+    const scopes = res.headers.get('X-OAuth-Scopes') || '';
+    if (!scopes.includes('gist')) {
+      toast('⚠️ PAT thiếu scope "gist" — Schedule sẽ không tạo được. Cập nhật token tại Settings.', 'warning');
+    }
+  } catch {}
 }
 
 // ═══════════════════════════════════════════════════

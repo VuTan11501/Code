@@ -1,12 +1,8 @@
 name: JPY Forecast Daily Report
 
 on:
-  schedule:
-    # 07:30 JST Mon-Fri only (22:30 UTC Sun-Thu). FX market closed on weekends.
-    - cron: '30 22 * * 0-4'
-    # Backup cron (+30min) in case primary is delayed
-    - cron: '0 23 * * 0-4'
-
+  # Triggered by scheduled-dispatch.yml (Gist-based scheduler) for precise timing.
+  # Native cron removed - GitHub Actions cron can delay 5-30+ minutes.
   workflow_dispatch:
     inputs:
       dry_run:

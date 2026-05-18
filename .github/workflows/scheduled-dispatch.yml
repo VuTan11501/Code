@@ -107,7 +107,11 @@ jobs:
                   return False
 
           def should_run_recurring(entry):
-              """Check if a recurring schedule should fire now."""
+              """Check if a recurring schedule should fire now.
+              
+              Uses a 15-min window (GitHub Actions cron can be delayed 5-30 min)
+              and last_run dedup to prevent double execution.
+              """
               if entry.get('enabled') is False:
                   return False
 
@@ -124,12 +128,22 @@ jobs:
               if end_date and today_str > end_date:
                   return False
 
-              # Check if current JST time matches schedule time (within 5-min window)
+              # Dedup: skip if already ran today (based on last_run)
+              last_run = entry.get('last_run')
+              if last_run:
+                  last_run_dt = datetime.fromisoformat(last_run.replace('Z', '+00:00'))
+                  last_run_jst = last_run_dt.astimezone(JST)
+                  if last_run_jst.date() == now_jst.date():
+                      return False
+
+              # Check if scheduled time has passed today.
+              # Use generous catch-up: if time passed and not yet run today, fire it.
+              # This handles GitHub Actions cron delays of any duration.
               hour, minute = map(int, sched_time.split(':'))
               sched_dt = now_jst.replace(hour=hour, minute=minute, second=0, microsecond=0)
               diff_min = (now_jst - sched_dt).total_seconds() / 60
-              if diff_min < 0 or diff_min > 5:
-                  return False
+              if diff_min < 0:
+                  return False  # Not yet time today
 
               # Check day-of-week / day-of-month
               dow = now_jst.weekday()  # 0=Mon in Python
