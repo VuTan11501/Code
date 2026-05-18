@@ -498,11 +498,17 @@ tailwind.config = {
           </select>
         </div>
 
-        <!-- Once fields -->
+        <!-- One-time fields -->
         <div id="editOnceFields" style="display:contents">
           <div class="field">
-            <label class="field-label text-xs text-muted-foreground font-medium block mb-1">Date & Time (JST)</label>
-            <input type="datetime-local" class="input w-full px-3 py-2 rounded-md border border-input bg-transparent text-foreground text-sm" id="editSchedDateTime">
+            <label class="field-label text-xs text-muted-foreground font-medium block mb-1">Date (JST)</label>
+            <div class="cal-picker" id="editCalPickerWrap">
+              <input type="text" class="cal-input input" id="editSchedDateInput" placeholder="Tap to pick date" readonly onclick="togglePicker('editCalPickerBody')" aria-label="Select date">
+              <div class="cal-picker-body popover-content" id="editCalPickerBody">
+                <div id="editCalPicker"></div>
+              </div>
+            </div>
+            <input type="hidden" id="editSchedDate">
           </div>
         </div>
 
@@ -510,34 +516,72 @@ tailwind.config = {
         <div id="editRecurFields" style="display:none">
           <div class="field">
             <label class="field-label text-xs text-muted-foreground font-medium block mb-1">Pattern</label>
-            <select class="input select-trigger" id="editSchedPattern">
+            <select class="input select-trigger" id="editSchedPattern" onchange="togglePatternUI('editSched')">
               <option value="daily">Every day</option>
               <option value="weekdays">Weekdays (Mon-Fri)</option>
-              <option value="weekly">Weekly</option>
-              <option value="monthly">Monthly</option>
+              <option value="weekly">Weekly (pick days)</option>
+              <option value="monthly">Monthly (pick dates)</option>
             </select>
           </div>
-          <div class="field">
-            <label class="field-label text-xs text-muted-foreground font-medium block mb-1">Time (HH:MM)</label>
-            <input type="time" class="input w-full px-3 py-2 rounded-md border border-input bg-transparent text-foreground text-sm font-mono" id="editSchedTime">
+          <div class="field" id="editWeeklyDaysField" style="display:none">
+            <label class="field-label text-xs text-muted-foreground font-medium block mb-1">Days of week</label>
+            <div class="day-picker" role="group" aria-label="Select days of week">
+              <label class="day-chip"><input type="checkbox" class="editWeeklyDay" value="0"><span>Sun</span></label>
+              <label class="day-chip"><input type="checkbox" class="editWeeklyDay" value="1"><span>Mon</span></label>
+              <label class="day-chip"><input type="checkbox" class="editWeeklyDay" value="2"><span>Tue</span></label>
+              <label class="day-chip"><input type="checkbox" class="editWeeklyDay" value="3"><span>Wed</span></label>
+              <label class="day-chip"><input type="checkbox" class="editWeeklyDay" value="4"><span>Thu</span></label>
+              <label class="day-chip"><input type="checkbox" class="editWeeklyDay" value="5"><span>Fri</span></label>
+              <label class="day-chip"><input type="checkbox" class="editWeeklyDay" value="6"><span>Sat</span></label>
+            </div>
+          </div>
+          <div class="field full-row" id="editMonthlyDatesField" style="display:none">
+            <label class="field-label text-xs text-muted-foreground font-medium block mb-1">Days of month</label>
+            <div class="month-date-grid" id="editMonthDateGrid" role="group" aria-label="Select days of month"></div>
           </div>
           <div class="field">
-            <label class="field-label text-xs text-muted-foreground font-medium block mb-1">Days (0=Sun..6=Sat)</label>
-            <input type="text" class="input w-full px-3 py-2 rounded-md border border-input bg-transparent text-foreground text-sm" id="editSchedDays" placeholder="e.g. 1,2,3,4,5">
+            <label class="field-label text-xs text-muted-foreground font-medium block mb-1">Start from</label>
+            <div class="cal-picker cal-picker-sm" id="editCalPickerStartWrap">
+              <input type="text" class="cal-input input" id="editSchedStartDateInput" placeholder="Tap to pick start date" readonly onclick="togglePicker('editCalPickerStartBody')" aria-label="Start date">
+              <div class="cal-picker-body popover-content" id="editCalPickerStartBody">
+                <div id="editCalPickerStart"></div>
+              </div>
+            </div>
+            <input type="hidden" id="editSchedStartDate">
           </div>
           <div class="field">
-            <label class="field-label text-xs text-muted-foreground font-medium block mb-1">Monthly dates</label>
-            <input type="text" class="input w-full px-3 py-2 rounded-md border border-input bg-transparent text-foreground text-sm" id="editSchedDates" placeholder="e.g. 1,15,28">
+            <label class="field-label text-xs text-muted-foreground font-medium block mb-1">End date (optional)</label>
+            <div class="cal-picker cal-picker-sm" id="editCalPickerEndWrap">
+              <input type="text" class="cal-input input" id="editSchedEndDateInput" placeholder="No end date" readonly onclick="togglePicker('editCalPickerEndBody')" aria-label="End date">
+              <div class="cal-picker-body popover-content" id="editCalPickerEndBody">
+                <div id="editCalPickerEnd"></div>
+              </div>
+            </div>
+            <input type="hidden" id="editSchedEndDate">
           </div>
-          <div class="field flex items-center gap-3">
-            <label class="field-label text-xs text-muted-foreground font-medium" for="editSchedEnabled">Enabled</label>
-            <div class="sched-toggle active" id="editSchedEnabled" role="switch" aria-checked="true" tabindex="0" onclick="this.classList.toggle('active'); this.setAttribute('aria-checked', this.classList.contains('active'))"></div>
+        </div>
+
+        <!-- Common: Time -->
+        <div class="field">
+          <label class="field-label text-xs text-muted-foreground font-medium block mb-1">Time (JST)</label>
+          <div class="time-picker" id="editTimePickerWrap">
+            <input type="text" class="time-input input" id="editSchedTimeInput" value="" readonly onclick="togglePicker('editTimePickerBody')" aria-label="Select time">
+            <div class="time-picker-body popover-content" id="editTimePickerBody">
+              <div id="editTimePicker"></div>
+            </div>
           </div>
+          <input type="time" class="input time-input-native w-full px-3 py-2 rounded-md border border-input bg-transparent text-foreground text-sm font-mono" id="editSchedTimeNative" aria-label="Select time">
+          <input type="hidden" id="editSchedTime" value="">
         </div>
 
         <div class="field full-row">
           <label class="field-label text-xs text-muted-foreground font-medium block mb-1">Note</label>
           <input type="text" class="input w-full px-3 py-2 rounded-md border border-input bg-transparent text-foreground text-sm placeholder:text-muted-foreground" id="editSchedNote" placeholder="Optional note">
+        </div>
+
+        <div class="field full-row flex items-center gap-3">
+          <label class="field-label text-xs text-muted-foreground font-medium" for="editSchedEnabled">Enabled</label>
+          <div class="sched-toggle active" id="editSchedEnabled" role="switch" aria-checked="true" tabindex="0" onclick="this.classList.toggle('active'); this.setAttribute('aria-checked', this.classList.contains('active'))"></div>
         </div>
 
         <div class="full-row flex gap-3 pt-2">

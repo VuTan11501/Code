@@ -11,13 +11,21 @@ function initSchedulePage() {
   initCalendar('calPicker', 'schedDate', 'schedDateInput', { allowPast: false });
   initCalendar('calPickerStart', 'schedStartDate', 'schedStartDateInput', { allowPast: true });
   initCalendar('calPickerEnd', 'schedEndDate', 'schedEndDateInput', { allowPast: true });
+  // Edit modal calendars (mirror create form)
+  initCalendar('editCalPicker', 'editSchedDate', 'editSchedDateInput', { allowPast: false });
+  initCalendar('editCalPickerStart', 'editSchedStartDate', 'editSchedStartDateInput', { allowPast: true });
+  initCalendar('editCalPickerEnd', 'editSchedEndDate', 'editSchedEndDateInput', { allowPast: true });
   // Default date = today, time = current JST time
   const now = jstNow();
+  TIME_STATE.sched.h = now.getHours();
+  TIME_STATE.sched.m = now.getMinutes();
+  TIME_STATE.editSched.h = now.getHours();
+  TIME_STATE.editSched.m = now.getMinutes();
   selectedHour = now.getHours();
   selectedMinute = now.getMinutes();
-  renderTimePicker();
-  initNativeTimeInput();
-  renderMonthDateGrid();
+  renderTimePicker('sched');
+  initNativeTimeInput('sched');
+  renderMonthDateGrid('sched');
   const todayStr = formatDate(now.getFullYear(), now.getMonth(), now.getDate());
   calSelect('calPicker', todayStr);
   loadScheduledRuns();
@@ -173,6 +181,13 @@ document.addEventListener('click', function(e) {
 // ═══════════════════════════════════════════════════
 //  iOS-STYLE WHEEL TIME PICKER
 // ═══════════════════════════════════════════════════
+// Per-prefix state ('sched' = create form, 'editSched' = edit modal)
+const TIME_STATE = {
+  sched: { h: 9, m: 0 },
+  editSched: { h: 9, m: 0 },
+};
+
+// Backward-compat globals (read-only mirrors of sched state)
 let selectedHour = 9;
 let selectedMinute = 0;
 
@@ -185,53 +200,88 @@ const TIME_PRESETS = [
   { label: '3:30', h: 3, m: 30, desc: 'Night OT CO' },
 ];
 
-function renderTimePicker() {
-  const container = document.getElementById('timePicker');
+function _timeIds(prefix) {
+  if (prefix === 'editSched') {
+    return {
+      container: 'editTimePicker',
+      wheelH: 'editWheelHour',
+      wheelM: 'editWheelMinute',
+      hidden: 'editSchedTime',
+      input: 'editSchedTimeInput',
+      native: 'editSchedTimeNative',
+    };
+  }
+  return {
+    container: 'timePicker',
+    wheelH: 'wheelHour',
+    wheelM: 'wheelMinute',
+    hidden: 'schedTime',
+    input: 'schedTimeInput',
+    native: 'schedTimeNative',
+  };
+}
+
+function renderTimePicker(prefix = 'sched') {
+  const ids = _timeIds(prefix);
+  const container = document.getElementById(ids.container);
   if (!container) return;
-  updateTimeDisplay();
+  const st = TIME_STATE[prefix];
+  updateTimeDisplay(prefix);
 
   let html = `<div class="wheel-picker-container">
     <div class="wheel-picker-highlight"></div>
-    <div class="wheel-column" id="wheelHour"></div>
+    <div class="wheel-column" id="${ids.wheelH}"></div>
     <div class="wheel-separator">:</div>
-    <div class="wheel-column" id="wheelMinute"></div>
+    <div class="wheel-column" id="${ids.wheelM}"></div>
   </div>`;
 
   html += '<div class="time-presets"><div class="time-presets-label">Quick presets</div><div class="time-presets-grid">';
   for (const p of TIME_PRESETS) {
-    const sel = (selectedHour === p.h && selectedMinute === p.m) ? ' selected' : '';
-    html += `<div class="time-preset${sel}" onclick="pickPreset(${p.h},${p.m})">${p.label} <span class="text-muted">${p.desc}</span></div>`;
+    const sel = (st.h === p.h && st.m === p.m) ? ' selected' : '';
+    html += `<div class="time-preset${sel}" onclick="pickPreset(${p.h},${p.m},'${prefix}')">${p.label} <span class="text-muted">${p.desc}</span></div>`;
   }
   html += '</div></div>';
   container.innerHTML = html;
 
-  // Initialize wheel columns
-  initWheel('wheelHour', 24, selectedHour, (val) => { selectedHour = val; updateTimeDisplay(); });
-  initWheel('wheelMinute', 60, selectedMinute, (val) => { selectedMinute = val; updateTimeDisplay(); });
+  initWheel(ids.wheelH, 24, st.h, (val) => { TIME_STATE[prefix].h = val; if (prefix === 'sched') selectedHour = val; updateTimeDisplay(prefix); });
+  initWheel(ids.wheelM, 60, st.m, (val) => { TIME_STATE[prefix].m = val; if (prefix === 'sched') selectedMinute = val; updateTimeDisplay(prefix); });
 }
 
-function updateTimeDisplay() {
-  const timeStr = `${String(selectedHour).padStart(2,'0')}:${String(selectedMinute).padStart(2,'0')}`;
-  document.getElementById('schedTime').value = timeStr;
-  const dispInput = document.getElementById('schedTimeInput');
+function updateTimeDisplay(prefix = 'sched') {
+  const ids = _timeIds(prefix);
+  const st = TIME_STATE[prefix];
+  const timeStr = `${String(st.h).padStart(2,'0')}:${String(st.m).padStart(2,'0')}`;
+  const hidden = document.getElementById(ids.hidden);
+  if (hidden) hidden.value = timeStr;
+  const dispInput = document.getElementById(ids.input);
   if (dispInput) dispInput.value = timeStr;
-  const nativeInput = document.getElementById('schedTimeNative');
+  const nativeInput = document.getElementById(ids.native);
   if (nativeInput && nativeInput.value !== timeStr) nativeInput.value = timeStr;
 }
 
-function initNativeTimeInput() {
-  const nativeInput = document.getElementById('schedTimeNative');
-  if (!nativeInput) return;
-  const timeStr = `${String(selectedHour).padStart(2,'0')}:${String(selectedMinute).padStart(2,'0')}`;
+function initNativeTimeInput(prefix = 'sched') {
+  const ids = _timeIds(prefix);
+  const nativeInput = document.getElementById(ids.native);
+  if (!nativeInput || nativeInput.dataset.boundNative === '1') return;
+  nativeInput.dataset.boundNative = '1';
+  const st = TIME_STATE[prefix];
+  const timeStr = `${String(st.h).padStart(2,'0')}:${String(st.m).padStart(2,'0')}`;
   nativeInput.value = timeStr;
   nativeInput.addEventListener('change', () => {
     const v = nativeInput.value;
     if (!v) return;
     const [h, m] = v.split(':').map(Number);
-    selectedHour = h;
-    selectedMinute = m;
-    updateTimeDisplay();
+    TIME_STATE[prefix].h = h;
+    TIME_STATE[prefix].m = m;
+    if (prefix === 'sched') { selectedHour = h; selectedMinute = m; }
+    updateTimeDisplay(prefix);
   });
+}
+
+function setTimeState(prefix, h, m) {
+  TIME_STATE[prefix].h = h;
+  TIME_STATE[prefix].m = m;
+  if (prefix === 'sched') { selectedHour = h; selectedMinute = m; }
 }
 
 function initWheel(id, count, initialIndex, onChange) {
@@ -250,14 +300,10 @@ function initWheel(id, count, initialIndex, onChange) {
   const visibleItems = 5;
   const padding = itemHeight * Math.floor(visibleItems / 2);
 
-  // Set padding so first/last items can center
   col.style.paddingTop = padding + 'px';
   col.style.paddingBottom = padding + 'px';
-
-  // Scroll to initial selection
   col.scrollTop = initialIndex * itemHeight;
 
-  // Handle scroll with snap
   let scrollTimeout;
   col.addEventListener('scroll', () => {
     clearTimeout(scrollTimeout);
@@ -265,8 +311,6 @@ function initWheel(id, count, initialIndex, onChange) {
       const index = Math.round(col.scrollTop / itemHeight);
       const clamped = Math.max(0, Math.min(count - 1, index));
       col.scrollTo({ top: clamped * itemHeight, behavior: 'smooth' });
-
-      // Update selection highlighting
       col.querySelectorAll('.wheel-item').forEach((el, i) => {
         el.classList.toggle('active', i === clamped);
       });
@@ -274,10 +318,8 @@ function initWheel(id, count, initialIndex, onChange) {
     }, 80);
   }, { passive: true });
 
-  // Mark initial active
   col.querySelectorAll('.wheel-item')[initialIndex]?.classList.add('active');
 
-  // Click to select
   col.querySelectorAll('.wheel-item').forEach((item) => {
     item.addEventListener('click', () => {
       const idx = parseInt(item.dataset.index);
@@ -286,47 +328,58 @@ function initWheel(id, count, initialIndex, onChange) {
   });
 }
 
-function pickPreset(h, m) {
-  selectedHour = h;
-  selectedMinute = m;
-  updateTimeDisplay();
-  // Re-scroll wheels
-  const hCol = document.getElementById('wheelHour');
-  const mCol = document.getElementById('wheelMinute');
+function pickPreset(h, m, prefix = 'sched') {
+  setTimeState(prefix, h, m);
+  updateTimeDisplay(prefix);
+  const ids = _timeIds(prefix);
+  const hCol = document.getElementById(ids.wheelH);
+  const mCol = document.getElementById(ids.wheelM);
   if (hCol) hCol.scrollTo({ top: h * 44, behavior: 'smooth' });
   if (mCol) mCol.scrollTo({ top: m * 44, behavior: 'smooth' });
-  // Update active states
   hCol?.querySelectorAll('.wheel-item').forEach((el, i) => el.classList.toggle('active', i === h));
   mCol?.querySelectorAll('.wheel-item').forEach((el, i) => el.classList.toggle('active', i === m));
 }
 
 // Keep old functions for backward compat
-function pickHour(h) { selectedHour = h; renderTimePicker(); }
-function pickMinute(m) { selectedMinute = m; renderTimePicker(); }
+function pickHour(h) { setTimeState('sched', h, TIME_STATE.sched.m); renderTimePicker('sched'); }
+function pickMinute(m) { setTimeState('sched', TIME_STATE.sched.h, m); renderTimePicker('sched'); }
 
 // ═══════════════════════════════════════════════════
 //  MONTHLY DATE GRID PICKER
 // ═══════════════════════════════════════════════════
-let selectedMonthDates = new Set();
+const MONTH_DATES_STATE = {
+  sched: new Set(),
+  editSched: new Set(),
+};
+// Backward-compat
+let selectedMonthDates = MONTH_DATES_STATE.sched;
 
-function renderMonthDateGrid() {
-  const container = document.getElementById('monthDateGrid');
+function _monthGridId(prefix) {
+  return prefix === 'editSched' ? 'editMonthDateGrid' : 'monthDateGrid';
+}
+
+function renderMonthDateGrid(prefix = 'sched') {
+  const container = document.getElementById(_monthGridId(prefix));
   if (!container) return;
+  const set = MONTH_DATES_STATE[prefix];
   let html = '';
   for (let d = 1; d <= 31; d++) {
-    const sel = selectedMonthDates.has(d) ? ' selected' : '';
-    html += `<div class="md-btn${sel}" onclick="toggleMonthDate(${d})">${d}</div>`;
+    const sel = set.has(d) ? ' selected' : '';
+    html += `<div class="md-btn${sel}" onclick="toggleMonthDate(${d},'${prefix}')">${d}</div>`;
   }
   container.innerHTML = html;
 }
 
-function toggleMonthDate(d) {
-  if (selectedMonthDates.has(d)) selectedMonthDates.delete(d);
-  else selectedMonthDates.add(d);
-  renderMonthDateGrid();
+function toggleMonthDate(d, prefix = 'sched') {
+  const set = MONTH_DATES_STATE[prefix];
+  if (set.has(d)) set.delete(d);
+  else set.add(d);
+  renderMonthDateGrid(prefix);
 }
 
-function getSelectedMonthDates() { return [...selectedMonthDates].sort((a, b) => a - b); }
+function getSelectedMonthDates(prefix = 'sched') {
+  return [...MONTH_DATES_STATE[prefix]].sort((a, b) => a - b);
+}
 
 // ═══════════════════════════════════════════════════
 //  SCHEDULE TYPE TOGGLE
@@ -348,10 +401,15 @@ function toggleEditLocationField() {
   document.getElementById('editLocationField').style.display = show ? '' : 'none';
 }
 
-function togglePatternUI() {
-  const pattern = document.getElementById('schedPattern').value;
-  document.getElementById('weeklyDaysField').style.display = pattern === 'weekly' ? 'block' : 'none';
-  document.getElementById('monthlyDatesField').style.display = pattern === 'monthly' ? 'block' : 'none';
+function togglePatternUI(prefix = 'sched') {
+  const prefixCap = prefix === 'editSched' ? 'editSched' : 'sched';
+  const pattern = document.getElementById(prefixCap + 'Pattern').value;
+  const weeklyId = prefix === 'editSched' ? 'editWeeklyDaysField' : 'weeklyDaysField';
+  const monthlyId = prefix === 'editSched' ? 'editMonthlyDatesField' : 'monthlyDatesField';
+  const weeklyEl = document.getElementById(weeklyId);
+  const monthlyEl = document.getElementById(monthlyId);
+  if (weeklyEl) weeklyEl.style.display = pattern === 'weekly' ? 'block' : 'none';
+  if (monthlyEl) monthlyEl.style.display = pattern === 'monthly' ? 'block' : 'none';
 }
 
 // ═══════════════════════════════════════════════════
@@ -758,24 +816,54 @@ function openEditSchedModal(index) {
   document.getElementById('editSchedNote').value = entry.note || '';
   document.getElementById('editSchedLocation').value = entry.location || 'office';
   toggleEditLocationField();
-
   toggleEditType(entry.type);
 
+  // Enabled toggle (only meaningful for recurring; harmless for once)
+  const enabledToggle = document.getElementById('editSchedEnabled');
+  const enabled = entry.enabled !== false;
+  enabledToggle.classList.toggle('active', enabled);
+  enabledToggle.setAttribute('aria-checked', enabled);
+
+  // Reset edit state
+  MONTH_DATES_STATE.editSched = new Set();
+  document.querySelectorAll('.editWeeklyDay').forEach(cb => cb.checked = false);
+
+  let timeStr = '09:00';
+  let dateStr = '';
+
   if (entry.type === 'once') {
-    // Parse run_at to datetime-local format
     if (entry.run_at) {
-      const dt = entry.run_at.slice(0, 16); // YYYY-MM-DDTHH:MM
-      document.getElementById('editSchedDateTime').value = dt;
+      // run_at format: YYYY-MM-DDTHH:MM:SS+09:00
+      dateStr = entry.run_at.slice(0, 10);
+      timeStr = entry.run_at.slice(11, 16);
+      calSelect('editCalPicker', dateStr);
     }
+    document.getElementById('editSchedPattern').value = 'daily';
   } else if (entry.recurrence) {
     const r = entry.recurrence;
     document.getElementById('editSchedPattern').value = r.pattern || 'daily';
-    document.getElementById('editSchedTime').value = r.time || '09:00';
-    document.getElementById('editSchedDays').value = (r.days || []).join(',');
-    document.getElementById('editSchedDates').value = (r.dates || []).join(',');
-    document.getElementById('editSchedEnabled').classList.toggle('active', entry.enabled !== false);
-    document.getElementById('editSchedEnabled').setAttribute('aria-checked', entry.enabled !== false);
+    timeStr = r.time || '09:00';
+
+    if (r.days && Array.isArray(r.days)) {
+      document.querySelectorAll('.editWeeklyDay').forEach(cb => {
+        cb.checked = r.days.includes(parseInt(cb.value));
+      });
+    }
+    if (r.dates && Array.isArray(r.dates)) {
+      MONTH_DATES_STATE.editSched = new Set(r.dates);
+    }
+    if (r.start_date) calSelect('editCalPickerStart', r.start_date);
+    if (r.end_date) calSelect('editCalPickerEnd', r.end_date);
   }
+
+  // Set time state and render time picker / native input
+  const [h, m] = timeStr.split(':').map(Number);
+  TIME_STATE.editSched.h = h;
+  TIME_STATE.editSched.m = m;
+  renderTimePicker('editSched');
+  initNativeTimeInput('editSched');
+  renderMonthDateGrid('editSched');
+  togglePatternUI('editSched');
 
   document.getElementById('editSchedModal').classList.add('open');
 }
@@ -797,40 +885,45 @@ async function saveEditSchedule() {
   const type = document.getElementById('editSchedType').value;
   const note = document.getElementById('editSchedNote').value.trim() || undefined;
   const location = document.getElementById('editSchedLocation').value;
+  const time = document.getElementById('editSchedTime').value;
   const needsLocation = ['auto-checkin.yml', 'auto-checkout.yml'].includes(workflow);
+  const enabled = document.getElementById('editSchedEnabled').classList.contains('active');
 
   let updatedEntry;
 
   if (type === 'once') {
-    const dt = document.getElementById('editSchedDateTime').value;
-    if (!dt) { toast('⚠️ Pick a date & time'); return; }
-    const runAt = dt + ':00+09:00';
+    const date = document.getElementById('editSchedDate').value;
+    if (!date) { toast('⚠️ Pick a date'); return; }
+    if (!time) { toast('⚠️ Pick a time'); return; }
+    const runAt = `${date}T${time}:00+09:00`;
     updatedEntry = { type: 'once', workflow, run_at: runAt, note, created: scheduleTableData[index].created || new Date().toISOString() };
   } else {
-    const pattern = document.getElementById('editSchedPattern').value;
-    const time = document.getElementById('editSchedTime').value;
     if (!time) { toast('⚠️ Set a time'); return; }
-
+    const pattern = document.getElementById('editSchedPattern').value;
+    const startDate = document.getElementById('editSchedStartDate').value;
+    const endDate = document.getElementById('editSchedEndDate').value;
     const recurrence = { pattern, time };
-    const daysStr = document.getElementById('editSchedDays').value.trim();
-    const datesStr = document.getElementById('editSchedDates').value.trim();
 
-    if (pattern === 'weekly' || pattern === 'weekdays') {
-      if (daysStr) recurrence.days = daysStr.split(',').map(d => parseInt(d.trim())).filter(d => !isNaN(d));
-      else if (pattern === 'weekdays') recurrence.days = [1,2,3,4,5];
-    }
-    if (pattern === 'monthly' && datesStr) {
-      recurrence.dates = datesStr.split(',').map(d => parseInt(d.trim())).filter(d => !isNaN(d));
+    if (pattern === 'weekly') {
+      const days = [...document.querySelectorAll('.editWeeklyDay:checked')].map(el => parseInt(el.value));
+      if (!days.length) { toast('⚠️ Select at least one day'); return; }
+      recurrence.days = days;
+    } else if (pattern === 'weekdays') {
+      recurrence.days = [1, 2, 3, 4, 5];
+    } else if (pattern === 'monthly') {
+      const dates = getSelectedMonthDates('editSched');
+      if (!dates.length) { toast('⚠️ Select at least one day of month'); return; }
+      recurrence.dates = dates;
     }
 
-    const enabled = document.getElementById('editSchedEnabled').classList.contains('active');
+    if (startDate) recurrence.start_date = startDate;
+    if (endDate) recurrence.end_date = endDate;
+
     updatedEntry = { type: 'recurring', workflow, recurrence, enabled, note, created: scheduleTableData[index].created || new Date().toISOString() };
   }
 
-  // Add location for checkin/checkout workflows
   if (needsLocation) updatedEntry.location = location;
 
-  // Save to Gist
   try {
     const entries = await loadEntriesFromGist();
     entries[index] = updatedEntry;
