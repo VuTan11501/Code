@@ -293,19 +293,21 @@ async function loadRunJobs(runId, container, status) {
 
     jobs.forEach((j, idx) => {
       const jobRunning = j.status === 'in_progress' || j.status === 'queued';
-      // Multi-job runs are rare for us; only show a job heading if >1 job
+      const toolbar = `<div class="job-toolbar">
+        <button class="btn btn-outline sm" type="button" onclick="copyFullJobLog(this, ${j.id})">Copy log</button>
+        <label class="log-opt"><input type="checkbox" checked onchange="toggleAllTimestamps(this, ${j.id})"> timestamps</label>
+        <a class="log-external" href="${j.html_url}" target="_blank" rel="noopener">Open on GitHub ↗</a>
+      </div>`;
       if (jobs.length > 1) {
         const jCls = conclusionClass(j.conclusion || j.status);
         html += `<div class="job-heading">
           <span class="run-dot ${jCls}"></span>
           <span class="job-name">${escapeHtml(j.name)}</span>
           <span class="status-badge status-${jCls}">${j.conclusion || j.status}</span>
-          <a class="log-external" href="${j.html_url}" target="_blank" rel="noopener">Open on GitHub ↗</a>
+          ${toolbar}
         </div>`;
       } else {
-        html += `<div class="job-heading-mini">
-          <a class="log-external" href="${j.html_url}" target="_blank" rel="noopener">Open on GitHub ↗</a>
-        </div>`;
+        html += `<div class="job-heading-mini">${toolbar}</div>`;
       }
 
       html += `<div class="steps-list" data-job-id="${j.id}">`;
@@ -463,12 +465,7 @@ function renderStepLog(body, lines, stepName) {
     body.innerHTML = '<div class="log-loading">No log output for this step.</div>';
     return;
   }
-  const html = ['<div class="log-toolbar">',
-    `<input type="search" class="input log-search" placeholder="Filter…" oninput="filterLogLines(this)">`,
-    `<button class="btn btn-outline sm" onclick="copyLogText(this)" type="button">Copy</button>`,
-    `<label class="log-opt"><input type="checkbox" checked onchange="toggleLogTimestamps(this)"> timestamps</label>`,
-    '</div>',
-    '<pre class="log-pre"><code>'];
+  const html = ['<pre class="log-pre"><code>'];
   for (const ln of lines) {
     const txt = ln.txt;
     if (!txt && !ln.ts) { html.push('\n'); continue; }
@@ -493,27 +490,25 @@ function renderStepLog(body, lines, stepName) {
   if (pre) pre.scrollTop = pre.scrollHeight;
 }
 
-function filterLogLines(input) {
-  const q = input.value.trim().toLowerCase();
-  const body = input.closest('.step-log-body');
-  body.querySelectorAll('.log-line').forEach(el => {
-    el.style.display = (!q || el.textContent.toLowerCase().includes(q)) ? '' : 'none';
-  });
+function toggleAllTimestamps(cb, jobId) {
+  const list = document.querySelector(`.steps-list[data-job-id="${jobId}"]`);
+  if (list) list.classList.toggle('hide-ts', !cb.checked);
 }
 
-function toggleLogTimestamps(cb) {
-  const body = cb.closest('.step-log-body');
-  body.classList.toggle('hide-ts', !cb.checked);
-}
-
-function copyLogText(btn) {
-  const body = btn.closest('.step-log-body');
-  const text = (body.querySelector('.log-pre code')?.innerText) || '';
-  navigator.clipboard.writeText(text).then(() => {
-    const old = btn.textContent;
+async function copyFullJobLog(btn, jobId) {
+  const old = btn.textContent;
+  btn.textContent = 'Loading…'; btn.disabled = true;
+  try {
+    const cache = await ensureJobLogCache(jobId);
+    const text = (cache && cache.raw) ? cache.raw : '';
+    if (!text) throw new Error(cache && cache.error ? cache.error : 'No log yet');
+    await navigator.clipboard.writeText(text);
     btn.textContent = 'Copied!';
-    setTimeout(() => { btn.textContent = old; }, 1200);
-  });
+  } catch (e) {
+    btn.textContent = '❌ ' + (e.message || 'Failed');
+  } finally {
+    setTimeout(() => { btn.textContent = old; btn.disabled = false; }, 1400);
+  }
 }
 
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeLogModal(); });

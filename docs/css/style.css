@@ -1164,7 +1164,10 @@ input[type="time"], input[type="date"], input[type="datetime-local"] {
   font-size: var(--fs-sm);
 }
 .job-heading .job-name { flex: 1; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.job-heading-mini { display: flex; justify-content: flex-end; padding: 0 0 6px; }
+.job-heading-mini { display: flex; justify-content: flex-end; padding: 0 0 8px; }
+.job-toolbar { display: flex; align-items: center; gap: 12px; margin-left: auto; }
+.job-toolbar .btn { height: 28px; padding: 4px 10px; font-size: var(--fs-xs); }
+.job-heading .job-toolbar { margin-left: auto; }
 .log-external { color: var(--primary); font-size: var(--fs-xs); text-decoration: none; }
 .log-external:hover { text-decoration: underline; }
 
@@ -1200,23 +1203,21 @@ input[type="time"], input[type="date"], input[type="datetime-local"] {
 .step-block.open > .step-log-body { display: block; animation: fade-in var(--duration-normal) var(--ease-out); }
 .log-loading { padding: 14px; text-align: center; color: var(--muted-foreground); font-size: var(--fs-sm); }
 
-.log-toolbar { display: flex; gap: 8px; align-items: center; padding: 6px 8px; background: var(--secondary); border-radius: var(--radius-sm) var(--radius-sm) 0 0; flex-wrap: wrap; }
-.log-search { flex: 1; min-width: 140px; height: 28px; font-size: var(--fs-xs); padding: 4px 8px; }
-.log-opt { font-size: var(--fs-xs); color: var(--muted-foreground); display: flex; align-items: center; gap: 4px; cursor: pointer; }
+.log-opt { font-size: var(--fs-xs); color: var(--muted-foreground); display: flex; align-items: center; gap: 4px; cursor: pointer; user-select: none; }
 .log-opt input { margin: 0; }
 
 .log-pre {
   background: #050505; color: #e0e0e0;
   font-family: var(--font-mono); font-size: 12px; line-height: 1.55;
   padding: 12px 14px; margin: 0;
-  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+  border-radius: var(--radius-sm);
   overflow: auto; max-height: 420px;
   white-space: pre; tab-size: 2;
 }
 .log-pre code { font-family: inherit; font-size: inherit; }
 .log-line { display: inline; }
 .log-ts { color: #6b7280; user-select: none; }
-.step-log-body.hide-ts .log-ts { display: none; }
+.steps-list.hide-ts .log-ts { display: none; }
 .log-group { color: #93c5fd; font-weight: 600; }
 .log-error { color: #fca5a5; background: rgba(239,68,68,0.06); display: inline-block; width: 100%; }
 .log-warn { color: #fcd34d; }
