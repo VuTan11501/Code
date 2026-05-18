@@ -190,20 +190,73 @@ html { touch-action: manipulation; }
 /* ─── RUN LIST (JS-generated) ─── */
 .run-list { list-style: none; padding: 0; margin: 0; }
 .run-item {
-  display: flex; align-items: center; gap: 12px;
-  padding: 12px; border-radius: var(--radius-md);
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr) auto auto auto;
+  align-items: center; gap: 12px;
+  padding: 10px 12px; border-radius: var(--radius-md);
   font-size: var(--fs-sm); cursor: pointer;
   transition: background var(--duration-fast);
 }
 .run-item:hover { background: rgba(255,255,255,0.04); }
 .run-item + .run-item { border-top: 1px solid var(--border); }
-.run-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.run-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; justify-self: center; }
 .run-dot.success { background: var(--green); }
 .run-dot.failure { background: var(--red); }
 .run-dot.in_progress { background: var(--yellow); animation: livePulse 2s infinite; }
 .run-dot.skipped { background: var(--muted-foreground); }
-.run-event { color: var(--muted-foreground); font-size: var(--fs-xs); background: rgba(255,255,255,0.05); padding: 2px 6px; border-radius: var(--radius-sm); }
-.run-time { margin-left: auto; color: var(--muted-foreground); font-size: var(--fs-xs); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.run-name {
+  font-weight: 500;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.run-event {
+  color: var(--muted-foreground);
+  font-size: var(--fs-xs);
+  background: rgba(255,255,255,0.05);
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  font-weight: 500;
+  text-transform: lowercase;
+  white-space: nowrap;
+  min-width: 72px;
+  text-align: center;
+  justify-self: end;
+}
+.run-num {
+  color: var(--muted-foreground);
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  min-width: 44px;
+  text-align: right;
+  text-decoration: none;
+}
+.run-num:hover { color: var(--foreground); }
+.run-time {
+  color: var(--muted-foreground);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  min-width: 72px;
+  text-align: right;
+}
+@media (max-width: 560px) {
+  .run-item {
+    grid-template-columns: 12px minmax(0, 1fr) auto;
+    grid-template-areas:
+      "dot name time"
+      ".   event num";
+    row-gap: 4px;
+  }
+  .run-dot { grid-area: dot; }
+  .run-name { grid-area: name; }
+  .run-time { grid-area: time; }
+  .run-event { grid-area: event; justify-self: start; min-width: 0; }
+  .run-num { grid-area: num; }
+}
 .empty { color: var(--muted-foreground); font-size: var(--fs-sm); padding: 20px; text-align: center; }
 
 /* ─── STATS (JS-generated) ─── */

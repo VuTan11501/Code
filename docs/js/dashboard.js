@@ -362,9 +362,9 @@ async function refresh() {
       recentEl.innerHTML = allRuns.slice(0, 12).map(r => `
         <li class="run-item" onclick="openLogModal(${r.id}, '${r._wf.icon} ${r._wf.name} #${r.run_number}', '${r.status}')">
           <span class="run-dot ${conclusionClass(r.conclusion || r.status)}"></span>
-          <span style="font-weight:500">${r._wf.icon} ${r._wf.name}</span>
+          <span class="run-name">${r._wf.icon} ${r._wf.name}</span>
           <span class="run-event">${r.event}</span>
-          <a href="${r.html_url}" target="_blank" onclick="event.stopPropagation()">#${r.run_number}</a>
+          <a class="run-num" href="${r.html_url}" target="_blank" onclick="event.stopPropagation()">#${r.run_number}</a>
           <span class="run-time">${timeAgo(r.created_at)}</span>
         </li>
       `).join('');
