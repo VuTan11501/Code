@@ -118,7 +118,7 @@ function renderHealthBar(workflowResults) {
     const passed = completed.filter(r => r.conclusion === 'success').length;
     const pct = completed.length ? Math.round(passed / completed.length * 100) : -1;
     const display = pct < 0 ? '—' : pct + '%';
-    const color = pct < 0 ? 'var(--muted)' : pct >= 90 ? 'var(--green)' : pct >= 70 ? 'var(--yellow)' : 'var(--red)';
+    const color = pct < 0 ? 'var(--muted-foreground)' : pct >= 90 ? 'var(--green)' : pct >= 70 ? 'var(--yellow)' : 'var(--red)';
     const circ = 2 * Math.PI * 20;
     const offset = pct < 0 ? circ : circ - (circ * pct / 100);
 
@@ -189,7 +189,7 @@ function renderWorkflowCard(wf, runs) {
               <span class="run-time">${timeAgo(r.created_at)}</span>
             </li>
           `).join('')}
-          ${last5.length === 0 ? '<li class="run-item" style="color:var(--muted);cursor:default">No runs yet</li>' : ''}
+          ${last5.length === 0 ? '<li class="run-item" style="color:var(--muted-foreground);cursor:default">No runs yet</li>' : ''}
         </ul>
         <div class="trigger-actions">
           <button class="btn primary sm" onclick="triggerWorkflow('${wf.file}')">▶ Trigger</button>
