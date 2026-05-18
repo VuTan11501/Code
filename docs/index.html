@@ -25,6 +25,7 @@ header h1 .icon { font-size: 28px; }
 .btn.primary { background: #238636; border-color: #238636; color: #fff; }
 .btn.primary:hover { background: #2ea043; }
 .btn.danger { border-color: var(--red); color: var(--red); }
+.btn.sm { padding: 4px 10px; font-size: 12px; }
 
 .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 16px; margin-bottom: 32px; }
 
@@ -57,63 +58,96 @@ header h1 .icon { font-size: 28px; }
 .stat-value { font-size: 24px; font-weight: 700; }
 .stat-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
 
-.token-input { display: flex; gap: 8px; align-items: center; }
-.token-input input { padding: 6px 12px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 13px; width: 240px; }
-.token-input input::placeholder { color: var(--muted); }
-
+.section-title { font-size: 14px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; }
+.empty { text-align: center; padding: 32px; color: var(--muted); }
+.trigger-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 12px; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+.last-update { font-size: 12px; color: var(--muted); }
 .toast { position: fixed; bottom: 24px; right: 24px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 20px; font-size: 13px; display: none; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
 .toast.show { display: block; animation: slideIn 0.3s; }
 @keyframes slideIn { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 
-.section-title { font-size: 14px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; }
-
-.empty { text-align: center; padding: 32px; color: var(--muted); }
-
-.trigger-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 12px; }
-
-a { color: var(--accent); text-decoration: none; }
-a:hover { text-decoration: underline; }
-
-.last-update { font-size: 12px; color: var(--muted); }
+/* Auth screen */
+.auth-screen { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; }
+.auth-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 40px; max-width: 400px; width: 100%; text-align: center; }
+.auth-card h2 { font-size: 20px; margin-bottom: 8px; display: flex; align-items: center; justify-content: center; gap: 10px; }
+.auth-card p { color: var(--muted); font-size: 13px; margin-bottom: 24px; }
+.auth-card input { width: 100%; padding: 10px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 14px; margin-bottom: 12px; }
+.auth-card input:focus { outline: none; border-color: var(--accent); }
+.auth-card .btn { width: 100%; justify-content: center; padding: 10px; font-size: 14px; }
+.auth-card .error { color: var(--red); font-size: 12px; margin-top: 8px; display: none; }
+.auth-card .hint { color: var(--muted); font-size: 11px; margin-top: 16px; }
+.auth-tabs { display: flex; margin-bottom: 20px; border-bottom: 1px solid var(--border); }
+.auth-tab { flex: 1; padding: 8px; font-size: 13px; cursor: pointer; border-bottom: 2px solid transparent; color: var(--muted); background: none; border-top: none; border-left: none; border-right: none; }
+.auth-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.lock-icon { font-size: 48px; margin-bottom: 16px; }
 
 @media (max-width: 600px) {
   .grid { grid-template-columns: 1fr; }
   header { flex-direction: column; align-items: flex-start; }
-  .token-input input { width: 160px; }
 }
 </style>
 </head>
 <body>
 
-<div class="container">
-  <header>
-    <h1><span class="icon">⚡</span> Workflow Dashboard</h1>
-    <div class="header-actions">
-      <span class="last-update" id="lastUpdate"></span>
-      <button class="btn" onclick="refresh()">🔄 Refresh</button>
-      <button class="btn" id="tokenBtn" onclick="toggleToken()">🔑 Token</button>
+<!-- Auth Screen -->
+<div id="authScreen" class="auth-screen">
+  <div class="auth-card">
+    <div class="lock-icon">🔐</div>
+    <h2>Workflow Dashboard</h2>
+    <p id="authDesc">Enter passphrase to unlock</p>
+
+    <div class="auth-tabs" id="authTabs">
+      <button class="auth-tab active" onclick="switchTab('unlock')">Unlock</button>
+      <button class="auth-tab" onclick="switchTab('setup')">Setup</button>
     </div>
-  </header>
 
-  <div id="tokenArea" style="display:none; margin-bottom: 20px;">
-    <div class="token-input">
-      <input type="password" id="tokenInput" placeholder="ghp_... (for trigger actions)">
-      <button class="btn primary" onclick="saveToken()">Save</button>
-      <button class="btn danger" onclick="clearToken()">Clear</button>
+    <!-- Unlock form -->
+    <div id="unlockForm">
+      <input type="password" id="passphrase" placeholder="Passphrase" autocomplete="off" onkeydown="if(event.key==='Enter')unlock()">
+      <button class="btn primary" onclick="unlock()">🔓 Unlock</button>
+      <div class="error" id="unlockError">Wrong passphrase</div>
     </div>
-    <p style="font-size:12px; color:var(--muted); margin-top:6px;">Token stored in localStorage. Needed only for triggering workflows.</p>
-  </div>
 
-  <div class="grid" id="workflowGrid">
-    <div class="empty">Loading workflows...</div>
+    <!-- Setup form (first time) -->
+    <div id="setupForm" style="display:none">
+      <input type="password" id="newToken" placeholder="GitHub PAT (ghp_... or github_pat_...)">
+      <input type="password" id="newPass" placeholder="Create passphrase (6+ chars)">
+      <input type="password" id="confirmPass" placeholder="Confirm passphrase" onkeydown="if(event.key==='Enter')setup()">
+      <button class="btn primary" onclick="setup()">🔑 Encrypt & Save</button>
+      <div class="error" id="setupError"></div>
+      <div class="hint">
+        PAT is encrypted with AES-256-GCM using your passphrase.<br>
+        Never stored in plaintext. Session expires on tab close.
+      </div>
+    </div>
   </div>
+</div>
 
-  <div class="section-title">Recent Activity (All Workflows)</div>
-  <div class="card">
-    <div class="card-body">
-      <ul class="run-list" id="recentRuns">
-        <li class="empty">Loading...</li>
-      </ul>
+<!-- Dashboard (hidden until authenticated) -->
+<div id="dashboard" style="display:none">
+  <div class="container">
+    <header>
+      <h1><span class="icon">⚡</span> Workflow Dashboard</h1>
+      <div class="header-actions">
+        <span class="last-update" id="lastUpdate"></span>
+        <button class="btn" onclick="refresh()">🔄 Refresh</button>
+        <button class="btn danger" onclick="lock()">🔒 Lock</button>
+      </div>
+    </header>
+
+    <div class="grid" id="workflowGrid">
+      <div class="empty">Loading workflows...</div>
+    </div>
+
+    <div class="section-title">Recent Activity</div>
+    <div class="card">
+      <div class="card-body">
+        <ul class="run-list" id="recentRuns">
+          <li class="empty">Loading...</li>
+        </ul>
+      </div>
     </div>
   </div>
 </div>
@@ -121,6 +155,126 @@ a:hover { text-decoration: underline; }
 <div class="toast" id="toast"></div>
 
 <script>
+// ═══════════════════════════════════════════════════
+//  CRYPTO: AES-256-GCM with PBKDF2 key derivation
+// ═══════════════════════════════════════════════════
+
+const STORAGE_KEY = 'wf_dash_vault';
+let sessionToken = null; // Only in memory, never persisted in plaintext
+
+async function deriveKey(passphrase, salt) {
+  const enc = new TextEncoder();
+  const keyMaterial = await crypto.subtle.importKey('raw', enc.encode(passphrase), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt, iterations: 310000, hash: 'SHA-256' },
+    keyMaterial,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt', 'decrypt']
+  );
+}
+
+async function encryptToken(token, passphrase) {
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const key = await deriveKey(passphrase, salt);
+  const enc = new TextEncoder();
+  const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, enc.encode(token));
+  // Store salt + iv + ciphertext as base64
+  const combined = new Uint8Array(salt.length + iv.length + new Uint8Array(ciphertext).length);
+  combined.set(salt, 0);
+  combined.set(iv, salt.length);
+  combined.set(new Uint8Array(ciphertext), salt.length + iv.length);
+  return btoa(String.fromCharCode(...combined));
+}
+
+async function decryptToken(stored, passphrase) {
+  const combined = Uint8Array.from(atob(stored), c => c.charCodeAt(0));
+  const salt = combined.slice(0, 16);
+  const iv = combined.slice(16, 28);
+  const ciphertext = combined.slice(28);
+  const key = await deriveKey(passphrase, salt);
+  const dec = new TextDecoder();
+  const plaintext = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ciphertext);
+  return dec.decode(plaintext);
+}
+
+// ═══════════════════════════════════════════════════
+//  AUTH FLOW
+// ═══════════════════════════════════════════════════
+
+function hasVault() { return !!localStorage.getItem(STORAGE_KEY); }
+
+function switchTab(tab) {
+  document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
+  if (tab === 'setup') {
+    document.getElementById('setupForm').style.display = 'block';
+    document.getElementById('unlockForm').style.display = 'none';
+    document.querySelectorAll('.auth-tab')[1].classList.add('active');
+  } else {
+    document.getElementById('setupForm').style.display = 'none';
+    document.getElementById('unlockForm').style.display = 'block';
+    document.querySelectorAll('.auth-tab')[0].classList.add('active');
+  }
+}
+
+async function setup() {
+  const token = document.getElementById('newToken').value.trim();
+  const pass = document.getElementById('newPass').value;
+  const confirm = document.getElementById('confirmPass').value;
+  const errEl = document.getElementById('setupError');
+
+  if (!token) { errEl.textContent = 'PAT is required'; errEl.style.display = 'block'; return; }
+  if (pass.length < 6) { errEl.textContent = 'Passphrase must be 6+ characters'; errEl.style.display = 'block'; return; }
+  if (pass !== confirm) { errEl.textContent = 'Passphrases do not match'; errEl.style.display = 'block'; return; }
+
+  try {
+    const encrypted = await encryptToken(token, pass);
+    localStorage.setItem(STORAGE_KEY, encrypted);
+    sessionToken = token;
+    showDashboard();
+    toast('✅ Setup complete! Dashboard unlocked.');
+  } catch (e) {
+    errEl.textContent = 'Encryption failed: ' + e.message;
+    errEl.style.display = 'block';
+  }
+}
+
+async function unlock() {
+  const pass = document.getElementById('passphrase').value;
+  const errEl = document.getElementById('unlockError');
+  const stored = localStorage.getItem(STORAGE_KEY);
+
+  if (!stored) { switchTab('setup'); return; }
+
+  try {
+    sessionToken = await decryptToken(stored, pass);
+    showDashboard();
+  } catch {
+    errEl.style.display = 'block';
+    document.getElementById('passphrase').value = '';
+    document.getElementById('passphrase').focus();
+  }
+}
+
+function lock() {
+  sessionToken = null;
+  document.getElementById('dashboard').style.display = 'none';
+  document.getElementById('authScreen').style.display = 'flex';
+  document.getElementById('passphrase').value = '';
+  document.getElementById('passphrase').focus();
+}
+
+function showDashboard() {
+  document.getElementById('authScreen').style.display = 'none';
+  document.getElementById('dashboard').style.display = 'block';
+  refresh();
+}
+
+// ═══════════════════════════════════════════════════
+//  DASHBOARD LOGIC
+// ═══════════════════════════════════════════════════
+
 const OWNER = 'VuTan11501';
 const REPO = 'Code';
 const API = 'https://api.github.com';
@@ -131,17 +285,6 @@ const WORKFLOWS = [
   { id: 278223037, name: 'JPY Forecast Daily Report', icon: '💹', file: 'jpy-forecast.yml' },
 ];
 
-function getToken() { return localStorage.getItem('gh_dashboard_token') || ''; }
-function saveToken() {
-  const t = document.getElementById('tokenInput').value.trim();
-  if (t) { localStorage.setItem('gh_dashboard_token', t); toast('✅ Token saved'); }
-}
-function clearToken() { localStorage.removeItem('gh_dashboard_token'); document.getElementById('tokenInput').value = ''; toast('🗑️ Token cleared'); }
-function toggleToken() {
-  const area = document.getElementById('tokenArea');
-  area.style.display = area.style.display === 'none' ? 'block' : 'none';
-}
-
 function toast(msg) {
   const el = document.getElementById('toast');
   el.textContent = msg;
@@ -151,8 +294,7 @@ function toast(msg) {
 
 async function apiFetch(path) {
   const headers = { 'Accept': 'application/vnd.github+json' };
-  const token = getToken();
-  if (token) headers['Authorization'] = `Bearer ${token}`;
+  if (sessionToken) headers['Authorization'] = `Bearer ${sessionToken}`;
   const res = await fetch(`${API}${path}`, { headers });
   if (!res.ok) throw new Error(`API ${res.status}`);
   return res.json();
@@ -194,8 +336,6 @@ function successRate(runs) {
 
 function renderWorkflowCard(wf, runs) {
   const last5 = runs.slice(0, 5);
-  const hasToken = !!getToken();
-
   return `
     <div class="card">
       <div class="card-header">
@@ -225,8 +365,8 @@ function renderWorkflowCard(wf, runs) {
           ${last5.length === 0 ? '<li class="run-item" style="color:var(--muted)">No runs yet</li>' : ''}
         </ul>
         <div class="trigger-actions">
-          ${hasToken ? `<button class="btn primary" onclick="triggerWorkflow('${wf.file}')">▶ Trigger</button>` : ''}
-          <a class="btn" href="https://github.com/${OWNER}/${REPO}/actions/workflows/${wf.file}" target="_blank">View →</a>
+          <button class="btn primary sm" onclick="triggerWorkflow('${wf.file}')">▶ Trigger</button>
+          <a class="btn sm" href="https://github.com/${OWNER}/${REPO}/actions/workflows/${wf.file}" target="_blank">View →</a>
         </div>
       </div>
     </div>
@@ -234,12 +374,11 @@ function renderWorkflowCard(wf, runs) {
 }
 
 async function triggerWorkflow(file) {
-  const token = getToken();
-  if (!token) { toast('⚠️ Set token first'); return; }
+  if (!sessionToken) { toast('⚠️ Not authenticated'); return; }
   try {
     const res = await fetch(`${API}/repos/${OWNER}/${REPO}/actions/workflows/${file}/dispatches`, {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/vnd.github+json' },
+      headers: { 'Authorization': `Bearer ${sessionToken}`, 'Accept': 'application/vnd.github+json' },
       body: JSON.stringify({ ref: 'main' }),
     });
     if (res.status === 204) { toast('✅ Workflow triggered!'); setTimeout(refresh, 3000); }
@@ -253,7 +392,6 @@ async function refresh() {
 
   try {
     const allRuns = [];
-
     const results = await Promise.all(
       WORKFLOWS.map(wf =>
         apiFetch(`/repos/${OWNER}/${REPO}/actions/workflows/${wf.id}/runs?per_page=10`)
@@ -267,11 +405,8 @@ async function refresh() {
       return renderWorkflowCard(wf, runs);
     }).join('');
 
-    // Recent activity (merged + sorted)
     allRuns.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-    const recent10 = allRuns.slice(0, 12);
-
-    recentEl.innerHTML = recent10.map(r => `
+    recentEl.innerHTML = allRuns.slice(0, 12).map(r => `
       <li class="run-item">
         <span class="run-dot ${conclusionClass(r.conclusion || r.status)}"></span>
         <span style="font-weight:500">${r._wf.icon} ${r._wf.name}</span>
@@ -282,15 +417,21 @@ async function refresh() {
     `).join('');
 
     document.getElementById('lastUpdate').textContent = `Updated: ${new Date().toLocaleTimeString('ja-JP', {timeZone:'Asia/Tokyo'})} JST`;
-
   } catch (e) {
     grid.innerHTML = `<div class="empty">❌ Failed to load: ${e.message}</div>`;
   }
 }
 
-// Auto-refresh every 60s
-refresh();
-setInterval(refresh, 60000);
+// Auto-refresh every 60s while unlocked
+setInterval(() => { if (sessionToken) refresh(); }, 60000);
+
+// Init: show setup tab if no vault exists
+if (!hasVault()) {
+  switchTab('setup');
+  document.getElementById('authDesc').textContent = 'First time? Set up your encrypted vault.';
+} else {
+  document.getElementById('passphrase').focus();
+}
 </script>
 </body>
 </html>
