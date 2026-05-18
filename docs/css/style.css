@@ -812,7 +812,8 @@ input[type="time"], input[type="date"], input[type="datetime-local"] {
 .sched-table tbody tr:hover { background: rgba(255,255,255,0.03); }
 .sched-table .badge-once { background: var(--blue-subtle); color: var(--blue); padding: 2px 8px; border-radius: var(--radius-full); font-size: 11px; font-weight: 500; }
 .sched-table .badge-recurring { background: var(--purple-subtle); color: var(--purple); padding: 2px 8px; border-radius: var(--radius-full); font-size: 11px; font-weight: 500; }
-.sched-table .badge-enabled { background: var(--green-subtle); color: var(--green); padding: 2px 8px; border-radius: var(--radius-full); font-size: 11px; font-weight: 500; }
-.sched-table .badge-disabled { background: rgba(161,161,170,0.1); color: var(--muted-foreground); padding: 2px 8px; border-radius: var(--radius-full); font-size: 11px; font-weight: 500; }
+.sched-table .badge-enabled { background: var(--green-subtle); color: var(--green); padding: 2px 8px; border-radius: var(--radius-full); font-size: 11px; font-weight: 500; display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.sched-table .badge-disabled { background: rgba(161,161,170,0.1); color: var(--muted-foreground); padding: 2px 8px; border-radius: var(--radius-full); font-size: 11px; font-weight: 500; display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.sched-table .badge-warning { background: var(--yellow-subtle, rgba(234,179,8,0.1)); color: var(--yellow, #eab308); padding: 2px 8px; border-radius: var(--radius-full); font-size: 11px; font-weight: 500; display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
 .sched-table .actions-cell { display: flex; gap: 4px; justify-content: center; }
 .sched-table .actions-cell .btn { min-height: 28px; padding: 4px 8px; font-size: 11px; }

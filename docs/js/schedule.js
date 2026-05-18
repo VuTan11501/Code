@@ -5,31 +5,41 @@ let scheduleInitialized = false;
 let dispatchTimer = null;
 
 function initSchedulePage() {
-  if (scheduleInitialized) return;
-  scheduleInitialized = true;
-  // Calendar will be rendered dynamically when Gist data loads
-  renderScheduleCalendar(null);
-  initCalendar('calPicker', 'schedDate', 'schedDateInput', { allowPast: false });
-  initCalendar('calPickerStart', 'schedStartDate', 'schedStartDateInput', { allowPast: true });
-  initCalendar('calPickerEnd', 'schedEndDate', 'schedEndDateInput', { allowPast: true });
-  // Edit modal calendars (mirror create form)
-  initCalendar('editCalPicker', 'editSchedDate', 'editSchedDateInput', { allowPast: false });
-  initCalendar('editCalPickerStart', 'editSchedStartDate', 'editSchedStartDateInput', { allowPast: true });
-  initCalendar('editCalPickerEnd', 'editSchedEndDate', 'editSchedEndDateInput', { allowPast: true });
-  // Default date = today, time = current JST time
+  // ── One-time setup (calendars, modal wiring, listeners) ──
+  if (!scheduleInitialized) {
+    scheduleInitialized = true;
+    // Calendar will be rendered dynamically when Gist data loads
+    renderScheduleCalendar(null);
+    initCalendar('calPicker', 'schedDate', 'schedDateInput', { allowPast: false });
+    initCalendar('calPickerStart', 'schedStartDate', 'schedStartDateInput', { allowPast: true });
+    initCalendar('calPickerEnd', 'schedEndDate', 'schedEndDateInput', { allowPast: true });
+    // Edit modal calendars (mirror create form)
+    initCalendar('editCalPicker', 'editSchedDate', 'editSchedDateInput', { allowPast: false });
+    initCalendar('editCalPickerStart', 'editSchedStartDate', 'editSchedStartDateInput', { allowPast: true });
+    initCalendar('editCalPickerEnd', 'editSchedEndDate', 'editSchedEndDateInput', { allowPast: true });
+    renderMonthDateGrid('sched');
+  }
+
+  // ── Always refresh on every visit: default Date+Time = NOW (JST) ──
+  refreshSchedDefaults();
+  loadScheduledRuns();
+}
+
+function refreshSchedDefaults() {
   const now = jstNow();
   TIME_STATE.sched.h = now.getHours();
   TIME_STATE.sched.m = now.getMinutes();
-  TIME_STATE.editSched.h = now.getHours();
-  TIME_STATE.editSched.m = now.getMinutes();
   selectedHour = now.getHours();
   selectedMinute = now.getMinutes();
   renderTimePicker('sched');
   initNativeTimeInput('sched');
-  renderMonthDateGrid('sched');
+  // Sync mobile native input even if already bound
+  const nativeInput = document.getElementById('schedTimeNative');
+  if (nativeInput) {
+    nativeInput.value = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+  }
   const todayStr = formatDate(now.getFullYear(), now.getMonth(), now.getDate());
   calSelect('calPicker', todayStr);
-  loadScheduledRuns();
 }
 
 /**
