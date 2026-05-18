@@ -11,7 +11,7 @@ env:
 
 concurrency:
   group: azure-reauth
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   reauth:

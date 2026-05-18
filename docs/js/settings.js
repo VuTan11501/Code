@@ -297,7 +297,45 @@ function closeAzureReauthModal() {
 
 async function startAzureReauth() {
   if (!sessionToken) { toast('🔒 Unlock vault first'); return; }
-  if (!await uiConfirm({ title: 'Start re-authentication?', message: 'A workflow will run a device-code login. You will see a code to enter on microsoft.com/devicelogin from any device.', confirmText: 'Start' })) return;
+
+  // Check for existing in-flight session first — avoid spawning duplicate runs
+  let existing = null;
+  try {
+    const gr = await fetch(`${API}/gists/${GIST_ID}?_=${Date.now()}`, {
+      headers: { 'Authorization': `Bearer ${sessionToken}`, 'Accept': 'application/vnd.github+json' }
+    });
+    if (gr.ok) {
+      const g = await gr.json();
+      const f = (g.files || {})[REAUTH_STATUS_FILE];
+      if (f && f.content) {
+        const s = JSON.parse(f.content);
+        if (s.state === 'waiting_code' && s.expires_at && new Date(s.expires_at).getTime() > Date.now()) {
+          existing = s;
+        }
+      }
+    }
+  } catch {}
+
+  if (existing) {
+    const reuse = await uiConfirm({
+      title: 'Re-auth already in progress',
+      message: `An active sign-in is waiting (code ${existing.user_code}, expires ${new Date(existing.expires_at).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}).\n\nResume that session?`,
+      confirmText: 'Resume',
+      cancelText: 'Cancel',
+    });
+    if (!reuse) return;
+    openAzureReauthModal();
+    renderReauthState(existing);
+    _startReauthPolling();
+    return;
+  }
+
+  if (!await uiConfirm({
+    title: 'Start re-authentication?',
+    message: 'A workflow will run a device-code login. You will see a code to enter on microsoft.com/devicelogin from any device.',
+    confirmText: 'Start',
+  })) return;
+
   openAzureReauthModal();
   const body = document.getElementById('azureReauthBody');
   body.innerHTML = '<div class="text-sm text-muted-foreground p-4 text-center">Starting workflow…</div>';
@@ -313,34 +351,41 @@ async function startAzureReauth() {
         <div class="mb-2">⏳ Workflow dispatched. Waiting for device code…</div>
         <div class="text-xs opacity-60">This usually takes 20–40 seconds (Actions cold start).</div>
       </div>`;
-    // Poll reauth-status.json every 3s
-    let lastState = null;
-    azureReauthPollTimer = setInterval(async () => {
-      try {
-        const gr = await fetch(`${API}/gists/${GIST_ID}?_=${Date.now()}`, {
-          headers: { 'Authorization': `Bearer ${sessionToken}`, 'Accept': 'application/vnd.github+json' }
-        });
-        if (!gr.ok) return;
-        const g = await gr.json();
-        const f = (g.files || {})[REAUTH_STATUS_FILE];
-        if (!f || !f.content) return;
-        const s = JSON.parse(f.content);
-        if (s.state === lastState && s.state !== 'waiting_code') return;
-        lastState = s.state;
-        renderReauthState(s);
-        if (['success', 'error', 'expired'].includes(s.state)) {
-          clearInterval(azureReauthPollTimer);
-          azureReauthPollTimer = null;
-          if (s.state === 'success') {
-            toast('✅ Re-authenticated. Refreshing status…');
-            setTimeout(loadTokenStatus, 5000);
-          }
-        }
-      } catch {}
-    }, 3000);
+    _startReauthPolling();
   } catch (e) {
     body.innerHTML = `<div class="text-red-400 p-4 text-center">❌ ${e.message}</div>`;
   }
+}
+
+function _startReauthPolling() {
+  if (azureReauthPollTimer) { clearInterval(azureReauthPollTimer); }
+  let lastState = null;
+  let lastCode = null;
+  azureReauthPollTimer = setInterval(async () => {
+    try {
+      const gr = await fetch(`${API}/gists/${GIST_ID}?_=${Date.now()}`, {
+        headers: { 'Authorization': `Bearer ${sessionToken}`, 'Accept': 'application/vnd.github+json' }
+      });
+      if (!gr.ok) return;
+      const g = await gr.json();
+      const f = (g.files || {})[REAUTH_STATUS_FILE];
+      if (!f || !f.content) return;
+      const s = JSON.parse(f.content);
+      // Only re-render when state OR code changes (avoids flicker on countdown)
+      if (s.state === lastState && s.user_code === lastCode) return;
+      lastState = s.state;
+      lastCode = s.user_code;
+      renderReauthState(s);
+      if (['success', 'error', 'expired'].includes(s.state)) {
+        clearInterval(azureReauthPollTimer);
+        azureReauthPollTimer = null;
+        if (s.state === 'success') {
+          toast('✅ Re-authenticated. Refreshing status…');
+          setTimeout(loadTokenStatus, 5000);
+        }
+      }
+    } catch {}
+  }, 3000);
 }
 
 function renderReauthState(s) {
