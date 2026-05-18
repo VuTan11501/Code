@@ -429,6 +429,8 @@ async function duplicateScheduledRun(entryIdx) {
       delete copy.last_run;
     }
     copy.note = (copy.note ? copy.note + ' ' : '') + '(copy)';
+    const conflict = detectCheckinConflict(copy, entries, -1);
+    if (conflict && !confirm(conflict + '\n\nDuplicate anyway?')) return;
     entries.push(copy);
     await saveToGist(entries);
     toast('📋 Duplicated');
@@ -1111,11 +1113,60 @@ async function addScheduledRun() {
 async function saveScheduledEntry(newEntry) {
   try {
     const entries = await loadEntriesFromGist();
+    const conflict = detectCheckinConflict(newEntry, entries, -1);
+    if (conflict && !confirm(conflict + '\n\nProceed anyway?')) return;
     entries.push(newEntry);
     await saveToGist(entries);
     toast('✅ Schedule added');
     loadScheduledRuns();
   } catch (e) { toast(`❌ ${e.message}`); }
+}
+
+// ── Kintai Rule 1 validator: max 1 CI/day ──
+// Returns a human-readable conflict message if newEntry would cause a day
+// to have 2 enabled checkin actions. Excludes entry at `excludeIdx` (for edits).
+function detectCheckinConflict(newEntry, existing, excludeIdx) {
+  if (!newEntry || newEntry.workflow !== 'auto-checkin.yml') return null;
+  if (newEntry.enabled === false) return null;
+  const newDays = _ciDaySet(newEntry);
+  if (!newDays.size) return null;
+  for (let i = 0; i < existing.length; i++) {
+    if (i === excludeIdx) continue;
+    const e = existing[i];
+    if (e.workflow !== 'auto-checkin.yml') continue;
+    if (e.enabled === false) continue;
+    if (e.type === 'once' && e.dispatched) continue;     // historic, irrelevant
+    const exDays = _ciDaySet(e);
+    const dup = [...newDays].filter(d => exDays.has(d));
+    if (dup.length) {
+      const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+      const human = dup.slice(0, 3).map(k => {
+        if (k.startsWith('dow:')) return dayNames[parseInt(k.slice(4))];
+        return k;          // YYYY-MM-DD
+      }).join(', ');
+      const extra = dup.length > 3 ? ` (+${dup.length - 3} more)` : '';
+      const exTime = e.type === 'once' ? (e.run_at || '').slice(11, 16) : (e.recurrence?.time || '');
+      return `⚠️ Kintai Rule 1: max 1 checkin per day.\n\nConflict on ${human}${extra} with existing checkin at ${exTime}.\n\n(Morning CI already covers the whole day including OT.)`;
+    }
+  }
+  return null;
+}
+
+// Day-key set for an entry: 'YYYY-MM-DD' for once, 'dow:0..6' for recurring.
+// 'dow:0'=Sun ... 'dow:6'=Sat (matches JS Date.getDay()).
+function _ciDaySet(entry) {
+  const out = new Set();
+  if (entry.type === 'once') {
+    const d = (entry.run_at || '').slice(0, 10);
+    if (d) out.add(d);
+    return out;
+  }
+  const r = entry.recurrence || {};
+  if (r.pattern === 'daily') { for (let i = 0; i < 7; i++) out.add(`dow:${i}`); }
+  else if (r.pattern === 'weekdays') { [1,2,3,4,5].forEach(i => out.add(`dow:${i}`)); }
+  else if (r.pattern === 'weekly') { (r.days || []).forEach(i => out.add(`dow:${i}`)); }
+  // monthly: rare, hard to compare with weekly. Skip — server-side will catch on API call.
+  return out;
 }
 
 async function deleteScheduledRun(index) {
@@ -1418,6 +1469,8 @@ async function saveEditSchedule() {
 
   try {
     const entries = await loadEntriesFromGist();
+    const conflict = detectCheckinConflict(updatedEntry, entries, index);
+    if (conflict && !confirm(conflict + '\n\nProceed anyway?')) return;
     entries[index] = updatedEntry;
     await saveToGist(entries);
     toast('✅ Schedule updated');
