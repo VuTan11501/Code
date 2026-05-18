@@ -208,6 +208,50 @@ a:hover { text-decoration: underline; }
 .sched-toggle::after { content: ''; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: var(--text); transition: transform 0.2s; }
 .sched-toggle.active::after { transform: translateX(18px); background: #fff; }
 
+/* Custom Calendar Picker */
+.cal-picker { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 12px; user-select: none; }
+.cal-picker-sm .cal-grid { font-size: 11px; }
+.cal-picker-sm { padding: 8px; }
+.cal-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.cal-nav button { background: none; border: none; color: var(--accent); font-size: 18px; cursor: pointer; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; transition: background 0.15s; -webkit-tap-highlight-color: transparent; }
+.cal-nav button:hover, .cal-nav button:active { background: rgba(88,166,255,0.1); }
+.cal-nav .cal-month { font-size: 14px; font-weight: 600; }
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; text-align: center; }
+.cal-grid .cal-dow { font-size: 11px; color: var(--muted); padding: 4px 0; font-weight: 500; }
+.cal-grid .cal-day { padding: 8px 4px; border-radius: 8px; font-size: 13px; cursor: pointer; transition: all 0.15s; -webkit-tap-highlight-color: transparent; min-height: 36px; display: flex; align-items: center; justify-content: center; }
+.cal-grid .cal-day:hover { background: rgba(88,166,255,0.1); }
+.cal-grid .cal-day:active { transform: scale(0.9); }
+.cal-grid .cal-day.selected { background: var(--accent); color: #fff; font-weight: 700; border-radius: 50%; }
+.cal-grid .cal-day.today { border: 1px solid var(--accent); }
+.cal-grid .cal-day.disabled { color: var(--border); cursor: default; }
+.cal-grid .cal-day.disabled:hover { background: none; }
+.cal-grid .cal-day.empty { cursor: default; }
+.cal-grid .cal-day.sun { color: var(--red); }
+.cal-grid .cal-day.sat { color: var(--accent); }
+.cal-grid .cal-day.selected.sun, .cal-grid .cal-day.selected.sat { color: #fff; }
+
+/* Custom Time Picker */
+.time-picker { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 12px; }
+.time-display { text-align: center; font-size: 28px; font-weight: 700; font-family: 'SF Mono', 'Menlo', monospace; color: var(--accent); margin-bottom: 12px; letter-spacing: 2px; }
+.time-section { margin-bottom: 10px; }
+.time-section-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+.time-grid { display: flex; gap: 6px; flex-wrap: wrap; }
+.time-grid .time-btn { padding: 8px 12px; border-radius: 8px; font-size: 13px; border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; transition: all 0.15s; min-width: 44px; text-align: center; -webkit-tap-highlight-color: transparent; }
+.time-grid .time-btn:hover, .time-grid .time-btn:active { border-color: var(--accent); color: var(--accent); }
+.time-grid .time-btn.selected { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.time-presets { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+.time-presets-label { font-size: 10px; color: var(--muted); margin-bottom: 6px; }
+.time-presets-grid { display: flex; gap: 6px; flex-wrap: wrap; }
+.time-preset { padding: 8px 14px; border-radius: 20px; font-size: 12px; border: 1px solid var(--border); background: var(--surface); color: var(--muted); cursor: pointer; transition: all 0.15s; -webkit-tap-highlight-color: transparent; }
+.time-preset:hover, .time-preset:active { border-color: var(--accent); color: var(--accent); }
+.time-preset.selected { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* Monthly date grid picker */
+.month-date-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.month-date-grid .md-btn { padding: 8px 4px; border-radius: 8px; font-size: 12px; border: 1px solid var(--border); background: var(--bg); color: var(--text); cursor: pointer; text-align: center; transition: all 0.15s; -webkit-tap-highlight-color: transparent; min-height: 36px; display: flex; align-items: center; justify-content: center; }
+.month-date-grid .md-btn:hover { border-color: var(--accent); }
+.month-date-grid .md-btn.selected { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+
 /* ═══════════════════════════════════════════════════
    MOBILE RESPONSIVE — iPhone 17 Pro (402x874pt)
    ═══════════════════════════════════════════════════ */
@@ -385,13 +429,8 @@ a:hover { text-decoration: underline; }
           <div id="onceFields">
             <div class="scheduler-field">
               <label>Date (JST)</label>
-              <input type="date" id="schedDate">
-              <div class="quick-picks" id="dateQuickPicks">
-                <span class="quick-pick" onclick="setQuickDate('today')">Today</span>
-                <span class="quick-pick" onclick="setQuickDate('tomorrow')">Tomorrow</span>
-                <span class="quick-pick" onclick="setQuickDate('+2')">+2 days</span>
-                <span class="quick-pick" onclick="setQuickDate('next-mon')">Next Mon</span>
-              </div>
+              <div class="cal-picker" id="calPicker"></div>
+              <input type="hidden" id="schedDate">
             </div>
           </div>
 
@@ -420,29 +459,25 @@ a:hover { text-decoration: underline; }
             </div>
             <div class="scheduler-field" id="monthlyDatesField" style="display:none">
               <label>Days of month</label>
-              <input type="text" id="schedMonthDates" placeholder="e.g. 1,15,28">
+              <div class="month-date-grid" id="monthDateGrid"></div>
             </div>
             <div class="scheduler-field">
               <label>Start from</label>
-              <input type="date" id="schedStartDate">
+              <div class="cal-picker cal-picker-sm" id="calPickerStart"></div>
+              <input type="hidden" id="schedStartDate">
             </div>
             <div class="scheduler-field">
               <label>End date (optional)</label>
-              <input type="date" id="schedEndDate">
+              <div class="cal-picker cal-picker-sm" id="calPickerEnd"></div>
+              <input type="hidden" id="schedEndDate">
             </div>
           </div>
 
           <!-- Common fields -->
           <div class="scheduler-field">
             <label>Time (JST)</label>
-            <input type="time" id="schedTime" value="09:00">
-            <div class="quick-picks">
-              <span class="quick-pick" onclick="setQuickTime('07:30')">7:30</span>
-              <span class="quick-pick" onclick="setQuickTime('09:00')">9:00</span>
-              <span class="quick-pick" onclick="setQuickTime('14:30')">14:30</span>
-              <span class="quick-pick" onclick="setQuickTime('18:00')">18:00</span>
-              <span class="quick-pick" onclick="setQuickTime('22:00')">22:00</span>
-            </div>
+            <div class="time-picker" id="timePicker"></div>
+            <input type="hidden" id="schedTime" value="09:00">
           </div>
           <div class="scheduler-field">
             <label>Note (optional)</label>
@@ -660,9 +695,17 @@ function showDashboard() {
   document.getElementById('authScreen').style.display = 'none';
   document.getElementById('dashboard').style.display = 'block';
   renderScheduleCalendar();
-  // Set default date to tomorrow JST
-  const tomorrow = new Date(Date.now() + 24*60*60*1000);
-  document.getElementById('schedDate').value = tomorrow.toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' });
+  // Initialize custom pickers
+  initCalendar('calPicker', 'schedDate');
+  initCalendar('calPickerStart', 'schedStartDate', { allowPast: false });
+  initCalendar('calPickerEnd', 'schedEndDate', { allowPast: false });
+  renderTimePicker();
+  renderMonthDateGrid();
+  // Select tomorrow by default
+  const now = jstNow();
+  const tmr = new Date(now); tmr.setDate(tmr.getDate() + 1);
+  const tmrStr = formatDate(tmr.getFullYear(), tmr.getMonth(), tmr.getDate());
+  calSelect('calPicker', tmrStr);
   loadScheduledRuns();
   startAutoLock();
   refresh();
@@ -885,46 +928,173 @@ function togglePatternUI() {
   document.getElementById('monthlyDatesField').style.display = pattern === 'monthly' ? 'block' : 'none';
 }
 
-// Quick-pick helpers for date/time selection
-function jstToday() {
-  return new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' });
+// ═══════════════════════════════════════════════════
+//  CUSTOM CALENDAR PICKER
+// ═══════════════════════════════════════════════════
+function jstNow() {
+  return new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
+}
+function formatDate(y, m, d) {
+  return `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
 }
 
-function jstDateOffset(days) {
-  const d = new Date(Date.now() + days * 86400000);
-  return d.toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' });
-}
-
-function nextDayOfWeek(dow) {
-  // dow: 0=Sun, 1=Mon, ... 6=Sat
-  const now = new Date();
-  const jstNow = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
-  const current = jstNow.getDay();
-  let daysAhead = dow - current;
-  if (daysAhead <= 0) daysAhead += 7;
-  return jstDateOffset(daysAhead);
-}
-
-function setQuickDate(preset) {
-  let val;
-  switch (preset) {
-    case 'today': val = jstToday(); break;
-    case 'tomorrow': val = jstDateOffset(1); break;
-    case '+2': val = jstDateOffset(2); break;
-    case 'next-mon': val = nextDayOfWeek(1); break;
-    default: val = jstDateOffset(parseInt(preset) || 1);
+class CalendarPicker {
+  constructor(containerId, inputId, options = {}) {
+    this.container = document.getElementById(containerId);
+    this.input = document.getElementById(inputId);
+    this.allowPast = options.allowPast || false;
+    this.onSelect = options.onSelect || null;
+    const now = jstNow();
+    this.year = now.getFullYear();
+    this.month = now.getMonth();
+    this.selected = null;
+    this.todayStr = formatDate(now.getFullYear(), now.getMonth(), now.getDate());
+    this.render();
   }
-  document.getElementById('schedDate').value = val;
-  // Highlight selected quick-pick
-  document.querySelectorAll('#dateQuickPicks .quick-pick').forEach(el => el.classList.remove('selected'));
-  event.target.classList.add('selected');
+
+  render() {
+    const firstDay = new Date(this.year, this.month, 1).getDay();
+    const daysInMonth = new Date(this.year, this.month + 1, 0).getDate();
+    const monthName = new Date(this.year, this.month).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+
+    let html = `<div class="cal-nav">
+      <button onclick="calNav('${this.container.id}', -1)">‹</button>
+      <span class="cal-month">${monthName}</span>
+      <button onclick="calNav('${this.container.id}', 1)">›</button>
+    </div>`;
+    html += '<div class="cal-grid">';
+    const dows = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    for (const d of dows) html += `<div class="cal-dow">${d}</div>`;
+
+    // Empty cells before first day
+    for (let i = 0; i < firstDay; i++) html += '<div class="cal-day empty"></div>';
+
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dateStr = formatDate(this.year, this.month, day);
+      const dow = new Date(this.year, this.month, day).getDay();
+      const isToday = dateStr === this.todayStr;
+      const isSelected = dateStr === this.selected;
+      const isPast = !this.allowPast && dateStr < this.todayStr;
+      const cls = [
+        'cal-day',
+        isToday ? 'today' : '',
+        isSelected ? 'selected' : '',
+        isPast ? 'disabled' : '',
+        dow === 0 ? 'sun' : '',
+        dow === 6 ? 'sat' : '',
+      ].filter(Boolean).join(' ');
+      const click = isPast ? '' : `onclick="calSelect('${this.container.id}', '${dateStr}')"`;
+      html += `<div class="${cls}" ${click}>${day}</div>`;
+    }
+    html += '</div>';
+    this.container.innerHTML = html;
+  }
+
+  navigate(offset) {
+    this.month += offset;
+    if (this.month > 11) { this.month = 0; this.year++; }
+    if (this.month < 0) { this.month = 11; this.year--; }
+    this.render();
+  }
+
+  select(dateStr) {
+    this.selected = dateStr;
+    this.input.value = dateStr;
+    this.render();
+    if (this.onSelect) this.onSelect(dateStr);
+  }
 }
 
-function setQuickTime(time) {
-  document.getElementById('schedTime').value = time;
-  // Highlight selected
-  event.target.parentElement.querySelectorAll('.quick-pick').forEach(el => el.classList.remove('selected'));
-  event.target.classList.add('selected');
+const calendarInstances = {};
+
+function initCalendar(containerId, inputId, options) {
+  calendarInstances[containerId] = new CalendarPicker(containerId, inputId, options);
+}
+
+function calNav(containerId, offset) {
+  calendarInstances[containerId]?.navigate(offset);
+}
+
+function calSelect(containerId, dateStr) {
+  calendarInstances[containerId]?.select(dateStr);
+}
+
+// ═══════════════════════════════════════════════════
+//  CUSTOM TIME PICKER
+// ═══════════════════════════════════════════════════
+let selectedHour = 9;
+let selectedMinute = 0;
+
+const TIME_PRESETS = [
+  { label: '7:30 AM', h: 7, m: 30, desc: 'JPY Report' },
+  { label: '9:00 AM', h: 9, m: 0, desc: 'Checkin' },
+  { label: '2:30 PM', h: 14, m: 30, desc: 'Sun OT CI' },
+  { label: '6:00 PM', h: 18, m: 0, desc: 'Checkout' },
+  { label: '10:00 PM', h: 22, m: 0, desc: 'Night OT CI' },
+  { label: '3:30 AM', h: 3, m: 30, desc: 'Night OT CO' },
+];
+
+function renderTimePicker() {
+  const container = document.getElementById('timePicker');
+  const timeStr = `${String(selectedHour).padStart(2,'0')}:${String(selectedMinute).padStart(2,'0')}`;
+  document.getElementById('schedTime').value = timeStr;
+
+  let html = `<div class="time-display">${timeStr}</div>`;
+
+  // Hour selector
+  html += '<div class="time-section"><div class="time-section-label">Hour</div><div class="time-grid">';
+  for (let h = 0; h < 24; h++) {
+    const sel = h === selectedHour ? ' selected' : '';
+    html += `<div class="time-btn${sel}" onclick="pickHour(${h})">${String(h).padStart(2,'0')}</div>`;
+  }
+  html += '</div></div>';
+
+  // Minute selector
+  html += '<div class="time-section"><div class="time-section-label">Minute</div><div class="time-grid">';
+  for (const m of [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55]) {
+    const sel = m === selectedMinute ? ' selected' : '';
+    html += `<div class="time-btn${sel}" onclick="pickMinute(${m})">:${String(m).padStart(2,'0')}</div>`;
+  }
+  html += '</div></div>';
+
+  // Presets
+  html += '<div class="time-presets"><div class="time-presets-label">Quick presets</div><div class="time-presets-grid">';
+  for (const p of TIME_PRESETS) {
+    const sel = (selectedHour === p.h && selectedMinute === p.m) ? ' selected' : '';
+    html += `<div class="time-preset${sel}" onclick="pickPreset(${p.h},${p.m})">${p.label}<br><small style="opacity:0.7">${p.desc}</small></div>`;
+  }
+  html += '</div></div>';
+
+  container.innerHTML = html;
+}
+
+function pickHour(h) { selectedHour = h; renderTimePicker(); }
+function pickMinute(m) { selectedMinute = m; renderTimePicker(); }
+function pickPreset(h, m) { selectedHour = h; selectedMinute = m; renderTimePicker(); }
+
+// ═══════════════════════════════════════════════════
+//  MONTHLY DATE GRID PICKER
+// ═══════════════════════════════════════════════════
+let selectedMonthDates = new Set();
+
+function renderMonthDateGrid() {
+  const container = document.getElementById('monthDateGrid');
+  let html = '';
+  for (let d = 1; d <= 31; d++) {
+    const sel = selectedMonthDates.has(d) ? ' selected' : '';
+    html += `<div class="md-btn${sel}" onclick="toggleMonthDate(${d})">${d}</div>`;
+  }
+  container.innerHTML = html;
+}
+
+function toggleMonthDate(d) {
+  if (selectedMonthDates.has(d)) selectedMonthDates.delete(d);
+  else selectedMonthDates.add(d);
+  renderMonthDateGrid();
+}
+
+function getSelectedMonthDates() {
+  return [...selectedMonthDates].sort((a, b) => a - b);
 }
 
 function getSelectedDays() {
@@ -1046,10 +1216,8 @@ async function addScheduledRun() {
     } else if (pattern === 'weekdays') {
       recurrence.days = [1, 2, 3, 4, 5];
     } else if (pattern === 'monthly') {
-      const datesStr = document.getElementById('schedMonthDates').value.trim();
-      if (!datesStr) { toast('⚠️ Enter day-of-month numbers'); return; }
-      const dates = datesStr.split(',').map(s => parseInt(s.trim())).filter(n => n >= 1 && n <= 31);
-      if (!dates.length) { toast('⚠️ Invalid dates'); return; }
+      const dates = getSelectedMonthDates();
+      if (!dates.length) { toast('⚠️ Select at least one day of month'); return; }
       recurrence.dates = dates;
     }
 
