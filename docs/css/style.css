@@ -579,69 +579,74 @@ select option { background: var(--card); color: var(--foreground); }
 @media (max-width: 600px) {
   body {
     padding-top: env(safe-area-inset-top);
-    padding-bottom: calc(var(--mobile-nav-height) + 16px + env(safe-area-inset-bottom));
+    padding-bottom: calc(var(--mobile-nav-height) + env(safe-area-inset-bottom));
   }
 
-  /* Bottom Navigation — Floating Dock (modern app style) */
+  /* Bottom Navigation — Flush Bottom Tab Bar (classic mobile app) */
   .nav-bar, .tabs-list {
-    position: fixed; left: 12px; right: 12px;
-    bottom: calc(8px + env(safe-area-inset-bottom));
+    position: fixed; left: 0; right: 0; bottom: 0;
     z-index: 100;
     margin: 0;
-    padding: 6px;
-    border-radius: 9999px;
-    border: 1px solid rgba(255,255,255,0.08);
-    background: rgba(20,20,22,0.78);
-    backdrop-filter: saturate(180%) blur(24px);
-    -webkit-backdrop-filter: saturate(180%) blur(24px);
-    box-shadow:
-      0 1px 0 rgba(255,255,255,0.06) inset,
-      0 8px 32px rgba(0,0,0,0.45),
-      0 2px 8px rgba(0,0,0,0.25);
-    display: flex; gap: 4px;
+    padding: 8px 4px 6px;
+    padding-bottom: calc(6px + env(safe-area-inset-bottom));
+    border-radius: 0;
+    border: none;
+    border-top: 1px solid var(--border);
+    background: rgba(10,10,12,0.92);
+    backdrop-filter: saturate(180%) blur(20px);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    box-shadow: 0 -4px 16px rgba(0,0,0,0.25);
+    display: flex; gap: 0;
   }
   .nav-item, .tabs-trigger {
-    flex-direction: row; gap: 6px;
-    padding: 10px 12px;
-    font-size: 13px; font-weight: 500;
-    min-height: 44px; flex: 1;
-    border-radius: 9999px; background: none;
+    flex-direction: column; gap: 4px;
+    padding: 6px 4px;
+    font-size: 11px; font-weight: 500;
+    min-height: 56px; flex: 1;
+    border-radius: 0; background: none;
     color: var(--muted-foreground) !important;
-    position: relative; overflow: hidden;
+    position: relative; overflow: visible;
     letter-spacing: 0;
-    transition: color 200ms cubic-bezier(0.4, 0, 0.2, 1),
-                background-color 250ms cubic-bezier(0.4, 0, 0.2, 1);
+    transition: color 180ms cubic-bezier(0.4, 0, 0.2, 1);
     white-space: nowrap;
   }
   .nav-item:active, .tabs-trigger:active {
-    transform: scale(0.96);
+    background: rgba(255,255,255,0.04);
   }
   .nav-item .nav-icon, .tabs-trigger .nav-icon {
-    font-size: 1.15rem; line-height: 1;
-    transition: transform 250ms cubic-bezier(0.34, 1.56, 0.64, 1);
+    font-size: 1.4rem; line-height: 1;
     display: inline-flex;
+    transition: transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1);
+    filter: grayscale(0.4) opacity(0.75);
   }
   .nav-item .nav-label, .tabs-trigger .nav-label {
-    font-size: 13px; line-height: 1;
-    max-width: 0; opacity: 0; overflow: hidden;
-    transition: max-width 280ms cubic-bezier(0.4, 0, 0.2, 1),
-                opacity 200ms cubic-bezier(0.4, 0, 0.2, 1);
+    font-size: 11px; line-height: 1.1;
+    max-width: none; opacity: 1; overflow: visible;
+    transition: color 180ms cubic-bezier(0.4, 0, 0.2, 1);
   }
   .nav-item.active, .tabs-trigger.active {
     box-shadow: none;
-    background: var(--primary);
-    color: var(--primary-foreground) !important;
-    flex-grow: 2.2;
+    background: none;
+    color: var(--primary) !important;
+    flex-grow: 1;
   }
   .nav-item.active .nav-icon, .tabs-trigger.active .nav-icon {
-    transform: scale(1.05);
+    transform: translateY(-2px) scale(1.08);
+    filter: none;
   }
   .nav-item.active .nav-label, .tabs-trigger.active .nav-label {
-    max-width: 120px; opacity: 1;
-    color: var(--primary-foreground);
+    color: var(--primary);
     font-weight: 600;
   }
-  .nav-item.active::before, .tabs-trigger.active::before { display: none; }
+  /* Active indicator pill at top */
+  .nav-item.active::before, .tabs-trigger.active::before {
+    content: '';
+    position: absolute; top: -1px; left: 50%; transform: translateX(-50%);
+    width: 28px; height: 3px;
+    background: var(--primary);
+    border-radius: 0 0 6px 6px;
+    box-shadow: 0 0 12px rgba(59,130,246,0.5);
+  }
 
   /* Cards */
   .grid { grid-template-columns: 1fr; gap: 12px; margin-bottom: 20px; }
