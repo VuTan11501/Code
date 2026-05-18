@@ -798,7 +798,7 @@ function checkForNewFailures(allRuns) {
 
 if ('serviceWorker' in navigator) {
   // Bump query string to force update of stale SW on existing PWA installs
-  navigator.serviceWorker.register('sw.js?v=20').catch(() => {});
+  navigator.serviceWorker.register('sw.js?v=21').catch(() => {});
 }
 
 // ═══════════════════════════════════════════════════

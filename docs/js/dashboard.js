@@ -294,9 +294,13 @@ async function loadRunJobs(runId, container, status) {
 
     jobs.forEach((j, idx) => {
       const jobRunning = j.status === 'in_progress' || j.status === 'queued';
+      const tsId = `ts-${j.id}`;
       const toolbar = `<div class="job-toolbar">
         <button class="btn btn-outline sm" type="button" onclick="copyFullJobLog(this, ${j.id})">Copy log</button>
-        <label class="log-opt"><input type="checkbox" checked onchange="toggleAllTimestamps(this, ${j.id})"> timestamps</label>
+        <div class="shadcn-field">
+          <input type="checkbox" id="${tsId}" class="shadcn-checkbox peer" checked onchange="toggleAllTimestamps(this, ${j.id})">
+          <label for="${tsId}" class="shadcn-label">timestamps</label>
+        </div>
         <a class="log-external" href="${j.html_url}" target="_blank" rel="noopener">Open on GitHub ↗</a>
       </div>`;
       if (jobs.length > 1) {

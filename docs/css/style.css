@@ -1206,6 +1206,53 @@ input[type="time"], input[type="date"], input[type="datetime-local"] {
 .log-opt { font-size: var(--fs-xs); color: var(--muted-foreground); display: flex; align-items: center; gap: 4px; cursor: pointer; user-select: none; }
 .log-opt input { margin: 0; }
 
+/* shadcn/ui Checkbox + Label
+   https://ui.shadcn.com/docs/components/base/checkbox
+   https://ui.shadcn.com/docs/components/base/label */
+.shadcn-field { display: inline-flex; align-items: center; gap: 8px; }
+.shadcn-checkbox {
+  appearance: none; -webkit-appearance: none;
+  width: 16px; height: 16px; margin: 0;
+  border: 1px solid var(--input);
+  border-radius: 4px;
+  background: var(--background);
+  cursor: pointer;
+  display: inline-grid; place-content: center;
+  transition: background var(--duration-fast) var(--ease-out),
+              border-color var(--duration-fast) var(--ease-out),
+              box-shadow var(--duration-fast) var(--ease-out);
+  flex-shrink: 0;
+}
+.shadcn-checkbox:hover { border-color: rgba(255,255,255,0.25); }
+.shadcn-checkbox:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--ring);
+}
+.shadcn-checkbox::before {
+  content: '';
+  width: 10px; height: 10px;
+  transform: scale(0);
+  transition: transform var(--duration-fast) var(--ease-out);
+  background-color: var(--primary-foreground, #0a0a0a);
+  clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
+}
+.shadcn-checkbox:checked {
+  background: var(--primary);
+  border-color: var(--primary);
+}
+.shadcn-checkbox:checked::before { transform: scale(1); }
+.shadcn-checkbox:disabled { cursor: not-allowed; opacity: 0.5; }
+.shadcn-label {
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  line-height: 1;
+  color: var(--foreground);
+  cursor: pointer;
+  user-select: none;
+}
+.shadcn-checkbox:disabled + .shadcn-label,
+.shadcn-checkbox.peer:disabled ~ .shadcn-label { cursor: not-allowed; opacity: 0.7; }
+
 .log-pre {
   background: #050505; color: #e0e0e0;
   font-family: var(--font-mono); font-size: 12px; line-height: 1.55;
