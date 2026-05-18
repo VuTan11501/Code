@@ -191,7 +191,7 @@ html { touch-action: manipulation; }
 .run-list { list-style: none; padding: 0; margin: 0; }
 .run-item {
   display: grid;
-  grid-template-columns: 12px minmax(0, 1fr) auto auto auto;
+  grid-template-columns: 12px minmax(0, 1fr) auto;
   align-items: center; gap: 10px;
   padding: 10px 12px; border-radius: var(--radius-md);
   font-size: var(--fs-sm); cursor: pointer;
@@ -218,6 +218,12 @@ html { touch-action: manipulation; }
   outline-offset: 2px;
   border-radius: 2px;
 }
+.run-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  justify-self: end;
+}
 .run-event {
   color: var(--muted-foreground);
   font-size: var(--fs-xs);
@@ -228,14 +234,12 @@ html { touch-action: manipulation; }
   text-transform: lowercase;
   white-space: nowrap;
   text-align: center;
-  justify-self: end;
 }
 .run-num {
   color: var(--muted-foreground);
   font-size: var(--fs-xs);
   font-variant-numeric: tabular-nums;
   font-family: var(--font-mono, ui-monospace, monospace);
-  min-width: 44px;
   text-align: right;
   text-decoration: none;
 }
@@ -245,22 +249,18 @@ html { touch-action: manipulation; }
   font-size: var(--fs-xs);
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
-  min-width: 72px;
   text-align: right;
 }
 @media (max-width: 560px) {
   .run-item {
     grid-template-columns: 12px minmax(0, 1fr) auto;
     grid-template-areas:
-      "dot name time"
-      ".   event num";
+      "dot name meta";
     row-gap: 4px;
   }
   .run-dot { grid-area: dot; }
   .run-name { grid-area: name; }
-  .run-time { grid-area: time; }
-  .run-event { grid-area: event; justify-self: start; min-width: 0; }
-  .run-num { grid-area: num; }
+  .run-meta { grid-area: meta; gap: 6px; }
   .run-list .run-item.hide-mobile { display: none; }
 }
 .empty { color: var(--muted-foreground); font-size: var(--fs-sm); padding: 20px; text-align: center; }

@@ -188,9 +188,11 @@ function renderWorkflowCard(wf, runs) {
             <li class="run-item${i >= 2 ? ' hide-mobile' : ''}" onclick="openLogModal(${r.id}, '${wf.icon} ${wf.name} #${r.run_number}', '${r.status}')">
               <span class="run-dot ${conclusionClass(r.conclusion || r.status)}"></span>
               <span class="run-name" data-tooltip="${titleEsc}" data-tooltip-truncate-only tabindex="0">${title}</span>
-              <span class="run-event">${r.event}</span>
-              <a class="run-num" href="${r.html_url}" target="_blank" onclick="event.stopPropagation()">#${r.run_number}</a>
-              <span class="run-time">${timeAgo(r.created_at)}</span>
+              <span class="run-meta">
+                <span class="run-event">${r.event}</span>
+                <a class="run-num" href="${r.html_url}" target="_blank" onclick="event.stopPropagation()">#${r.run_number}</a>
+                <span class="run-time">${timeAgo(r.created_at)}</span>
+              </span>
             </li>
           `;}).join('')}
           ${last5.length === 0 ? '<li class="run-item" style="color:var(--muted-foreground);cursor:default">No runs yet</li>' : ''}
@@ -349,9 +351,11 @@ async function refresh() {
         <li class="run-item" onclick="openLogModal(${r.id}, '${r._wf.icon} ${r._wf.name} #${r.run_number}', '${r.status}')">
           <span class="run-dot ${conclusionClass(r.conclusion || r.status)}"></span>
           <span class="run-name">${r._wf.icon} ${r._wf.name}</span>
-          <span class="run-event">${r.event}</span>
-          <a class="run-num" href="${r.html_url}" target="_blank" onclick="event.stopPropagation()">#${r.run_number}</a>
-          <span class="run-time">${timeAgo(r.created_at)}</span>
+          <span class="run-meta">
+            <span class="run-event">${r.event}</span>
+            <a class="run-num" href="${r.html_url}" target="_blank" onclick="event.stopPropagation()">#${r.run_number}</a>
+            <span class="run-time">${timeAgo(r.created_at)}</span>
+          </span>
         </li>
       `).join('');
     }
