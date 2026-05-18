@@ -4,6 +4,8 @@ on:
   schedule:
     # Chạy 7:30 sáng JST mỗi ngày (22:30 UTC ngày trước)
     - cron: '30 22 * * *'
+    # Backup cron (+30min) in case primary is delayed
+    - cron: '0 23 * * *'
 
   workflow_dispatch:
     inputs:
@@ -21,6 +23,11 @@ env:
   SMTP_USER: ${{ secrets.SMTP_USER }}
   SMTP_PASS: ${{ secrets.SMTP_PASS }}
   NOTIFY_EMAIL: ${{ secrets.NOTIFY_EMAIL }}
+
+# Prevent duplicate reports: if primary is running, backup is skipped
+concurrency:
+  group: jpy-forecast-daily
+  cancel-in-progress: true
 
 jobs:
   forecast:
