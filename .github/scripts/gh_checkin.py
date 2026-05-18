@@ -329,78 +329,100 @@ def find_action_by_cron(schedule, trigger_cron, now_jst):
 # ═══════════════════════════════════════════════════════════
 
 def build_checkin_html(status, action, location_name, location_key, note, now_jst, ci_after=None, co_after=None, error_detail=None):
-    """Build beautiful HTML email for checkin/checkout notification."""
-    colors = {"success": "#22c55e", "failure": "#ef4444", "error": "#f97316"}
-    bg_colors = {"success": "#f0fdf4", "failure": "#fef2f2", "error": "#fff7ed"}
-    icons = {"success": "✅", "failure": "❌", "error": "🚨"}
-    labels = {"success": "SUCCESS", "failure": "FAILED", "error": "ERROR"}
-    action_icons = {"checkin": "📥", "checkout": "📤"}
-
-    color = colors.get(status, "#6b7280")
-    bg = bg_colors.get(status, "#f9fafb")
-    icon = icons.get(status, "❓")
-    label = labels.get(status, "UNKNOWN")
-    a_icon = action_icons.get(action, "🔄")
+    """Build shadcn/ui dark-themed HTML email for checkin/checkout notification."""
+    # shadcn dark tokens
+    BG = "#0a0a0a"
+    CARD = "#0f0f0f"
+    BORDER = "#262626"
+    FG = "#fafafa"
+    MUTED = "#a3a3a3"
+    MUTED_BG = "#171717"
+    # status accents (subtle bg + bright fg, matching .badge-warning style)
+    accents = {
+        "success": {"bg": "rgba(34,197,94,0.12)", "fg": "#4ade80", "border": "rgba(34,197,94,0.25)"},
+        "failure": {"bg": "rgba(239,68,68,0.12)", "fg": "#f87171", "border": "rgba(239,68,68,0.25)"},
+        "error":   {"bg": "rgba(249,115,22,0.12)", "fg": "#fb923c", "border": "rgba(249,115,22,0.25)"},
+    }
+    a = accents.get(status, {"bg": MUTED_BG, "fg": MUTED, "border": BORDER})
+    labels = {"success": "Success", "failure": "Failed", "error": "Error"}
+    icons = {"success": "✓", "failure": "✕", "error": "!"}
+    action_icons = {"checkin": "↓", "checkout": "↑"}
+    label = labels.get(status, "Unknown")
+    icon = icons.get(status, "?")
+    a_icon = action_icons.get(action, "•")
 
     date_str = now_jst.strftime("%Y-%m-%d")
     time_str = now_jst.strftime("%H:%M")
     day_str = now_jst.strftime("%A")
 
-    verified_html = ""
+    def row(k, v, mono=False):
+        v_style = f"color:{FG};font-size:13px;{'font-family:ui-monospace,SFMono-Regular,Consolas,monospace;' if mono else ''}"
+        return f'<tr><td style="padding:10px 0;color:{MUTED};font-size:12px;width:96px;border-bottom:1px solid {BORDER};">{k}</td><td style="padding:10px 0;{v_style};border-bottom:1px solid {BORDER};">{v}</td></tr>'
+
+    rows = ""
+    rows += row("Date", f"{date_str} <span style='color:{MUTED}'>· {day_str}</span>", mono=True)
+    rows += row("Time", f'<span style="font-size:16px;font-weight:600;letter-spacing:-0.01em">{time_str}</span> <span style="color:{MUTED};font-size:11px">JST</span>', mono=True)
+    rows += row("Location", location_name)
+    if note:
+        rows += row("Note", note)
     if ci_after:
-        verified_html = f"""
-        <tr><td style="padding:8px 12px;color:#6b7280;font-size:13px;">Verified</td>
-            <td style="padding:8px 12px;font-size:13px;">CI: {ci_after} / CO: {co_after or '—'}</td></tr>"""
+        rows += row("Verified", f"CI {ci_after} / CO {co_after or '—'}", mono=True)
 
     error_html = ""
     if error_detail:
-        error_html = f"""
-        <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:12px;margin-top:16px;">
-          <strong style="color:#dc2626;">Error Detail:</strong>
-          <pre style="margin:8px 0 0;font-size:12px;color:#7f1d1d;white-space:pre-wrap;">{error_detail}</pre>
-        </div>"""
+        error_html = f'''<div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.25);border-radius:8px;padding:14px;margin-top:20px;">
+          <div style="color:#f87171;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:8px;">Error</div>
+          <pre style="margin:0;font:11px ui-monospace,SFMono-Regular,Consolas,monospace;color:#fca5a5;white-space:pre-wrap;word-break:break-word;">{error_detail}</pre>
+        </div>'''
 
-    log_html = "\n".join(f"<div style='padding:2px 0;'>{line}</div>" for line in LOG_LINES)
+    log_html = "<br>".join(LOG_LINES)
 
-    return f"""<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f3f4f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
-<div style="max-width:520px;margin:20px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-  <!-- Header -->
-  <div style="background:{color};padding:20px 24px;text-align:center;">
-    <div style="font-size:36px;">{a_icon}</div>
-    <div style="color:#fff;font-size:20px;font-weight:700;margin-top:4px;">{action.upper()} {label}</div>
-    <div style="color:rgba(255,255,255,0.85);font-size:13px;margin-top:4px;">{icon} DokoKin Auto System</div>
-  </div>
+    return f'''<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="color-scheme" content="dark"><meta name="supported-color-schemes" content="dark"></head>
+<body style="margin:0;padding:0;background:{BG};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:{FG};-webkit-font-smoothing:antialiased;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="{BG}" style="background:{BG};">
+<tr><td align="center" style="padding:24px 12px;">
 
-  <!-- Body -->
-  <div style="padding:20px 24px;">
-    <table style="width:100%;border-collapse:collapse;">
-      <tr><td style="padding:8px 12px;color:#6b7280;font-size:13px;width:90px;">Date</td>
-          <td style="padding:8px 12px;font-weight:600;">{date_str} ({day_str})</td></tr>
-      <tr style="background:#f9fafb;"><td style="padding:8px 12px;color:#6b7280;font-size:13px;">Time</td>
-          <td style="padding:8px 12px;font-weight:600;font-size:18px;">{time_str} JST</td></tr>
-      <tr><td style="padding:8px 12px;color:#6b7280;font-size:13px;">Location</td>
-          <td style="padding:8px 12px;">📍 {location_name}</td></tr>
-      {"<tr style='background:#f9fafb;'><td style='padding:8px 12px;color:#6b7280;font-size:13px;'>Note</td><td style='padding:8px 12px;'>" + note + "</td></tr>" if note else ""}
-      {verified_html}
-    </table>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:520px;background:{CARD};border:1px solid {BORDER};border-radius:12px;overflow:hidden;">
+
+  <!-- Header: status pill -->
+  <tr><td style="padding:24px 24px 0;">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+      <td style="background:{a['bg']};border:1px solid {a['border']};border-radius:9999px;padding:4px 12px;color:{a['fg']};font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;">
+        <span style="font-family:ui-monospace,SFMono-Regular,Consolas,monospace;">{icon}</span> &nbsp;{action.capitalize()} · {label}
+      </td>
+    </tr></table>
+    <h1 style="margin:14px 0 4px;font-size:22px;font-weight:700;letter-spacing:-0.01em;color:{FG};">
+      <span style="display:inline-block;width:28px;height:28px;line-height:28px;text-align:center;background:{MUTED_BG};border:1px solid {BORDER};border-radius:8px;font-size:14px;margin-right:6px;vertical-align:middle;">{a_icon}</span>
+      {action.capitalize()} {label.lower()}
+    </h1>
+    <p style="margin:0 0 4px;color:{MUTED};font-size:13px;">DokoKin attendance automation</p>
+  </td></tr>
+
+  <!-- Divider -->
+  <tr><td style="padding:20px 24px 0;"><div style="height:1px;background:{BORDER};"></div></td></tr>
+
+  <!-- Body: rows -->
+  <tr><td style="padding:4px 24px 20px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">{rows}</table>
     {error_html}
+  </td></tr>
 
-    <!-- Log -->
-    <details style="margin-top:20px;">
-      <summary style="cursor:pointer;color:#6b7280;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">
-        Execution Log ({len(LOG_LINES)} lines)
-      </summary>
-      <div style="background:#1e293b;color:#e2e8f0;padding:12px;border-radius:8px;margin-top:8px;font-family:'Cascadia Code',Consolas,monospace;font-size:11px;line-height:1.6;max-height:400px;overflow-y:auto;">
-        {log_html}
-      </div>
+  <!-- Log (collapsed) -->
+  <tr><td style="padding:0 24px 20px;">
+    <details style="background:{MUTED_BG};border:1px solid {BORDER};border-radius:8px;">
+      <summary style="cursor:pointer;padding:10px 14px;color:{MUTED};font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;">Execution log ({len(LOG_LINES)} lines)</summary>
+      <div style="padding:0 14px 14px;font:11px/1.7 ui-monospace,SFMono-Regular,Consolas,monospace;color:#d4d4d4;max-height:360px;overflow:auto;white-space:pre-wrap;word-break:break-word;">{log_html}</div>
     </details>
-  </div>
+  </td></tr>
 
   <!-- Footer -->
-  <div style="padding:12px 24px;background:#f9fafb;border-top:1px solid #e5e7eb;text-align:center;">
-    <span style="color:#9ca3af;font-size:11px;">🤖 Auto Checkin System • GitHub Actions • {date_str}</span>
-  </div>
-</div></body></html>"""
+  <tr><td style="padding:14px 24px;border-top:1px solid {BORDER};background:#080808;">
+    <div style="color:#737373;font-size:11px;letter-spacing:0.02em;">DokoKin Auto · GitHub Actions · {date_str}</div>
+  </td></tr>
+</table>
+
+</td></tr></table></body></html>'''
 
 
 def send_email(subject, body, html=None):

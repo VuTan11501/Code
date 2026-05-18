@@ -187,68 +187,109 @@ def create_ot_request(token, entry):
 # ═══════════════════════════════════════════════════════════
 
 def build_ot_html(created, existing, past, outside_window, errors, today):
-    """Build HTML email for OT creator results."""
+    """Build shadcn/ui dark-themed HTML email for OT creator results."""
+    BG = "#0a0a0a"
+    CARD = "#0f0f0f"
+    BORDER = "#262626"
+    FG = "#fafafa"
+    MUTED = "#a3a3a3"
+    MUTED_BG = "#171717"
     has_errors = len(errors) > 0
-    color = "#ef4444" if has_errors else "#22c55e" if created else "#3b82f6"
+    accent = (
+        {"bg": "rgba(239,68,68,0.12)", "fg": "#f87171", "border": "rgba(239,68,68,0.25)", "label": "Errors"} if has_errors else
+        {"bg": "rgba(34,197,94,0.12)", "fg": "#4ade80", "border": "rgba(34,197,94,0.25)", "label": "OK"} if created else
+        {"bg": "rgba(59,130,246,0.12)", "fg": "#60a5fa", "border": "rgba(59,130,246,0.25)", "label": "Status"}
+    )
     title = "OT Requests Created" if created else "OT Status Check"
 
+    def stat_card(label, value, color=FG):
+        return f'''<td width="33%" style="padding:0 4px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:{MUTED_BG};border:1px solid {BORDER};border-radius:8px;">
+          <tr><td style="padding:14px 12px;">
+            <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:{MUTED};margin-bottom:4px;">{label}</div>
+            <div style="font:600 22px/1 ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:-0.02em;color:{color};">{value}</div>
+          </td></tr></table></td>'''
+
+    def status_pill(color_key, txt):
+        c = {"green": ("rgba(34,197,94,0.12)", "#4ade80", "rgba(34,197,94,0.25)"),
+             "muted": (MUTED_BG, MUTED, BORDER),
+             "yellow": ("rgba(234,179,8,0.12)", "#facc15", "rgba(234,179,8,0.25)")}[color_key]
+        return f'<span style="display:inline-block;background:{c[0]};border:1px solid {c[2]};border-radius:9999px;padding:2px 8px;color:{c[1]};font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">{txt}</span>'
+
+    def trow(date, time, hours, pill):
+        return f'''<tr style="border-bottom:1px solid {BORDER};">
+          <td style="padding:10px 8px;color:{FG};font:13px ui-monospace,SFMono-Regular,Consolas,monospace;">{date}</td>
+          <td style="padding:10px 8px;color:{MUTED};font:12px ui-monospace,SFMono-Regular,Consolas,monospace;">{time}</td>
+          <td style="padding:10px 8px;text-align:right;color:{FG};font:600 13px ui-monospace,SFMono-Regular,Consolas,monospace;">{hours}h</td>
+          <td style="padding:10px 8px;text-align:right;">{pill}</td></tr>'''
+
     rows = ""
-    for item in created:
-        rows += f"""<tr style="background:#f0fdf4;">
-            <td style="padding:8px 12px;">✅ {item['date']}</td>
-            <td style="padding:8px 12px;">{item['start']}→{item['end']}</td>
-            <td style="padding:8px 12px;font-weight:600;">{item['hours']}h</td>
-            <td style="padding:8px 12px;color:#16a34a;">CREATED</td></tr>"""
-    for item in existing:
-        rows += f"""<tr>
-            <td style="padding:8px 12px;">✓ {item['date']}</td>
-            <td style="padding:8px 12px;">{item['start']}→{item['end']}</td>
-            <td style="padding:8px 12px;">{item['hours']}h</td>
-            <td style="padding:8px 12px;color:#6b7280;">EXISTS</td></tr>"""
-    for item in outside_window:
-        rows += f"""<tr style="background:#f9fafb;">
-            <td style="padding:8px 12px;">⏳ {item['date']}</td>
-            <td style="padding:8px 12px;">{item['start']}→{item['end']}</td>
-            <td style="padding:8px 12px;">{item['hours']}h</td>
-            <td style="padding:8px 12px;color:#9ca3af;">WAITING</td></tr>"""
+    for it in created: rows += trow(it['date'], f"{it['start']}→{it['end']}", it['hours'], status_pill('green', 'Created'))
+    for it in existing: rows += trow(it['date'], f"{it['start']}→{it['end']}", it['hours'], status_pill('muted', 'Exists'))
+    for it in outside_window: rows += trow(it['date'], f"{it['start']}→{it['end']}", it['hours'], status_pill('yellow', 'Waiting'))
+
+    if not rows:
+        rows = f'<tr><td colspan="4" style="padding:32px 8px;text-align:center;color:{MUTED};font-size:13px;">No entries to display</td></tr>'
 
     error_html = ""
     if errors:
-        err_items = "".join(f"<li style='color:#dc2626;margin:4px 0;'>{e}</li>" for e in errors)
-        error_html = f"""<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:12px;margin-top:16px;">
-            <strong style="color:#dc2626;">⚠️ Errors:</strong><ul style="margin:8px 0 0;padding-left:20px;">{err_items}</ul></div>"""
+        err_items = "".join(f'<li style="color:#fca5a5;margin:6px 0;font-size:12px;">{e}</li>' for e in errors)
+        error_html = f'''<div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.25);border-radius:8px;padding:14px;margin-top:20px;">
+          <div style="color:#f87171;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:6px;">Errors ({len(errors)})</div>
+          <ul style="margin:0;padding-left:18px;">{err_items}</ul></div>'''
 
-    log_html = "\n".join(f"<div style='padding:2px 0;'>{line}</div>" for line in LOG_LINES)
+    log_html = "<br>".join(LOG_LINES)
 
-    return f"""<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f3f4f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
-<div style="max-width:560px;margin:20px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-  <div style="background:{color};padding:20px 24px;text-align:center;">
-    <div style="font-size:36px;">📋</div>
-    <div style="color:#fff;font-size:20px;font-weight:700;margin-top:4px;">{title}</div>
-    <div style="color:rgba(255,255,255,0.85);font-size:13px;margin-top:4px;">
-      {len(created)} created • {len(existing)} exist • {len(outside_window)} waiting</div>
-  </div>
-  <div style="padding:20px 24px;">
-    <table style="width:100%;border-collapse:collapse;font-size:13px;">
-      <tr style="border-bottom:2px solid #e5e7eb;">
-        <th style="padding:8px 12px;text-align:left;color:#6b7280;">Date</th>
-        <th style="padding:8px 12px;text-align:left;color:#6b7280;">Time</th>
-        <th style="padding:8px 12px;text-align:left;color:#6b7280;">Hours</th>
-        <th style="padding:8px 12px;text-align:left;color:#6b7280;">Status</th></tr>
-      {rows}
+    return f'''<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="color-scheme" content="dark"><meta name="supported-color-schemes" content="dark"></head>
+<body style="margin:0;padding:0;background:{BG};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:{FG};-webkit-font-smoothing:antialiased;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="{BG}" style="background:{BG};">
+<tr><td align="center" style="padding:24px 12px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;background:{CARD};border:1px solid {BORDER};border-radius:12px;overflow:hidden;">
+
+  <tr><td style="padding:24px 24px 0;">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+      <td style="background:{accent['bg']};border:1px solid {accent['border']};border-radius:9999px;padding:4px 12px;color:{accent['fg']};font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;">{accent['label']}</td>
+    </tr></table>
+    <h1 style="margin:14px 0 4px;font-size:22px;font-weight:700;letter-spacing:-0.01em;color:{FG};">{title}</h1>
+    <p style="margin:0;color:{MUTED};font-size:13px;">Auto OT request creator · {today}</p>
+  </td></tr>
+
+  <!-- Stats -->
+  <tr><td style="padding:20px 20px 0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
+      {stat_card('Created', len(created), '#4ade80')}
+      {stat_card('Exists', len(existing), FG)}
+      {stat_card('Waiting', len(outside_window), '#facc15')}
+    </tr></table>
+  </td></tr>
+
+  <!-- Table -->
+  <tr><td style="padding:20px 24px 0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border:1px solid {BORDER};border-radius:8px;overflow:hidden;">
+      <thead><tr style="background:{MUTED_BG};">
+        <th style="padding:10px 8px;text-align:left;color:{MUTED};font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid {BORDER};">Date</th>
+        <th style="padding:10px 8px;text-align:left;color:{MUTED};font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid {BORDER};">Time</th>
+        <th style="padding:10px 8px;text-align:right;color:{MUTED};font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid {BORDER};">Hours</th>
+        <th style="padding:10px 8px;text-align:right;color:{MUTED};font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid {BORDER};">Status</th>
+      </tr></thead>
+      <tbody>{rows}</tbody>
     </table>
     {error_html}
-    <details style="margin-top:20px;">
-      <summary style="cursor:pointer;color:#6b7280;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">
-        Execution Log ({len(LOG_LINES)} lines)</summary>
-      <div style="background:#1e293b;color:#e2e8f0;padding:12px;border-radius:8px;margin-top:8px;font-family:'Cascadia Code',Consolas,monospace;font-size:11px;line-height:1.6;max-height:400px;overflow-y:auto;">
-        {log_html}</div>
+  </td></tr>
+
+  <!-- Log -->
+  <tr><td style="padding:20px 24px;">
+    <details style="background:{MUTED_BG};border:1px solid {BORDER};border-radius:8px;">
+      <summary style="cursor:pointer;padding:10px 14px;color:{MUTED};font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;">Execution log ({len(LOG_LINES)} lines)</summary>
+      <div style="padding:0 14px 14px;font:11px/1.7 ui-monospace,SFMono-Regular,Consolas,monospace;color:#d4d4d4;max-height:360px;overflow:auto;white-space:pre-wrap;word-break:break-word;">{log_html}</div>
     </details>
-  </div>
-  <div style="padding:12px 24px;background:#f9fafb;border-top:1px solid #e5e7eb;text-align:center;">
-    <span style="color:#9ca3af;font-size:11px;">🤖 OT Auto-Creator • GitHub Actions • {today}</span>
-  </div>
-</div></body></html>"""
+  </td></tr>
+
+  <tr><td style="padding:14px 24px;border-top:1px solid {BORDER};background:#080808;">
+    <div style="color:#737373;font-size:11px;letter-spacing:0.02em;">OT Auto-Creator · GitHub Actions · {today}</div>
+  </td></tr>
+</table>
+</td></tr></table></body></html>'''
 
 
 def send_email(subject, body, html=None):
