@@ -261,9 +261,9 @@ function renderScheduleCalendar(gistEntries) {
       if (isToday && isNext) classes.push('now-slot');
       if (cellPips.length === 0) classes.push('empty-slot');
       const onclick = cellPips.length === 0
-        ? `onclick="quickAddRecurring(${day}, '${time}')"`
+        ? `ondblclick="quickAddRecurring(${day}, '${time}')"`
         : '';
-      html += `<div class="${classes.join(' ')}" ${onclick} title="${cellPips.length === 0 ? 'Tap to add' : ''}">`;
+      html += `<div class="${classes.join(' ')}" ${onclick} title="${cellPips.length === 0 ? 'Double-tap to add' : ''}">`;
       for (const p of cellPips) {
         const dimmed = p.enabled ? '' : ' disabled';
         html += `<span class="schedule-pip ${p.typeKey}${dimmed}" data-entry="${p.entryIdx}" title="${p.name}${p.enabled ? '' : ' (disabled)'}">${p.name.split(' ').slice(-1)[0]}</span>`;
@@ -276,7 +276,7 @@ function renderScheduleCalendar(gistEntries) {
   html += '<span class="legend-item"><span class="legend-dot today-col"></span>Today</span>';
   html += '<span class="legend-item"><span class="legend-dot next-time"></span>Next slot</span>';
   html += '<span class="legend-divider" aria-hidden="true"></span>';
-  html += '<span class="legend-hint"><kbd class="legend-kbd">Tap empty</kbd> add</span>';
+  html += '<span class="legend-hint"><kbd class="legend-kbd">Double-tap empty</kbd> add</span>';
   html += '<span class="legend-hint"><kbd class="legend-kbd">Tap pip</kbd> actions</span>';
   html += '<span class="legend-hint"><kbd class="legend-kbd">Long-press</kbd> toggle</span>';
   html += '</div></div>';
