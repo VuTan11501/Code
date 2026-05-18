@@ -478,12 +478,16 @@ function renderScheduledQueue(entries) {
         nextInfo = `<span class="sched-status upcoming">In ${diff}m</span>`;
       }
     } else if (isOnce) {
-      const runAt = new Date(entry.run_at);
-      if (runAt < nowJST) nextInfo = '<span class="sched-status done">Expired</span>';
-      else {
-        const diff = Math.round((runAt - nowJST) / 60000);
-        const label2 = diff < 60 ? `In ${diff}m` : diff < 1440 ? `In ${Math.round(diff/60)}h` : `In ${Math.round(diff/1440)}d`;
-        nextInfo = `<span class="sched-status upcoming">${label2}</span>`;
+      if (entry.dispatched) {
+        nextInfo = '<span class="sched-status done">✓ Dispatched</span>';
+      } else {
+        const runAt = new Date(entry.run_at);
+        if (runAt < nowJST) nextInfo = '<span class="sched-status overdue">⏳ Pending dispatch</span>';
+        else {
+          const diff = Math.round((runAt - nowJST) / 60000);
+          const label2 = diff < 60 ? `In ${diff}m` : diff < 1440 ? `In ${Math.round(diff/60)}h` : `In ${Math.round(diff/1440)}d`;
+          nextInfo = `<span class="sched-status upcoming">${label2}</span>`;
+        }
       }
     }
 
@@ -669,10 +673,14 @@ function renderScheduleTable() {
     const enabled = entry.enabled !== false;
     let statusBadge = '';
     if (isOnce) {
-      const isPast = entry.run_at && new Date(entry.run_at) < new Date();
-      statusBadge = isPast
-        ? '<span class="badge-disabled">Expired</span>'
-        : '<span class="badge-enabled">Pending</span>';
+      if (entry.dispatched) {
+        statusBadge = '<span class="badge-enabled">✓ Dispatched</span>';
+      } else {
+        const isPast = entry.run_at && new Date(entry.run_at) < new Date();
+        statusBadge = isPast
+          ? '<span class="badge-warning">⏳ Pending dispatch</span>'
+          : '<span class="badge-enabled">Pending</span>';
+      }
     } else {
       statusBadge = enabled
         ? '<span class="badge-enabled">Active</span>'
