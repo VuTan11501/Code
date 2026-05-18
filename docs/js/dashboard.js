@@ -320,7 +320,7 @@ async function loadRunJobs(runId, container, status) {
         const hasLog = sCls !== 'skipped' && s.status !== 'queued';
         const stepNum = s.number;
         html += `
-          <div class="step-block step-${sCls}${hasLog ? '' : ' no-log'}" data-job-id="${j.id}" data-step-num="${stepNum}" data-step-name="${escapeHtml(s.name)}">
+          <div class="step-block step-${sCls}${hasLog ? '' : ' no-log'}" data-job-id="${j.id}" data-step-num="${stepNum}" data-step-name="${escapeHtml(s.name)}" data-started="${s.started_at || ''}" data-completed="${s.completed_at || ''}">
             <button type="button" class="step-row" ${hasLog ? `onclick="toggleStepLog(this)"` : `disabled aria-disabled="true"`} aria-expanded="false">
               <span class="step-icon">${icon}</span>
               <span class="step-name">${escapeHtml(s.name)}</span>
@@ -362,6 +362,8 @@ async function toggleStepLog(btn) {
   const jobId = block.dataset.jobId;
   const stepName = block.dataset.stepName;
   const stepNum = parseInt(block.dataset.stepNum, 10);
+  const startedAt = block.dataset.started;
+  const completedAt = block.dataset.completed;
 
   if (body.dataset.loaded !== '1') {
     body.innerHTML = '<div class="log-loading">Fetching log…</div>';
@@ -370,19 +372,18 @@ async function toggleStepLog(btn) {
       body.innerHTML = `<div class="log-loading">❌ ${escapeHtml(cache.error)}</div>`;
       return;
     }
-    const lines = pickStepLines(cache, stepName, stepNum);
+    const lines = sliceStepLines(cache, startedAt, completedAt, stepName);
     renderStepLog(body, lines, stepName);
     body.dataset.loaded = '1';
   }
 
-  // Stream if step still running
   const stepRunning = block.classList.contains('step-in_progress');
   if (stepRunning && !_jobLogPolls.has(`${jobId}:${stepNum}`)) {
     const t = setInterval(async () => {
       _jobLogCache.delete(jobId);
       const cache = await ensureJobLogCache(jobId);
       if (!cache.error) {
-        const lines = pickStepLines(cache, stepName, stepNum);
+        const lines = sliceStepLines(cache, startedAt, block.dataset.completed, stepName);
         renderStepLog(body, lines, stepName);
       }
     }, 4000);
@@ -412,51 +413,38 @@ async function ensureJobLogCache(jobId) {
   }
 }
 
-// Split full job log into ##[group]…##[endgroup] sections.
-// Each group is anchored to a step by matching the title against the step name.
+// Parse raw job log into an array of timestamped lines.
+// Each line: { ts: ISO string, txt: content (with ##[...] markers preserved) }
 function parseJobLog(raw) {
   const cleaned = raw.replace(/\x1b\[[0-9;]*m/g, ''); // strip ANSI
   const lines = cleaned.split(/\r?\n/);
-  const groups = []; // [{title, lines: []}]
-  let current = null;
-  const preamble = []; // lines before first group
+  const out = [];
   for (const ln of lines) {
-    const m = ln.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z) (.*)$/);
-    const ts = m ? m[1] : '';
-    const txt = m ? m[2] : ln;
-    if (/^##\[group\]/.test(txt)) {
-      const title = txt.replace(/^##\[group\]/, '').trim();
-      current = { title, lines: [] };
-      groups.push(current);
-    } else if (/^##\[endgroup\]/.test(txt)) {
-      current = null;
-    } else if (current) {
-      current.lines.push({ ts, txt });
-    } else {
-      preamble.push({ ts, txt });
-    }
+    if (!ln) { out.push({ ts: '', txt: '' }); continue; }
+    const m = ln.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z) ?(.*)$/);
+    if (m) out.push({ ts: m[1], txt: m[2] });
+    else out.push({ ts: '', txt: ln });
   }
-  return { raw: cleaned, groups, preamble, error: null };
+  return { raw: cleaned, lines: out, error: null };
 }
 
-// Find the lines belonging to the given step name.
-// Matching strategy: case-insensitive substring match between step name and group title.
-function pickStepLines(cache, stepName, stepNum) {
-  if (!cache || !cache.groups) return [];
-  const needle = stepName.toLowerCase();
-  // Direct title match first
-  let hits = cache.groups.filter(g => g.title.toLowerCase().includes(needle) || needle.includes(g.title.toLowerCase()));
-  // If multiple steps share a name pattern (e.g. "Run X"), keep best-effort
-  if (hits.length === 0) {
-    // Fallback: try positional — group index ≈ step number - 1 (rough)
-    const guess = cache.groups[Math.max(0, stepNum - 1)];
-    if (guess) hits = [guess];
-  }
+// Slice job log lines belonging to a step by [started_at, completed_at] window.
+// Untimestamped continuation lines stick to the previous timestamped line.
+function sliceStepLines(cache, startedAt, completedAt, stepName) {
+  if (!cache || !cache.lines) return [];
+  const start = startedAt ? Date.parse(startedAt) : 0;
+  // For running steps completedAt is null → include up to "now"
+  const end = completedAt ? Date.parse(completedAt) : Date.now() + 60_000;
   const out = [];
-  hits.forEach(g => {
-    out.push({ ts: '', txt: `▸ ${g.title}`, marker: true });
-    out.push(...g.lines);
-  });
+  let inWindow = false;
+  for (const ln of cache.lines) {
+    if (ln.ts) {
+      const t = Date.parse(ln.ts);
+      inWindow = (t >= start && t <= end);
+    }
+    // else: orphan continuation — inherit prev state
+    if (inWindow) out.push(ln);
+  }
   return out;
 }
 
@@ -469,16 +457,29 @@ function renderStepLog(body, lines, stepName) {
   for (const ln of lines) {
     const txt = ln.txt;
     if (!txt && !ln.ts) { html.push('\n'); continue; }
+    if (/^##\[endgroup\]/.test(txt)) continue; // suppress endgroup markers
     let cls = 'log-line';
-    if (ln.marker) cls += ' log-group';
-    else if (/^##\[error\]/.test(txt) || /\b(error|failed|exception|traceback)\b/i.test(txt)) cls += ' log-error';
-    else if (/^##\[warning\]/.test(txt) || /\bwarning\b/i.test(txt)) cls += ' log-warn';
-    else if (/^##\[command\]/.test(txt)) cls += ' log-cmd';
-    const clean = txt
-      .replace(/^##\[error\]/, '')
-      .replace(/^##\[warning\]/, '')
-      .replace(/^##\[command\]/, '$ ')
-      .replace(/^##\[section\]/, '');
+    let clean = txt;
+    if (/^##\[group\]/.test(txt)) {
+      cls += ' log-group';
+      clean = '▸ ' + txt.replace(/^##\[group\]/, '');
+    } else if (/^##\[error\]/.test(txt)) {
+      cls += ' log-error';
+      clean = txt.replace(/^##\[error\]/, '');
+    } else if (/^##\[warning\]/.test(txt)) {
+      cls += ' log-warn';
+      clean = txt.replace(/^##\[warning\]/, '');
+    } else if (/^##\[command\]/.test(txt)) {
+      cls += ' log-cmd';
+      clean = '$ ' + txt.replace(/^##\[command\]/, '');
+    } else if (/^##\[section\]/.test(txt)) {
+      cls += ' log-group';
+      clean = txt.replace(/^##\[section\]/, '');
+    } else if (/\b(error|failed|exception|traceback)\b/i.test(txt)) {
+      cls += ' log-error';
+    } else if (/\bwarning\b/i.test(txt)) {
+      cls += ' log-warn';
+    }
     html.push(`<span class="${cls}">`);
     if (ln.ts) html.push(`<span class="log-ts">${ln.ts.substring(11, 19)}</span> `);
     html.push(escapeHtml(clean));
