@@ -273,6 +273,7 @@ function closeLogModal() {
     _jobLogPolls.forEach(t => clearInterval(t));
     _jobLogPolls.clear();
   }
+  if (typeof _jobLogCache !== 'undefined') _jobLogCache.clear();
 }
 
 async function loadRunJobs(runId, container, status) {
@@ -290,54 +291,48 @@ async function loadRunJobs(runId, container, status) {
 
     if (!jobs.length) { container.innerHTML = html + '<div class="empty">No jobs found.</div>'; return; }
 
-    html += '<div class="jobs-list">';
     jobs.forEach((j, idx) => {
-      const dur = j.completed_at && j.started_at
-        ? Math.round((new Date(j.completed_at) - new Date(j.started_at)) / 1000) : null;
-      const durStr = dur !== null ? (dur >= 60 ? `${Math.floor(dur/60)}m ${dur%60}s` : `${dur}s`) : 'running…';
-      const conclusion = j.conclusion || j.status;
-      const cls = conclusionClass(conclusion);
       const jobRunning = j.status === 'in_progress' || j.status === 'queued';
-      const expanded = idx === 0 || cls === 'failure' || jobRunning;
-      const steps = (j.steps || []).map(s => {
+      // Multi-job runs are rare for us; only show a job heading if >1 job
+      if (jobs.length > 1) {
+        const jCls = conclusionClass(j.conclusion || j.status);
+        html += `<div class="job-heading">
+          <span class="run-dot ${jCls}"></span>
+          <span class="job-name">${escapeHtml(j.name)}</span>
+          <span class="status-badge status-${jCls}">${j.conclusion || j.status}</span>
+          <a class="log-external" href="${j.html_url}" target="_blank" rel="noopener">Open on GitHub ↗</a>
+        </div>`;
+      } else {
+        html += `<div class="job-heading-mini">
+          <a class="log-external" href="${j.html_url}" target="_blank" rel="noopener">Open on GitHub ↗</a>
+        </div>`;
+      }
+
+      html += `<div class="steps-list" data-job-id="${j.id}">`;
+      (j.steps || []).forEach(s => {
         const sd = (s.completed_at && s.started_at)
           ? Math.round((new Date(s.completed_at) - new Date(s.started_at)) / 1000) : null;
         const sDurStr = sd !== null ? (sd >= 60 ? `${Math.floor(sd/60)}m ${sd%60}s` : `${sd}s`) : (s.status === 'in_progress' ? 'running…' : '—');
         const sCls = conclusionClass(s.conclusion || s.status);
         const icon = sCls === 'success' ? '✓' : sCls === 'failure' ? '✗' : sCls === 'skipped' ? '○' : sCls === 'in_progress' ? '●' : '–';
-        return `<div class="step-row step-${sCls}">
-          <span class="step-icon">${icon}</span>
-          <span class="step-name">${escapeHtml(s.name)}</span>
-          <span class="step-duration">${sDurStr}</span>
-        </div>`;
-      }).join('') || '<div class="step-row step-skipped"><span class="step-name text-muted-foreground">No steps reported.</span></div>';
-
-      html += `
-        <div class="job-card ${expanded ? 'expanded' : ''}" data-job-id="${j.id}">
-          <button type="button" class="job-card-head" onclick="toggleJobCard(this)" aria-expanded="${expanded}">
-            <span class="run-dot ${cls}"></span>
-            <span class="job-name">${escapeHtml(j.name)}</span>
-            <span class="status-badge status-${cls}">${conclusion}</span>
-            <span class="job-head-meta">⏱ ${durStr}</span>
-            <span class="job-chevron" aria-hidden="true">▾</span>
-          </button>
-          <div class="job-card-content">
-            <div class="steps-list">${steps}</div>
-            <div class="job-log-section">
-              <button type="button" class="log-toggle" onclick="toggleJobLog(this, ${j.id})" aria-expanded="false">
-                <span class="job-chevron" aria-hidden="true">▾</span>
-                <span>📜 Log output</span>
-                <a class="log-external" href="${j.html_url}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Open on GitHub ↗</a>
-              </button>
-              <div class="job-log-body" data-job-id="${j.id}"></div>
-            </div>
-          </div>
-        </div>`;
+        const hasLog = sCls !== 'skipped' && s.status !== 'queued';
+        const stepNum = s.number;
+        html += `
+          <div class="step-block step-${sCls}${hasLog ? '' : ' no-log'}" data-job-id="${j.id}" data-step-num="${stepNum}" data-step-name="${escapeHtml(s.name)}">
+            <button type="button" class="step-row" ${hasLog ? `onclick="toggleStepLog(this)"` : `disabled aria-disabled="true"`} aria-expanded="false">
+              <span class="step-icon">${icon}</span>
+              <span class="step-name">${escapeHtml(s.name)}</span>
+              <span class="step-duration">${sDurStr}</span>
+              ${hasLog ? '<span class="step-chevron" aria-hidden="true">▾</span>' : ''}
+            </button>
+            ${hasLog ? `<div class="step-log-body" data-loaded="0"></div>` : ''}
+          </div>`;
+      });
+      html += '</div>';
     });
-    html += '</div>';
+
     container.innerHTML = html;
 
-    // Auto-refresh job list every 5s while any job is still running
     if (isRunning) {
       _logModalRefreshTimer = setTimeout(() => loadRunJobs(runId, container, status), 5000);
     }
@@ -348,113 +343,171 @@ async function loadRunJobs(runId, container, status) {
 
 let _logModalRefreshTimer = null;
 const _jobLogPolls = new Map(); // jobId → timer
+const _jobLogCache = new Map(); // jobId → { steps: Map<stepName, lines[]>, raw: string }
 
 function escapeHtml(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
-function toggleJobCard(headEl) {
-  const card = headEl.closest('.job-card');
-  const open = card.classList.toggle('expanded');
-  headEl.setAttribute('aria-expanded', String(open));
+async function toggleStepLog(btn) {
+  const block = btn.closest('.step-block');
+  const body = block.querySelector('.step-log-body');
+  if (!body) return;
+  const open = block.classList.toggle('open');
+  btn.setAttribute('aria-expanded', String(open));
+  if (!open) return;
+
+  const jobId = block.dataset.jobId;
+  const stepName = block.dataset.stepName;
+  const stepNum = parseInt(block.dataset.stepNum, 10);
+
+  if (body.dataset.loaded !== '1') {
+    body.innerHTML = '<div class="log-loading">Fetching log…</div>';
+    const cache = await ensureJobLogCache(jobId);
+    if (cache.error) {
+      body.innerHTML = `<div class="log-loading">❌ ${escapeHtml(cache.error)}</div>`;
+      return;
+    }
+    const lines = pickStepLines(cache, stepName, stepNum);
+    renderStepLog(body, lines, stepName);
+    body.dataset.loaded = '1';
+  }
+
+  // Stream if step still running
+  const stepRunning = block.classList.contains('step-in_progress');
+  if (stepRunning && !_jobLogPolls.has(`${jobId}:${stepNum}`)) {
+    const t = setInterval(async () => {
+      _jobLogCache.delete(jobId);
+      const cache = await ensureJobLogCache(jobId);
+      if (!cache.error) {
+        const lines = pickStepLines(cache, stepName, stepNum);
+        renderStepLog(body, lines, stepName);
+      }
+    }, 4000);
+    _jobLogPolls.set(`${jobId}:${stepNum}`, t);
+  }
 }
 
-async function toggleJobLog(toggleEl, jobId) {
-  const section = toggleEl.parentElement;
-  const body = section.querySelector('.job-log-body');
-  const open = section.classList.toggle('open');
-  toggleEl.setAttribute('aria-expanded', String(open));
-  if (!open) {
-    // Stop polling on collapse
-    const t = _jobLogPolls.get(jobId);
-    if (t) { clearInterval(t); _jobLogPolls.delete(jobId); }
+async function ensureJobLogCache(jobId) {
+  if (_jobLogCache.has(jobId)) return _jobLogCache.get(jobId);
+  try {
+    // NOTE: do NOT set Accept: text/plain — GitHub responds 415.
+    // Default Accept works; endpoint 302-redirects to Azure Blob (text/plain).
+    const r = await fetch(`${API}/repos/${OWNER}/${REPO}/actions/jobs/${jobId}/logs`, {
+      headers: { 'Authorization': `Bearer ${sessionToken}` }
+    });
+    if (r.status === 404) {
+      const empty = { raw: '', groups: [], error: null, notReady: true };
+      return empty;
+    }
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const raw = await r.text();
+    const parsed = parseJobLog(raw);
+    _jobLogCache.set(jobId, parsed);
+    return parsed;
+  } catch (e) {
+    return { error: e.message };
+  }
+}
+
+// Split full job log into ##[group]…##[endgroup] sections.
+// Each group is anchored to a step by matching the title against the step name.
+function parseJobLog(raw) {
+  const cleaned = raw.replace(/\x1b\[[0-9;]*m/g, ''); // strip ANSI
+  const lines = cleaned.split(/\r?\n/);
+  const groups = []; // [{title, lines: []}]
+  let current = null;
+  const preamble = []; // lines before first group
+  for (const ln of lines) {
+    const m = ln.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z) (.*)$/);
+    const ts = m ? m[1] : '';
+    const txt = m ? m[2] : ln;
+    if (/^##\[group\]/.test(txt)) {
+      const title = txt.replace(/^##\[group\]/, '').trim();
+      current = { title, lines: [] };
+      groups.push(current);
+    } else if (/^##\[endgroup\]/.test(txt)) {
+      current = null;
+    } else if (current) {
+      current.lines.push({ ts, txt });
+    } else {
+      preamble.push({ ts, txt });
+    }
+  }
+  return { raw: cleaned, groups, preamble, error: null };
+}
+
+// Find the lines belonging to the given step name.
+// Matching strategy: case-insensitive substring match between step name and group title.
+function pickStepLines(cache, stepName, stepNum) {
+  if (!cache || !cache.groups) return [];
+  const needle = stepName.toLowerCase();
+  // Direct title match first
+  let hits = cache.groups.filter(g => g.title.toLowerCase().includes(needle) || needle.includes(g.title.toLowerCase()));
+  // If multiple steps share a name pattern (e.g. "Run X"), keep best-effort
+  if (hits.length === 0) {
+    // Fallback: try positional — group index ≈ step number - 1 (rough)
+    const guess = cache.groups[Math.max(0, stepNum - 1)];
+    if (guess) hits = [guess];
+  }
+  const out = [];
+  hits.forEach(g => {
+    out.push({ ts: '', txt: `▸ ${g.title}`, marker: true });
+    out.push(...g.lines);
+  });
+  return out;
+}
+
+function renderStepLog(body, lines, stepName) {
+  if (!lines || lines.length === 0) {
+    body.innerHTML = '<div class="log-loading">No log output for this step.</div>';
     return;
   }
-  if (!body.dataset.loaded) {
-    body.innerHTML = '<div class="log-loading">Fetching log…</div>';
-    await fetchAndRenderJobLog(jobId, body);
-  }
-  // Start polling if the job's still running
-  const card = section.closest('.job-card');
-  const stillRunning = card.querySelector('.status-badge.status-in_progress, .status-badge.status-queued');
-  if (stillRunning && !_jobLogPolls.has(jobId)) {
-    const t = setInterval(() => fetchAndRenderJobLog(jobId, body, true), 4000);
-    _jobLogPolls.set(jobId, t);
-  }
-}
-
-async function fetchAndRenderJobLog(jobId, body, isPoll = false) {
-  try {
-    const r = await fetch(`${API}/repos/${OWNER}/${REPO}/actions/jobs/${jobId}/logs`, {
-      headers: { 'Authorization': `Bearer ${sessionToken}`, 'Accept': 'text/plain' }
-    });
-    if (r.status === 404) { body.innerHTML = '<div class="log-loading">Log not available yet (job still starting…).</div>'; return; }
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    const text = await r.text();
-    body.dataset.loaded = '1';
-    renderJobLogContent(body, text);
-  } catch (e) {
-    if (!isPoll) body.innerHTML = `<div class="log-loading">❌ ${escapeHtml(e.message)}</div>`;
-  }
-}
-
-function renderJobLogContent(body, raw) {
-  // Strip ANSI escape sequences
-  let text = raw.replace(/\x1b\[[0-9;]*m/g, '');
-  const lines = text.split(/\r?\n/);
   const html = ['<div class="log-toolbar">',
-    `<input type="search" class="input log-search" placeholder="Filter lines…" oninput="filterLogLines(this)">`,
+    `<input type="search" class="input log-search" placeholder="Filter…" oninput="filterLogLines(this)">`,
     `<button class="btn btn-outline sm" onclick="copyLogText(this)" type="button">Copy</button>`,
     `<label class="log-opt"><input type="checkbox" checked onchange="toggleLogTimestamps(this)"> timestamps</label>`,
     '</div>',
     '<pre class="log-pre"><code>'];
   for (const ln of lines) {
-    if (!ln) { html.push('\n'); continue; }
-    // Detect timestamp prefix: 2026-05-18T22:00:00.0000000Z
-    const m = ln.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z) (.*)$/);
-    const ts = m ? m[1] : '';
-    const content = m ? m[2] : ln;
-    let lineCls = 'log-line';
-    if (/^##\[group\]/.test(content)) lineCls += ' log-group';
-    else if (/^##\[endgroup\]/.test(content)) lineCls += ' log-endgroup';
-    else if (/^##\[error\]/.test(content) || /\b(error|failed|exception)\b/i.test(content)) lineCls += ' log-error';
-    else if (/^##\[warning\]/.test(content) || /\bwarning\b/i.test(content)) lineCls += ' log-warn';
-    else if (/^##\[command\]/.test(content)) lineCls += ' log-cmd';
-    const cleanContent = content
-      .replace(/^##\[group\]/, '▸ ')
-      .replace(/^##\[endgroup\]/, '')
+    const txt = ln.txt;
+    if (!txt && !ln.ts) { html.push('\n'); continue; }
+    let cls = 'log-line';
+    if (ln.marker) cls += ' log-group';
+    else if (/^##\[error\]/.test(txt) || /\b(error|failed|exception|traceback)\b/i.test(txt)) cls += ' log-error';
+    else if (/^##\[warning\]/.test(txt) || /\bwarning\b/i.test(txt)) cls += ' log-warn';
+    else if (/^##\[command\]/.test(txt)) cls += ' log-cmd';
+    const clean = txt
       .replace(/^##\[error\]/, '')
       .replace(/^##\[warning\]/, '')
       .replace(/^##\[command\]/, '$ ')
       .replace(/^##\[section\]/, '');
-    if (/^##\[endgroup\]/.test(content)) continue;
-    html.push(`<span class="${lineCls}">`);
-    if (ts) html.push(`<span class="log-ts">${ts.substring(11, 19)}</span> `);
-    html.push(escapeHtml(cleanContent));
+    html.push(`<span class="${cls}">`);
+    if (ln.ts) html.push(`<span class="log-ts">${ln.ts.substring(11, 19)}</span> `);
+    html.push(escapeHtml(clean));
     html.push('</span>\n');
   }
   html.push('</code></pre>');
   body.innerHTML = html.join('');
-  // Auto-scroll to bottom for streaming feel
   const pre = body.querySelector('.log-pre');
   if (pre) pre.scrollTop = pre.scrollHeight;
 }
 
 function filterLogLines(input) {
   const q = input.value.trim().toLowerCase();
-  const body = input.closest('.job-log-body');
+  const body = input.closest('.step-log-body');
   body.querySelectorAll('.log-line').forEach(el => {
     el.style.display = (!q || el.textContent.toLowerCase().includes(q)) ? '' : 'none';
   });
 }
 
 function toggleLogTimestamps(cb) {
-  const body = cb.closest('.job-log-body');
+  const body = cb.closest('.step-log-body');
   body.classList.toggle('hide-ts', !cb.checked);
 }
 
 function copyLogText(btn) {
-  const body = btn.closest('.job-log-body');
+  const body = btn.closest('.step-log-body');
   const text = (body.querySelector('.log-pre code')?.innerText) || '';
   navigator.clipboard.writeText(text).then(() => {
     const old = btn.textContent;
