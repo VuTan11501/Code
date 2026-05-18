@@ -466,8 +466,8 @@ tailwind.config = {
             <input type="text" class="input w-full px-3 py-2 rounded-md border border-input bg-transparent text-foreground text-sm" id="editSchedDates" placeholder="e.g. 1,15,28">
           </div>
           <div class="flex items-center gap-3">
-            <label class="field-label text-xs text-muted-foreground font-medium">Enabled</label>
-            <input type="checkbox" id="editSchedEnabled" checked class="w-4 h-4 accent-green-500">
+            <label class="field-label text-xs text-muted-foreground font-medium" for="editSchedEnabled">Enabled</label>
+            <div class="sched-toggle active" id="editSchedEnabled" role="switch" aria-checked="true" tabindex="0" onclick="this.classList.toggle('active'); this.setAttribute('aria-checked', this.classList.contains('active'))"></div>
           </div>
         </div>
 

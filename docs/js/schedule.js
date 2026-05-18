@@ -512,7 +512,7 @@ function renderScheduledQueue(entries) {
         ${nextInfo}
       </div>
       <div class="sched-item-actions">
-        ${!isOnce ? `<div class="${toggleCls}" onclick="toggleScheduleEntry(${i})" title="${enabled ? 'Disable' : 'Enable'}"></div>` : ''}
+        ${!isOnce ? `<div class="${toggleCls}" role="switch" aria-checked="${enabled}" tabindex="0" onclick="toggleScheduleEntry(${i})" title="${enabled ? 'Disable' : 'Enable'}"></div>` : ''}
         <button class="btn danger sm" onclick="deleteScheduledRun(${i})" title="Delete">🗑</button>
       </div>
     </div>`;
@@ -741,7 +741,8 @@ function openEditSchedModal(index) {
     document.getElementById('editSchedTime').value = r.time || '09:00';
     document.getElementById('editSchedDays').value = (r.days || []).join(',');
     document.getElementById('editSchedDates').value = (r.dates || []).join(',');
-    document.getElementById('editSchedEnabled').checked = entry.enabled !== false;
+    document.getElementById('editSchedEnabled').classList.toggle('active', entry.enabled !== false);
+    document.getElementById('editSchedEnabled').setAttribute('aria-checked', entry.enabled !== false);
   }
 
   document.getElementById('editSchedModal').classList.add('open');
@@ -788,7 +789,7 @@ async function saveEditSchedule() {
       recurrence.dates = datesStr.split(',').map(d => parseInt(d.trim())).filter(d => !isNaN(d));
     }
 
-    const enabled = document.getElementById('editSchedEnabled').checked;
+    const enabled = document.getElementById('editSchedEnabled').classList.contains('active');
     updatedEntry = { type: 'recurring', workflow, recurrence, enabled, note, created: scheduleTableData[index].created || new Date().toISOString() };
   }
 
