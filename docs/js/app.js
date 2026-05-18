@@ -221,6 +221,12 @@ function navigate(hash) {
   // Initialize page-specific content
   if (page === 'schedule' && typeof initSchedulePage === 'function') initSchedulePage();
   if (page === 'settings' && typeof initSettingsPage === 'function') initSettingsPage();
+  if (page === 'dashboard' && typeof refresh === 'function' && sessionToken) {
+    // Ensure dashboard always has fresh data when entering the tab.
+    // Guards against any scenario where polling didn't start or stalled.
+    refresh();
+    if (typeof startPolling === 'function' && !pollTimer) startPolling();
+  }
 }
 
 window.addEventListener('hashchange', () => {
@@ -426,15 +432,29 @@ if ('serviceWorker' in navigator) {
 }
 
 // ═══════════════════════════════════════════════════
-//  INIT
+//  INIT  (wait for ALL scripts to load before init —
+//   otherwise dashboard.js symbols like startPolling/
+//   refresh aren't defined yet when app.js executes,
+//   causing a silent ReferenceError in showDashboard()
+//   and the dashboard never starts polling on reload.)
 // ═══════════════════════════════════════════════════
-updateNotifBtn();
-if (restoreSession()) {
-  // Session survived reload — go straight to dashboard
-  showDashboard();
-} else if (!hasVault()) {
-  switchTab('setup');
-  document.getElementById('authDesc').textContent = 'First time? Set up your encrypted vault.';
+function bootstrap() {
+  updateNotifBtn();
+  if (restoreSession()) {
+    // Session survived reload — go straight to dashboard
+    showDashboard();
+  } else if (!hasVault()) {
+    switchTab('setup');
+    document.getElementById('authDesc').textContent = 'First time? Set up your encrypted vault.';
+  } else {
+    document.getElementById('passphrase').focus();
+  }
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', bootstrap);
 } else {
-  document.getElementById('passphrase').focus();
+  // DOM already parsed (scripts at end of body) — but defer to next tick
+  // so any remaining <script> tags after this one finish executing first.
+  setTimeout(bootstrap, 0);
 }
