@@ -141,6 +141,28 @@ let _calendarEntries = [];      // cached for pip-action handlers
 let _pressTimer = null;          // long-press detection
 let _pressMoved = false;
 
+const PIP_FILTER_KEY = 'sched_pip_filter_v1';
+const PIP_TYPES = [
+  { key: 'checkin',  label: 'Checkin',  match: f => f.includes('checkin') },
+  { key: 'checkout', label: 'Checkout', match: f => f.includes('checkout') },
+  { key: 'ot',       label: 'OT',       match: f => f.includes('ot-creator') || f.includes('ot-report') },
+  { key: 'forecast', label: 'Forecast', match: f => f.includes('forecast') || f.includes('jpy') },
+];
+function _loadPipFilter() {
+  try { return JSON.parse(localStorage.getItem(PIP_FILTER_KEY)) || {}; } catch { return {}; }
+}
+function _savePipFilter(f) { try { localStorage.setItem(PIP_FILTER_KEY, JSON.stringify(f)); } catch {} }
+function _pipTypeOf(wfFile) {
+  const t = PIP_TYPES.find(t => t.match(wfFile || ''));
+  return t ? t.key : 'forecast';
+}
+function togglePipFilter(key) {
+  const f = _loadPipFilter();
+  f[key] = f[key] === false;     // toggle (default visible = true)
+  _savePipFilter(f);
+  renderScheduleCalendar(_calendarEntries);
+}
+
 function renderScheduleCalendar(gistEntries) {
   const container = document.getElementById('scheduleCalendar');
   if (!container) return;
@@ -148,33 +170,46 @@ function renderScheduleCalendar(gistEntries) {
   _calendarEntries = gistEntries || [];
   closePipPopover();
 
-  // Build pip records: { entryIdx, dayIdx, time, name, wfFile, enabled }
+  const filter = _loadPipFilter();
+  const isHidden = (k) => filter[k] === true;     // hidden when explicitly true
+
+  // Build pip records: { entryIdx, dayIdx, time, name, wfFile, enabled, typeKey }
   const pips = [];
+  const typeCounts = { checkin: 0, checkout: 0, ot: 0, forecast: 0 };
   for (let i = 0; i < _calendarEntries.length; i++) {
     const entry = _calendarEntries[i];
     if (entry.type !== 'recurring') continue;
     const r = entry.recurrence || {};
     const wf = WORKFLOWS.find(w => w.file === entry.workflow);
     const name = wf ? wf.name : entry.workflow;
+    const typeKey = _pipTypeOf(entry.workflow);
     let days = [];
     if (r.pattern === 'daily') days = [0,1,2,3,4,5,6];
     else if (r.pattern === 'weekdays') days = [1,2,3,4,5];
     else if (r.pattern === 'weekly') days = r.days || [];
-    else continue;       // monthly: not shown in weekly grid (no fixed weekday)
+    else continue;
     if (!days.length) continue;
     const time = r.time || '00:00';
     for (const d of days) {
-      pips.push({ entryIdx: i, dayIdx: d, time, name, wfFile: entry.workflow, enabled: entry.enabled !== false });
+      pips.push({ entryIdx: i, dayIdx: d, time, name, wfFile: entry.workflow, enabled: entry.enabled !== false, typeKey });
+      if (entry.enabled !== false) typeCounts[typeKey] = (typeCounts[typeKey] || 0) + 1;
     }
   }
+  const visiblePips = pips.filter(p => !isHidden(p.typeKey));
+
+  // Stats
+  const activeEntries = _calendarEntries.filter(e => e.enabled !== false && (e.type === 'recurring' || (e.type === 'once' && !e.dispatched))).length;
+  const oneTimePending = _calendarEntries.filter(e => e.type === 'once' && !e.dispatched).length;
+  const nextDelay = (typeof computeNextFireDelay === 'function') ? computeNextFireDelay(_calendarEntries) : null;
+  const nextStr = (nextDelay && nextDelay > 0) ? _formatCountdown(nextDelay) : '—';
+  const weekRuns = visiblePips.filter(p => p.enabled).length;     // visible recurring runs/week
 
   // Collect unique times. Always include common slots so empty grid still useful.
   const baseTimes = ['09:00', '12:00', '18:00', '22:00'];
   const timeSet = new Set(baseTimes);
-  for (const p of pips) timeSet.add(p.time);
+  for (const p of visiblePips) timeSet.add(p.time);
   const times = [...timeSet].sort();
 
-  // Today + next-upcoming time slot for highlight
   const nowJST = jstNow();
   const todayDow = nowJST.getDay();
   const nowMin = nowJST.getHours() * 60 + nowJST.getMinutes();
@@ -185,20 +220,40 @@ function renderScheduleCalendar(gistEntries) {
   }
 
   const dayNames = ['S','M','T','W','T','F','S'];
-  let html = '<div class="schedule-grid-wrapper"><div class="schedule-grid">';
-  // Header row
+  let html = '';
+
+  // Stats bar
+  html += `<div class="schedule-stats">
+    <div class="stat-chip"><span class="stat-num">${activeEntries}</span><span class="stat-lbl">active</span></div>
+    <div class="stat-chip"><span class="stat-num">${weekRuns}</span><span class="stat-lbl">runs/week</span></div>
+    <div class="stat-chip"><span class="stat-num">${oneTimePending}</span><span class="stat-lbl">one-time</span></div>
+    <div class="stat-chip stat-chip-next"><span class="stat-num">${nextStr}</span><span class="stat-lbl">next run</span></div>
+  </div>`;
+
+  // Filter chips
+  html += '<div class="schedule-filter">';
+  for (const t of PIP_TYPES) {
+    const count = typeCounts[t.key] || 0;
+    const hidden = isHidden(t.key);
+    html += `<button type="button" class="filter-chip filter-${t.key}${hidden ? ' off' : ''}" onclick="togglePipFilter('${t.key}')" title="${hidden ? 'Show' : 'Hide'} ${t.label}">
+      <span class="filter-dot"></span>${t.label}<span class="filter-count">${count}</span>
+    </button>`;
+  }
+  html += '</div>';
+
+  // Grid
+  html += '<div class="schedule-grid-wrapper"><div class="schedule-grid">';
   html += '<div class="schedule-cell header"></div>';
   for (let d = 0; d < 7; d++) {
     const cls = d === todayDow ? 'header today-col' : 'header';
     html += `<div class="schedule-cell ${cls}">${dayNames[d]}</div>`;
   }
-  // Body rows
   for (let ti = 0; ti < times.length; ti++) {
     const time = times[ti];
     const rowCls = ti === nextTimeIdx ? 'time-label next-time' : 'time-label';
     html += `<div class="schedule-cell ${rowCls}" title="${ti === nextTimeIdx ? 'Next upcoming slot' : ''}">${time}</div>`;
     for (let day = 0; day < 7; day++) {
-      const cellPips = pips.filter(p => p.dayIdx === day && p.time === time);
+      const cellPips = visiblePips.filter(p => p.dayIdx === day && p.time === time);
       const isToday = day === todayDow;
       const isNext = ti === nextTimeIdx;
       const classes = ['schedule-cell', 'sc-slot'];
@@ -210,19 +265,13 @@ function renderScheduleCalendar(gistEntries) {
         : '';
       html += `<div class="${classes.join(' ')}" ${onclick} title="${cellPips.length === 0 ? 'Tap to add' : ''}">`;
       for (const p of cellPips) {
-        const wfFile = p.wfFile || '';
-        const cls = wfFile.includes('checkin') ? 'checkin'
-                  : wfFile.includes('checkout') ? 'checkout'
-                  : wfFile.includes('ot-creator') ? 'ot'
-                  : 'forecast';
         const dimmed = p.enabled ? '' : ' disabled';
-        html += `<span class="schedule-pip ${cls}${dimmed}" data-entry="${p.entryIdx}" title="${p.name}${p.enabled ? '' : ' (disabled)'}">${p.name.split(' ').slice(-1)[0]}</span>`;
+        html += `<span class="schedule-pip ${p.typeKey}${dimmed}" data-entry="${p.entryIdx}" title="${p.name}${p.enabled ? '' : ' (disabled)'}">${p.name.split(' ').slice(-1)[0]}</span>`;
       }
       html += '</div>';
     }
   }
   html += '</div>';
-  // Legend
   html += '<div class="schedule-legend">';
   html += '<span class="legend-item"><span class="legend-dot today-col"></span>Today</span>';
   html += '<span class="legend-item"><span class="legend-dot next-time"></span>Next slot</span>';
@@ -230,7 +279,7 @@ function renderScheduleCalendar(gistEntries) {
   html += '</div></div>';
   container.innerHTML = html;
 
-  // Wire up pip interactions (tap → popover, long-press → toggle)
+  // Wire up pip interactions
   container.querySelectorAll('.schedule-pip[data-entry]').forEach(pip => {
     const entryIdx = parseInt(pip.getAttribute('data-entry'));
     pip.addEventListener('pointerdown', (e) => {
@@ -254,8 +303,17 @@ function renderScheduleCalendar(gistEntries) {
     });
   });
 
-  // Dismiss popover on outside click
   document.addEventListener('click', _outsidePopoverHandler, { capture: true });
+}
+
+function _formatCountdown(ms) {
+  if (ms < 60_000) return `${Math.max(1, Math.round(ms/1000))}s`;
+  const min = Math.round(ms / 60_000);
+  if (min < 60) return `${min}m`;
+  const h = Math.floor(min / 60), m = min % 60;
+  if (h < 24) return m ? `${h}h ${m}m` : `${h}h`;
+  const d = Math.floor(h / 24), hr = h % 24;
+  return hr ? `${d}d ${hr}h` : `${d}d`;
 }
 
 function _outsidePopoverHandler(e) {
@@ -279,19 +337,27 @@ function openPipActions(entryIdx, pipEl) {
   const enabled = entry.enabled !== false;
   const time = entry.recurrence?.time || '';
 
+  // Per-entry next-fire countdown
+  let nextFireStr = '';
+  if (typeof computeNextFireDelay === 'function') {
+    const d = computeNextFireDelay([entry]);
+    if (d && d > 0) nextFireStr = ` · next in ${_formatCountdown(d)}`;
+  }
+
   const pop = document.createElement('div');
   pop.id = 'pipActionsPopover';
   pop.className = 'pip-popover';
   pop.innerHTML = `
     <div class="pip-popover-header">
       <div class="pip-popover-title">${wf?.icon || '⚙️'} ${name}</div>
-      <div class="pip-popover-sub text-muted">${time} · ${describeRecurrence(entry.recurrence || {})}</div>
+      <div class="pip-popover-sub text-muted">${time} · ${describeRecurrence(entry.recurrence || {})}${nextFireStr}</div>
     </div>
     <div class="pip-popover-actions">
       <button class="btn sm" onclick="runScheduledNow(${entryIdx})">${ICON('play', 14)} Run now</button>
       <button class="btn sm" onclick="openEditSchedModal(${entryIdx}); closePipPopover();">${ICON('edit', 14)} Edit</button>
+      <button class="btn sm" onclick="duplicateScheduledRun(${entryIdx})">${ICON('copy', 14)} Duplicate</button>
       <button class="btn sm" onclick="toggleRecurringEnabled(${entryIdx})">${ICON(enabled ? 'pause' : 'play', 14)} ${enabled ? 'Disable' : 'Enable'}</button>
-      <button class="btn danger sm" onclick="deleteScheduledRun(${entryIdx}); closePipPopover();">${ICON('trash', 14)} Delete</button>
+      <button class="btn danger sm pip-action-wide" onclick="deleteScheduledRun(${entryIdx}); closePipPopover();">${ICON('trash', 14)} Delete</button>
     </div>
   `;
   document.body.appendChild(pop);
@@ -345,6 +411,28 @@ async function runScheduledNow(entryIdx) {
     } else {
       toast(`❌ Failed (${res.status})`);
     }
+  } catch (e) { toast(`❌ ${e.message}`); }
+}
+
+async function duplicateScheduledRun(entryIdx) {
+  closePipPopover();
+  try {
+    const entries = await loadEntriesFromGist();
+    const src = entries[entryIdx];
+    if (!src) { toast('⚠️ Entry not found'); return; }
+    const copy = JSON.parse(JSON.stringify(src));
+    copy.created = new Date().toISOString();
+    if (copy.type === 'once') {
+      copy.dispatched = false;
+      delete copy.last_run;
+    } else {
+      delete copy.last_run;
+    }
+    copy.note = (copy.note ? copy.note + ' ' : '') + '(copy)';
+    entries.push(copy);
+    await saveToGist(entries);
+    toast('📋 Duplicated');
+    loadScheduledRuns();
   } catch (e) { toast(`❌ ${e.message}`); }
 }
 

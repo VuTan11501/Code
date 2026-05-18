@@ -41,6 +41,7 @@ const ICON_PATHS = {
   barChart:   '<path d="M3 3v18h18"/><path d="M7 16V9"/><path d="M12 16v-5"/><path d="M17 16v-3"/>',
   play:       '<polygon points="6 3 20 12 6 21 6 3"/>',
   pause:      '<rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/>',
+  copy:       '<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
 };
 
 function ICON(name, size = 16, extraClass = '') {

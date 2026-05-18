@@ -487,6 +487,59 @@ select option { background: var(--card); color: var(--foreground); }
   100% { box-shadow: 0 0 0 0 rgba(59,130,246,0); }
 }
 
+/* Schedule stats bar */
+.schedule-stats {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--sp-2);
+  margin-bottom: var(--sp-3);
+}
+.stat-chip {
+  background: var(--muted); border: 1px solid var(--border);
+  border-radius: var(--radius-md); padding: var(--sp-2) var(--sp-3);
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  min-width: 0;
+}
+.stat-chip .stat-num {
+  font-size: var(--fs-md); font-weight: 700; color: var(--foreground);
+  font-family: var(--font-mono); line-height: 1.1;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%;
+}
+.stat-chip .stat-lbl { font-size: 10px; color: var(--muted-foreground); text-transform: uppercase; letter-spacing: 0.05em; }
+.stat-chip-next .stat-num { color: var(--green); }
+
+/* Filter chips */
+.schedule-filter {
+  display: flex; flex-wrap: wrap; gap: var(--sp-2);
+  margin-bottom: var(--sp-3);
+}
+.filter-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 10px; border-radius: var(--radius-full);
+  border: 1px solid var(--border); background: var(--card);
+  font-size: var(--fs-xs); color: var(--foreground); cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-out);
+  -webkit-tap-highlight-color: transparent;
+}
+.filter-chip:hover { background: var(--muted); }
+.filter-chip.off { opacity: 0.4; text-decoration: line-through; }
+.filter-chip .filter-dot {
+  width: 8px; height: 8px; border-radius: 2px; display: inline-block;
+}
+.filter-chip.filter-checkin  .filter-dot { background: var(--green); }
+.filter-chip.filter-checkout .filter-dot { background: var(--orange); }
+.filter-chip.filter-ot       .filter-dot { background: var(--purple); }
+.filter-chip.filter-forecast .filter-dot { background: var(--blue); }
+.filter-chip .filter-count {
+  font-family: var(--font-mono); color: var(--muted-foreground);
+  background: var(--muted); padding: 0 5px; border-radius: var(--radius-sm);
+  font-size: 10px; min-width: 18px; text-align: center;
+}
+
+.pip-popover-actions .pip-action-wide { grid-column: 1 / -1; }
+
+@media (max-width: 600px) {
+  .schedule-stats { grid-template-columns: repeat(2, 1fr); }
+}
+
 /* ─── DAY PICKER ─── */
 .day-picker { display: flex; gap: 8px; flex-wrap: wrap; }
 .day-chip { cursor: pointer; -webkit-tap-highlight-color: transparent; }
