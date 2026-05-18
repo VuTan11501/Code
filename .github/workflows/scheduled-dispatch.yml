@@ -2,9 +2,15 @@ name: Scheduled Run Dispatcher
 
 on:
   schedule:
-    # Check every 5 minutes for pending scheduled runs
-    - cron: '*/5 * * * *'
+    # Backup cron — in case self-loop chain breaks (rare)
+    - cron: '*/15 * * * *'
   workflow_dispatch:
+    inputs:
+      loop_minutes:
+        description: 'How many minutes to loop within this run (max ~330)'
+        required: false
+        default: '300'
+        type: string
 
 permissions:
   contents: read
@@ -17,16 +23,17 @@ concurrency:
 jobs:
   dispatch:
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    timeout-minutes: 350
     steps:
-      - name: Process scheduled runs from Gist
+      - name: Self-looping dispatcher (checks every 30s)
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
           GIST_ID: 'abc2a47c0a396025a72a6580227ff493'
           GITHUB_REPOSITORY: ${{ github.repository }}
+          LOOP_MINUTES: ${{ inputs.loop_minutes || '300' }}
         run: |
           python3 << 'EOF'
-          import json, os, sys
+          import json, os, sys, time
           from datetime import datetime, timezone, timedelta
           import urllib.request
           import urllib.error
@@ -34,32 +41,44 @@ jobs:
           GIST_ID = os.environ['GIST_ID']
           REPO = os.environ['GITHUB_REPOSITORY']
           TOKEN = os.environ.get('GH_TOKEN', '')
+          LOOP_MINUTES = int(os.environ.get('LOOP_MINUTES', '300'))
+          CHECK_INTERVAL_SEC = 30
           JST = timezone(timedelta(hours=9))
 
+          loop_start = time.time()
+          loop_end = loop_start + (LOOP_MINUTES * 60)
+          gist_etag = None
+          cached_runs = None
+
           def gist_read():
-              """Read scheduled-runs.json from Gist."""
+              """Read scheduled-runs.json with ETag conditional caching."""
+              global gist_etag, cached_runs
               url = f"https://api.github.com/gists/{GIST_ID}"
               req = urllib.request.Request(url)
               req.add_header('Authorization', f'Bearer {TOKEN}')
               req.add_header('Accept', 'application/vnd.github+json')
+              if gist_etag:
+                  req.add_header('If-None-Match', gist_etag)
               try:
                   with urllib.request.urlopen(req) as resp:
+                      gist_etag = resp.headers.get('ETag')
                       data = json.loads(resp.read())
-                      file_content = data['files']['scheduled-runs.json']['content']
-                      return json.loads(file_content)
+                      cached_runs = json.loads(data['files']['scheduled-runs.json']['content'])
+                      return cached_runs
+              except urllib.error.HTTPError as e:
+                  if e.code == 304 and cached_runs is not None:
+                      return cached_runs
+                  print(f"  ❌ Gist read HTTP {e.code}")
+                  return None
               except Exception as e:
-                  print(f"❌ Failed to read Gist: {e}")
+                  print(f"  ❌ Gist read error: {e}")
                   return None
 
           def gist_write(entries):
-              """Write scheduled-runs.json to Gist."""
+              global cached_runs, gist_etag
               url = f"https://api.github.com/gists/{GIST_ID}"
               payload = json.dumps({
-                  "files": {
-                      "scheduled-runs.json": {
-                          "content": json.dumps(entries, indent=2)
-                      }
-                  }
+                  "files": {"scheduled-runs.json": {"content": json.dumps(entries, indent=2)}}
               }).encode()
               req = urllib.request.Request(url, data=payload, method='PATCH')
               req.add_header('Authorization', f'Bearer {TOKEN}')
@@ -68,29 +87,16 @@ jobs:
               try:
                   with urllib.request.urlopen(req) as resp:
                       print(f"  📝 Gist updated (HTTP {resp.status})")
+                      cached_runs = entries
+                      gist_etag = resp.headers.get('ETag')
                       return True
               except urllib.error.HTTPError as e:
-                  print(f"  ❌ Failed to update Gist: HTTP {e.code}")
+                  print(f"  ❌ Gist write HTTP {e.code}")
                   return False
 
-          runs = gist_read()
-          if runs is None:
-              print("Failed to read Gist. Exiting.")
-              sys.exit(1)
-
-          if not runs:
-              print("No scheduled runs pending.")
-              sys.exit(0)
-
-          now = datetime.now(timezone.utc)
-          now_jst = now.astimezone(JST)
-          updated = []
-          triggered_count = 0
-
           def dispatch_workflow(workflow, reason="", inputs=None):
-              """Trigger a workflow_dispatch via GitHub API."""
               if not TOKEN:
-                  print(f"  ⚠️ GH_PAT not set, cannot dispatch")
+                  print(f"  ⚠️ GH_PAT not set")
                   return False
               url = f"https://api.github.com/repos/{REPO}/actions/workflows/{workflow}/dispatches"
               payload = {"ref": "main"}
@@ -106,125 +112,108 @@ jobs:
                       print(f"  ✅ Triggered {workflow} (HTTP {resp.status}) {reason}")
                       return True
               except urllib.error.HTTPError as e:
-                  print(f"  ❌ Failed to trigger {workflow}: HTTP {e.code}")
+                  print(f"  ❌ Dispatch {workflow} HTTP {e.code}")
                   return False
 
-          def should_run_recurring(entry):
-              """Check if a recurring schedule should fire now.
-              
-              Uses a 15-min window (GitHub Actions cron can be delayed 5-30 min)
-              and last_run dedup to prevent double execution.
-              """
-              if entry.get('enabled') is False:
-                  return False
-
+          def should_run_recurring(entry, now_jst):
+              if entry.get('enabled') is False: return False
               rec = entry.get('recurrence', {})
               pattern = rec.get('pattern', '')
               sched_time = rec.get('time', '00:00')
-
-              # Check start_date / end_date bounds
               start_date = rec.get('start_date')
               end_date = rec.get('end_date')
               today_str = now_jst.strftime('%Y-%m-%d')
-              if start_date and today_str < start_date:
-                  return False
-              if end_date and today_str > end_date:
-                  return False
-
-              # Dedup: skip if already ran today (based on last_run)
+              if start_date and today_str < start_date: return False
+              if end_date and today_str > end_date: return False
               last_run = entry.get('last_run')
               if last_run:
                   last_run_dt = datetime.fromisoformat(last_run.replace('Z', '+00:00'))
-                  last_run_jst = last_run_dt.astimezone(JST)
-                  if last_run_jst.date() == now_jst.date():
-                      return False
-
-              # Check if scheduled time has passed today.
-              # Use generous catch-up: if time passed and not yet run today, fire it.
-              # This handles GitHub Actions cron delays of any duration.
+                  if last_run_dt.astimezone(JST).date() == now_jst.date(): return False
               hour, minute = map(int, sched_time.split(':'))
               sched_dt = now_jst.replace(hour=hour, minute=minute, second=0, microsecond=0)
-              diff_min = (now_jst - sched_dt).total_seconds() / 60
-              if diff_min < 0:
-                  return False  # Not yet time today
-
-              # Check day-of-week / day-of-month
-              dow = now_jst.weekday()  # 0=Mon in Python
-              # Convert to JS convention: 0=Sun, 1=Mon, ...
+              if (now_jst - sched_dt).total_seconds() < 0: return False
+              dow = now_jst.weekday()
               js_dow = (dow + 1) % 7 if dow < 6 else 0
-
-              if pattern == 'daily':
-                  return True
-              elif pattern == 'weekdays':
-                  return js_dow in [1, 2, 3, 4, 5]
-              elif pattern == 'weekly':
-                  days = rec.get('days', [])
-                  return js_dow in days
-              elif pattern == 'monthly':
-                  dates = rec.get('dates', [])
-                  return now_jst.day in dates
-
+              if pattern == 'daily': return True
+              elif pattern == 'weekdays': return js_dow in [1,2,3,4,5]
+              elif pattern == 'weekly': return js_dow in rec.get('days', [])
+              elif pattern == 'monthly': return now_jst.day in rec.get('dates', [])
               return False
 
-          for entry in runs:
-              entry_type = entry.get('type', 'once')
-              # Build inputs from entry (e.g. location + lat/lon for checkin/checkout)
-              entry_inputs = {}
-              if entry.get('location'):
-                  entry_inputs['location'] = entry['location']
-              if entry.get('location_lat') is not None:
-                  entry_inputs['latitude'] = str(entry['location_lat'])
-              if entry.get('location_lon') is not None:
-                  entry_inputs['longitude'] = str(entry['location_lon'])
-
-              if entry_type == 'recurring':
-                  # Recurring: check if it's time, dispatch, keep in list
-                  if should_run_recurring(entry):
-                      workflow = entry['workflow']
-                      rec = entry.get('recurrence', {})
-                      print(f"🔁 Recurring dispatch: {workflow} ({rec.get('pattern','')}, {rec.get('time','')})")
-                      if dispatch_workflow(workflow, f"[recurring: {rec.get('pattern','')}]", entry_inputs or None):
-                          entry['last_run'] = now.isoformat()
-                          triggered_count += 1
-                  # Always keep recurring entries
-                  updated.append(entry)
-
-              else:
-                  # One-time: check run_at, dispatch, remove from list
-                  run_at_str = entry.get('run_at', '')
-                  if not run_at_str:
+          def process_runs():
+              runs = gist_read()
+              if not runs: return 0
+              now = datetime.now(timezone.utc)
+              now_jst = now.astimezone(JST)
+              updated = []
+              triggered = 0
+              changed = False
+              for entry in runs:
+                  entry_type = entry.get('type', 'once')
+                  entry_inputs = {}
+                  if entry.get('location'):
+                      entry_inputs['location'] = entry['location']
+                  if entry.get('location_lat') is not None:
+                      entry_inputs['latitude'] = str(entry['location_lat'])
+                  if entry.get('location_lon') is not None:
+                      entry_inputs['longitude'] = str(entry['location_lon'])
+                  if entry_type == 'recurring':
+                      if should_run_recurring(entry, now_jst):
+                          wf = entry['workflow']
+                          rec = entry.get('recurrence', {})
+                          print(f"🔁 Recurring: {wf} ({rec.get('pattern','')}, {rec.get('time','')})")
+                          if dispatch_workflow(wf, "[recurring]", entry_inputs or None):
+                              entry['last_run'] = now.isoformat()
+                              triggered += 1
+                              changed = True
                       updated.append(entry)
-                      continue
-
-                  run_at = datetime.fromisoformat(run_at_str.replace('Z', '+00:00'))
-                  if run_at <= now:
-                      workflow = entry['workflow']
-                      print(f"🔹 One-time dispatch: {workflow} (scheduled for {run_at_str})")
-                      if dispatch_workflow(workflow, "[one-time]", entry_inputs or None):
-                          triggered_count += 1
-                          # Don't keep — it's done
-                      else:
-                          # Failed — keep for retry
-                          updated.append(entry)
                   else:
-                      # Not yet time
-                      updated.append(entry)
+                      run_at_str = entry.get('run_at', '')
+                      if not run_at_str:
+                          updated.append(entry); continue
+                      run_at = datetime.fromisoformat(run_at_str.replace('Z', '+00:00'))
+                      if run_at <= now:
+                          wf = entry['workflow']
+                          print(f"🔹 One-time: {wf} (scheduled {run_at_str})")
+                          if dispatch_workflow(wf, "[one-time]", entry_inputs or None):
+                              triggered += 1
+                              changed = True
+                              # remove from list (don't append)
+                          else:
+                              updated.append(entry)
+                      else:
+                          updated.append(entry)
+              if changed:
+                  gist_write(updated)
+              return triggered
 
-          # Write back updated list to Gist
-          if updated != runs or triggered_count > 0:
-              gist_write(updated)
-              print(f"\n📝 Queue updated: {len(updated)} entries, {triggered_count} dispatched this run")
-          else:
-              print(f"\n⏳ No dispatches due. {len(updated)} entries in queue.")
+          print(f"🔄 Loop start: {LOOP_MINUTES} min, check every {CHECK_INTERVAL_SEC}s")
+          iteration = 0
+          total_dispatched = 0
+          while time.time() < loop_end:
+              iteration += 1
+              try:
+                  n = process_runs()
+                  if n > 0:
+                      total_dispatched += n
+                      print(f"  [iter {iteration}] dispatched {n} (total: {total_dispatched})")
+              except Exception as e:
+                  print(f"  [iter {iteration}] error: {e}")
+              remaining = loop_end - time.time()
+              if remaining <= 0: break
+              time.sleep(min(CHECK_INTERVAL_SEC, remaining))
+
+          elapsed_min = (time.time() - loop_start) / 60
+          print(f"\n✅ Loop ended: {elapsed_min:.1f} min, {iteration} iter, {total_dispatched} dispatched")
           EOF
 
-      - name: Schedule next run (self-retrigger in 5 min)
+      - name: Re-trigger self (chain next run)
         if: always()
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
-          # Use GitHub API to create a delayed dispatch via repository_dispatch
-          # Schedule next run using 'at' equivalent - just dispatch after sleep
-          echo "Next cron should fire in ~5 min. If cron is inactive, manual re-trigger needed."
-          # Re-enable workflow to keep cron alive (GitHub disables after 60 days of inactivity)
+          # Keep workflow enabled (GitHub disables after 60 days inactivity)
           gh api "repos/$GITHUB_REPOSITORY/actions/workflows/scheduled-dispatch.yml/enable" --method PUT 2>/dev/null || true
+          # Self re-dispatch — continuous loop without depending on cron
+          echo "🔁 Re-dispatching self for next loop chunk..."
+          gh workflow run scheduled-dispatch.yml --ref main || echo "⚠️ Self re-dispatch failed; backup cron will recover"

@@ -2,7 +2,7 @@
 //  SCHEDULE PAGE — Calendar, Scheduled Runs, Pickers
 // ═══════════════════════════════════════════════════
 let scheduleInitialized = false;
-let dispatchCheckInterval = null;
+let dispatchTimer = null;
 
 function initSchedulePage() {
   if (scheduleInitialized) return;
@@ -30,27 +30,98 @@ function initSchedulePage() {
   const todayStr = formatDate(now.getFullYear(), now.getMonth(), now.getDate());
   calSelect('calPicker', todayStr);
   loadScheduledRuns();
+}
 
-  // Periodic dispatch check every 30s — catches overdue entries without manual refresh
-  if (!dispatchCheckInterval) {
-    dispatchCheckInterval = setInterval(checkAndDispatchOverdue, 30000);
+/**
+ * Compute when the next entry should fire (ms from now).
+ * Returns null if no upcoming entries.
+ */
+function computeNextFireDelay(entries) {
+  if (!entries || !entries.length) return null;
+  const now = Date.now();
+  const nowJST = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
+  let nextMs = Infinity;
+
+  for (const e of entries) {
+    if (e.type === 'once' && e.run_at && !e.dispatched) {
+      const t = new Date(e.run_at).getTime();
+      if (t > now - 30000 && t < nextMs) nextMs = t;
+    } else if (e.type === 'recurring' && e.enabled !== false) {
+      const r = e.recurrence || {};
+      const [h, m] = (r.time || '00:00').split(':').map(Number);
+      // Find next occurrence within next 48h
+      for (let dayOffset = 0; dayOffset < 2; dayOffset++) {
+        const d = new Date(nowJST);
+        d.setDate(d.getDate() + dayOffset);
+        d.setHours(h, m, 0, 0);
+        if (d.getTime() <= now) continue;
+        // Check pattern match
+        const dow = d.getDay();
+        let match = false;
+        if (r.pattern === 'daily') match = true;
+        else if (r.pattern === 'weekdays') match = [1,2,3,4,5].includes(dow);
+        else if (r.pattern === 'weekly') match = (r.days || []).includes(dow);
+        else if (r.pattern === 'monthly') match = (r.dates || []).includes(d.getDate());
+        if (match) {
+          // Check already ran on that day
+          if (e.last_run) {
+            const lastRunJST = new Date(new Date(e.last_run).toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
+            if (lastRunJST.toDateString() === d.toDateString()) continue;
+          }
+          if (d.getTime() < nextMs) nextMs = d.getTime();
+          break;
+        }
+      }
+    }
   }
+
+  if (nextMs === Infinity) return null;
+  // Add small jitter past target to ensure server time has passed (30s buffer)
+  return Math.max(0, nextMs - now + 30000);
+}
+
+/**
+ * Schedule a precise wake-up to dispatch the next entry.
+ * Re-schedules itself after each fire.
+ */
+function scheduleNextDispatch(entries) {
+  if (dispatchTimer) { clearTimeout(dispatchTimer); dispatchTimer = null; }
+  const delay = computeNextFireDelay(entries);
+  if (delay === null) {
+    // Nothing upcoming — fallback: re-check in 5 min
+    dispatchTimer = setTimeout(checkAndDispatchOverdue, 5 * 60 * 1000);
+    return;
+  }
+  // Cap delay at 5 min so we don't sleep forever (in case entries change)
+  const wake = Math.min(delay, 5 * 60 * 1000);
+  dispatchTimer = setTimeout(checkAndDispatchOverdue, wake);
 }
 
 async function checkAndDispatchOverdue() {
-  if (!sessionToken) return;
+  dispatchTimer = null;
+  if (!sessionToken) {
+    // Try again later in case user just unlocked
+    dispatchTimer = setTimeout(checkAndDispatchOverdue, 60 * 1000);
+    return;
+  }
   try {
     const gist = await apiFetch(`/gists/${GIST_ID}`);
     const file = gist.files['scheduled-runs.json'];
-    if (!file) return;
+    if (!file) {
+      scheduleNextDispatch([]);
+      return;
+    }
     const entries = JSON.parse(file.content);
     const hadDispatches = await clientSideDispatchOverdue(entries);
     if (hadDispatches) {
-      // Refresh UI to show updated status
       renderScheduleCalendar(entries);
       renderScheduledQueue(entries);
     }
-  } catch {}
+    scheduleNextDispatch(entries);
+  } catch {
+    // On error, retry in 1 min
+    dispatchTimer = setTimeout(checkAndDispatchOverdue, 60 * 1000);
+  }
 }
 
 // ═══════════════════════════════════════════════════
@@ -449,6 +520,8 @@ async function loadScheduledRuns() {
     // Update calendar visualization with live data
     renderScheduleCalendar(entries);
     renderScheduledQueue(entries);
+    // Smart wake-up: schedule a precise timer for the next upcoming entry
+    scheduleNextDispatch(entries);
   } catch (e) {
     if (e.message.includes('404')) {
       queue.innerHTML = '<div class="empty">No scheduled runs yet</div>';
