@@ -144,6 +144,24 @@ a:hover { text-decoration: underline; }
 .file-input-label { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; font-size: 13px; transition: all 0.15s; }
 .file-input-label:hover { border-color: var(--accent); color: var(--accent); }
 
+/* Live Status Indicator */
+.live-indicator { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); padding: 4px 10px; border-radius: 20px; background: rgba(63,185,80,0.08); border: 1px solid rgba(63,185,80,0.2); }
+.live-indicator.active { color: var(--green); border-color: rgba(63,185,80,0.4); }
+.live-indicator.paused { color: var(--yellow); border-color: rgba(210,153,34,0.3); background: rgba(210,153,34,0.08); }
+.live-indicator.error { color: var(--red); border-color: rgba(248,81,73,0.3); background: rgba(248,81,73,0.08); }
+.live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); }
+.live-indicator.active .live-dot { animation: livePulse 2s infinite; }
+.live-indicator.paused .live-dot { background: var(--yellow); animation: none; }
+.live-indicator.error .live-dot { background: var(--red); animation: none; }
+@keyframes livePulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(0.8); } }
+.live-interval { font-size: 10px; opacity: 0.7; }
+
+/* Smooth card transitions */
+.card { transition: opacity 0.3s, transform 0.3s; }
+.card.updating { opacity: 0.7; }
+.status-change-flash { animation: statusFlash 1s ease; }
+@keyframes statusFlash { 0% { box-shadow: 0 0 0 2px var(--accent); } 100% { box-shadow: none; } }
+
 @media (max-width: 600px) {
   .grid { grid-template-columns: 1fr; }
   header { flex-direction: column; align-items: flex-start; }
@@ -196,8 +214,12 @@ a:hover { text-decoration: underline; }
     <header>
       <h1><span class="icon">⚡</span> Workflow Dashboard</h1>
       <div class="header-actions">
+        <div class="live-indicator active" id="liveIndicator">
+          <span class="live-dot"></span>
+          <span id="liveStatus">Live</span>
+          <span class="live-interval" id="liveInterval">10s</span>
+        </div>
         <span class="last-update" id="lastUpdate"></span>
-        <button class="btn" onclick="refresh()" title="Refresh">🔄 Refresh</button>
         <button class="btn icon-btn" id="notifBtn" onclick="requestNotifPermission()" title="Notifications">🔔</button>
         <button class="btn icon-btn" onclick="toggleSettings()" title="Settings">⚙️</button>
         <button class="btn danger" onclick="lock()">🔒 Lock</button>
@@ -415,6 +437,8 @@ async function unlock() {
 function lock() {
   sessionToken = null;
   stopAutoLock();
+  stopPolling();
+  updateLiveIndicator('paused', 0);
   document.getElementById('dashboard').style.display = 'none';
   document.getElementById('authScreen').style.display = 'flex';
   document.getElementById('passphrase').value = '';
@@ -427,6 +451,7 @@ function showDashboard() {
   renderScheduleCalendar();
   startAutoLock();
   refresh();
+  startPolling();
 }
 
 // ═══════════════════════════════════════════════════
@@ -577,7 +602,13 @@ async function triggerWorkflow(file) {
       headers: { 'Authorization': `Bearer ${sessionToken}`, 'Accept': 'application/vnd.github+json' },
       body: JSON.stringify({ ref: 'main' }),
     });
-    if (res.status === 204) { toast('✅ Workflow triggered!'); setTimeout(refresh, 3000); }
+    if (res.status === 204) {
+      toast('✅ Workflow triggered!');
+      // Speed up polling to catch the new run
+      hasRunningWorkflows = true;
+      adjustPollRate();
+      setTimeout(refresh, 2000);
+    }
     else toast(`❌ Failed (${res.status})`);
   } catch (e) { toast(`❌ ${e.message}`); }
 }
@@ -864,9 +895,130 @@ function importVault(event) {
 }
 
 // ═══════════════════════════════════════════════════
-//  MAIN REFRESH
+//  REALTIME ADAPTIVE POLLING ENGINE
+// ═══════════════════════════════════════════════════
+const POLL_FAST = 10000;    // 10s when workflows are running
+const POLL_NORMAL = 30000;  // 30s when idle
+const POLL_SLOW = 120000;   // 2min when tab hidden (save API quota)
+let pollInterval = POLL_NORMAL;
+let pollTimer = null;
+let isPolling = false;
+let lastRunStates = {};     // Track status changes { runId: conclusion }
+let hasRunningWorkflows = false;
+let consecutiveErrors = 0;
+
+function updateLiveIndicator(status, interval) {
+  const el = document.getElementById('liveIndicator');
+  const statusEl = document.getElementById('liveStatus');
+  const intervalEl = document.getElementById('liveInterval');
+  if (!el) return;
+  el.className = 'live-indicator ' + status;
+  if (status === 'active') {
+    statusEl.textContent = hasRunningWorkflows ? 'Streaming' : 'Live';
+    intervalEl.textContent = `${Math.round(interval / 1000)}s`;
+  } else if (status === 'paused') {
+    statusEl.textContent = 'Paused';
+    intervalEl.textContent = 'tab hidden';
+  } else if (status === 'error') {
+    statusEl.textContent = 'Error';
+    intervalEl.textContent = 'retrying...';
+  }
+}
+
+function startPolling() {
+  stopPolling();
+  pollInterval = POLL_NORMAL;
+  updateLiveIndicator('active', pollInterval);
+  schedulePoll();
+}
+
+function stopPolling() {
+  clearTimeout(pollTimer);
+  pollTimer = null;
+}
+
+function schedulePoll() {
+  clearTimeout(pollTimer);
+  if (!sessionToken) return;
+  pollTimer = setTimeout(async () => {
+    await refresh();
+    schedulePoll();
+  }, pollInterval);
+}
+
+function adjustPollRate() {
+  const newInterval = hasRunningWorkflows ? POLL_FAST : POLL_NORMAL;
+  if (newInterval !== pollInterval) {
+    pollInterval = newInterval;
+    updateLiveIndicator('active', pollInterval);
+    // Restart timer with new interval
+    clearTimeout(pollTimer);
+    schedulePoll();
+  }
+}
+
+// Page Visibility API — pause when hidden, immediate refresh on focus
+document.addEventListener('visibilitychange', () => {
+  if (!sessionToken) return;
+  if (document.hidden) {
+    clearTimeout(pollTimer);
+    pollInterval = POLL_SLOW;
+    updateLiveIndicator('paused', pollInterval);
+    // Still poll slowly in background to detect failures
+    schedulePoll();
+  } else {
+    // Tab visible again — immediate refresh + resume fast polling
+    pollInterval = hasRunningWorkflows ? POLL_FAST : POLL_NORMAL;
+    updateLiveIndicator('active', pollInterval);
+    refresh();
+    schedulePoll();
+  }
+});
+
+// Focus event — also trigger immediate refresh
+window.addEventListener('focus', () => {
+  if (sessionToken && !isPolling) {
+    refresh();
+  }
+});
+
+// Detect status changes and show toasts
+function detectStatusChanges(allRuns) {
+  const changes = [];
+  for (const r of allRuns) {
+    const key = r.id;
+    const prev = lastRunStates[key];
+    const current = r.conclusion || r.status;
+    if (prev && prev !== current) {
+      changes.push({ run: r, from: prev, to: current });
+    }
+    lastRunStates[key] = current;
+  }
+
+  for (const ch of changes) {
+    const wf = ch.run._wf || {};
+    if (ch.to === 'success' && ch.from !== 'success') {
+      toast(`✅ ${wf.icon || ''} ${wf.name || 'Workflow'} #${ch.run.run_number} completed`);
+    } else if (ch.to === 'failure') {
+      toast(`❌ ${wf.icon || ''} ${wf.name || 'Workflow'} #${ch.run.run_number} failed`, 'error');
+    } else if ((ch.from === 'queued' || ch.from === 'waiting') && ch.to === 'in_progress') {
+      toast(`🔄 ${wf.icon || ''} ${wf.name || 'Workflow'} #${ch.run.run_number} started`);
+    }
+  }
+
+  // Flash cards that changed
+  if (changes.length > 0) {
+    document.querySelectorAll('.card').forEach(card => card.classList.add('status-change-flash'));
+    setTimeout(() => document.querySelectorAll('.card').forEach(card => card.classList.remove('status-change-flash')), 1000);
+  }
+}
+
+// ═══════════════════════════════════════════════════
+//  MAIN REFRESH (with realtime awareness)
 // ═══════════════════════════════════════════════════
 async function refresh() {
+  if (isPolling) return; // Prevent overlapping requests
+  isPolling = true;
   const grid = document.getElementById('workflowGrid');
   const recentEl = document.getElementById('recentRuns');
 
@@ -901,14 +1053,26 @@ async function refresh() {
 
     document.getElementById('lastUpdate').textContent = `Updated: ${new Date().toLocaleTimeString('ja-JP', { timeZone: 'Asia/Tokyo' })} JST`;
 
+    // Detect running workflows → speed up polling
+    hasRunningWorkflows = allRuns.some(r => r.status === 'in_progress' || r.status === 'queued');
+    adjustPollRate();
+
+    // Detect status changes → show notifications
+    detectStatusChanges(allRuns);
     checkForNewFailures(allRuns);
+
+    consecutiveErrors = 0;
+    if (!document.hidden) updateLiveIndicator('active', pollInterval);
   } catch (e) {
-    grid.innerHTML = `<div class="empty">❌ Failed to load: ${e.message}</div>`;
+    consecutiveErrors++;
+    if (consecutiveErrors >= 3) {
+      updateLiveIndicator('error', pollInterval);
+      grid.innerHTML = `<div class="empty">❌ Connection lost: ${e.message}<br><small>Retrying automatically...</small></div>`;
+    }
+  } finally {
+    isPolling = false;
   }
 }
-
-// Auto-refresh every 60s while unlocked
-setInterval(() => { if (sessionToken) refresh(); }, 60000);
 
 // Init
 updateNotifBtn();
