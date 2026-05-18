@@ -669,6 +669,36 @@ def main():
                 except (ValueError, TypeError):
                     log(f"  ⚠️ Could not parse previous CO time ({co_ref}); proceeding with checkout anyway.")
 
+        # ── Smart skip: early-CO on a day that has scheduled night OT ──
+        # Kintai Rule 2: don't close the shift at 18:00 if OT runs until 03:30
+        # next-day — that would clip OT hours. The 03:30 CO entry will close it.
+        if is_checkout and not is_checkout_yesterday:
+            pending_ot = schedule.get("pending_ot", []) or []
+            has_ot_today = any(ot.get("date") == today_str for ot in pending_ot)
+            entry_dt_for_check = None
+            try:
+                entry_dt_for_check = datetime.strptime(
+                    action_entry["datetime"], "%Y-%m-%d %H:%M"
+                ).replace(tzinfo=JST)
+            except (ValueError, KeyError):
+                pass
+            is_early_co = entry_dt_for_check is None or entry_dt_for_check.hour < 20
+            note_marks_ot = any(k in (note or "").lower() for k in ("ot", "night"))
+            if has_ot_today and is_early_co and not note_marks_ot:
+                ot_entry = next(ot for ot in pending_ot if ot["date"] == today_str)
+                log(
+                    f"⏭️ Skip early CO — {today_str} has scheduled OT "
+                    f"{ot_entry.get('start','?')}→{ot_entry.get('end','?')}. "
+                    f"OT CO at 03:30 next-day will close the shift."
+                )
+                set_output("skipped", "true")
+                set_summary(
+                    f"⏭️ **Skipped early CO** — OT scheduled today "
+                    f"({ot_entry.get('start','?')}→{ot_entry.get('end','?')}). "
+                    f"Will CO at 03:30 next-day instead."
+                )
+                return  # No email for routine domain-rule skips
+
         # ── Execute (with retry on server errors) ──
         emoji = "📥" if action == "checkin" else "📤"
 
