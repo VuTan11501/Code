@@ -806,6 +806,8 @@ input[type="time"], input[type="date"], input[type="datetime-local"] {
 /* ─── BUTTON VARIANTS (additional) ─── */
 .btn-outline { background: transparent; border-color: var(--input); }
 .btn-outline:hover { background: var(--accent); border-color: rgba(255,255,255,0.15); }
+.btn-outline.danger-outline { color: var(--red); border-color: rgba(239,68,68,0.35); }
+.btn-outline.danger-outline:hover { background: rgba(239,68,68,0.1); border-color: var(--red); color: var(--red); }
 .btn-icon { background: var(--secondary); border-color: transparent; padding: 0.5rem; border-radius: var(--radius-md); }
 
 /* ─── TEXT UTILITIES (used by JS) ─── */

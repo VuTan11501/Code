@@ -400,6 +400,9 @@ tailwind.config = {
                 <span data-icon="upload" data-size="14"></span> Import Vault
                 <input type="file" accept=".json" onchange="importVault(event)" class="hidden" aria-label="Import vault file">
               </label>
+              <button class="btn btn-outline sm danger-outline" onclick="if(confirm('Delete vault and all data? This cannot be undone.')){localStorage.removeItem(STORAGE_KEY);localStorage.removeItem('wf_dash_vault_meta');lock();toast('Vault deleted','warning')}" type="button">
+                <span data-icon="trash" data-size="14"></span> Delete Vault
+              </button>
             </div>
           </div>
         </div>
@@ -438,9 +441,6 @@ tailwind.config = {
           <div class="card-header">
             <div class="card-title"><span data-icon="info" data-size="16"></span> About</div>
             <div class="card-description">Workflow Dashboard v3.0 — Multi-page SPA with encrypted vault. Data refreshes every 10-30s automatically.</div>
-          </div>
-          <div class="card-content">
-            <button class="btn danger sm" onclick="if(confirm('Delete vault and all data?')){localStorage.removeItem(STORAGE_KEY);lock();toast('Vault deleted','warning')}"><span data-icon="trash" data-size="14"></span> Delete Vault</button>
           </div>
         </div>
       </div>
