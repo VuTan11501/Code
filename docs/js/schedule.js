@@ -299,16 +299,16 @@ function togglePatternUI() {
 }
 
 // ═══════════════════════════════════════════════════
-//  SCHEDULED RUNS CRUD (repo file with [skip ci])
+//  SCHEDULED RUNS CRUD (Gist-based storage)
 // ═══════════════════════════════════════════════════
 async function loadScheduledRuns() {
   const queue = document.getElementById('schedulerQueue');
   if (!queue) return;
   try {
-    const data = await apiFetch(`/repos/${OWNER}/${REPO}/contents/.github/scheduled-runs.json`);
-    const content = JSON.parse(atob(data.content));
-    const entries = Array.isArray(content) ? content : [];
-    currentSchedSha = data.sha;
+    const gist = await apiFetch(`/gists/${GIST_ID}`);
+    const file = gist.files['scheduled-runs.json'];
+    const entries = file ? JSON.parse(file.content) : [];
+    // Client-side fallback: dispatch overdue one-time runs directly
     await clientSideDispatchOverdue(entries);
     renderScheduledQueue(entries);
   } catch (e) {
@@ -317,26 +317,10 @@ async function loadScheduledRuns() {
     } else {
       queue.innerHTML = `<div class="empty">⚠️ ${e.message}</div>`;
     }
+    // Clear table on error/empty
     scheduleTableData = [];
     renderScheduleTable();
   }
-}
-
-let currentSchedSha = null;
-
-async function saveToRepo(entries, message) {
-  const content = btoa(unescape(encodeURIComponent(JSON.stringify(entries, null, 2))));
-  const body = { message: message + ' [skip ci]', content };
-  if (currentSchedSha) body.sha = currentSchedSha;
-  const res = await fetch(`${API}/repos/${OWNER}/${REPO}/contents/.github/scheduled-runs.json`, {
-    method: 'PUT',
-    headers: { 'Authorization': `Bearer ${sessionToken}`, 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) throw new Error(`Save failed (${res.status})`);
-  const result = await res.json();
-  currentSchedSha = result.content.sha;
-  return result;
 }
 
 // Fallback: if GitHub cron hasn't fired, dispatch overdue runs from the browser
@@ -349,6 +333,7 @@ async function clientSideDispatchOverdue(entries) {
   for (const entry of entries) {
     if (entry.type === 'once' && entry.run_at) {
       const runAt = new Date(entry.run_at);
+      // If run_at has passed (with 1 min tolerance) and it wasn't dispatched yet
       if (now - runAt > 60000) {
         overdue.push(entry);
       } else {
@@ -371,17 +356,19 @@ async function clientSideDispatchOverdue(entries) {
       if (res.status === 204) {
         toast(`✅ Dispatched overdue: ${entry.workflow.replace('.yml','')}`);
       } else {
-        remaining.push(entry);
+        remaining.push(entry); // keep for retry
       }
     } catch {
       remaining.push(entry);
     }
   }
 
+  // Update the Gist to remove dispatched entries
   if (remaining.length !== entries.length) {
     try {
-      await saveToRepo(remaining, 'sched: client-side dispatch overdue');
+      await saveToGist(remaining);
     } catch {}
+    // Reload to show updated queue
     entries.length = 0;
     remaining.forEach(e => entries.push(e));
   }
@@ -428,11 +415,21 @@ function describeRecurrence(r) {
   return desc;
 }
 
-// ─── CRUD helpers (repo-based with [skip ci]) ───
-async function loadEntriesFromRepo() {
-  const data = await apiFetch(`/repos/${OWNER}/${REPO}/contents/.github/scheduled-runs.json`);
-  currentSchedSha = data.sha;
-  return JSON.parse(atob(data.content));
+// ─── Gist Helper ───
+async function saveToGist(entries) {
+  const res = await fetch(`${API}/gists/${GIST_ID}`, {
+    method: 'PATCH',
+    headers: { 'Authorization': `Bearer ${sessionToken}`, 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ files: { 'scheduled-runs.json': { content: JSON.stringify(entries, null, 2) } } }),
+  });
+  if (!res.ok) throw new Error(`Gist update failed (${res.status})`);
+  return res.json();
+}
+
+async function loadEntriesFromGist() {
+  const gist = await apiFetch(`/gists/${GIST_ID}`);
+  const file = gist.files['scheduled-runs.json'];
+  return file ? JSON.parse(file.content) : [];
 }
 
 async function addScheduledRun() {
@@ -480,10 +477,9 @@ async function addScheduledRun() {
 
 async function saveScheduledEntry(newEntry) {
   try {
-    let entries = [];
-    try { entries = await loadEntriesFromRepo(); } catch {}
+    const entries = await loadEntriesFromGist();
     entries.push(newEntry);
-    await saveToRepo(entries, `sched: add ${newEntry.type} run`);
+    await saveToGist(entries);
     toast('✅ Schedule added');
     loadScheduledRuns();
   } catch (e) { toast(`❌ ${e.message}`); }
@@ -492,9 +488,9 @@ async function saveScheduledEntry(newEntry) {
 async function deleteScheduledRun(index) {
   if (!confirm('Delete this scheduled run?')) return;
   try {
-    const entries = await loadEntriesFromRepo();
+    const entries = await loadEntriesFromGist();
     entries.splice(index, 1);
-    await saveToRepo(entries, 'sched: remove entry');
+    await saveToGist(entries);
     toast('🗑 Removed');
     loadScheduledRuns();
   } catch (e) { toast(`❌ ${e.message}`); }
@@ -502,9 +498,9 @@ async function deleteScheduledRun(index) {
 
 async function toggleScheduleEntry(index) {
   try {
-    const entries = await loadEntriesFromRepo();
+    const entries = await loadEntriesFromGist();
     entries[index].enabled = !entries[index].enabled;
-    await saveToRepo(entries, 'sched: toggle entry');
+    await saveToGist(entries);
     loadScheduledRuns();
   } catch (e) { toast(`❌ ${e.message}`); }
 }
@@ -665,11 +661,11 @@ async function saveEditSchedule() {
     updatedEntry = { type: 'recurring', workflow, recurrence, enabled, note, created: scheduleTableData[index].created || new Date().toISOString() };
   }
 
-  // Save to repo
+  // Save to Gist
   try {
-    const entries = await loadEntriesFromRepo();
+    const entries = await loadEntriesFromGist();
     entries[index] = updatedEntry;
-    await saveToRepo(entries, 'sched: edit entry');
+    await saveToGist(entries);
     toast('✅ Schedule updated');
     closeEditSchedModal();
     loadScheduledRuns();
