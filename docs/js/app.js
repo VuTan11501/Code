@@ -364,14 +364,28 @@ function checkAutoLock() {
 // ═══════════════════════════════════════════════════
 //  PUSH NOTIFICATIONS
 // ═══════════════════════════════════════════════════
+// Design goals:
+//  - No spam when opening PWA: first load = silent seed, not notify
+//  - No duplicate noti across reloads: localStorage persistence
+//  - No old noti: only notify completions within FRESH_WINDOW_MIN
+//  - Auto-dedupe per workflow: tag = workflow id so newer replaces older
+//  - Clickable: tapping noti opens the run URL
+//  - Self-cleaning: drop stale IDs after 7 days
+
+const NOTIF_STORE_KEY = 'wf_seen_runs_v2';
+const FRESH_WINDOW_MIN = 10;            // only notify completions ≤ 10 min old
+const SEEN_TTL_DAYS = 7;                // forget run IDs after a week
+const MAX_NOTIFY_PER_REFRESH = 3;       // safety: never blast > 3 noti at once
+let isFirstRefresh = true;              // suppress noti on initial seed
+
 let notifPermission = (typeof Notification !== 'undefined') ? Notification.permission : 'default';
 
 function updateNotifBtn() {
   const btn = document.getElementById('notifBtn');
   if (!btn) return;
-  if (notifPermission === 'granted') { btn.innerHTML = ICON('bell', 18); btn.title = 'Notifications: ON'; }
+  if (notifPermission === 'granted') { btn.innerHTML = ICON('bell', 18); btn.title = 'Notifications: ON'; btn.style.opacity = '1'; }
   else if (notifPermission === 'denied') { btn.innerHTML = ICON('bell', 18); btn.title = 'Notifications: Blocked'; btn.style.opacity = '0.4'; }
-  else { btn.innerHTML = ICON('bell', 18); btn.title = 'Enable notifications'; }
+  else { btn.innerHTML = ICON('bell', 18); btn.title = 'Enable notifications'; btn.style.opacity = '0.7'; }
 }
 
 async function requestNotifPermission() {
@@ -382,8 +396,11 @@ async function requestNotifPermission() {
     updateNotifBtn();
     if (result === 'granted') {
       toast('🔔 Notifications enabled');
-      // Test notification via ServiceWorker for PWA compatibility
-      showNotification('✅ Notifications Active', 'You will be notified when workflows fail.');
+      showNotification({
+        title: '✅ Notifications Active',
+        body: 'You will get a ping only when a workflow fails.',
+        tag: 'notif-welcome',
+      });
     }
     else if (result === 'denied') toast('🔕 Notifications blocked by browser. Check Settings.');
     else toast('⚠️ Permission dismissed');
@@ -392,44 +409,132 @@ async function requestNotifPermission() {
   }
 }
 
-async function showNotification(title, body, tag) {
+// Unified notification API. opts: { title, body, tag, url, requireInteraction }
+async function showNotification(opts) {
   if (notifPermission !== 'granted') return;
+  const { title, body, tag, url, requireInteraction } = opts;
+  const options = {
+    body,
+    tag: tag || ('wf-' + Date.now()),
+    renotify: false,                     // don't vibrate again when replacing same tag
+    icon: 'icon-192.png',                // fallback gracefully if missing
+    badge: 'icon-192.png',
+    data: { url: url || location.href, ts: Date.now() },
+    requireInteraction: !!requireInteraction,
+    silent: false,
+  };
   try {
-    // Prefer ServiceWorker notification (works in PWA/iOS)
     const reg = await navigator.serviceWorker?.ready;
     if (reg) {
-      await reg.showNotification(title, { body, tag: tag || 'wf-' + Date.now(), icon: '⚡' });
+      await reg.showNotification(title, options);
     } else {
-      // Fallback to Notification constructor (desktop)
-      new Notification(title, { body, tag });
+      const n = new Notification(title, options);
+      if (url) n.onclick = () => { window.open(url, '_blank'); n.close(); };
     }
   } catch {
-    // Silent fail if notifications not available
-    try { new Notification(title, { body, tag }); } catch {}
+    try {
+      const n = new Notification(title, { body, tag });
+      if (url) n.onclick = () => { window.open(url, '_blank'); n.close(); };
+    } catch {}
   }
+}
+
+// ── Persistent "seen runs" store (localStorage, TTL 7d) ──
+function loadSeenRuns() {
+  try {
+    const raw = localStorage.getItem(NOTIF_STORE_KEY);
+    if (!raw) return {};
+    const store = JSON.parse(raw);
+    // Drop expired
+    const cutoff = Date.now() - SEEN_TTL_DAYS * 86400_000;
+    const cleaned = {};
+    for (const [id, ts] of Object.entries(store)) {
+      if (ts > cutoff) cleaned[id] = ts;
+    }
+    return cleaned;
+  } catch { return {}; }
+}
+
+function saveSeenRuns(store) {
+  try { localStorage.setItem(NOTIF_STORE_KEY, JSON.stringify(store)); } catch {}
+}
+
+function markRunSeen(store, id) {
+  store[String(id)] = Date.now();
+}
+
+function isRunSeen(store, id) {
+  return Object.prototype.hasOwnProperty.call(store, String(id));
+}
+
+// Format relative time, e.g. "2m ago"
+function relTimeShort(iso) {
+  const diff = Date.now() - new Date(iso).getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return 'just now';
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
 }
 
 function checkForNewFailures(allRuns) {
-  if (notifPermission !== 'granted') return;
-  const knownStr = sessionStorage.getItem('wf_known_failures') || '[]';
-  const knownIds = new Set(JSON.parse(knownStr));
-  const newFailures = allRuns.filter(r =>
-    r.status === 'completed' && r.conclusion === 'failure' && !knownIds.has(r.id)
-  );
-  for (const r of newFailures) {
-    const wf = r._wf || {};
-    showNotification(
-      `❌ ${wf.name || 'Workflow'} Failed`,
-      `Run #${r.run_number} failed (${r.event})`,
-      `wf-fail-${r.id}`
-    );
+  // Always update the seen store, but only notify if permissions granted & not first refresh
+  const store = loadSeenRuns();
+  const now = Date.now();
+  const freshCutoff = now - FRESH_WINDOW_MIN * 60_000;
+
+  // Find unseen completed failures
+  const newFailures = allRuns
+    .filter(r => r.status === 'completed' && r.conclusion === 'failure' && !isRunSeen(store, r.id))
+    .sort((a, b) => new Date(b.updated_at || b.created_at) - new Date(a.updated_at || a.created_at));
+
+  // First refresh after page load: seed everything silently, no notifications.
+  // This prevents the "open phone → flood of old failures" bug.
+  if (isFirstRefresh) {
+    for (const r of allRuns) {
+      if (r.status === 'completed') markRunSeen(store, r.id);
+    }
+    saveSeenRuns(store);
+    isFirstRefresh = false;
+    return;
   }
-  const allFailIds = allRuns.filter(r => r.status === 'completed' && r.conclusion === 'failure').map(r => r.id);
-  sessionStorage.setItem('wf_known_failures', JSON.stringify(allFailIds));
+
+  if (notifPermission !== 'granted') {
+    // Still mark seen so we don't backlog if permission is granted later
+    for (const r of newFailures) markRunSeen(store, r.id);
+    saveSeenRuns(store);
+    return;
+  }
+
+  // Only notify failures that completed within the fresh window
+  let notified = 0;
+  for (const r of newFailures) {
+    const completedAt = new Date(r.updated_at || r.created_at).getTime();
+    const isFresh = completedAt >= freshCutoff;
+    if (isFresh && notified < MAX_NOTIFY_PER_REFRESH) {
+      const wf = r._wf || {};
+      const wfName = wf.name || 'Workflow';
+      const icon = wf.icon || '⚙️';
+      showNotification({
+        title: `${icon} ${wfName} failed`,
+        body: `Run #${r.run_number} • ${r.event} • ${relTimeShort(r.updated_at || r.created_at)}`,
+        tag: `wf-fail-${wf.id || 'unknown'}`,       // per-workflow tag → newer replaces older
+        url: r.html_url,
+        requireInteraction: true,                    // stay on screen until user dismisses
+      });
+      notified++;
+    }
+    // Mark seen regardless (even if too old to notify) so we don't reconsider
+    markRunSeen(store, r.id);
+  }
+
+  saveSeenRuns(store);
 }
 
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('sw.js').catch(() => {});
+  // Bump query string to force update of stale SW on existing PWA installs
+  navigator.serviceWorker.register('sw.js?v=2').catch(() => {});
 }
 
 // ═══════════════════════════════════════════════════
