@@ -273,6 +273,34 @@ function togglePicker(bodyId) {
     if (el.id !== bodyId) el.classList.remove('open');
   });
   body.classList.toggle('open', !isOpen);
+
+  // ── FIX: scrollTop on a hidden wheel doesn't take effect, so re-sync now
+  // that the popover is visible. Map body id → prefix.
+  if (!isOpen) {
+    let prefix = null;
+    if (bodyId === 'timePickerBody') prefix = 'sched';
+    else if (bodyId === 'editTimePickerBody') prefix = 'editSched';
+    if (prefix) {
+      // Defer one frame so layout/visibility flush before scroll positioning.
+      requestAnimationFrame(() => syncWheelScroll(prefix));
+    }
+  }
+}
+
+function syncWheelScroll(prefix) {
+  const ids = _timeIds(prefix);
+  const st = TIME_STATE[prefix];
+  const itemHeight = 44;
+  const hCol = document.getElementById(ids.wheelH);
+  const mCol = document.getElementById(ids.wheelM);
+  if (hCol) {
+    hCol.scrollTop = st.h * itemHeight;
+    hCol.querySelectorAll('.wheel-item').forEach((el, i) => el.classList.toggle('active', i === st.h));
+  }
+  if (mCol) {
+    mCol.scrollTop = st.m * itemHeight;
+    mCol.querySelectorAll('.wheel-item').forEach((el, i) => el.classList.toggle('active', i === st.m));
+  }
 }
 
 document.addEventListener('click', function(e) {
