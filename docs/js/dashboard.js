@@ -332,7 +332,7 @@ async function refresh() {
       throw firstError;
     }
 
-    renderHealthBar(results);
+    // Health bar removed — no longer rendered
 
     if (grid) {
       grid.innerHTML = results.map(({ wf, runs }) => {

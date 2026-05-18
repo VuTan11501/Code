@@ -27,7 +27,7 @@ function initSchedulePage() {
 function renderScheduleCalendar() {
   const container = document.getElementById('scheduleCalendar');
   if (!container) return;
-  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const dayNames = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
   const allTimes = new Set();
   for (const [, entries] of Object.entries(SCHEDULE)) {
     for (const e of entries) allTimes.add(e.time);
