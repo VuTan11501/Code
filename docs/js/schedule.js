@@ -135,64 +135,248 @@ async function checkAndDispatchOverdue() {
 }
 
 // ═══════════════════════════════════════════════════
-//  SCHEDULE CALENDAR (Weekly overview — dynamic from Gist)
+//  SCHEDULE CALENDAR (Weekly overview — interactive)
 // ═══════════════════════════════════════════════════
+let _calendarEntries = [];      // cached for pip-action handlers
+let _pressTimer = null;          // long-press detection
+let _pressMoved = false;
+
 function renderScheduleCalendar(gistEntries) {
   const container = document.getElementById('scheduleCalendar');
   if (!container) return;
 
-  // Build schedule map from Gist entries (dynamic) merged with hardcoded fallback
-  const dynamicSchedule = {};
-  const entries = gistEntries || [];
+  _calendarEntries = gistEntries || [];
+  closePipPopover();
 
-  for (const entry of entries) {
-    if (entry.type !== 'recurring' || entry.enabled === false) continue;
+  // Build pip records: { entryIdx, dayIdx, time, name, wfFile, enabled }
+  const pips = [];
+  for (let i = 0; i < _calendarEntries.length; i++) {
+    const entry = _calendarEntries[i];
+    if (entry.type !== 'recurring') continue;
     const r = entry.recurrence || {};
     const wf = WORKFLOWS.find(w => w.file === entry.workflow);
     const name = wf ? wf.name : entry.workflow;
-    if (!dynamicSchedule[name]) dynamicSchedule[name] = [];
-
     let days = [];
     if (r.pattern === 'daily') days = [0,1,2,3,4,5,6];
     else if (r.pattern === 'weekdays') days = [1,2,3,4,5];
     else if (r.pattern === 'weekly') days = r.days || [];
-
-    if (days.length > 0) {
-      dynamicSchedule[name].push({ days, time: r.time || '00:00', label: entry.note || r.time || '' });
+    else continue;       // monthly: not shown in weekly grid (no fixed weekday)
+    if (!days.length) continue;
+    const time = r.time || '00:00';
+    for (const d of days) {
+      pips.push({ entryIdx: i, dayIdx: d, time, name, wfFile: entry.workflow, enabled: entry.enabled !== false });
     }
   }
 
-  // Use dynamic if available, fallback to hardcoded SCHEDULE
-  const schedule = Object.keys(dynamicSchedule).length > 0 ? dynamicSchedule : SCHEDULE;
+  // Collect unique times. Always include common slots so empty grid still useful.
+  const baseTimes = ['09:00', '12:00', '18:00', '22:00'];
+  const timeSet = new Set(baseTimes);
+  for (const p of pips) timeSet.add(p.time);
+  const times = [...timeSet].sort();
 
-  const dayNames = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
-  const allTimes = new Set();
-  for (const [, sched] of Object.entries(schedule)) {
-    for (const e of sched) allTimes.add(e.time);
+  // Today + next-upcoming time slot for highlight
+  const nowJST = jstNow();
+  const todayDow = nowJST.getDay();
+  const nowMin = nowJST.getHours() * 60 + nowJST.getMinutes();
+  let nextTimeIdx = -1;
+  for (let i = 0; i < times.length; i++) {
+    const [h, m] = times[i].split(':').map(Number);
+    if (h * 60 + m >= nowMin) { nextTimeIdx = i; break; }
   }
-  const times = [...allTimes].sort();
 
+  const dayNames = ['S','M','T','W','T','F','S'];
   let html = '<div class="schedule-grid-wrapper"><div class="schedule-grid">';
+  // Header row
   html += '<div class="schedule-cell header"></div>';
-  for (const d of dayNames) html += `<div class="schedule-cell header">${d}</div>`;
-
-  for (const time of times) {
-    html += `<div class="schedule-cell time-label">${time}</div>`;
+  for (let d = 0; d < 7; d++) {
+    const cls = d === todayDow ? 'header today-col' : 'header';
+    html += `<div class="schedule-cell ${cls}">${dayNames[d]}</div>`;
+  }
+  // Body rows
+  for (let ti = 0; ti < times.length; ti++) {
+    const time = times[ti];
+    const rowCls = ti === nextTimeIdx ? 'time-label next-time' : 'time-label';
+    html += `<div class="schedule-cell ${rowCls}" title="${ti === nextTimeIdx ? 'Next upcoming slot' : ''}">${time}</div>`;
     for (let day = 0; day < 7; day++) {
-      html += '<div class="schedule-cell">';
-      for (const [name, sched] of Object.entries(schedule)) {
-        for (const e of sched) {
-          if (e.time === time && e.days.includes(day)) {
-            const cls = name.includes('Checkin') ? 'checkin' : 'forecast';
-            html += `<span class="schedule-pip ${cls}" title="${name}">${e.label}</span>`;
-          }
-        }
+      const cellPips = pips.filter(p => p.dayIdx === day && p.time === time);
+      const isToday = day === todayDow;
+      const isNext = ti === nextTimeIdx;
+      const classes = ['schedule-cell', 'sc-slot'];
+      if (isToday) classes.push('today-col');
+      if (isToday && isNext) classes.push('now-slot');
+      if (cellPips.length === 0) classes.push('empty-slot');
+      const onclick = cellPips.length === 0
+        ? `onclick="quickAddRecurring(${day}, '${time}')"`
+        : '';
+      html += `<div class="${classes.join(' ')}" ${onclick} title="${cellPips.length === 0 ? 'Tap to add' : ''}">`;
+      for (const p of cellPips) {
+        const wfFile = p.wfFile || '';
+        const cls = wfFile.includes('checkin') ? 'checkin'
+                  : wfFile.includes('checkout') ? 'checkout'
+                  : wfFile.includes('ot-creator') ? 'ot'
+                  : 'forecast';
+        const dimmed = p.enabled ? '' : ' disabled';
+        html += `<span class="schedule-pip ${cls}${dimmed}" data-entry="${p.entryIdx}" title="${p.name}${p.enabled ? '' : ' (disabled)'}">${p.name.split(' ').slice(-1)[0]}</span>`;
       }
       html += '</div>';
     }
   }
+  html += '</div>';
+  // Legend
+  html += '<div class="schedule-legend">';
+  html += '<span class="legend-item"><span class="legend-dot today-col"></span>Today</span>';
+  html += '<span class="legend-item"><span class="legend-dot next-time"></span>Next slot</span>';
+  html += '<span class="legend-item text-muted">Tap empty cell to add · Tap pip for actions · Long-press to toggle</span>';
   html += '</div></div>';
   container.innerHTML = html;
+
+  // Wire up pip interactions (tap → popover, long-press → toggle)
+  container.querySelectorAll('.schedule-pip[data-entry]').forEach(pip => {
+    const entryIdx = parseInt(pip.getAttribute('data-entry'));
+    pip.addEventListener('pointerdown', (e) => {
+      e.stopPropagation();
+      _pressMoved = false;
+      _pressTimer = setTimeout(() => {
+        _pressTimer = null;
+        toggleRecurringEnabled(entryIdx, pip);
+      }, 550);
+    });
+    pip.addEventListener('pointermove', () => { _pressMoved = true; });
+    pip.addEventListener('pointerup', (e) => {
+      e.stopPropagation();
+      if (_pressTimer) {
+        clearTimeout(_pressTimer); _pressTimer = null;
+        if (!_pressMoved) openPipActions(entryIdx, pip);
+      }
+    });
+    pip.addEventListener('pointercancel', () => {
+      if (_pressTimer) { clearTimeout(_pressTimer); _pressTimer = null; }
+    });
+  });
+
+  // Dismiss popover on outside click
+  document.addEventListener('click', _outsidePopoverHandler, { capture: true });
+}
+
+function _outsidePopoverHandler(e) {
+  const pop = document.getElementById('pipActionsPopover');
+  if (pop && !pop.contains(e.target) && !e.target.closest('.schedule-pip')) {
+    closePipPopover();
+  }
+}
+
+function closePipPopover() {
+  const pop = document.getElementById('pipActionsPopover');
+  if (pop) pop.remove();
+}
+
+function openPipActions(entryIdx, pipEl) {
+  closePipPopover();
+  const entry = _calendarEntries[entryIdx];
+  if (!entry) return;
+  const wf = WORKFLOWS.find(w => w.file === entry.workflow);
+  const name = wf ? wf.name : entry.workflow;
+  const enabled = entry.enabled !== false;
+  const time = entry.recurrence?.time || '';
+
+  const pop = document.createElement('div');
+  pop.id = 'pipActionsPopover';
+  pop.className = 'pip-popover';
+  pop.innerHTML = `
+    <div class="pip-popover-header">
+      <div class="pip-popover-title">${wf?.icon || '⚙️'} ${name}</div>
+      <div class="pip-popover-sub text-muted">${time} · ${describeRecurrence(entry.recurrence || {})}</div>
+    </div>
+    <div class="pip-popover-actions">
+      <button class="btn sm" onclick="runScheduledNow(${entryIdx})">${ICON('play', 14)} Run now</button>
+      <button class="btn sm" onclick="openEditSchedModal(${entryIdx}); closePipPopover();">${ICON('edit', 14)} Edit</button>
+      <button class="btn sm" onclick="toggleRecurringEnabled(${entryIdx})">${ICON(enabled ? 'pause' : 'play', 14)} ${enabled ? 'Disable' : 'Enable'}</button>
+      <button class="btn danger sm" onclick="deleteScheduledRun(${entryIdx}); closePipPopover();">${ICON('trash', 14)} Delete</button>
+    </div>
+  `;
+  document.body.appendChild(pop);
+
+  // Position popover below pip, clamped to viewport
+  const rect = pipEl.getBoundingClientRect();
+  const popRect = pop.getBoundingClientRect();
+  let top = rect.bottom + 6 + window.scrollY;
+  let left = rect.left + (rect.width / 2) - (popRect.width / 2) + window.scrollX;
+  const maxLeft = window.innerWidth - popRect.width - 8;
+  if (left < 8) left = 8;
+  if (left > maxLeft) left = maxLeft;
+  // Flip above if no room below
+  if (rect.bottom + popRect.height + 16 > window.innerHeight) {
+    top = rect.top - popRect.height - 6 + window.scrollY;
+  }
+  pop.style.top = `${top}px`;
+  pop.style.left = `${left}px`;
+}
+
+async function toggleRecurringEnabled(entryIdx, pipEl) {
+  closePipPopover();
+  try {
+    const entries = await loadEntriesFromGist();
+    if (!entries[entryIdx]) return;
+    entries[entryIdx].enabled = entries[entryIdx].enabled === false ? true : false;
+    await saveToGist(entries);
+    toast(entries[entryIdx].enabled ? '▶ Enabled' : '⏸ Disabled');
+    loadScheduledRuns();
+  } catch (e) { toast(`❌ ${e.message}`); }
+}
+
+async function runScheduledNow(entryIdx) {
+  closePipPopover();
+  const entry = _calendarEntries[entryIdx];
+  if (!entry) return;
+  if (!sessionToken) { toast('⚠️ Not authenticated'); return; }
+  try {
+    const inputs = {};
+    if (entry.location) inputs.location = entry.location;
+    if (entry.location_lat != null) inputs.latitude = String(entry.location_lat);
+    if (entry.location_lon != null) inputs.longitude = String(entry.location_lon);
+    const res = await fetch(`${API}/repos/${OWNER}/${REPO}/actions/workflows/${entry.workflow}/dispatches`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${sessionToken}`, 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ref: 'main', inputs: Object.keys(inputs).length ? inputs : undefined }),
+    });
+    if (res.status === 204) {
+      const wf = WORKFLOWS.find(w => w.file === entry.workflow);
+      toast(`✅ Dispatched: ${wf ? wf.name : entry.workflow}`);
+    } else {
+      toast(`❌ Failed (${res.status})`);
+    }
+  } catch (e) { toast(`❌ ${e.message}`); }
+}
+
+function quickAddRecurring(dayIdx, time) {
+  closePipPopover();
+  // Pre-fill the Add form with weekly pattern + selected day + selected time
+  const typeEl = document.getElementById('schedType');
+  if (typeEl) { typeEl.value = 'recurring'; typeof toggleScheduleType === 'function' && toggleScheduleType('recurring'); }
+  const patternEl = document.getElementById('schedPattern');
+  if (patternEl) { patternEl.value = 'weekly'; typeof togglePatternUI === 'function' && togglePatternUI('sched'); }
+  // Tick the day checkbox
+  document.querySelectorAll('#weeklyDaysField input[type=checkbox]').forEach(cb => {
+    cb.checked = parseInt(cb.value) === dayIdx;
+  });
+  // Set time
+  const [h, m] = time.split(':').map(Number);
+  if (typeof setTimeState === 'function') {
+    setTimeState('sched', h, m);
+    if (typeof renderTimePicker === 'function') renderTimePicker('sched');
+    if (typeof updateTimeDisplay === 'function') updateTimeDisplay('sched');
+  }
+  const timeInput = document.getElementById('schedTime');
+  if (timeInput) timeInput.value = time;
+  // Scroll to form and flash
+  const form = document.querySelector('.scheduler-form');
+  if (form) {
+    form.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    form.classList.add('form-flash');
+    setTimeout(() => form.classList.remove('form-flash'), 1200);
+  }
+  const dayName = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dayIdx];
+  toast(`📝 Pre-filled: every ${dayName} at ${time}`);
 }
 
 // ═══════════════════════════════════════════════════

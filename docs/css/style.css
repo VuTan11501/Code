@@ -422,18 +422,70 @@ select option { background: var(--card); color: var(--foreground); }
 .schedule-grid {
   display: grid; grid-template-columns: 48px repeat(7, 1fr); gap: 1px;
   background: var(--border); border-radius: var(--radius-md); overflow: hidden;
-  margin-bottom: 24px; font-size: var(--fs-xs); width: 100%;
+  margin-bottom: 12px; font-size: var(--fs-xs); width: 100%;
 }
 .schedule-cell {
   background: var(--card); padding: 6px 2px; min-height: 32px;
   display: flex; flex-direction: column; gap: 2px; align-items: center;
-  overflow: hidden;
+  overflow: hidden; transition: background var(--duration-fast) var(--ease-out);
 }
 .schedule-cell.header { font-weight: 500; color: var(--muted-foreground); font-size: 9px; justify-content: center; letter-spacing: 0.05em; text-transform: uppercase; }
 .schedule-cell.time-label { justify-content: center; font-weight: 500; color: var(--muted-foreground); font-size: 9px; font-family: var(--font-mono); }
-.schedule-pip { padding: 1px 4px; border-radius: var(--radius-sm); font-size: 8px; white-space: nowrap; line-height: 1.3; font-weight: 500; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.schedule-cell.today-col { background: rgba(59,130,246,0.08); }
+.schedule-cell.header.today-col { color: var(--primary); font-weight: 700; }
+.schedule-cell.time-label.next-time { color: var(--green); font-weight: 700; background: var(--green-subtle); }
+.schedule-cell.now-slot { box-shadow: inset 0 0 0 1px var(--green); }
+.schedule-cell.sc-slot.empty-slot { cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.schedule-cell.sc-slot.empty-slot:hover { background: var(--muted); }
+.schedule-cell.sc-slot.empty-slot.today-col:hover { background: rgba(59,130,246,0.16); }
+.schedule-cell.sc-slot.empty-slot:active { background: var(--secondary); }
+.schedule-pip {
+  padding: 1px 4px; border-radius: var(--radius-sm); font-size: 8px; white-space: nowrap;
+  line-height: 1.3; font-weight: 500; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
+  cursor: pointer; -webkit-tap-highlight-color: transparent; user-select: none;
+  transition: transform var(--duration-fast) var(--ease-out), opacity var(--duration-fast);
+}
+.schedule-pip:active { transform: scale(0.92); }
 .schedule-pip.checkin { background: var(--green-subtle); color: var(--green); }
+.schedule-pip.checkout { background: var(--orange); color: white; opacity: 0.85; }
+.schedule-pip.ot { background: var(--purple-subtle); color: var(--purple); }
 .schedule-pip.forecast { background: var(--blue-subtle); color: var(--blue); }
+.schedule-pip.disabled { opacity: 0.35; text-decoration: line-through; }
+
+.schedule-legend {
+  display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
+  font-size: var(--fs-xs); color: var(--muted-foreground);
+  padding: 0 4px 8px;
+}
+.schedule-legend .legend-item { display: inline-flex; align-items: center; gap: 4px; }
+.schedule-legend .legend-dot { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+.schedule-legend .legend-dot.today-col { background: rgba(59,130,246,0.4); }
+.schedule-legend .legend-dot.next-time { background: var(--green); }
+
+/* Pip action popover */
+.pip-popover {
+  position: absolute; z-index: 100;
+  background: var(--popover, var(--card)); color: var(--foreground);
+  border: 1px solid var(--border); border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  padding: var(--sp-3); min-width: 200px; max-width: 260px;
+  animation: modal-in var(--duration-normal) var(--ease-out);
+}
+.pip-popover-header { margin-bottom: var(--sp-2); }
+.pip-popover-title { font-weight: 600; font-size: var(--fs-sm); }
+.pip-popover-sub { font-size: var(--fs-xs); margin-top: 2px; }
+.pip-popover-actions {
+  display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-2); margin-top: var(--sp-2);
+}
+.pip-popover-actions .btn { font-size: var(--fs-xs); padding: 6px 8px; justify-content: center; }
+
+/* Pre-fill form flash */
+.form-flash { animation: form-flash-anim 1.2s ease-out; }
+@keyframes form-flash-anim {
+  0% { box-shadow: 0 0 0 0 rgba(59,130,246,0.5); }
+  30% { box-shadow: 0 0 0 6px rgba(59,130,246,0.15); }
+  100% { box-shadow: 0 0 0 0 rgba(59,130,246,0); }
+}
 
 /* ─── DAY PICKER ─── */
 .day-picker { display: flex; gap: 8px; flex-wrap: wrap; }

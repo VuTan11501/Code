@@ -40,6 +40,7 @@ const ICON_PATHS = {
   // Charts / dashboard
   barChart:   '<path d="M3 3v18h18"/><path d="M7 16V9"/><path d="M12 16v-5"/><path d="M17 16v-3"/>',
   play:       '<polygon points="6 3 20 12 6 21 6 3"/>',
+  pause:      '<rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/>',
 };
 
 function ICON(name, size = 16, extraClass = '') {
