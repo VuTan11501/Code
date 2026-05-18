@@ -256,6 +256,7 @@ html { touch-action: manipulation; }
   .run-time { grid-area: time; }
   .run-event { grid-area: event; justify-self: start; min-width: 0; }
   .run-num { grid-area: num; }
+  .run-list .run-item.hide-mobile { display: none; }
 }
 .empty { color: var(--muted-foreground); font-size: var(--fs-sm); padding: 20px; text-align: center; }
 
