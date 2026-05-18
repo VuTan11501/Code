@@ -785,8 +785,8 @@ function closeEditSchedModal() {
 }
 
 function toggleEditType(type) {
-  document.getElementById('editOnceFields').style.display = type === 'once' ? 'block' : 'none';
-  document.getElementById('editRecurFields').style.display = type === 'recurring' ? 'block' : 'none';
+  document.getElementById('editOnceFields').style.display = type === 'once' ? 'contents' : 'none';
+  document.getElementById('editRecurFields').style.display = type === 'recurring' ? 'contents' : 'none';
 }
 
 async function saveEditSchedule() {

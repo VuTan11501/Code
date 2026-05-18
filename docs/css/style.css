@@ -567,6 +567,19 @@ input[type="time"], input[type="date"], input[type="datetime-local"] {
   .time-input-native { display: block; }
 }
 
+/* Edit Schedule modal: 2-column grid on desktop, 1-column on mobile */
+.edit-sched-modal { max-width: 480px; }
+.edit-sched-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: 1fr;
+}
+.edit-sched-grid > .full-row { grid-column: 1 / -1; }
+@media (min-width: 640px) {
+  .edit-sched-modal { max-width: 640px; }
+  .edit-sched-grid { grid-template-columns: 1fr 1fr; }
+}
+
 /* Wheel Picker */
 .wheel-picker-container {
   display: flex; align-items: center; justify-content: center;

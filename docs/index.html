@@ -466,21 +466,21 @@ tailwind.config = {
 
 <!-- Edit Schedule Modal -->
 <div class="dialog-overlay modal-overlay" id="editSchedModal" role="dialog" aria-modal="true" aria-labelledby="editSchedTitle">
-  <div class="dialog-content modal" style="max-width:480px">
+  <div class="dialog-content modal edit-sched-modal">
     <div class="dialog-header modal-header">
       <h3 class="dialog-title text-lg font-semibold" id="editSchedTitle">Edit Schedule</h3>
       <button class="btn btn-ghost btn-icon modal-close" onclick="closeEditSchedModal()" aria-label="Close">&times;</button>
     </div>
     <div class="dialog-body modal-body" style="padding:20px">
       <input type="hidden" id="editSchedIndex">
-      <div class="flex flex-col gap-4">
+      <div class="edit-sched-grid">
         <div class="field">
           <label class="field-label text-xs text-muted-foreground font-medium block mb-1">Workflow</label>
           <select class="input select-trigger" id="editSchedWorkflow" onchange="toggleEditLocationField()">
-            <option value="auto-checkin.yml">📥 Auto Checkin</option>
-            <option value="auto-checkout.yml">📤 Auto Checkout</option>
-            <option value="auto-ot-creator.yml">⏰ Auto OT Creator</option>
-            <option value="jpy-forecast.yml">💹 JPY Forecast</option>
+            <option value="auto-checkin.yml">Auto Checkin</option>
+            <option value="auto-checkout.yml">Auto Checkout</option>
+            <option value="auto-ot-creator.yml">Auto OT Creator</option>
+            <option value="jpy-forecast.yml">JPY Forecast</option>
           </select>
         </div>
         <div class="field" id="editLocationField">
@@ -499,7 +499,7 @@ tailwind.config = {
         </div>
 
         <!-- Once fields -->
-        <div id="editOnceFields">
+        <div id="editOnceFields" style="display:contents">
           <div class="field">
             <label class="field-label text-xs text-muted-foreground font-medium block mb-1">Date & Time (JST)</label>
             <input type="datetime-local" class="input w-full px-3 py-2 rounded-md border border-input bg-transparent text-foreground text-sm" id="editSchedDateTime">
@@ -508,7 +508,7 @@ tailwind.config = {
 
         <!-- Recurring fields -->
         <div id="editRecurFields" style="display:none">
-          <div class="field mb-3">
+          <div class="field">
             <label class="field-label text-xs text-muted-foreground font-medium block mb-1">Pattern</label>
             <select class="input select-trigger" id="editSchedPattern">
               <option value="daily">Every day</option>
@@ -517,30 +517,30 @@ tailwind.config = {
               <option value="monthly">Monthly</option>
             </select>
           </div>
-          <div class="field mb-3">
+          <div class="field">
             <label class="field-label text-xs text-muted-foreground font-medium block mb-1">Time (HH:MM)</label>
             <input type="time" class="input w-full px-3 py-2 rounded-md border border-input bg-transparent text-foreground text-sm font-mono" id="editSchedTime">
           </div>
-          <div class="field mb-3">
-            <label class="field-label text-xs text-muted-foreground font-medium block mb-1">Days (comma separated: 0=Sun..6=Sat)</label>
+          <div class="field">
+            <label class="field-label text-xs text-muted-foreground font-medium block mb-1">Days (0=Sun..6=Sat)</label>
             <input type="text" class="input w-full px-3 py-2 rounded-md border border-input bg-transparent text-foreground text-sm" id="editSchedDays" placeholder="e.g. 1,2,3,4,5">
           </div>
-          <div class="field mb-3">
-            <label class="field-label text-xs text-muted-foreground font-medium block mb-1">Monthly dates (comma separated)</label>
+          <div class="field">
+            <label class="field-label text-xs text-muted-foreground font-medium block mb-1">Monthly dates</label>
             <input type="text" class="input w-full px-3 py-2 rounded-md border border-input bg-transparent text-foreground text-sm" id="editSchedDates" placeholder="e.g. 1,15,28">
           </div>
-          <div class="flex items-center gap-3">
+          <div class="field flex items-center gap-3">
             <label class="field-label text-xs text-muted-foreground font-medium" for="editSchedEnabled">Enabled</label>
             <div class="sched-toggle active" id="editSchedEnabled" role="switch" aria-checked="true" tabindex="0" onclick="this.classList.toggle('active'); this.setAttribute('aria-checked', this.classList.contains('active'))"></div>
           </div>
         </div>
 
-        <div class="field">
+        <div class="field full-row">
           <label class="field-label text-xs text-muted-foreground font-medium block mb-1">Note</label>
           <input type="text" class="input w-full px-3 py-2 rounded-md border border-input bg-transparent text-foreground text-sm placeholder:text-muted-foreground" id="editSchedNote" placeholder="Optional note">
         </div>
 
-        <div class="flex gap-3 pt-2">
+        <div class="full-row flex gap-3 pt-2">
           <button class="btn primary flex-1" onclick="saveEditSchedule()"><span data-icon="save" data-size="14"></span> Save</button>
           <button class="btn flex-1" onclick="closeEditSchedModal()">Cancel</button>
         </div>
