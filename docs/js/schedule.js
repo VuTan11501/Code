@@ -10,13 +10,14 @@ function initSchedulePage() {
   initCalendar('calPicker', 'schedDate', 'schedDateInput', { allowPast: false });
   initCalendar('calPickerStart', 'schedStartDate', 'schedStartDateInput', { allowPast: true });
   initCalendar('calPickerEnd', 'schedEndDate', 'schedEndDateInput', { allowPast: true });
+  // Default date = today, time = current JST time
+  const now = jstNow();
+  selectedHour = now.getHours();
+  selectedMinute = now.getMinutes();
   renderTimePicker();
   renderMonthDateGrid();
-  // Select tomorrow by default
-  const now = jstNow();
-  const tmr = new Date(now); tmr.setDate(tmr.getDate() + 1);
-  const tmrStr = formatDate(tmr.getFullYear(), tmr.getMonth(), tmr.getDate());
-  calSelect('calPicker', tmrStr);
+  const todayStr = formatDate(now.getFullYear(), now.getMonth(), now.getDate());
+  calSelect('calPicker', todayStr);
   loadScheduledRuns();
 }
 
@@ -179,7 +180,7 @@ function renderTimePicker() {
 
   // Initialize wheel columns
   initWheel('wheelHour', 24, selectedHour, (val) => { selectedHour = val; updateTimeDisplay(); });
-  initWheel('wheelMinute', 12, selectedMinute / 5, (val) => { selectedMinute = val * 5; updateTimeDisplay(); }, true);
+  initWheel('wheelMinute', 60, selectedMinute, (val) => { selectedMinute = val; updateTimeDisplay(); });
 }
 
 function updateTimeDisplay() {
@@ -189,14 +190,14 @@ function updateTimeDisplay() {
   if (dispInput) dispInput.value = timeStr;
 }
 
-function initWheel(id, count, initialIndex, onChange, isMinute) {
+function initWheel(id, count, initialIndex, onChange) {
   const col = document.getElementById(id);
   if (!col) return;
 
   // Generate items
   let html = '';
   for (let i = 0; i < count; i++) {
-    const label = isMinute ? String(i * 5).padStart(2, '0') : String(i).padStart(2, '0');
+    const label = String(i).padStart(2, '0');
     html += `<div class="wheel-item" data-index="${i}">${label}</div>`;
   }
   col.innerHTML = html;
@@ -249,10 +250,10 @@ function pickPreset(h, m) {
   const hCol = document.getElementById('wheelHour');
   const mCol = document.getElementById('wheelMinute');
   if (hCol) hCol.scrollTo({ top: h * 44, behavior: 'smooth' });
-  if (mCol) mCol.scrollTo({ top: (m / 5) * 44, behavior: 'smooth' });
+  if (mCol) mCol.scrollTo({ top: m * 44, behavior: 'smooth' });
   // Update active states
   hCol?.querySelectorAll('.wheel-item').forEach((el, i) => el.classList.toggle('active', i === h));
-  mCol?.querySelectorAll('.wheel-item').forEach((el, i) => el.classList.toggle('active', i === m / 5));
+  mCol?.querySelectorAll('.wheel-item').forEach((el, i) => el.classList.toggle('active', i === m));
 }
 
 // Keep old functions for backward compat
