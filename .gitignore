@@ -15,3 +15,6 @@ finance/data/*.db
 finance/data/*.html
 finance/data/models/*.pkl
 copilot-session-*.md
+
+.github/skills/dokokin-auto-checkin/scripts/*.log
+.github/skills/dokokin-auto-checkin/scripts/.azure_tokens.json
