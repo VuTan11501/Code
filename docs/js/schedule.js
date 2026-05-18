@@ -684,8 +684,15 @@ async function addScheduledRun() {
     entry = { type: 'recurring', workflow, recurrence, enabled: true, note: note || undefined, created: new Date().toISOString() };
   }
 
-  // Add location for checkin/checkout workflows
-  if (needsLocation) entry.location = location;
+  // Add location (key + lat/lon snapshot) for checkin/checkout workflows
+  if (needsLocation) {
+    entry.location = location;
+    const loc = (typeof getLocation === 'function') ? getLocation(location) : null;
+    if (loc) {
+      entry.location_lat = loc.lat;
+      entry.location_lon = loc.lon;
+    }
+  }
 
   await saveScheduledEntry(entry);
 }
@@ -922,7 +929,14 @@ async function saveEditSchedule() {
     updatedEntry = { type: 'recurring', workflow, recurrence, enabled, note, created: scheduleTableData[index].created || new Date().toISOString() };
   }
 
-  if (needsLocation) updatedEntry.location = location;
+  if (needsLocation) {
+    updatedEntry.location = location;
+    const loc = (typeof getLocation === 'function') ? getLocation(location) : null;
+    if (loc) {
+      updatedEntry.location_lat = loc.lat;
+      updatedEntry.location_lon = loc.lon;
+    }
+  }
 
   try {
     const entries = await loadEntriesFromGist();

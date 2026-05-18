@@ -206,8 +206,7 @@ tailwind.config = {
             <div class="field scheduler-field" id="schedLocationField">
               <label class="field-label text-xs text-muted-foreground font-medium block mb-1" for="schedLocation">Location</label>
               <select class="input select-trigger" id="schedLocation">
-                <option value="office">🏢 Office (NEC Tamagawa)</option>
-                <option value="home">🏠 Home (FPT Residence)</option>
+                <!-- populated dynamically by locations.js -->
               </select>
             </div>
             <div class="field scheduler-field">
@@ -411,26 +410,13 @@ tailwind.config = {
             <div class="card-description">Configure GPS coordinates for DokoKin checkin/checkout.</div>
           </div>
           <div class="card-content">
-            <div class="location-list" style="display:flex;flex-direction:column;gap:12px;">
-              <div class="location-item" style="display:flex;align-items:center;gap:10px;padding:10px 14px;border:1px solid var(--border);border-radius:8px;background:var(--card);">
-                <span style="font-size:1.3em;">🏢</span>
-                <div style="flex:1">
-                  <div style="font-weight:600;font-size:0.9em;">Office — NEC Tamagawa</div>
-                  <div style="font-size:0.75em;color:var(--muted-foreground);">35.5202417, 139.620325</div>
-                </div>
-                <span class="badge badge-sm" style="font-size:0.7em;padding:2px 8px;background:var(--primary);color:#fff;border-radius:999px;">Default</span>
-              </div>
-              <div class="location-item" style="display:flex;align-items:center;gap:10px;padding:10px 14px;border:1px solid var(--border);border-radius:8px;background:var(--card);">
-                <span style="font-size:1.3em;">🏠</span>
-                <div style="flex:1">
-                  <div style="font-weight:600;font-size:0.9em;">Home — FPT Residence Tsurumi</div>
-                  <div style="font-size:0.75em;color:var(--muted-foreground);">35.51386, 139.6749183</div>
-                </div>
-              </div>
+            <div class="location-list" id="locationList" style="display:flex;flex-direction:column;gap:12px;">
+              <!-- populated dynamically by locations.js -->
             </div>
+            <button class="btn primary mt-3" onclick="openAddLocationModal()" style="width:100%"><span data-icon="map-pin" data-size="14"></span> Add Location</button>
             <p class="text-xs text-muted-foreground mt-3 leading-relaxed opacity-70">
-              Locations are used by Auto Checkin/Checkout workflows for GPS stamping.<br>
-              To add new locations, update <code>schedule.json</code> in <code>.github/scripts/</code>.
+              Locations are stored locally. Lat/Lon is sent directly with the API request when dispatching Auto Checkin/Checkout.<br>
+              Default locations (Office, Home) cannot be deleted.
             </p>
           </div>
         </div>
@@ -486,8 +472,7 @@ tailwind.config = {
         <div class="field" id="editLocationField">
           <label class="field-label text-xs text-muted-foreground font-medium block mb-1">Location</label>
           <select class="input select-trigger" id="editSchedLocation">
-            <option value="office">🏢 Office (NEC Tamagawa)</option>
-            <option value="home">🏠 Home (FPT Residence)</option>
+            <!-- populated dynamically by locations.js -->
           </select>
         </div>
         <div class="field">
@@ -593,6 +578,56 @@ tailwind.config = {
   </div>
 </div>
 
+<!-- Add Location Modal -->
+<div class="dialog-overlay modal-overlay" id="addLocationModal" role="dialog" aria-modal="true" aria-labelledby="addLocTitle">
+  <div class="dialog-content modal" style="max-width:480px">
+    <div class="dialog-header modal-header">
+      <h3 class="dialog-title text-lg font-semibold" id="addLocTitle">Add Location</h3>
+      <button class="btn btn-ghost btn-icon modal-close" onclick="closeAddLocationModal()" aria-label="Close">&times;</button>
+    </div>
+    <div class="dialog-body modal-body" style="padding:20px">
+      <div class="flex flex-col gap-4">
+        <div class="grid grid-cols-[1fr_72px] gap-3">
+          <div class="field">
+            <label class="field-label text-xs text-muted-foreground font-medium block mb-1" for="addLocName">Name</label>
+            <input type="text" class="input w-full" id="addLocName" placeholder="e.g. Client Site Shibuya" maxlength="48">
+          </div>
+          <div class="field">
+            <label class="field-label text-xs text-muted-foreground font-medium block mb-1" for="addLocIcon">Icon</label>
+            <input type="text" class="input w-full text-center" id="addLocIcon" value="📍" maxlength="2">
+          </div>
+        </div>
+
+        <div class="field">
+          <label class="field-label text-xs text-muted-foreground font-medium block mb-1" for="addLocUrl">Google Maps URL <span class="opacity-60">(optional — auto-extracts lat/lon)</span></label>
+          <div class="flex gap-2">
+            <input type="text" class="input flex-1" id="addLocUrl" placeholder="https://www.google.com/maps/place/.../@35.5,139.6,17z/...">
+            <button class="btn" onclick="extractLatLonFromUrl()" type="button">Extract</button>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div class="field">
+            <label class="field-label text-xs text-muted-foreground font-medium block mb-1" for="addLocLat">Latitude</label>
+            <input type="text" class="input w-full font-mono" id="addLocLat" placeholder="35.5202417" inputmode="decimal">
+          </div>
+          <div class="field">
+            <label class="field-label text-xs text-muted-foreground font-medium block mb-1" for="addLocLon">Longitude</label>
+            <input type="text" class="input w-full font-mono" id="addLocLon" placeholder="139.620325" inputmode="decimal">
+          </div>
+        </div>
+
+        <div id="addLocStatus" class="text-xs mt-2"></div>
+
+        <div class="flex gap-3 pt-2">
+          <button class="btn primary flex-1" onclick="saveAddLocation()"><span data-icon="save" data-size="14"></span> Save</button>
+          <button class="btn flex-1" onclick="closeAddLocationModal()">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Toast -->
 <div class="toast-container">
   <div class="toast" id="toast" role="alert" aria-live="assertive"></div>
@@ -600,6 +635,7 @@ tailwind.config = {
 
 <!-- Scripts (order matters) -->
 <script src="js/icons.js"></script>
+<script src="js/locations.js"></script>
 <script src="js/app.js"></script>
 <script src="js/dashboard.js"></script>
 <script src="js/schedule.js"></script>

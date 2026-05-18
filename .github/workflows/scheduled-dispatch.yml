@@ -168,10 +168,14 @@ jobs:
 
           for entry in runs:
               entry_type = entry.get('type', 'once')
-              # Build inputs from entry (e.g. location for checkin/checkout)
+              # Build inputs from entry (e.g. location + lat/lon for checkin/checkout)
               entry_inputs = {}
               if entry.get('location'):
                   entry_inputs['location'] = entry['location']
+              if entry.get('location_lat') is not None:
+                  entry_inputs['latitude'] = str(entry['location_lat'])
+              if entry.get('location_lon') is not None:
+                  entry_inputs['longitude'] = str(entry['location_lon'])
 
               if entry_type == 'recurring':
                   # Recurring: check if it's time, dispatch, keep in list

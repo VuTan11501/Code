@@ -517,7 +517,18 @@ def main():
 
         action = action_entry["action"]
         location_key = action_entry["location"]
-        loc = schedule["locations"][location_key]
+        # ── Resolve coords: env override (PWA custom location) > schedule.json lookup ──
+        force_lat = os.environ.get("FORCE_LATITUDE", "").strip()
+        force_lon = os.environ.get("FORCE_LONGITUDE", "").strip()
+        if force_lat and force_lon:
+            try:
+                loc = {"lat": float(force_lat), "lon": float(force_lon), "name": location_key}
+                log(f"Using lat/lon override from inputs: ({loc['lat']}, {loc['lon']})")
+            except ValueError:
+                log(f"⚠️ Invalid FORCE_LATITUDE/FORCE_LONGITUDE: '{force_lat}', '{force_lon}' — falling back to schedule.json")
+                loc = schedule["locations"][location_key]
+        else:
+            loc = schedule["locations"][location_key]
         location_name = loc["name"]
         note = action_entry.get("note", "")
 

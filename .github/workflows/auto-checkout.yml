@@ -4,13 +4,18 @@ on:
   workflow_dispatch:
     inputs:
       location:
-        description: Location
-        required: true
-        type: choice
+        description: Location key (office, home, or custom key from PWA)
+        required: false
+        type: string
         default: office
-        options:
-          - office
-          - home
+      latitude:
+        description: Override latitude (decimal) — bypasses schedule.json lookup
+        required: false
+        type: string
+      longitude:
+        description: Override longitude (decimal) — bypasses schedule.json lookup
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -44,6 +49,8 @@ jobs:
           AZURE_REFRESH_TOKEN: ${{ secrets.AZURE_REFRESH_TOKEN }}
           FORCE_ACTION: checkout
           FORCE_LOCATION: ${{ inputs.location || 'office' }}
+          FORCE_LATITUDE: ${{ inputs.latitude }}
+          FORCE_LONGITUDE: ${{ inputs.longitude }}
           SMTP_USER: ${{ secrets.SMTP_USER }}
           SMTP_PASS: ${{ secrets.SMTP_PASS }}
           NOTIFY_EMAIL: ${{ secrets.NOTIFY_EMAIL }}
