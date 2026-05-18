@@ -1,1 +1,8 @@
-[]
+[
+  {
+    "type": "once",
+    "workflow": "jpy-forecast.yml",
+    "run_at": "2026-05-18T16:15:00+09:00",
+    "created": "2026-05-18T07:12:50.317Z"
+  }
+]
