@@ -285,6 +285,51 @@ tailwind.config = {
           </div>
         </div>
       </section>
+
+      <div class="separator h-px w-full bg-border mt-6 mb-4"></div>
+
+      <!-- Schedule Data Table -->
+      <section aria-label="All schedules table">
+        <div class="flex items-center justify-between mb-4">
+          <div class="section-title text-sm font-medium text-muted-foreground flex items-center gap-2 mb-0">📋 All Schedules</div>
+          <div class="flex items-center gap-2">
+            <select id="tableFilterType" class="input select-trigger text-xs !w-auto !h-8 !px-2 !py-1" onchange="renderScheduleTable()">
+              <option value="all">All Types</option>
+              <option value="once">One-time</option>
+              <option value="recurring">Recurring</option>
+            </select>
+            <select id="tableFilterWf" class="input select-trigger text-xs !w-auto !h-8 !px-2 !py-1" onchange="renderScheduleTable()">
+              <option value="all">All Workflows</option>
+              <option value="auto-checkin.yml">Checkin/Checkout</option>
+              <option value="auto-ot.yml">Auto OT</option>
+              <option value="jpy-forecast.yml">JPY Forecast</option>
+            </select>
+          </div>
+        </div>
+        <div class="sched-table-wrap overflow-x-auto rounded-lg border border-border">
+          <table class="sched-table w-full text-sm" id="scheduleTable">
+            <thead>
+              <tr class="bg-muted/50 border-b border-border">
+                <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">#</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Type</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Workflow</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Schedule</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Note</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Created</th>
+                <th class="px-4 py-3 text-center text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="scheduleTableBody">
+              <tr><td colspan="8" class="text-center text-muted-foreground py-8">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="flex items-center justify-between mt-3 text-xs text-muted-foreground" id="tableFooter">
+          <span id="tableCount">0 entries</span>
+          <button class="btn sm" onclick="loadScheduledRuns()" title="Refresh">🔄 Refresh</button>
+        </div>
+      </section>
     </div>
 
     <!-- PAGE: SETTINGS -->
@@ -364,6 +409,83 @@ tailwind.config = {
     </div>
     <div class="dialog-body modal-body" id="logModalBody">
       <div class="empty text-muted-foreground text-sm p-5 text-center">Loading jobs...</div>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Schedule Modal -->
+<div class="dialog-overlay modal-overlay" id="editSchedModal" role="dialog" aria-modal="true" aria-labelledby="editSchedTitle">
+  <div class="dialog-content modal" style="max-width:480px">
+    <div class="dialog-header modal-header">
+      <h3 class="dialog-title text-lg font-semibold" id="editSchedTitle">Edit Schedule</h3>
+      <button class="btn btn-ghost btn-icon modal-close" onclick="closeEditSchedModal()" aria-label="Close">&times;</button>
+    </div>
+    <div class="dialog-body modal-body" style="padding:20px">
+      <input type="hidden" id="editSchedIndex">
+      <div class="flex flex-col gap-4">
+        <div class="field">
+          <label class="field-label text-xs text-muted-foreground font-medium block mb-1">Workflow</label>
+          <select class="input select-trigger" id="editSchedWorkflow">
+            <option value="auto-checkin.yml">🕐 Auto Checkin/Checkout</option>
+            <option value="auto-ot.yml">⏰ Auto OT Creator</option>
+            <option value="jpy-forecast.yml">💹 JPY Forecast</option>
+          </select>
+        </div>
+        <div class="field">
+          <label class="field-label text-xs text-muted-foreground font-medium block mb-1">Type</label>
+          <select class="input select-trigger" id="editSchedType" onchange="toggleEditType(this.value)">
+            <option value="once">One-time</option>
+            <option value="recurring">Recurring</option>
+          </select>
+        </div>
+
+        <!-- Once fields -->
+        <div id="editOnceFields">
+          <div class="field">
+            <label class="field-label text-xs text-muted-foreground font-medium block mb-1">Date & Time (JST)</label>
+            <input type="datetime-local" class="input w-full px-3 py-2 rounded-md border border-input bg-transparent text-foreground text-sm" id="editSchedDateTime">
+          </div>
+        </div>
+
+        <!-- Recurring fields -->
+        <div id="editRecurFields" style="display:none">
+          <div class="field mb-3">
+            <label class="field-label text-xs text-muted-foreground font-medium block mb-1">Pattern</label>
+            <select class="input select-trigger" id="editSchedPattern">
+              <option value="daily">Every day</option>
+              <option value="weekdays">Weekdays (Mon-Fri)</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+            </select>
+          </div>
+          <div class="field mb-3">
+            <label class="field-label text-xs text-muted-foreground font-medium block mb-1">Time (HH:MM)</label>
+            <input type="time" class="input w-full px-3 py-2 rounded-md border border-input bg-transparent text-foreground text-sm font-mono" id="editSchedTime">
+          </div>
+          <div class="field mb-3">
+            <label class="field-label text-xs text-muted-foreground font-medium block mb-1">Days (comma separated: 0=Sun..6=Sat)</label>
+            <input type="text" class="input w-full px-3 py-2 rounded-md border border-input bg-transparent text-foreground text-sm" id="editSchedDays" placeholder="e.g. 1,2,3,4,5">
+          </div>
+          <div class="field mb-3">
+            <label class="field-label text-xs text-muted-foreground font-medium block mb-1">Monthly dates (comma separated)</label>
+            <input type="text" class="input w-full px-3 py-2 rounded-md border border-input bg-transparent text-foreground text-sm" id="editSchedDates" placeholder="e.g. 1,15,28">
+          </div>
+          <div class="flex items-center gap-3">
+            <label class="field-label text-xs text-muted-foreground font-medium">Enabled</label>
+            <input type="checkbox" id="editSchedEnabled" checked class="w-4 h-4 accent-green-500">
+          </div>
+        </div>
+
+        <div class="field">
+          <label class="field-label text-xs text-muted-foreground font-medium block mb-1">Note</label>
+          <input type="text" class="input w-full px-3 py-2 rounded-md border border-input bg-transparent text-foreground text-sm placeholder:text-muted-foreground" id="editSchedNote" placeholder="Optional note">
+        </div>
+
+        <div class="flex gap-3 pt-2">
+          <button class="btn primary flex-1" onclick="saveEditSchedule()">💾 Save</button>
+          <button class="btn flex-1" onclick="closeEditSchedModal()">Cancel</button>
+        </div>
+      </div>
     </div>
   </div>
 </div>

@@ -317,6 +317,10 @@ async function loadScheduledRuns() {
     } else {
       queue.innerHTML = `<div class="empty">⚠️ ${e.message}</div>`;
     }
+    // Clear table on error/empty
+    scheduleTableData = [];
+    scheduleTableSha = null;
+    renderScheduleTable();
   }
 }
 
@@ -377,8 +381,13 @@ async function clientSideDispatchOverdue(entries, sha) {
 }
 
 function renderScheduledQueue(entries, sha) {
+  // Store data for table
+  scheduleTableData = entries;
+  scheduleTableSha = sha;
+
+  // Render queue cards
   const queue = document.getElementById('schedulerQueue');
-  if (!entries.length) { queue.innerHTML = '<div class="empty">No scheduled runs</div>'; return; }
+  if (!entries.length) { queue.innerHTML = '<div class="empty">No scheduled runs</div>'; renderScheduleTable(); return; }
 
   queue.dataset.sha = sha;
   queue.innerHTML = entries.map((entry, i) => {
@@ -398,6 +407,9 @@ function renderScheduledQueue(entries, sha) {
       <button class="btn danger sm" onclick="deleteScheduledRun(${i})">🗑</button>
     </div>`;
   }).join('');
+
+  // Also render the data table
+  renderScheduleTable();
 }
 
 function describeRecurrence(r) {
@@ -519,5 +531,185 @@ async function toggleScheduleEntry(index) {
 
     if (res.ok) { loadScheduledRuns(); }
     else toast(`❌ Failed (${res.status})`);
+  } catch (e) { toast(`❌ ${e.message}`); }
+}
+
+// ═══════════════════════════════════════════════════
+//  SCHEDULE DATA TABLE
+// ═══════════════════════════════════════════════════
+let scheduleTableData = [];
+let scheduleTableSha = null;
+
+function renderScheduleTable() {
+  const tbody = document.getElementById('scheduleTableBody');
+  const countEl = document.getElementById('tableCount');
+  if (!tbody) return;
+
+  const filterType = document.getElementById('tableFilterType')?.value || 'all';
+  const filterWf = document.getElementById('tableFilterWf')?.value || 'all';
+
+  let filtered = scheduleTableData;
+  if (filterType !== 'all') filtered = filtered.filter(e => e.type === filterType);
+  if (filterWf !== 'all') filtered = filtered.filter(e => e.workflow === filterWf);
+
+  if (!filtered.length) {
+    tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted-foreground py-8">No schedules found</td></tr>';
+    if (countEl) countEl.textContent = '0 entries';
+    return;
+  }
+
+  const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+  tbody.innerHTML = filtered.map((entry, filteredIdx) => {
+    const realIdx = scheduleTableData.indexOf(entry);
+    const wf = WORKFLOWS.find(w => w.file === entry.workflow);
+    const wfName = wf ? `${wf.icon} ${wf.name}` : entry.workflow;
+    const isOnce = entry.type === 'once';
+
+    // Schedule description
+    let schedDesc = '';
+    if (isOnce) {
+      schedDesc = entry.run_at ? entry.run_at.slice(0, 16).replace('T', ' ') + ' JST' : '—';
+    } else if (entry.recurrence) {
+      const r = entry.recurrence;
+      schedDesc = r.time + ' ';
+      if (r.pattern === 'daily') schedDesc += 'Every day';
+      else if (r.pattern === 'weekdays') schedDesc += 'Mon–Fri';
+      else if (r.pattern === 'weekly') schedDesc += (r.days || []).map(d => dayNames[d]).join(', ');
+      else if (r.pattern === 'monthly') schedDesc += 'Day ' + (r.dates || []).join(', ');
+    }
+
+    // Status
+    const enabled = entry.enabled !== false;
+    let statusBadge = '';
+    if (isOnce) {
+      const isPast = entry.run_at && new Date(entry.run_at) < new Date();
+      statusBadge = isPast
+        ? '<span class="badge-disabled">Expired</span>'
+        : '<span class="badge-enabled">Pending</span>';
+    } else {
+      statusBadge = enabled
+        ? '<span class="badge-enabled">Active</span>'
+        : '<span class="badge-disabled">Disabled</span>';
+    }
+
+    // Created date
+    const created = entry.created ? new Date(entry.created).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' }) : '—';
+
+    return `<tr>
+      <td class="text-muted-foreground font-mono">${realIdx + 1}</td>
+      <td><span class="badge-${entry.type}">${isOnce ? 'Once' : 'Recurring'}</span></td>
+      <td class="font-medium">${wfName}</td>
+      <td class="font-mono text-xs">${schedDesc}</td>
+      <td class="text-muted-foreground">${entry.note || '—'}</td>
+      <td>${statusBadge}</td>
+      <td class="text-muted-foreground text-xs">${created}</td>
+      <td><div class="actions-cell">
+        <button class="btn sm" onclick="openEditSchedModal(${realIdx})" title="Edit">✏️</button>
+        <button class="btn danger sm" onclick="deleteScheduledRun(${realIdx})" title="Delete">🗑</button>
+      </div></td>
+    </tr>`;
+  }).join('');
+
+  if (countEl) countEl.textContent = `${filtered.length} of ${scheduleTableData.length} entries`;
+}
+
+// ═══════════════════════════════════════════════════
+//  EDIT SCHEDULE MODAL
+// ═══════════════════════════════════════════════════
+function openEditSchedModal(index) {
+  const entry = scheduleTableData[index];
+  if (!entry) return;
+
+  document.getElementById('editSchedIndex').value = index;
+  document.getElementById('editSchedWorkflow').value = entry.workflow;
+  document.getElementById('editSchedType').value = entry.type;
+  document.getElementById('editSchedNote').value = entry.note || '';
+
+  toggleEditType(entry.type);
+
+  if (entry.type === 'once') {
+    // Parse run_at to datetime-local format
+    if (entry.run_at) {
+      const dt = entry.run_at.slice(0, 16); // YYYY-MM-DDTHH:MM
+      document.getElementById('editSchedDateTime').value = dt;
+    }
+  } else if (entry.recurrence) {
+    const r = entry.recurrence;
+    document.getElementById('editSchedPattern').value = r.pattern || 'daily';
+    document.getElementById('editSchedTime').value = r.time || '09:00';
+    document.getElementById('editSchedDays').value = (r.days || []).join(',');
+    document.getElementById('editSchedDates').value = (r.dates || []).join(',');
+    document.getElementById('editSchedEnabled').checked = entry.enabled !== false;
+  }
+
+  document.getElementById('editSchedModal').classList.add('open');
+}
+
+function closeEditSchedModal() {
+  document.getElementById('editSchedModal').classList.remove('open');
+}
+
+function toggleEditType(type) {
+  document.getElementById('editOnceFields').style.display = type === 'once' ? 'block' : 'none';
+  document.getElementById('editRecurFields').style.display = type === 'recurring' ? 'block' : 'none';
+}
+
+async function saveEditSchedule() {
+  const index = parseInt(document.getElementById('editSchedIndex').value);
+  if (isNaN(index) || !scheduleTableData[index]) { toast('❌ Invalid entry'); return; }
+
+  const workflow = document.getElementById('editSchedWorkflow').value;
+  const type = document.getElementById('editSchedType').value;
+  const note = document.getElementById('editSchedNote').value.trim() || undefined;
+
+  let updatedEntry;
+
+  if (type === 'once') {
+    const dt = document.getElementById('editSchedDateTime').value;
+    if (!dt) { toast('⚠️ Pick a date & time'); return; }
+    const runAt = dt + ':00+09:00';
+    updatedEntry = { type: 'once', workflow, run_at: runAt, note, created: scheduleTableData[index].created || new Date().toISOString() };
+  } else {
+    const pattern = document.getElementById('editSchedPattern').value;
+    const time = document.getElementById('editSchedTime').value;
+    if (!time) { toast('⚠️ Set a time'); return; }
+
+    const recurrence = { pattern, time };
+    const daysStr = document.getElementById('editSchedDays').value.trim();
+    const datesStr = document.getElementById('editSchedDates').value.trim();
+
+    if (pattern === 'weekly' || pattern === 'weekdays') {
+      if (daysStr) recurrence.days = daysStr.split(',').map(d => parseInt(d.trim())).filter(d => !isNaN(d));
+      else if (pattern === 'weekdays') recurrence.days = [1,2,3,4,5];
+    }
+    if (pattern === 'monthly' && datesStr) {
+      recurrence.dates = datesStr.split(',').map(d => parseInt(d.trim())).filter(d => !isNaN(d));
+    }
+
+    const enabled = document.getElementById('editSchedEnabled').checked;
+    updatedEntry = { type: 'recurring', workflow, recurrence, enabled, note, created: scheduleTableData[index].created || new Date().toISOString() };
+  }
+
+  // Save to GitHub
+  try {
+    const data = await apiFetch(`/repos/${OWNER}/${REPO}/contents/.github/scheduled-runs.json`);
+    const entries = JSON.parse(atob(data.content));
+    entries[index] = updatedEntry;
+
+    const content = btoa(unescape(encodeURIComponent(JSON.stringify(entries, null, 2))));
+    const res = await fetch(`${API}/repos/${OWNER}/${REPO}/contents/.github/scheduled-runs.json`, {
+      method: 'PUT',
+      headers: { 'Authorization': `Bearer ${sessionToken}`, 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: 'sched: edit entry', content, sha: data.sha }),
+    });
+
+    if (res.ok) {
+      toast('✅ Schedule updated');
+      closeEditSchedModal();
+      loadScheduledRuns();
+    } else {
+      toast(`❌ Failed (${res.status})`);
+    }
   } catch (e) { toast(`❌ ${e.message}`); }
 }
