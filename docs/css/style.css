@@ -250,6 +250,7 @@ html { touch-action: manipulation; }
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
   text-align: right;
+  min-width: 60px;
 }
 @media (max-width: 560px) {
   .run-item {

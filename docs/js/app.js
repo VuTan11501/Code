@@ -454,12 +454,100 @@ let isFirstRefresh = true;              // suppress noti on initial seed
 
 let notifPermission = (typeof Notification !== 'undefined') ? Notification.permission : 'default';
 
+// ─── Notification preferences (persisted) ───
+const NOTIF_PREFS_KEY = 'wf_dash_notif_prefs';
+const DEFAULT_NOTIF_PREFS = {
+  onFailure: true,         // 🔴 alert when a run fails
+  onSuccess: false,        // 🟢 alert when a run completes successfully
+  onStart: false,          // 🟡 alert when a run starts/is queued
+  requireInteraction: true,  // failure stays on screen until dismissed
+};
+function getNotifPrefs() {
+  try {
+    const raw = localStorage.getItem(NOTIF_PREFS_KEY);
+    return { ...DEFAULT_NOTIF_PREFS, ...(raw ? JSON.parse(raw) : {}) };
+  } catch { return { ...DEFAULT_NOTIF_PREFS }; }
+}
+function saveNotifPrefs(prefs) {
+  try { localStorage.setItem(NOTIF_PREFS_KEY, JSON.stringify(prefs)); } catch {}
+}
+function toggleNotifPref(key) {
+  const p = getNotifPrefs();
+  p[key] = !p[key];
+  saveNotifPrefs(p);
+  renderNotifSettings();
+  toast(`${p[key] ? 'Enabled' : 'Disabled'} ${key.replace(/^on/, '').toLowerCase()} notifications`);
+}
+
 function updateNotifBtn() {
   const btn = document.getElementById('notifBtn');
   if (!btn) return;
-  if (notifPermission === 'granted') { btn.innerHTML = ICON('bell', 18); btn.title = 'Notifications: ON'; btn.style.opacity = '1'; }
-  else if (notifPermission === 'denied') { btn.innerHTML = ICON('bell', 18); btn.title = 'Notifications: Blocked'; btn.style.opacity = '0.4'; }
-  else { btn.innerHTML = ICON('bell', 18); btn.title = 'Enable notifications'; btn.style.opacity = '0.7'; }
+  btn.innerHTML = ICON('bell', 18);
+  if (notifPermission === 'granted')      { btn.setAttribute('data-tooltip', 'Notifications: ON');     btn.style.opacity = '1';   }
+  else if (notifPermission === 'denied')  { btn.setAttribute('data-tooltip', 'Notifications: Blocked'); btn.style.opacity = '0.4'; }
+  else                                    { btn.setAttribute('data-tooltip', 'Enable notifications');   btn.style.opacity = '0.7'; }
+  renderNotifSettings();
+}
+
+// Render the Notifications card body (status pill + prefs switches or enable button)
+function renderNotifSettings() {
+  const body = document.getElementById('notifCardBody');
+  if (!body) return;
+
+  // Status pill
+  let pill;
+  if (notifPermission === 'granted') {
+    pill = `<span class="status-badge status-success" style="display:inline-flex;align-items:center;gap:6px"><span data-icon="check" data-size="12"></span> Granted</span>`;
+  } else if (notifPermission === 'denied') {
+    pill = `<span class="status-badge status-failure" style="display:inline-flex;align-items:center;gap:6px"><span data-icon="x" data-size="12"></span> Blocked by browser</span>`;
+  } else {
+    pill = `<span class="status-badge" style="background:rgba(161,161,170,0.1);color:var(--muted-foreground);display:inline-flex;align-items:center;gap:6px"><span data-icon="bell" data-size="12"></span> Not requested</span>`;
+  }
+
+  const statusRow = `<div class="flex items-center justify-between mb-3"><span class="text-xs text-muted-foreground">Permission</span>${pill}</div>`;
+
+  // Body content depending on state
+  let inner;
+  if (notifPermission === 'granted') {
+    const p = getNotifPrefs();
+    const sw = (key, label, desc, iconName, color) => `
+      <div class="flex items-start justify-between gap-3 py-2.5 border-t border-border first:border-t-0">
+        <div class="flex items-start gap-2.5 min-w-0">
+          <span data-icon="${iconName}" data-size="14" style="color:${color};margin-top:2px;flex-shrink:0"></span>
+          <div class="min-w-0">
+            <div class="text-sm font-medium">${label}</div>
+            <div class="text-xs text-muted-foreground mt-0.5">${desc}</div>
+          </div>
+        </div>
+        <div class="switch ${p[key] ? 'active' : ''}" role="switch" aria-checked="${p[key]}" tabindex="0" onclick="toggleNotifPref('${key}')" onkeydown="if(event.key===' '||event.key==='Enter'){event.preventDefault();toggleNotifPref('${key}')}"></div>
+      </div>`;
+    inner = `
+      <div>
+        ${sw('onFailure', 'Failure alerts',  'Notify when a workflow run fails.',                              'alert',  'var(--red)')}
+        ${sw('onSuccess', 'Success alerts',  'Notify when a workflow run completes successfully.',             'check',  'var(--green)')}
+        ${sw('onStart',   'Start alerts',    'Notify when a new workflow run starts (queued or in_progress).', 'play',   'var(--blue, #3b82f6)')}
+        ${sw('requireInteraction', 'Sticky failure alerts', 'Failure notifications stay on screen until dismissed.', 'lockKeyhole', 'var(--yellow)')}
+      </div>
+      <div class="flex gap-2 mt-3 pt-3 border-t border-border">
+        <button class="btn btn-outline sm" onclick="testNotification()" type="button"><span data-icon="bell" data-size="14"></span> Send test</button>
+      </div>`;
+  } else if (notifPermission === 'denied') {
+    inner = `<div class="text-xs text-muted-foreground leading-relaxed">Notifications were blocked. To re-enable, open your browser's site settings for this page (lock icon in address bar) and set <strong>Notifications</strong> to <em>Allow</em>, then reload.</div>`;
+  } else {
+    inner = `<div class="flex flex-col gap-2"><button class="btn btn-outline sm" onclick="requestNotifPermission()" type="button" style="align-self:flex-start"><span data-icon="bell" data-size="14"></span> Enable Notifications</button><div class="text-xs text-muted-foreground">Browser will ask for permission. You can fine-tune what to be alerted about after granting.</div></div>`;
+  }
+
+  body.innerHTML = statusRow + inner;
+  if (window.renderIcons) window.renderIcons(body);
+}
+
+function testNotification() {
+  showNotification({
+    title: '🔔 Test notification',
+    body: 'If you can see this, notifications are working correctly.',
+    tag: 'notif-test-' + Date.now(),
+  });
+  toast('Test notification sent');
 }
 
 async function requestNotifPermission() {
@@ -553,21 +641,18 @@ function relTimeShort(iso) {
 }
 
 function checkForNewFailures(allRuns) {
-  // Always update the seen store, but only notify if permissions granted & not first refresh
+  // Misnomer: now handles failure / success / start notifications based on user prefs.
   const store = loadSeenRuns();
   const now = Date.now();
   const freshCutoff = now - FRESH_WINDOW_MIN * 60_000;
-
-  // Find unseen completed failures
-  const newFailures = allRuns
-    .filter(r => r.status === 'completed' && r.conclusion === 'failure' && !isRunSeen(store, r.id))
-    .sort((a, b) => new Date(b.updated_at || b.created_at) - new Date(a.updated_at || a.created_at));
+  const prefs = getNotifPrefs();
 
   // First refresh after page load: seed everything silently, no notifications.
-  // This prevents the "open phone → flood of old failures" bug.
   if (isFirstRefresh) {
     for (const r of allRuns) {
-      if (r.status === 'completed') markRunSeen(store, r.id);
+      // Seed completed AND in_progress/queued so we don't blast on first poll
+      markRunSeen(store, r.id + ':' + (r.status === 'completed' ? r.conclusion : r.status));
+      if (r.status === 'completed') markRunSeen(store, r.id);    // legacy key for back-compat
     }
     saveSeenRuns(store);
     isFirstRefresh = false;
@@ -575,32 +660,85 @@ function checkForNewFailures(allRuns) {
   }
 
   if (notifPermission !== 'granted') {
-    // Still mark seen so we don't backlog if permission is granted later
-    for (const r of newFailures) markRunSeen(store, r.id);
+    // Mark everything seen so we don't backlog on grant later
+    for (const r of allRuns) {
+      markRunSeen(store, r.id + ':' + (r.status === 'completed' ? r.conclusion : r.status));
+      if (r.status === 'completed') markRunSeen(store, r.id);
+    }
     saveSeenRuns(store);
     return;
   }
 
-  // Only notify failures that completed within the fresh window
   let notified = 0;
-  for (const r of newFailures) {
-    const completedAt = new Date(r.updated_at || r.created_at).getTime();
-    const isFresh = completedAt >= freshCutoff;
-    if (isFresh && notified < MAX_NOTIFY_PER_REFRESH) {
-      const wf = r._wf || {};
-      const wfName = wf.name || 'Workflow';
-      const icon = wf.icon || '⚙️';
-      showNotification({
-        title: `${icon} ${wfName} failed`,
-        body: `Run #${r.run_number} • ${r.event} • ${relTimeShort(r.updated_at || r.created_at)}`,
-        tag: `wf-fail-${wf.id || 'unknown'}`,       // per-workflow tag → newer replaces older
-        url: r.html_url,
-        requireInteraction: true,                    // stay on screen until user dismisses
-      });
-      notified++;
+  const tryNotify = (r, kind) => {
+    if (notified >= MAX_NOTIFY_PER_REFRESH) return;
+    const wf = r._wf || {};
+    const wfName = wf.name || 'Workflow';
+    const icon = wf.icon || '⚙️';
+    const titles = {
+      failure: `${icon} ${wfName} failed`,
+      success: `${icon} ${wfName} succeeded`,
+      start:   `${icon} ${wfName} started`,
+    };
+    showNotification({
+      title: titles[kind],
+      body: `Run #${r.run_number} • ${r.event} • ${relTimeShort(r.updated_at || r.created_at)}`,
+      tag: `wf-${kind}-${wf.id || 'unknown'}`,
+      url: r.html_url,
+      requireInteraction: kind === 'failure' && prefs.requireInteraction,
+    });
+    notified++;
+  };
+
+  // FAILURES
+  if (prefs.onFailure) {
+    const newFailures = allRuns
+      .filter(r => r.status === 'completed' && r.conclusion === 'failure' && !isRunSeen(store, r.id + ':failure'))
+      .sort((a, b) => new Date(b.updated_at || b.created_at) - new Date(a.updated_at || a.created_at));
+    for (const r of newFailures) {
+      const completedAt = new Date(r.updated_at || r.created_at).getTime();
+      if (completedAt >= freshCutoff) tryNotify(r, 'failure');
+      markRunSeen(store, r.id + ':failure');
+      markRunSeen(store, r.id);    // legacy
     }
-    // Mark seen regardless (even if too old to notify) so we don't reconsider
-    markRunSeen(store, r.id);
+  } else {
+    // Still seed so toggling on later doesn't backlog
+    for (const r of allRuns.filter(r => r.status === 'completed' && r.conclusion === 'failure')) {
+      markRunSeen(store, r.id + ':failure');
+      markRunSeen(store, r.id);
+    }
+  }
+
+  // SUCCESSES
+  if (prefs.onSuccess) {
+    const newSucc = allRuns
+      .filter(r => r.status === 'completed' && r.conclusion === 'success' && !isRunSeen(store, r.id + ':success'))
+      .sort((a, b) => new Date(b.updated_at || b.created_at) - new Date(a.updated_at || a.created_at));
+    for (const r of newSucc) {
+      const completedAt = new Date(r.updated_at || r.created_at).getTime();
+      if (completedAt >= freshCutoff) tryNotify(r, 'success');
+      markRunSeen(store, r.id + ':success');
+    }
+  } else {
+    for (const r of allRuns.filter(r => r.status === 'completed' && r.conclusion === 'success')) {
+      markRunSeen(store, r.id + ':success');
+    }
+  }
+
+  // STARTS
+  if (prefs.onStart) {
+    const newStarts = allRuns
+      .filter(r => (r.status === 'in_progress' || r.status === 'queued') && !isRunSeen(store, r.id + ':start'))
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    for (const r of newStarts) {
+      const createdAt = new Date(r.created_at).getTime();
+      if (createdAt >= freshCutoff) tryNotify(r, 'start');
+      markRunSeen(store, r.id + ':start');
+    }
+  } else {
+    for (const r of allRuns.filter(r => r.status === 'in_progress' || r.status === 'queued')) {
+      markRunSeen(store, r.id + ':start');
+    }
   }
 
   saveSeenRuns(store);

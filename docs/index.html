@@ -411,10 +411,10 @@ tailwind.config = {
         <div class="card settings-card">
           <div class="card-header">
             <div class="card-title"><span data-icon="bell" data-size="16"></span> Notifications</div>
-            <div class="card-description">Get browser notifications when workflows fail or complete.</div>
+            <div class="card-description">Get browser notifications for workflow runs.</div>
           </div>
-          <div class="card-content">
-            <button class="btn btn-outline sm" onclick="requestNotifPermission()">Enable Notifications</button>
+          <div class="card-content" id="notifCardBody">
+            <!-- Rendered by renderNotifSettings() -->
           </div>
         </div>
 
@@ -700,11 +700,11 @@ tailwind.config = {
 
 <!-- Scripts (order matters) -->
 <script src="js/icons.js?v=7"></script>
-<script src="js/no-autofill.js?v=11"></script>
-<script src="js/locations.js?v=11"></script>
-<script src="js/app.js?v=11"></script>
-<script src="js/dashboard.js?v=11"></script>
-<script src="js/schedule.js?v=11"></script>
-<script src="js/settings.js?v=11"></script>
+<script src="js/no-autofill.js?v=12"></script>
+<script src="js/locations.js?v=12"></script>
+<script src="js/app.js?v=12"></script>
+<script src="js/dashboard.js?v=12"></script>
+<script src="js/schedule.js?v=12"></script>
+<script src="js/settings.js?v=12"></script>
 </body>
 </html>
