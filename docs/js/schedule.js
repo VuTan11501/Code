@@ -307,6 +307,8 @@ async function loadScheduledRuns() {
     const data = await apiFetch(`/repos/${OWNER}/${REPO}/contents/.github/scheduled-runs.json`);
     const content = JSON.parse(atob(data.content));
     const entries = Array.isArray(content) ? content : [];
+    // Client-side fallback: dispatch overdue one-time runs directly
+    await clientSideDispatchOverdue(entries, data.sha);
     renderScheduledQueue(entries, data.sha);
   } catch (e) {
     if (e.message.includes('404')) {
@@ -314,6 +316,62 @@ async function loadScheduledRuns() {
     } else {
       queue.innerHTML = `<div class="empty">⚠️ ${e.message}</div>`;
     }
+  }
+}
+
+// Fallback: if GitHub cron hasn't fired, dispatch overdue runs from the browser
+async function clientSideDispatchOverdue(entries, sha) {
+  if (!sessionToken || !entries.length) return;
+  const now = new Date();
+  const overdue = [];
+  const remaining = [];
+
+  for (const entry of entries) {
+    if (entry.type === 'once' && entry.run_at) {
+      const runAt = new Date(entry.run_at);
+      // If run_at has passed (with 1 min tolerance) and it wasn't dispatched yet
+      if (now - runAt > 60000) {
+        overdue.push(entry);
+      } else {
+        remaining.push(entry);
+      }
+    } else {
+      remaining.push(entry);
+    }
+  }
+
+  if (!overdue.length) return;
+
+  for (const entry of overdue) {
+    try {
+      const res = await fetch(`${API}/repos/${OWNER}/${REPO}/actions/workflows/${entry.workflow}/dispatches`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${sessionToken}`, 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ref: 'main' }),
+      });
+      if (res.status === 204) {
+        toast(`✅ Dispatched overdue: ${entry.workflow.replace('.yml','')}`);
+      } else {
+        remaining.push(entry); // keep for retry
+      }
+    } catch {
+      remaining.push(entry);
+    }
+  }
+
+  // Update the file to remove dispatched entries
+  if (remaining.length !== entries.length) {
+    const content = btoa(unescape(encodeURIComponent(JSON.stringify(remaining, null, 2))));
+    try {
+      await fetch(`${API}/repos/${OWNER}/${REPO}/contents/.github/scheduled-runs.json`, {
+        method: 'PUT',
+        headers: { 'Authorization': `Bearer ${sessionToken}`, 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: 'sched: client-side dispatch overdue [skip ci]', content, sha }),
+      });
+    } catch {}
+    // Reload to show updated queue
+    entries.length = 0;
+    remaining.forEach(e => entries.push(e));
   }
 }
 
