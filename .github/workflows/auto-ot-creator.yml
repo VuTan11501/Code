@@ -1,4 +1,4 @@
-name: Auto OT Creator
+name: Auto Request OT
 
 on:
   # Triggered by scheduled-dispatch.yml (Gist-based scheduler) at 10:00 JST daily.
@@ -27,7 +27,7 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Run OT creator
+      - name: Run Auto Request OT
         id: ot_creator
         env:
           AZURE_REFRESH_TOKEN: ${{ secrets.AZURE_REFRESH_TOKEN }}

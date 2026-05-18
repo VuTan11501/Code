@@ -8,7 +8,7 @@ const GIST_ID = 'abc2a47c0a396025a72a6580227ff493';
 const WORKFLOWS = [
   { id: 277782817, name: 'Auto Checkin', icon: '📥', iconName: 'logIn', file: 'auto-checkin.yml' },
   { id: 278639767, name: 'Auto Checkout', icon: '📤', iconName: 'logOut', file: 'auto-checkout.yml' },
-  { id: 277802136, name: 'Auto OT Creator', icon: '⏰', iconName: 'hourglass', file: 'auto-ot-creator.yml' },
+  { id: 277802136, name: 'Auto Request OT', icon: '⏰', iconName: 'hourglass', file: 'auto-ot-creator.yml' },
   { id: 278223037, name: 'JPY Forecast', icon: '💹', iconName: 'barChart', file: 'jpy-forecast.yml' },
 ];
 const AUTO_LOCK_MS = 15 * 60 * 1000;
@@ -27,7 +27,7 @@ const SCHEDULE = {
   'JPY Forecast': [
     { days: [1,2,3,4,5], time: '07:30', label: 'Daily Report' },
   ],
-  'Auto OT Creator': [
+  'Auto Request OT': [
     { days: [0,1,2,3,4,5,6], time: '10:00', label: 'Auto OT' },
   ],
 };

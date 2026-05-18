@@ -65,7 +65,7 @@ Tự động hóa nghiệp vụ kintai (chấm công) FJP DokoKin + báo cáo OT
 | `dispatcher-watchdog.yml` | cron `*/20` | Hồi sinh dispatcher nếu chết quá 10 phút |
 | `auto-checkin.yml` | dispatch | Worker checkin (location, lat/long override) |
 | `auto-checkout.yml` | dispatch | Worker checkout (allow re-run nếu now > prev_CO) |
-| `auto-ot-creator.yml` | dispatch (10:00 JST) | Worker tạo OT — **luôn gửi email summary** |
+| `auto-ot-creator.yml` | dispatch (10:00 JST) | Worker Auto Request OT — **luôn gửi email summary** |
 | `jpy-forecast.yml` | cron | Dự báo tỉ giá JPY/VND |
 | `ot-report.yml`, `schedule-generator.yml`, `token-monitor.yml`, `daily-validation.yml` | cron / dispatch | Báo cáo & maintenance |
 | `deploy-pages.yml` | push `docs/**` | Deploy PWA |
@@ -114,7 +114,7 @@ Tham khảo SKILL.md trước khi đụng vào lĩnh vực tương ứng:
 
 **Implications cho UI/automation**:
 - Schedule grid không cảnh báo về double-CI vì generator đã đúng — nhưng nếu user tự thêm recurring CI 22:00 weekly trên cùng workday đã có CI 09:00, sẽ fail tại API. UI cân nhắc warning (TODO).
-- OT auto-creator (`gh_ot_creator.py`) chỉ tạo OT **request** (申請), KHÔNG tạo CI/CO → không ảnh hưởng Rule 1.
+- OT auto-request (`gh_ot_creator.py`) chỉ tạo OT **request** (申請), KHÔNG tạo CI/CO → không ảnh hưởng Rule 1.
 - Dispatcher self-loop không hiểu domain rules — nó dispatch đúng giờ trong Gist. Trách nhiệm "không tạo entry sai" thuộc về generator + người tạo schedule thủ công.
 
 ### Azure AD
@@ -140,8 +140,8 @@ Tham khảo SKILL.md trước khi đụng vào lĩnh vực tương ứng:
 - Backup: cron `*/15` + watchdog độc lập (`dispatcher-watchdog.yml`) `*/20`
 
 ### Notification rules
-- **Checkin/checkout/OT-creator**: luôn gửi mail summary (trừ `skip` cho checkin/checkout)
-- **OT-creator status badges**: ✅ CREATED / ℹ️ UP-TO-DATE / ⏳ WAITING / 🚨 ERROR / 💤 NO-OP
+- **Checkin/checkout/Auto Request OT**: luôn gửi mail summary (trừ `skip` cho checkin/checkout)
+- **Auto Request OT status badges**: ✅ CREATED / ℹ️ UP-TO-DATE / ⏳ WAITING / 🚨 ERROR / 💤 NO-OP
 - **LINE Notify** chỉ kích hoạt `on: failure()` cho worker quan trọng (checkin)
 - Helper: `send_email()` dùng SMTP Gmail port 587, secrets `SMTP_USER` / `SMTP_PASS` / `NOTIFY_EMAIL`
 
@@ -195,7 +195,7 @@ Tham khảo SKILL.md trước khi đụng vào lĩnh vực tương ứng:
 ### Idempotency
 - **Checkin**: skip nếu đã có CI hôm nay
 - **Checkout**: cho phép re-run nếu `now > previous_CO` (overwrite được)
-- **OT-creator**: skip entry nếu đã tồn tại trong KINTAI
+- **Auto Request OT**: skip entry nếu đã tồn tại trong KINTAI
 
 ---
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""GitHub Actions — Auto OT Request Creator.
+"""GitHub Actions — Auto Request OT.
 Zero external dependencies (stdlib only).
 Reads pending_ot from schedule.json, checks existing OT requests via KINTAI API,
 creates missing ones that are within the 7-day creation window.
@@ -187,7 +187,7 @@ def create_ot_request(token, entry):
 # ═══════════════════════════════════════════════════════════
 
 def build_ot_html(created, existing, past, outside_window, errors, today):
-    """Build shadcn/ui dark-themed HTML email for OT creator results."""
+    """Build shadcn/ui dark-themed HTML email for Auto Request OT results."""
     BG = "#0a0a0a"
     CARD = "#0f0f0f"
     BORDER = "#262626"
@@ -200,7 +200,7 @@ def build_ot_html(created, existing, past, outside_window, errors, today):
         {"bg": "rgba(34,197,94,0.12)", "fg": "#4ade80", "border": "rgba(34,197,94,0.25)", "label": "OK"} if created else
         {"bg": "rgba(59,130,246,0.12)", "fg": "#60a5fa", "border": "rgba(59,130,246,0.25)", "label": "Status"}
     )
-    title = "OT Requests Created" if created else "OT Status Check"
+    title = "OT Requests Created" if created else "Auto Request OT Status"
 
     def stat_card(label, value, color=FG):
         return f'''<td width="33%" style="padding:0 4px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:{MUTED_BG};border:1px solid {BORDER};border-radius:8px;">
@@ -251,7 +251,7 @@ def build_ot_html(created, existing, past, outside_window, errors, today):
       <td style="background:{accent['bg']};border:1px solid {accent['border']};border-radius:9999px;padding:4px 12px;color:{accent['fg']};font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;">{accent['label']}</td>
     </tr></table>
     <h1 style="margin:14px 0 4px;font-size:22px;font-weight:700;letter-spacing:-0.01em;color:{FG};">{title}</h1>
-    <p style="margin:0;color:{MUTED};font-size:13px;">Auto OT request creator · {today}</p>
+    <p style="margin:0;color:{MUTED};font-size:13px;">Auto Request OT · {today}</p>
   </td></tr>
 
   <!-- Stats -->
@@ -286,7 +286,7 @@ def build_ot_html(created, existing, past, outside_window, errors, today):
   </td></tr>
 
   <tr><td style="padding:14px 24px;border-top:1px solid {BORDER};background:#080808;">
-    <div style="color:#737373;font-size:11px;letter-spacing:0.02em;">OT Auto-Creator · GitHub Actions · {today}</div>
+    <div style="color:#737373;font-size:11px;letter-spacing:0.02em;">Auto Request OT · GitHub Actions · {today}</div>
   </td></tr>
 </table>
 </td></tr></table></body></html>'''
@@ -325,7 +325,7 @@ def send_email(subject, body, html=None):
 def main():
     now = datetime.now(JST)
     today = now.date()
-    log(f"OT Auto-Creator running at {now.strftime('%Y-%m-%d %H:%M:%S %A')}")
+    log(f"Auto Request OT running at {now.strftime('%Y-%m-%d %H:%M:%S %A')}")
 
     created_items = []
     existing_items = []
@@ -453,7 +453,7 @@ def main():
         else:
             emoji, status_word = "💤", "NO-OP"
         subject = (
-            f"{emoji} OT Auto-Creator [{status_word}]: "
+            f"{emoji} Auto Request OT [{status_word}]: "
             f"{len(created_items)} created, {len(existing_items)} exist, "
             f"{len(outside_items)} pending, {len(errors)} errors — {today_str}"
         )
