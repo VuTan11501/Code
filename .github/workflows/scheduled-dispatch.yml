@@ -171,16 +171,20 @@ jobs:
                       run_at_str = entry.get('run_at', '')
                       if not run_at_str:
                           updated.append(entry); continue
+                      if entry.get('dispatched'):
+                          # Already dispatched — keep for history
+                          updated.append(entry); continue
                       run_at = datetime.fromisoformat(run_at_str.replace('Z', '+00:00'))
                       if run_at <= now:
                           wf = entry['workflow']
                           print(f"🔹 One-time: {wf} (scheduled {run_at_str})")
                           if dispatch_workflow(wf, "[one-time]", entry_inputs or None):
+                              # Mark dispatched, keep in list for history
+                              entry['dispatched'] = True
+                              entry['last_run'] = now.isoformat()
                               triggered += 1
                               changed = True
-                              # remove from list (don't append)
-                          else:
-                              updated.append(entry)
+                          updated.append(entry)
                       else:
                           updated.append(entry)
               if changed:

@@ -613,18 +613,27 @@ async function clientSideDispatchOverdue(entries) {
 }
 
 function renderScheduledQueue(entries) {
-  // Store data for table
+  // Store data for table (full history)
   scheduleTableData = entries;
+
+  // Queue shows only ACTIVE entries (not dispatched once entries)
+  const activeEntries = entries
+    .map((e, origIdx) => ({ e, origIdx }))
+    .filter(({ e }) => !(e.type === 'once' && e.dispatched));
 
   // Render queue cards
   const queue = document.getElementById('schedulerQueue');
-  if (!entries.length) { queue.innerHTML = '<div class="empty">No scheduled runs</div>'; renderScheduleTable(); return; }
+  if (!activeEntries.length) {
+    queue.innerHTML = '<div class="empty">No active scheduled runs</div>';
+    renderScheduleTable();
+    return;
+  }
 
   // Compute next fire time for each entry
   const nowJST = jstNow();
   const todayDow = nowJST.getDay(); // 0=Sun
 
-  queue.innerHTML = entries.map((entry, i) => {
+  queue.innerHTML = activeEntries.map(({ e: entry, origIdx: i }) => {
     const wf = WORKFLOWS.find(w => w.file === entry.workflow);
     const wfName = wf?.name || entry.workflow.replace('.yml', '');
     const iconName = wf?.iconName || 'settings';
@@ -664,16 +673,12 @@ function renderScheduledQueue(entries) {
         nextInfo = `<span class="sched-status upcoming">In ${diff}m</span>`;
       }
     } else if (isOnce) {
-      if (entry.dispatched) {
-        nextInfo = `<span class="sched-status done">${ICON('check', 11)} Dispatched</span>`;
-      } else {
-        const runAt = new Date(entry.run_at);
-        if (runAt < nowJST) nextInfo = `<span class="sched-status overdue">${ICON('hourglass', 11)} Pending dispatch</span>`;
-        else {
-          const diff = Math.round((runAt - nowJST) / 60000);
-          const label2 = diff < 60 ? `In ${diff}m` : diff < 1440 ? `In ${Math.round(diff/60)}h` : `In ${Math.round(diff/1440)}d`;
-          nextInfo = `<span class="sched-status upcoming">${label2}</span>`;
-        }
+      const runAt = new Date(entry.run_at);
+      if (runAt < nowJST) nextInfo = `<span class="sched-status overdue">${ICON('hourglass', 11)} Pending dispatch</span>`;
+      else {
+        const diff = Math.round((runAt - nowJST) / 60000);
+        const label2 = diff < 60 ? `In ${diff}m` : diff < 1440 ? `In ${Math.round(diff/60)}h` : `In ${Math.round(diff/1440)}d`;
+        nextInfo = `<span class="sched-status upcoming">${label2}</span>`;
       }
     }
 
@@ -693,7 +698,7 @@ function renderScheduledQueue(entries) {
     </div>`;
   }).join('');
 
-  // Also render the data table
+  // Also render the data table (shows all entries, including history)
   renderScheduleTable();
 }
 
