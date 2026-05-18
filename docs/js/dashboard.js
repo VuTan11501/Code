@@ -274,6 +274,7 @@ function closeLogModal() {
     _jobLogPolls.clear();
   }
   if (typeof _jobLogCache !== 'undefined') _jobLogCache.clear();
+  if (typeof _jobStepsMap !== 'undefined') _jobStepsMap.clear();
 }
 
 async function loadRunJobs(runId, container, status) {
@@ -311,6 +312,7 @@ async function loadRunJobs(runId, container, status) {
       }
 
       html += `<div class="steps-list" data-job-id="${j.id}">`;
+      _jobStepsMap.set(String(j.id), j.steps || []);
       (j.steps || []).forEach(s => {
         const sd = (s.completed_at && s.started_at)
           ? Math.round((new Date(s.completed_at) - new Date(s.started_at)) / 1000) : null;
@@ -344,8 +346,9 @@ async function loadRunJobs(runId, container, status) {
 }
 
 let _logModalRefreshTimer = null;
-const _jobLogPolls = new Map(); // jobId → timer
-const _jobLogCache = new Map(); // jobId → { steps: Map<stepName, lines[]>, raw: string }
+const _jobLogPolls = new Map(); // key → timer
+const _jobLogCache = new Map(); // jobId → parsed log
+const _jobStepsMap = new Map(); // jobId → steps[]
 
 function escapeHtml(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -362,8 +365,8 @@ async function toggleStepLog(btn) {
   const jobId = block.dataset.jobId;
   const stepName = block.dataset.stepName;
   const stepNum = parseInt(block.dataset.stepNum, 10);
-  const startedAt = block.dataset.started;
-  const completedAt = block.dataset.completed;
+  const allSteps = _jobStepsMap.get(String(jobId)) || [];
+  const currentStep = allSteps.find(s => s.number === stepNum) || { name: stepName, number: stepNum };
 
   if (body.dataset.loaded !== '1') {
     body.innerHTML = '<div class="log-loading">Fetching log…</div>';
@@ -372,7 +375,7 @@ async function toggleStepLog(btn) {
       body.innerHTML = `<div class="log-loading">❌ ${escapeHtml(cache.error)}</div>`;
       return;
     }
-    const lines = sliceStepLines(cache, startedAt, completedAt, stepName);
+    const lines = sliceStepLines(cache, allSteps, currentStep);
     renderStepLog(body, lines, stepName);
     body.dataset.loaded = '1';
   }
@@ -383,7 +386,7 @@ async function toggleStepLog(btn) {
       _jobLogCache.delete(jobId);
       const cache = await ensureJobLogCache(jobId);
       if (!cache.error) {
-        const lines = sliceStepLines(cache, startedAt, block.dataset.completed, stepName);
+        const lines = sliceStepLines(cache, allSteps, currentStep);
         renderStepLog(body, lines, stepName);
       }
     }, 4000);
@@ -413,39 +416,89 @@ async function ensureJobLogCache(jobId) {
   }
 }
 
-// Parse raw job log into an array of timestamped lines.
-// Each line: { ts: ISO string, txt: content (with ##[...] markers preserved) }
+// Parse raw job log into timestamped lines + detect step boundaries via
+// ##[group]Run X / ##[group]Post X / ##[group]Cleaning up / ##[group]Complete job markers.
+// This mirrors GitHub UI's own log slicing.
 function parseJobLog(raw) {
   const cleaned = raw.replace(/\x1b\[[0-9;]*m/g, ''); // strip ANSI
-  const lines = cleaned.split(/\r?\n/);
-  const out = [];
-  for (const ln of lines) {
-    if (!ln) { out.push({ ts: '', txt: '' }); continue; }
+  const rawLines = cleaned.split(/\r?\n/);
+  const lines = rawLines.map(ln => {
+    if (!ln) return { ts: '', txt: '' };
     const m = ln.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z) ?(.*)$/);
-    if (m) out.push({ ts: m[1], txt: m[2] });
-    else out.push({ ts: '', txt: ln });
+    return m ? { ts: m[1], txt: m[2] } : { ts: '', txt: ln };
+  });
+
+  // Find boundary markers
+  const boundaries = []; // {index, kind: 'run'|'post'|'cleanup', name}
+  for (let i = 0; i < lines.length; i++) {
+    const t = lines[i].txt;
+    let m;
+    if ((m = t.match(/^##\[group\]Run (.+)$/))) {
+      boundaries.push({ index: i, kind: 'run', name: m[1].trim() });
+    } else if ((m = t.match(/^##\[group\]Post Run (.+)$/))) {
+      boundaries.push({ index: i, kind: 'post', name: m[1].trim() });
+    } else if ((m = t.match(/^##\[group\]Post (.+)$/))) {
+      boundaries.push({ index: i, kind: 'post', name: m[1].trim() });
+    } else if (/^##\[group\](Cleaning up orphan processes|Complete job)/i.test(t)) {
+      boundaries.push({ index: i, kind: 'cleanup', name: '' });
+    }
   }
-  return { raw: cleaned, lines: out, error: null };
+  return { raw: cleaned, lines, boundaries, error: null };
 }
 
-// Slice job log lines belonging to a step by [started_at, completed_at] window.
-// Untimestamped continuation lines stick to the previous timestamped line.
-function sliceStepLines(cache, startedAt, completedAt, stepName) {
+// Slice lines for a step using the GitHub-style group boundaries.
+// allSteps = full j.steps array; currentStep = the step we want logs for.
+function sliceStepLines(cache, allSteps, currentStep) {
   if (!cache || !cache.lines) return [];
-  const start = startedAt ? Date.parse(startedAt) : 0;
-  // For running steps completedAt is null → include up to "now"
-  const end = completedAt ? Date.parse(completedAt) : Date.now() + 60_000;
-  const out = [];
-  let inWindow = false;
-  for (const ln of cache.lines) {
-    if (ln.ts) {
-      const t = Date.parse(ln.ts);
-      inWindow = (t >= start && t <= end);
-    }
-    // else: orphan continuation — inherit prev state
-    if (inWindow) out.push(ln);
+  const { lines, boundaries } = cache;
+  const name = currentStep.name || '';
+  const nameLc = name.toLowerCase();
+
+  // "Set up job": everything before the first boundary
+  if (/^set up job$/i.test(name)) {
+    const end = boundaries.length ? boundaries[0].index : lines.length;
+    return lines.slice(0, end);
   }
-  return out;
+  // "Complete job": last cleanup boundary → end
+  if (/^complete job$/i.test(name)) {
+    const ups = boundaries.filter(b => b.kind === 'cleanup');
+    if (ups.length) return lines.slice(ups[ups.length - 1].index);
+    return [];
+  }
+  // "Post <Step Name>": match by suffix among post boundaries
+  if (/^post\s+/i.test(name)) {
+    const suffix = name.replace(/^post\s+/i, '').toLowerCase();
+    const posts = boundaries.filter(b => b.kind === 'post');
+    let hit = posts.find(b => b.name.toLowerCase().includes(suffix) || suffix.includes(b.name.toLowerCase()));
+    if (!hit) {
+      // Fallback: positional match among post boundaries
+      const postSteps = allSteps.filter(s => /^post\s+/i.test(s.name) && s.conclusion !== 'skipped');
+      const idx = postSteps.findIndex(s => s.number === currentStep.number);
+      if (idx >= 0 && idx < posts.length) hit = posts[idx];
+    }
+    if (!hit) return [];
+    const next = boundaries.find(b => b.index > hit.index);
+    return lines.slice(hit.index, next ? next.index : lines.length);
+  }
+
+  // Regular user step: match by name suffix in run boundaries, fall back to positional
+  const runs = boundaries.filter(b => b.kind === 'run');
+  let hit = runs.find(b => b.name.toLowerCase().includes(nameLc) || nameLc.includes(b.name.toLowerCase()));
+  if (!hit) {
+    // Positional: nth runnable step ↔ nth run boundary
+    const runSteps = allSteps.filter(s =>
+      !/^set up job$/i.test(s.name) &&
+      !/^post\s+/i.test(s.name) &&
+      !/^complete job$/i.test(s.name) &&
+      s.conclusion !== 'skipped'
+    );
+    const idx = runSteps.findIndex(s => s.number === currentStep.number);
+    if (idx >= 0 && idx < runs.length) hit = runs[idx];
+  }
+  if (!hit) return [];
+  // End at next run/post/cleanup boundary
+  const next = boundaries.find(b => b.index > hit.index);
+  return lines.slice(hit.index, next ? next.index : lines.length);
 }
 
 function renderStepLog(body, lines, stepName) {
