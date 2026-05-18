@@ -54,7 +54,7 @@
   --duration-normal: 200ms;
   --duration-slow: 300ms;
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
-  --mobile-nav-height: 64px;
+  --mobile-nav-height: 72px;
   --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px;
   --sp-5: 20px; --sp-6: 24px; --sp-8: 32px;
 }
@@ -111,7 +111,11 @@ html { touch-action: manipulation; }
 }
 
 /* ─── TABS & NAV (active toggled by JS) ─── */
-.nav-icon { font-size: 1.25rem; line-height: 1; }
+.nav-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  line-height: 1;
+}
+.nav-icon svg { width: 18px; height: 18px; }
 .nav-label { font-size: inherit; }
 .tabs-trigger.active,
 .nav-item.active {
@@ -119,6 +123,8 @@ html { touch-action: manipulation; }
   background: var(--secondary);
   box-shadow: var(--shadow-sm);
 }
+.tabs-trigger.active .nav-icon,
+.nav-item.active .nav-icon { color: var(--primary); }
 
 /* ─── BUTTON VARIANTS (JS uses .btn .primary .danger .sm) ─── */
 .btn {
@@ -582,71 +588,79 @@ select option { background: var(--card); color: var(--foreground); }
     padding-bottom: calc(var(--mobile-nav-height) + env(safe-area-inset-bottom));
   }
 
-  /* Bottom Navigation — Flush Bottom Tab Bar (classic mobile app) */
+  /* Bottom Navigation — Material You Style (pill indicator around icon) */
   .nav-bar, .tabs-list {
     position: fixed; left: 0; right: 0; bottom: 0;
     z-index: 100;
     margin: 0;
-    padding: 8px 4px 6px;
-    padding-bottom: calc(6px + env(safe-area-inset-bottom));
+    padding: 10px 6px 8px;
+    padding-bottom: calc(8px + env(safe-area-inset-bottom));
     border-radius: 0;
     border: none;
     border-top: 1px solid var(--border);
-    background: rgba(10,10,12,0.92);
+    background: rgba(15,15,18,0.92);
     backdrop-filter: saturate(180%) blur(20px);
     -webkit-backdrop-filter: saturate(180%) blur(20px);
-    box-shadow: 0 -4px 16px rgba(0,0,0,0.25);
     display: flex; gap: 0;
   }
   .nav-item, .tabs-trigger {
     flex-direction: column; gap: 4px;
-    padding: 6px 4px;
+    padding: 4px 6px;
     font-size: 11px; font-weight: 500;
     min-height: 56px; flex: 1;
     border-radius: 0; background: none;
     color: var(--muted-foreground) !important;
     position: relative; overflow: visible;
-    letter-spacing: 0;
+    letter-spacing: 0.1px;
     transition: color 180ms cubic-bezier(0.4, 0, 0.2, 1);
     white-space: nowrap;
   }
-  .nav-item:active, .tabs-trigger:active {
-    background: rgba(255,255,255,0.04);
-  }
+  /* Icon container — becomes the Material You pill */
   .nav-item .nav-icon, .tabs-trigger .nav-icon {
-    font-size: 1.4rem; line-height: 1;
-    display: inline-flex;
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 56px; height: 30px;
+    border-radius: 9999px;
+    background: transparent;
+    transition: background-color 250ms cubic-bezier(0.4, 0, 0.2, 1),
+                color 180ms cubic-bezier(0.4, 0, 0.2, 1);
+    font-size: 0;
+  }
+  .nav-item .nav-icon svg, .tabs-trigger .nav-icon svg {
+    width: 22px; height: 22px;
     transition: transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1);
-    filter: grayscale(0.4) opacity(0.75);
   }
   .nav-item .nav-label, .tabs-trigger .nav-label {
     font-size: 11px; line-height: 1.1;
     max-width: none; opacity: 1; overflow: visible;
-    transition: color 180ms cubic-bezier(0.4, 0, 0.2, 1);
+    transition: color 180ms cubic-bezier(0.4, 0, 0.2, 1),
+                font-weight 180ms;
   }
+  /* Active state */
   .nav-item.active, .tabs-trigger.active {
     box-shadow: none;
     background: none;
-    color: var(--primary) !important;
-    flex-grow: 1;
+    color: var(--foreground) !important;
   }
   .nav-item.active .nav-icon, .tabs-trigger.active .nav-icon {
-    transform: translateY(-2px) scale(1.08);
-    filter: none;
+    background: color-mix(in srgb, var(--primary) 22%, transparent);
+    color: var(--primary);
+  }
+  .nav-item.active .nav-icon svg, .tabs-trigger.active .nav-icon svg {
+    stroke-width: 2.4;
   }
   .nav-item.active .nav-label, .tabs-trigger.active .nav-label {
-    color: var(--primary);
+    color: var(--foreground);
     font-weight: 600;
   }
-  /* Active indicator pill at top */
-  .nav-item.active::before, .tabs-trigger.active::before {
-    content: '';
-    position: absolute; top: -1px; left: 50%; transform: translateX(-50%);
-    width: 28px; height: 3px;
-    background: var(--primary);
-    border-radius: 0 0 6px 6px;
-    box-shadow: 0 0 12px rgba(59,130,246,0.5);
+  /* Tap ripple */
+  .nav-item:active .nav-icon, .tabs-trigger:active .nav-icon {
+    background: rgba(255,255,255,0.08);
   }
+  .nav-item.active:active .nav-icon, .tabs-trigger.active:active .nav-icon {
+    background: color-mix(in srgb, var(--primary) 32%, transparent);
+  }
+  /* Remove old pill top indicator */
+  .nav-item.active::before, .tabs-trigger.active::before { display: none; }
 
   /* Cards */
   .grid { grid-template-columns: 1fr; gap: 12px; margin-bottom: 20px; }
