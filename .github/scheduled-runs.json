@@ -1,9 +1,1 @@
-[
-  {
-    "type": "once",
-    "workflow": "jpy-forecast.yml",
-    "run_at": "2026-05-18T14:45:00+09:00",
-    "note": "Test phát nữa",
-    "created": "2026-05-18T05:41:02.738Z"
-  }
-]
+[]
