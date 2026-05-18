@@ -183,12 +183,11 @@ function renderWorkflowCard(wf, runs) {
         <ul class="run-list">
           ${last5.map((r, i) => {
             const title = r.display_title || r.name || `Run #${r.run_number}`;
-            const titleTrunc = title.length > 40 ? title.slice(0, 40) + '…' : title;
-            const titleAttr = title.length > 40 ? ` data-tooltip="${title.replace(/"/g, '&quot;')}" tabindex="0"` : '';
+            const titleEsc = title.replace(/"/g, '&quot;');
             return `
             <li class="run-item${i >= 2 ? ' hide-mobile' : ''}" onclick="openLogModal(${r.id}, '${wf.icon} ${wf.name} #${r.run_number}', '${r.status}')">
               <span class="run-dot ${conclusionClass(r.conclusion || r.status)}"></span>
-              <span class="run-name"${titleAttr}>${titleTrunc}</span>
+              <span class="run-name" data-tooltip="${titleEsc}" data-tooltip-truncate-only tabindex="0">${title}</span>
               <span class="run-event">${r.event}</span>
               <a class="run-num" href="${r.html_url}" target="_blank" onclick="event.stopPropagation()">#${r.run_number}</a>
               <span class="run-time">${timeAgo(r.created_at)}</span>

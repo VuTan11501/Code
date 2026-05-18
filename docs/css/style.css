@@ -192,7 +192,7 @@ html { touch-action: manipulation; }
 .run-item {
   display: grid;
   grid-template-columns: 12px minmax(0, 1fr) auto auto auto;
-  align-items: center; gap: 12px;
+  align-items: center; gap: 10px;
   padding: 10px 12px; border-radius: var(--radius-md);
   font-size: var(--fs-sm); cursor: pointer;
   transition: background var(--duration-fast);
@@ -207,10 +207,16 @@ html { touch-action: manipulation; }
 .run-name {
   font-weight: 500;
   min-width: 0;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  display: inline-flex; align-items: center; gap: 6px;
+  outline: none;
+}
+.run-name:focus-visible {
+  outline: 2px solid var(--ring, var(--primary));
+  outline-offset: 2px;
+  border-radius: 2px;
 }
 .run-event {
   color: var(--muted-foreground);
@@ -221,7 +227,6 @@ html { touch-action: manipulation; }
   font-weight: 500;
   text-transform: lowercase;
   white-space: nowrap;
-  min-width: 72px;
   text-align: center;
   justify-self: end;
 }

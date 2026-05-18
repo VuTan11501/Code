@@ -683,6 +683,11 @@ if (document.readyState === 'loading') {
   function show(trigger) {
     const text = trigger.getAttribute('data-tooltip');
     if (!text) return;
+    // If element opts into "only-when-truncated" mode and text isn't actually
+    // overflowing, skip the tooltip (avoids redundant hover boxes on short text).
+    if (trigger.hasAttribute('data-tooltip-truncate-only')) {
+      if (trigger.scrollWidth <= trigger.clientWidth + 1) return;
+    }
     clearTimeout(hideTimer);
     currentTrigger = trigger;
     const el = ensureTip();
