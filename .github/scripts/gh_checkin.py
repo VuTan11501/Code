@@ -632,10 +632,20 @@ def main():
             co_ref = co_yest if is_checkout_yesterday else co_today
             if co_ref:
                 ref_day = "yesterday" if is_checkout_yesterday else "today"
-                log(f"⏭️ Already checked out {ref_day} at {co_ref}. Skipping (idempotent).")
-                set_output("skipped", "true")
-                set_summary(f"⏭️ Already checked out at {co_ref}. Skipping.")
-                return  # No email for idempotent skips
+                # Checkout is allowed to be updated (e.g. user worked OT after initial checkout).
+                # Skip ONLY if the recorded checkout is in the future relative to now (clock skew).
+                try:
+                    co_dt = datetime.fromisoformat(str(co_ref).replace("Z", "+00:00"))
+                    if co_dt.tzinfo is None:
+                        co_dt = co_dt.replace(tzinfo=JST)
+                    if co_dt >= now_jst:
+                        log(f"⏭️ Already checked out {ref_day} at {co_ref} (>= now). Skipping (idempotent).")
+                        set_output("skipped", "true")
+                        set_summary(f"⏭️ Already checked out at {co_ref}. Skipping.")
+                        return
+                    log(f"🔁 Re-checkout {ref_day}: previous CO at {co_ref}, current time {now_jst.strftime('%H:%M:%S')} — updating.")
+                except (ValueError, TypeError):
+                    log(f"  ⚠️ Could not parse previous CO time ({co_ref}); proceeding with checkout anyway.")
 
         # ── Execute (with retry on server errors) ──
         emoji = "📥" if action == "checkin" else "📤"
