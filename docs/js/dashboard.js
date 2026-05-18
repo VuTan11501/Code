@@ -19,7 +19,7 @@ function updateLiveIndicator(status, interval) {
   el.className = 'live-indicator ' + status;
   if (status === 'active') {
     statusEl.textContent = hasRunningWorkflows ? 'Streaming' : 'Live';
-    intervalEl.textContent = `${Math.round(interval / 1000)}s`;
+    intervalEl.textContent = interval < 2000 ? 'realtime' : `${Math.round(interval / 1000)}s`;
   } else if (status === 'paused') {
     statusEl.textContent = 'Paused';
     intervalEl.textContent = 'tab hidden';

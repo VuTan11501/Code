@@ -244,10 +244,26 @@ function toast(msg, cls) {
 // ═══════════════════════════════════════════════════
 //  API & UTILITIES
 // ═══════════════════════════════════════════════════
-async function apiFetch(path) {
+// ETag cache for conditional requests (304 = no change, very fast)
+const etagCache = new Map(); // path → { etag, data }
+
+async function apiFetch(path, opts = {}) {
   const headers = { 'Accept': 'application/vnd.github+json' };
   if (sessionToken) headers['Authorization'] = `Bearer ${sessionToken}`;
+
+  // Use ETag for conditional request if available
+  const cached = etagCache.get(path);
+  if (cached?.etag && !opts.noCache) {
+    headers['If-None-Match'] = cached.etag;
+  }
+
   const res = await fetch(`${API}${path}`, { headers });
+
+  // 304 Not Modified — return cached data (no bandwidth used)
+  if (res.status === 304 && cached?.data) {
+    return cached.data;
+  }
+
   if (res.status === 403) {
     const remaining = res.headers.get('X-RateLimit-Remaining');
     const reset = res.headers.get('X-RateLimit-Reset');
@@ -258,7 +274,16 @@ async function apiFetch(path) {
     throw new Error('API 403 Forbidden');
   }
   if (!res.ok) throw new Error(`API ${res.status}`);
-  return res.json();
+
+  const data = await res.json();
+
+  // Cache ETag for next request
+  const etag = res.headers.get('ETag');
+  if (etag) {
+    etagCache.set(path, { etag, data });
+  }
+
+  return data;
 }
 
 function timeAgo(dateStr) {
