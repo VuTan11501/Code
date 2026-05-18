@@ -87,13 +87,16 @@ jobs:
           updated = []
           triggered_count = 0
 
-          def dispatch_workflow(workflow, reason=""):
+          def dispatch_workflow(workflow, reason="", inputs=None):
               """Trigger a workflow_dispatch via GitHub API."""
               if not TOKEN:
                   print(f"  ⚠️ GH_PAT not set, cannot dispatch")
                   return False
               url = f"https://api.github.com/repos/{REPO}/actions/workflows/{workflow}/dispatches"
-              data = json.dumps({"ref": "main"}).encode()
+              payload = {"ref": "main"}
+              if inputs:
+                  payload["inputs"] = inputs
+              data = json.dumps(payload).encode()
               req = urllib.request.Request(url, data=data, method='POST')
               req.add_header('Authorization', f'Bearer {TOKEN}')
               req.add_header('Accept', 'application/vnd.github+json')
@@ -165,6 +168,10 @@ jobs:
 
           for entry in runs:
               entry_type = entry.get('type', 'once')
+              # Build inputs from entry (e.g. location for checkin/checkout)
+              entry_inputs = {}
+              if entry.get('location'):
+                  entry_inputs['location'] = entry['location']
 
               if entry_type == 'recurring':
                   # Recurring: check if it's time, dispatch, keep in list
@@ -172,7 +179,7 @@ jobs:
                       workflow = entry['workflow']
                       rec = entry.get('recurrence', {})
                       print(f"🔁 Recurring dispatch: {workflow} ({rec.get('pattern','')}, {rec.get('time','')})")
-                      if dispatch_workflow(workflow, f"[recurring: {rec.get('pattern','')}]"):
+                      if dispatch_workflow(workflow, f"[recurring: {rec.get('pattern','')}]", entry_inputs or None):
                           entry['last_run'] = now.isoformat()
                           triggered_count += 1
                   # Always keep recurring entries
@@ -189,7 +196,7 @@ jobs:
                   if run_at <= now:
                       workflow = entry['workflow']
                       print(f"🔹 One-time dispatch: {workflow} (scheduled for {run_at_str})")
-                      if dispatch_workflow(workflow, "[one-time]"):
+                      if dispatch_workflow(workflow, "[one-time]", entry_inputs or None):
                           triggered_count += 1
                           # Don't keep — it's done
                       else:

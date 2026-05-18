@@ -336,6 +336,18 @@ function toggleScheduleType(type) {
   document.getElementById('recurFields').style.display = type === 'recurring' ? 'block' : 'none';
 }
 
+function toggleLocationField() {
+  const wf = document.getElementById('schedWorkflow').value;
+  const show = ['auto-checkin.yml', 'auto-checkout.yml'].includes(wf);
+  document.getElementById('schedLocationField').style.display = show ? '' : 'none';
+}
+
+function toggleEditLocationField() {
+  const wf = document.getElementById('editSchedWorkflow').value;
+  const show = ['auto-checkin.yml', 'auto-checkout.yml'].includes(wf);
+  document.getElementById('editLocationField').style.display = show ? '' : 'none';
+}
+
 function togglePatternUI() {
   const pattern = document.getElementById('schedPattern').value;
   document.getElementById('weeklyDaysField').style.display = pattern === 'weekly' ? 'block' : 'none';
@@ -383,10 +395,11 @@ async function clientSideDispatchOverdue(entries) {
       // If run_at has passed (with 1 min tolerance)
       if (now - runAt > 60000) {
         try {
+          const inputs = entry.location ? { location: entry.location } : {};
           const res = await fetch(`${API}/repos/${OWNER}/${REPO}/actions/workflows/${entry.workflow}/dispatches`, {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${sessionToken}`, 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ref: 'main' }),
+            body: JSON.stringify({ ref: 'main', inputs }),
           });
           if (res.status === 204) {
             toast(`✅ Dispatched: ${(WORKFLOWS.find(w=>w.file===entry.workflow)||{}).name || entry.workflow.replace('.yml','')}`);
@@ -423,10 +436,11 @@ async function clientSideDispatchOverdue(entries) {
 
       if (shouldRun) {
         try {
+          const inputs = entry.location ? { location: entry.location } : {};
           const res = await fetch(`${API}/repos/${OWNER}/${REPO}/actions/workflows/${entry.workflow}/dispatches`, {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${sessionToken}`, 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ref: 'main' }),
+            body: JSON.stringify({ ref: 'main', inputs }),
           });
           if (res.status === 204) {
             toast(`✅ Dispatched: ${(WORKFLOWS.find(w=>w.file===entry.workflow)||{}).name || entry.workflow.replace('.yml','')}`);
@@ -576,6 +590,8 @@ async function addScheduledRun() {
   const type = document.getElementById('schedType').value;
   const time = document.getElementById('schedTime').value;
   const note = document.getElementById('schedNote').value.trim();
+  const location = document.getElementById('schedLocation').value;
+  const needsLocation = ['auto-checkin.yml', 'auto-checkout.yml'].includes(workflow);
 
   let entry;
 
@@ -609,6 +625,9 @@ async function addScheduledRun() {
 
     entry = { type: 'recurring', workflow, recurrence, enabled: true, note: note || undefined, created: new Date().toISOString() };
   }
+
+  // Add location for checkin/checkout workflows
+  if (needsLocation) entry.location = location;
 
   await saveScheduledEntry(entry);
 }
@@ -737,6 +756,8 @@ function openEditSchedModal(index) {
   document.getElementById('editSchedWorkflow').value = entry.workflow;
   document.getElementById('editSchedType').value = entry.type;
   document.getElementById('editSchedNote').value = entry.note || '';
+  document.getElementById('editSchedLocation').value = entry.location || 'office';
+  toggleEditLocationField();
 
   toggleEditType(entry.type);
 
@@ -775,6 +796,8 @@ async function saveEditSchedule() {
   const workflow = document.getElementById('editSchedWorkflow').value;
   const type = document.getElementById('editSchedType').value;
   const note = document.getElementById('editSchedNote').value.trim() || undefined;
+  const location = document.getElementById('editSchedLocation').value;
+  const needsLocation = ['auto-checkin.yml', 'auto-checkout.yml'].includes(workflow);
 
   let updatedEntry;
 
@@ -803,6 +826,9 @@ async function saveEditSchedule() {
     const enabled = document.getElementById('editSchedEnabled').classList.contains('active');
     updatedEntry = { type: 'recurring', workflow, recurrence, enabled, note, created: scheduleTableData[index].created || new Date().toISOString() };
   }
+
+  // Add location for checkin/checkout workflows
+  if (needsLocation) updatedEntry.location = location;
 
   // Save to Gist
   try {

@@ -196,11 +196,18 @@ tailwind.config = {
           <div class="scheduler-form" role="form" aria-label="Create scheduled run">
             <div class="field scheduler-field">
               <label class="field-label text-xs text-muted-foreground font-medium block mb-1" for="schedWorkflow">Workflow</label>
-              <select class="input select-trigger" id="schedWorkflow">
-                <option value="auto-checkin.yml">Auto Checkin</option>
-                <option value="auto-checkout.yml">Auto Checkout</option>
-                <option value="auto-ot-creator.yml">Auto OT Creator</option>
-                <option value="jpy-forecast.yml">JPY Forecast</option>
+              <select class="input select-trigger" id="schedWorkflow" onchange="toggleLocationField()">
+                <option value="auto-checkin.yml">📥 Auto Checkin</option>
+                <option value="auto-checkout.yml">📤 Auto Checkout</option>
+                <option value="auto-ot-creator.yml">⏰ Auto OT Creator</option>
+                <option value="jpy-forecast.yml">💹 JPY Forecast</option>
+              </select>
+            </div>
+            <div class="field scheduler-field" id="schedLocationField">
+              <label class="field-label text-xs text-muted-foreground font-medium block mb-1" for="schedLocation">Location</label>
+              <select class="input select-trigger" id="schedLocation">
+                <option value="office">🏢 Office (NEC Tamagawa)</option>
+                <option value="home">🏠 Home (FPT Residence)</option>
               </select>
             </div>
             <div class="field scheduler-field">
@@ -397,6 +404,37 @@ tailwind.config = {
           </div>
         </div>
 
+        <!-- Location Settings -->
+        <div class="card settings-card">
+          <div class="card-header">
+            <div class="card-title"><span data-icon="map-pin" data-size="16"></span> Location Settings</div>
+            <div class="card-description">Configure GPS coordinates for DokoKin checkin/checkout.</div>
+          </div>
+          <div class="card-content">
+            <div class="location-list" style="display:flex;flex-direction:column;gap:12px;">
+              <div class="location-item" style="display:flex;align-items:center;gap:10px;padding:10px 14px;border:1px solid var(--border);border-radius:8px;background:var(--card);">
+                <span style="font-size:1.3em;">🏢</span>
+                <div style="flex:1">
+                  <div style="font-weight:600;font-size:0.9em;">Office — NEC Tamagawa</div>
+                  <div style="font-size:0.75em;color:var(--muted-foreground);">35.5202417, 139.620325</div>
+                </div>
+                <span class="badge badge-sm" style="font-size:0.7em;padding:2px 8px;background:var(--primary);color:#fff;border-radius:999px;">Default</span>
+              </div>
+              <div class="location-item" style="display:flex;align-items:center;gap:10px;padding:10px 14px;border:1px solid var(--border);border-radius:8px;background:var(--card);">
+                <span style="font-size:1.3em;">🏠</span>
+                <div style="flex:1">
+                  <div style="font-weight:600;font-size:0.9em;">Home — FPT Residence Tsurumi</div>
+                  <div style="font-size:0.75em;color:var(--muted-foreground);">35.51386, 139.6749183</div>
+                </div>
+              </div>
+            </div>
+            <p class="text-xs text-muted-foreground mt-3 leading-relaxed opacity-70">
+              Locations are used by Auto Checkin/Checkout workflows for GPS stamping.<br>
+              To add new locations, update <code>schedule.json</code> in <code>.github/scripts/</code>.
+            </p>
+          </div>
+        </div>
+
         <!-- About -->
         <div class="card settings-card">
           <div class="card-header">
@@ -438,11 +476,18 @@ tailwind.config = {
       <div class="flex flex-col gap-4">
         <div class="field">
           <label class="field-label text-xs text-muted-foreground font-medium block mb-1">Workflow</label>
-          <select class="input select-trigger" id="editSchedWorkflow">
-            <option value="auto-checkin.yml">Auto Checkin</option>
-            <option value="auto-checkout.yml">Auto Checkout</option>
-            <option value="auto-ot-creator.yml">Auto OT Creator</option>
-            <option value="jpy-forecast.yml">JPY Forecast</option>
+          <select class="input select-trigger" id="editSchedWorkflow" onchange="toggleEditLocationField()">
+            <option value="auto-checkin.yml">📥 Auto Checkin</option>
+            <option value="auto-checkout.yml">📤 Auto Checkout</option>
+            <option value="auto-ot-creator.yml">⏰ Auto OT Creator</option>
+            <option value="jpy-forecast.yml">💹 JPY Forecast</option>
+          </select>
+        </div>
+        <div class="field" id="editLocationField">
+          <label class="field-label text-xs text-muted-foreground font-medium block mb-1">Location</label>
+          <select class="input select-trigger" id="editSchedLocation">
+            <option value="office">🏢 Office (NEC Tamagawa)</option>
+            <option value="home">🏠 Home (FPT Residence)</option>
           </select>
         </div>
         <div class="field">
