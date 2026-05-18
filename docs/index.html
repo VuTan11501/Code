@@ -881,7 +881,7 @@ function renderWorkflowCard(wf, runs) {
         </div>
         <ul class="run-list">
           ${last5.map(r => `
-            <li class="run-item" onclick="openLogModal(${r.id}, '${wf.icon} ${wf.name} #${r.run_number}')">
+            <li class="run-item" onclick="openLogModal(${r.id}, '${wf.icon} ${wf.name} #${r.run_number}', '${r.status}')">
               <span class="run-dot ${conclusionClass(r.conclusion || r.status)}"></span>
               <a href="${r.html_url}" target="_blank" onclick="event.stopPropagation()">#${r.run_number}</a>
               <span class="run-event">${r.event}</span>
@@ -908,11 +908,19 @@ async function triggerWorkflow(file) {
       body: JSON.stringify({ ref: 'main' }),
     });
     if (res.status === 204) {
-      toast('✅ Workflow triggered!');
-      // Speed up polling to catch the new run
+      toast('✅ Workflow triggered! Refreshing…');
       hasRunningWorkflows = true;
       adjustPollRate();
-      setTimeout(refresh, 2000);
+      // Retry refresh until new run appears (GitHub API delay)
+      let attempts = 0;
+      const pollForNew = async () => {
+        attempts++;
+        await refresh();
+        if (attempts < 5 && !document.querySelector('.status-badge.status-running')) {
+          setTimeout(pollForNew, 3000);
+        }
+      };
+      setTimeout(pollForNew, 2000);
     }
     else toast(`❌ Failed (${res.status})`);
   } catch (e) { toast(`❌ ${e.message}`); }
@@ -1402,26 +1410,59 @@ async function removeScheduledRun(index) {
 // ═══════════════════════════════════════════════════
 //  LOG VIEWER MODAL
 // ═══════════════════════════════════════════════════
-function openLogModal(runId, title) {
+function openLogModal(runId, title, status) {
   const overlay = document.getElementById('logModal');
   const body = document.getElementById('logModalBody');
   document.getElementById('logModalTitle').textContent = title || 'Run Logs';
   body.innerHTML = '<div class="empty">Loading jobs…</div>';
   overlay.classList.add('open');
-  loadRunJobs(runId, body);
+  overlay.dataset.runId = runId;
+  overlay.dataset.runStatus = status || '';
+  loadRunJobs(runId, body, status);
 }
 
 function closeLogModal() {
   document.getElementById('logModal').classList.remove('open');
 }
 
-async function loadRunJobs(runId, container) {
+async function cancelWorkflowRun(runId) {
+  if (!sessionToken) { toast('⚠️ Not authenticated'); return; }
+  if (!confirm('Cancel this workflow run?')) return;
+  try {
+    const res = await fetch(`${API}/repos/${OWNER}/${REPO}/actions/runs/${runId}/cancel`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${sessionToken}`, 'Accept': 'application/vnd.github+json' },
+    });
+    if (res.status === 202) {
+      toast('✅ Workflow cancelled');
+      closeLogModal();
+      setTimeout(refresh, 1500);
+    } else {
+      toast(`❌ Cancel failed (${res.status})`);
+    }
+  } catch (e) { toast(`❌ ${e.message}`); }
+}
+
+async function loadRunJobs(runId, container, status) {
   try {
     const data = await apiFetch(`/repos/${OWNER}/${REPO}/actions/runs/${runId}/jobs`);
     const jobs = data.jobs || [];
-    if (!jobs.length) { container.innerHTML = '<div class="empty">No jobs found.</div>'; return; }
 
-    container.innerHTML = jobs.map(j => {
+    let html = '';
+
+    // Cancel button for running/queued workflows
+    const isRunning = status === 'in_progress' || status === 'queued';
+    if (isRunning) {
+      html += `<div style="margin-bottom:12px; padding-bottom:12px; border-bottom:1px solid var(--border)">
+        <button class="btn danger" onclick="cancelWorkflowRun(${runId})" style="width:100%">
+          ⏹ Cancel this run
+        </button>
+      </div>`;
+    }
+
+    if (!jobs.length) { container.innerHTML = html + '<div class="empty">No jobs found.</div>'; return; }
+
+    html += jobs.map(j => {
       const dur = j.completed_at && j.started_at
         ? Math.round((new Date(j.completed_at) - new Date(j.started_at)) / 1000)
         : null;
@@ -1438,6 +1479,8 @@ async function loadRunJobs(runId, container) {
         </div>
       </div>`;
     }).join('');
+
+    container.innerHTML = html;
   } catch (e) {
     container.innerHTML = `<div class="empty">❌ Failed to load jobs: ${e.message}</div>`;
   }
@@ -1794,7 +1837,7 @@ async function refresh() {
     allRuns.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
     recentEl.innerHTML = allRuns.slice(0, 12).map(r => `
-      <li class="run-item" onclick="openLogModal(${r.id}, '${r._wf.icon} ${r._wf.name} #${r.run_number}')">
+      <li class="run-item" onclick="openLogModal(${r.id}, '${r._wf.icon} ${r._wf.name} #${r.run_number}', '${r.status}')">
         <span class="run-dot ${conclusionClass(r.conclusion || r.status)}"></span>
         <span style="font-weight:500">${r._wf.icon} ${r._wf.name}</span>
         <span class="run-event">${r.event}</span>
