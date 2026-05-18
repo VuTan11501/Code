@@ -161,7 +161,17 @@ function lock() {
 function showDashboard() {
   document.getElementById('authScreen').style.display = 'none';
   document.getElementById('dashboard').style.display = 'block';
-  navigate(location.hash || '#dashboard');
+  // Always start on dashboard when first entering (ignore stale hash from PWA reopen)
+  const validPages = ['dashboard', 'schedule', 'settings'];
+  const hashPage = location.hash.replace('#', '');
+  const target = validPages.includes(hashPage) ? location.hash : '#dashboard';
+  // On fresh login/restore, always go to dashboard
+  if (!window._hasNavigated) {
+    window._hasNavigated = true;
+    navigate('#dashboard');
+  } else {
+    navigate(target);
+  }
   startAutoLock();
   startPolling();
   refresh();
@@ -310,12 +320,38 @@ function updateNotifBtn() {
 }
 
 async function requestNotifPermission() {
-  if (!('Notification' in window)) { toast('⚠️ Notifications not supported'); return; }
-  const result = await Notification.requestPermission();
-  notifPermission = result;
-  updateNotifBtn();
-  if (result === 'granted') toast('🔔 Notifications enabled');
-  else if (result === 'denied') toast('🔕 Notifications blocked by browser');
+  if (!('Notification' in window)) { toast('⚠️ Notifications not supported on this device'); return; }
+  try {
+    const result = await Notification.requestPermission();
+    notifPermission = result;
+    updateNotifBtn();
+    if (result === 'granted') {
+      toast('🔔 Notifications enabled');
+      // Test notification via ServiceWorker for PWA compatibility
+      showNotification('✅ Notifications Active', 'You will be notified when workflows fail.');
+    }
+    else if (result === 'denied') toast('🔕 Notifications blocked by browser. Check Settings.');
+    else toast('⚠️ Permission dismissed');
+  } catch (e) {
+    toast(`⚠️ ${e.message}`, 'warning');
+  }
+}
+
+async function showNotification(title, body, tag) {
+  if (notifPermission !== 'granted') return;
+  try {
+    // Prefer ServiceWorker notification (works in PWA/iOS)
+    const reg = await navigator.serviceWorker?.ready;
+    if (reg) {
+      await reg.showNotification(title, { body, tag: tag || 'wf-' + Date.now(), icon: '⚡' });
+    } else {
+      // Fallback to Notification constructor (desktop)
+      new Notification(title, { body, tag });
+    }
+  } catch {
+    // Silent fail if notifications not available
+    try { new Notification(title, { body, tag }); } catch {}
+  }
 }
 
 function checkForNewFailures(allRuns) {
@@ -327,12 +363,11 @@ function checkForNewFailures(allRuns) {
   );
   for (const r of newFailures) {
     const wf = r._wf || {};
-    try {
-      new Notification(`❌ ${wf.name || 'Workflow'} Failed`, {
-        body: `Run #${r.run_number} failed (${r.event})`,
-        tag: `wf-fail-${r.id}`,
-      });
-    } catch {}
+    showNotification(
+      `❌ ${wf.name || 'Workflow'} Failed`,
+      `Run #${r.run_number} failed (${r.event})`,
+      `wf-fail-${r.id}`
+    );
   }
   const allFailIds = allRuns.filter(r => r.status === 'completed' && r.conclusion === 'failure').map(r => r.id);
   sessionStorage.setItem('wf_known_failures', JSON.stringify(allFailIds));
