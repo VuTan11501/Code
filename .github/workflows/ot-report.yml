@@ -1,0 +1,65 @@
+name: Monthly OT Report
+
+on:
+  schedule:
+    - cron: '0 15 28 * *'  # 00:00 JST on 28th of each month
+  workflow_dispatch:
+    inputs:
+      year:
+        description: 'Year'
+        type: number
+      month:
+        description: 'Month'
+        type: number
+
+permissions:
+  contents: read
+
+env:
+  TZ: Asia/Tokyo
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            .github/scripts
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Generate OT report
+        id: report
+        env:
+          INPUT_YEAR: ${{ inputs.year }}
+          INPUT_MONTH: ${{ inputs.month }}
+        run: python .github/scripts/ot_report.py > report.html
+
+      - name: Send report email
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 587
+          username: ${{ secrets.SMTP_USER }}
+          password: ${{ secrets.SMTP_PASS }}
+          subject: "📊 Monthly OT Report"
+          to: ${{ secrets.NOTIFY_EMAIL }}
+          from: ${{ secrets.SMTP_USER }}
+          html_body: file://report.html
+
+      - name: LINE notification
+        if: always()
+        env:
+          LINE_NOTIFY_TOKEN: ${{ secrets.LINE_NOTIFY_TOKEN }}
+        run: |
+          if [ "${{ job.status }}" = "success" ]; then
+            python .github/scripts/line_notify.py "📊 Monthly OT report generated and emailed."
+          else
+            python .github/scripts/line_notify.py "⚠️ Monthly OT report generation failed!"
+          fi

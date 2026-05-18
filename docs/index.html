@@ -15,17 +15,19 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Ar
 
 .container { max-width: 1200px; margin: 0 auto; padding: 24px 16px; }
 
-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 32px; flex-wrap: wrap; gap: 12px; }
+header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; flex-wrap: wrap; gap: 12px; }
 header h1 { font-size: 24px; font-weight: 600; display: flex; align-items: center; gap: 10px; }
 header h1 .icon { font-size: 28px; }
 .header-actions { display: flex; gap: 8px; align-items: center; }
 
 .btn { padding: 6px 14px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; font-size: 13px; transition: all 0.15s; display: inline-flex; align-items: center; gap: 6px; }
 .btn:hover { border-color: var(--accent); color: var(--accent); }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .btn.primary { background: #238636; border-color: #238636; color: #fff; }
 .btn.primary:hover { background: #2ea043; }
 .btn.danger { border-color: var(--red); color: var(--red); }
 .btn.sm { padding: 4px 10px; font-size: 12px; }
+.btn.icon-btn { padding: 6px 10px; font-size: 16px; line-height: 1; }
 
 .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 16px; margin-bottom: 32px; }
 
@@ -41,8 +43,9 @@ header h1 .icon { font-size: 28px; }
 .status-skipped { background: rgba(139,148,158,0.15); color: var(--muted); }
 
 .run-list { list-style: none; }
-.run-item { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+.run-item { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; cursor: pointer; }
 .run-item:last-child { border-bottom: none; }
+.run-item:hover { background: rgba(88,166,255,0.04); }
 .run-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
 .run-dot.success { background: var(--green); }
 .run-dot.failure { background: var(--red); }
@@ -64,8 +67,11 @@ header h1 .icon { font-size: 28px; }
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
 .last-update { font-size: 12px; color: var(--muted); }
-.toast { position: fixed; bottom: 24px; right: 24px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 20px; font-size: 13px; display: none; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
+
+/* Toast */
+.toast { position: fixed; bottom: 24px; right: 24px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 20px; font-size: 13px; display: none; z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.4); max-width: 400px; }
 .toast.show { display: block; animation: slideIn 0.3s; }
+.toast.warning { border-color: var(--yellow); color: var(--yellow); }
 @keyframes slideIn { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 
 /* Auth screen */
@@ -83,9 +89,68 @@ a:hover { text-decoration: underline; }
 .auth-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
 .lock-icon { font-size: 48px; margin-bottom: 16px; }
 
+/* Health Score Bar */
+.health-bar { display: flex; gap: 12px; margin-bottom: 24px; flex-wrap: wrap; }
+.health-item { flex: 1; min-width: 200px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; display: flex; align-items: center; gap: 14px; }
+.health-ring { position: relative; width: 52px; height: 52px; flex-shrink: 0; }
+.health-ring svg { transform: rotate(-90deg); }
+.health-ring .ring-bg { fill: none; stroke: var(--border); stroke-width: 4; }
+.health-ring .ring-fg { fill: none; stroke-width: 4; stroke-linecap: round; transition: stroke-dashoffset 0.6s ease; }
+.health-pct { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; }
+.health-info { flex: 1; min-width: 0; }
+.health-name { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.health-detail { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+/* Collapsible sections */
+.collapsible-header { display: flex; align-items: center; justify-content: space-between; cursor: pointer; user-select: none; padding: 12px 0; }
+.collapsible-header .chevron { transition: transform 0.2s; font-size: 12px; color: var(--muted); }
+.collapsible-header.open .chevron { transform: rotate(180deg); }
+.collapsible-body { overflow: hidden; transition: max-height 0.3s ease; max-height: 0; }
+.collapsible-body.open { max-height: 2000px; }
+
+/* Schedule Calendar */
+.schedule-grid { display: grid; grid-template-columns: 60px repeat(7, 1fr); gap: 1px; background: var(--border); border-radius: 8px; overflow: hidden; margin-bottom: 24px; font-size: 12px; }
+.schedule-cell { background: var(--surface); padding: 6px 4px; min-height: 36px; display: flex; flex-direction: column; gap: 2px; align-items: center; }
+.schedule-cell.header { font-weight: 600; color: var(--muted); text-transform: uppercase; font-size: 11px; justify-content: center; }
+.schedule-cell.time-label { justify-content: center; font-weight: 500; color: var(--muted); font-size: 11px; font-family: monospace; }
+.schedule-pip { padding: 2px 5px; border-radius: 4px; font-size: 10px; white-space: nowrap; line-height: 1.3; }
+.schedule-pip.checkin { background: rgba(63,185,80,0.2); color: var(--green); }
+.schedule-pip.forecast { background: rgba(88,166,255,0.2); color: var(--accent); }
+
+/* Modal overlay */
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 900; display: none; align-items: center; justify-content: center; padding: 20px; }
+.modal-overlay.open { display: flex; }
+.modal { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; max-width: 700px; width: 100%; max-height: 80vh; display: flex; flex-direction: column; }
+.modal-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--border); }
+.modal-header h3 { font-size: 16px; font-weight: 600; }
+.modal-close { background: none; border: none; color: var(--muted); font-size: 22px; cursor: pointer; padding: 4px 8px; border-radius: 4px; line-height: 1; }
+.modal-close:hover { color: var(--text); background: rgba(255,255,255,0.05); }
+.modal-body { padding: 16px 20px; overflow-y: auto; flex: 1; }
+.job-item { padding: 12px 0; border-bottom: 1px solid var(--border); }
+.job-item:last-child { border-bottom: none; }
+.job-head { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+.job-name { font-weight: 600; font-size: 14px; }
+.job-meta { font-size: 12px; color: var(--muted); display: flex; gap: 12px; }
+
+/* Settings panel */
+.settings-section { margin-top: 24px; }
+.settings-body { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); padding-top: 12px; }
+.settings-card { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 20px; }
+.settings-card h4 { font-size: 14px; margin-bottom: 4px; display: flex; align-items: center; gap: 8px; }
+.settings-card p { font-size: 12px; color: var(--muted); margin-bottom: 14px; }
+.settings-card input { width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 13px; margin-bottom: 8px; }
+.settings-card input:focus { outline: none; border-color: var(--accent); }
+.settings-card .btn { margin-top: 4px; }
+.file-input-label { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; font-size: 13px; transition: all 0.15s; }
+.file-input-label:hover { border-color: var(--accent); color: var(--accent); }
+
 @media (max-width: 600px) {
   .grid { grid-template-columns: 1fr; }
   header { flex-direction: column; align-items: flex-start; }
+  .health-bar { flex-direction: column; }
+  .schedule-grid { font-size: 10px; }
+  .schedule-grid { grid-template-columns: 44px repeat(7, 1fr); }
+  .settings-body { grid-template-columns: 1fr; }
 }
 </style>
 </head>
@@ -132,16 +197,34 @@ a:hover { text-decoration: underline; }
       <h1><span class="icon">⚡</span> Workflow Dashboard</h1>
       <div class="header-actions">
         <span class="last-update" id="lastUpdate"></span>
-        <button class="btn" onclick="refresh()">🔄 Refresh</button>
+        <button class="btn" onclick="refresh()" title="Refresh">🔄 Refresh</button>
+        <button class="btn icon-btn" id="notifBtn" onclick="requestNotifPermission()" title="Notifications">🔔</button>
+        <button class="btn icon-btn" onclick="toggleSettings()" title="Settings">⚙️</button>
         <button class="btn danger" onclick="lock()">🔒 Lock</button>
       </div>
     </header>
 
+    <!-- Health Score Bar -->
+    <div class="health-bar" id="healthBar">
+      <div class="empty" style="width:100%">Loading health...</div>
+    </div>
+
+    <!-- Workflow Cards Grid -->
     <div class="grid" id="workflowGrid">
       <div class="empty">Loading workflows...</div>
     </div>
 
-    <div class="section-title">Recent Activity</div>
+    <!-- Schedule Calendar (collapsible) -->
+    <div class="collapsible-header" onclick="toggleCollapsible(this, 'scheduleBody')">
+      <span class="section-title" style="margin-bottom:0">📅 Schedule Calendar (JST)</span>
+      <span class="chevron">▼</span>
+    </div>
+    <div class="collapsible-body" id="scheduleBody">
+      <div id="scheduleCalendar"></div>
+    </div>
+
+    <!-- Recent Activity -->
+    <div class="section-title" style="margin-top:24px">Recent Activity</div>
     <div class="card">
       <div class="card-body">
         <ul class="run-list" id="recentRuns">
@@ -149,18 +232,92 @@ a:hover { text-decoration: underline; }
         </ul>
       </div>
     </div>
+
+    <!-- Settings Panel (collapsible) -->
+    <div class="settings-section" id="settingsSection" style="display:none">
+      <div class="collapsible-header open" onclick="toggleCollapsible(this, 'settingsBody')">
+        <span class="section-title" style="margin-bottom:0">⚙️ Settings</span>
+        <span class="chevron">▼</span>
+      </div>
+      <div class="collapsible-body open" id="settingsBody">
+        <div class="settings-body">
+          <!-- Change Passphrase -->
+          <div class="settings-card">
+            <h4>🔑 Change Passphrase</h4>
+            <p>Decrypt vault with current passphrase and re-encrypt with a new one.</p>
+            <input type="password" id="cpOldPass" placeholder="Current passphrase">
+            <input type="password" id="cpNewPass" placeholder="New passphrase (6+ chars)">
+            <input type="password" id="cpConfirmPass" placeholder="Confirm new passphrase">
+            <button class="btn primary sm" onclick="changePassphrase()">Change Passphrase</button>
+            <div class="error" id="cpError" style="display:none"></div>
+          </div>
+          <!-- Export / Import Vault -->
+          <div class="settings-card">
+            <h4>💾 Export / Import Vault</h4>
+            <p>Transfer your encrypted vault between devices. The export is encrypted — your passphrase is still needed to unlock it.</p>
+            <button class="btn sm" onclick="exportVault()" style="margin-bottom:10px">📥 Export Vault (.json)</button>
+            <br>
+            <label class="file-input-label">
+              📤 Import Vault (.json)
+              <input type="file" accept=".json" onchange="importVault(event)" style="display:none">
+            </label>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
+<!-- Log Viewer Modal -->
+<div class="modal-overlay" id="logModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="logModalTitle">Run Logs</h3>
+      <button class="modal-close" onclick="closeLogModal()">&times;</button>
+    </div>
+    <div class="modal-body" id="logModalBody">
+      <div class="empty">Loading jobs...</div>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
 <div class="toast" id="toast"></div>
 
 <script>
 // ═══════════════════════════════════════════════════
+//  CONFIGURATION
+// ═══════════════════════════════════════════════════
+const OWNER = 'VuTan11501';
+const REPO = 'Code';
+const API = 'https://api.github.com';
+const WORKFLOWS = [
+  { id: 277782817, name: 'Auto Checkin/Checkout', icon: '🕐', file: 'auto-checkin.yml' },
+  { id: 277802136, name: 'Auto OT Creator', icon: '⏰', file: 'auto-ot.yml' },
+  { id: 278223037, name: 'JPY Forecast Daily Report', icon: '💹', file: 'jpy-forecast.yml' },
+];
+const AUTO_LOCK_MS = 15 * 60 * 1000;
+
+const SCHEDULE = {
+  'Auto Checkin/Checkout': [
+    { days: [1,2,3,4,5], time: '09:00', label: 'Workday CI' },
+    { days: [1,2,3,4,5], time: '18:00', label: 'Workday CO' },
+    { days: [0,1,2,3,4,5,6], time: '22:00', label: 'Night OT CI' },
+    { days: [0,1,2,3,4,5,6], time: '00:00', label: 'Midnight CO' },
+    { days: [0,1,2,3,4,5,6], time: '03:30', label: 'Night OT CO' },
+    { days: [0], time: '14:30', label: 'Sunday OT CI' },
+  ],
+  'JPY Forecast Daily Report': [
+    { days: [1,2,3,4,5], time: '07:30', label: 'Daily Report' },
+  ],
+  'Auto OT Creator': [],
+};
+
+// ═══════════════════════════════════════════════════
 //  CRYPTO: AES-256-GCM with PBKDF2 key derivation
 // ═══════════════════════════════════════════════════
-
 const STORAGE_KEY = 'wf_dash_vault';
-let sessionToken = null; // Only in memory, never persisted in plaintext
+let sessionToken = null;
 
 async function deriveKey(passphrase, salt) {
   const enc = new TextEncoder();
@@ -180,7 +337,6 @@ async function encryptToken(token, passphrase) {
   const key = await deriveKey(passphrase, salt);
   const enc = new TextEncoder();
   const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, enc.encode(token));
-  // Store salt + iv + ciphertext as base64
   const combined = new Uint8Array(salt.length + iv.length + new Uint8Array(ciphertext).length);
   combined.set(salt, 0);
   combined.set(iv, salt.length);
@@ -202,7 +358,6 @@ async function decryptToken(stored, passphrase) {
 // ═══════════════════════════════════════════════════
 //  AUTH FLOW
 // ═══════════════════════════════════════════════════
-
 function hasVault() { return !!localStorage.getItem(STORAGE_KEY); }
 
 function switchTab(tab) {
@@ -259,6 +414,7 @@ async function unlock() {
 
 function lock() {
   sessionToken = null;
+  stopAutoLock();
   document.getElementById('dashboard').style.display = 'none';
   document.getElementById('authScreen').style.display = 'flex';
   document.getElementById('passphrase').value = '';
@@ -268,30 +424,26 @@ function lock() {
 function showDashboard() {
   document.getElementById('authScreen').style.display = 'none';
   document.getElementById('dashboard').style.display = 'block';
+  renderScheduleCalendar();
+  startAutoLock();
   refresh();
 }
 
 // ═══════════════════════════════════════════════════
-//  DASHBOARD LOGIC
+//  TOAST
 // ═══════════════════════════════════════════════════
-
-const OWNER = 'VuTan11501';
-const REPO = 'Code';
-const API = 'https://api.github.com';
-
-const WORKFLOWS = [
-  { id: 277782817, name: 'Auto Checkin/Checkout', icon: '🕐', file: 'auto-checkin.yml' },
-  { id: 277802136, name: 'Auto OT Creator', icon: '⏰', file: 'auto-ot.yml' },
-  { id: 278223037, name: 'JPY Forecast Daily Report', icon: '💹', file: 'jpy-forecast.yml' },
-];
-
-function toast(msg) {
+let toastTimer = null;
+function toast(msg, cls) {
   const el = document.getElementById('toast');
   el.textContent = msg;
-  el.classList.add('show');
-  setTimeout(() => el.classList.remove('show'), 3000);
+  el.className = 'toast show' + (cls ? ' ' + cls : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 4000);
 }
 
+// ═══════════════════════════════════════════════════
+//  API & UTILITIES
+// ═══════════════════════════════════════════════════
 async function apiFetch(path) {
   const headers = { 'Accept': 'application/vnd.github+json' };
   if (sessionToken) headers['Authorization'] = `Bearer ${sessionToken}`;
@@ -303,9 +455,9 @@ async function apiFetch(path) {
 function timeAgo(dateStr) {
   const diff = (Date.now() - new Date(dateStr).getTime()) / 1000;
   if (diff < 60) return 'just now';
-  if (diff < 3600) return `${Math.floor(diff/60)}m ago`;
-  if (diff < 86400) return `${Math.floor(diff/3600)}h ago`;
-  return `${Math.floor(diff/86400)}d ago`;
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  return `${Math.floor(diff / 86400)}d ago`;
 }
 
 function conclusionClass(c) {
@@ -334,6 +486,50 @@ function successRate(runs) {
   return `${Math.round(success / completed.length * 100)}%`;
 }
 
+function successRateNum(runs) {
+  const completed = runs.filter(r => r.status === 'completed');
+  if (!completed.length) return -1;
+  const success = completed.filter(r => r.conclusion === 'success').length;
+  return Math.round(success / completed.length * 100);
+}
+
+// ═══════════════════════════════════════════════════
+//  HEALTH SCORE BAR
+// ═══════════════════════════════════════════════════
+function renderHealthBar(workflowResults) {
+  const el = document.getElementById('healthBar');
+  const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+
+  el.innerHTML = workflowResults.map(({ wf, runs }) => {
+    const recent = runs.filter(r => new Date(r.created_at).getTime() >= sevenDaysAgo);
+    const pct = successRateNum(recent);
+    const display = pct < 0 ? '—' : pct + '%';
+    const color = pct < 0 ? 'var(--muted)' : pct >= 90 ? 'var(--green)' : pct >= 70 ? 'var(--yellow)' : 'var(--red)';
+    const circ = 2 * Math.PI * 20;
+    const offset = pct < 0 ? circ : circ - (circ * pct / 100);
+    const completed = recent.filter(r => r.status === 'completed').length;
+    const passed = recent.filter(r => r.conclusion === 'success').length;
+
+    return `<div class="health-item">
+      <div class="health-ring">
+        <svg width="52" height="52" viewBox="0 0 52 52">
+          <circle class="ring-bg" cx="26" cy="26" r="20"/>
+          <circle class="ring-fg" cx="26" cy="26" r="20" stroke="${color}"
+            stroke-dasharray="${circ}" stroke-dashoffset="${offset}"/>
+        </svg>
+        <span class="health-pct" style="color:${color}">${display}</span>
+      </div>
+      <div class="health-info">
+        <div class="health-name">${wf.icon} ${wf.name}</div>
+        <div class="health-detail">${passed}/${completed} passed (7 days)</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════════
+//  WORKFLOW CARDS
+// ═══════════════════════════════════════════════════
 function renderWorkflowCard(wf, runs) {
   const last5 = runs.slice(0, 5);
   return `
@@ -355,14 +551,14 @@ function renderWorkflowCard(wf, runs) {
         </div>
         <ul class="run-list">
           ${last5.map(r => `
-            <li class="run-item">
+            <li class="run-item" onclick="openLogModal(${r.id}, '${wf.icon} ${wf.name} #${r.run_number}')">
               <span class="run-dot ${conclusionClass(r.conclusion || r.status)}"></span>
-              <a href="${r.html_url}" target="_blank">#${r.run_number}</a>
+              <a href="${r.html_url}" target="_blank" onclick="event.stopPropagation()">#${r.run_number}</a>
               <span class="run-event">${r.event}</span>
               <span class="run-time">${timeAgo(r.created_at)}</span>
             </li>
           `).join('')}
-          ${last5.length === 0 ? '<li class="run-item" style="color:var(--muted)">No runs yet</li>' : ''}
+          ${last5.length === 0 ? '<li class="run-item" style="color:var(--muted);cursor:default">No runs yet</li>' : ''}
         </ul>
         <div class="trigger-actions">
           <button class="btn primary sm" onclick="triggerWorkflow('${wf.file}')">▶ Trigger</button>
@@ -386,6 +582,290 @@ async function triggerWorkflow(file) {
   } catch (e) { toast(`❌ ${e.message}`); }
 }
 
+// ═══════════════════════════════════════════════════
+//  SCHEDULE CALENDAR
+// ═══════════════════════════════════════════════════
+function renderScheduleCalendar() {
+  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const allTimes = new Set();
+  for (const [, entries] of Object.entries(SCHEDULE)) {
+    for (const e of entries) allTimes.add(e.time);
+  }
+  const times = [...allTimes].sort();
+
+  let html = '<div class="schedule-grid">';
+  html += '<div class="schedule-cell header"></div>';
+  for (const d of dayNames) html += `<div class="schedule-cell header">${d}</div>`;
+
+  for (const time of times) {
+    html += `<div class="schedule-cell time-label">${time}</div>`;
+    for (let day = 0; day < 7; day++) {
+      html += '<div class="schedule-cell">';
+      for (const [name, entries] of Object.entries(SCHEDULE)) {
+        for (const e of entries) {
+          if (e.time === time && e.days.includes(day)) {
+            const cls = name.includes('Checkin') ? 'checkin' : 'forecast';
+            html += `<span class="schedule-pip ${cls}" title="${name}">${e.label}</span>`;
+          }
+        }
+      }
+      html += '</div>';
+    }
+  }
+  html += '</div>';
+  document.getElementById('scheduleCalendar').innerHTML = html;
+}
+
+// ═══════════════════════════════════════════════════
+//  LOG VIEWER MODAL
+// ═══════════════════════════════════════════════════
+function openLogModal(runId, title) {
+  const overlay = document.getElementById('logModal');
+  const body = document.getElementById('logModalBody');
+  document.getElementById('logModalTitle').textContent = title || 'Run Logs';
+  body.innerHTML = '<div class="empty">Loading jobs…</div>';
+  overlay.classList.add('open');
+  loadRunJobs(runId, body);
+}
+
+function closeLogModal() {
+  document.getElementById('logModal').classList.remove('open');
+}
+
+async function loadRunJobs(runId, container) {
+  try {
+    const data = await apiFetch(`/repos/${OWNER}/${REPO}/actions/runs/${runId}/jobs`);
+    const jobs = data.jobs || [];
+    if (!jobs.length) { container.innerHTML = '<div class="empty">No jobs found.</div>'; return; }
+
+    container.innerHTML = jobs.map(j => {
+      const dur = j.completed_at && j.started_at
+        ? Math.round((new Date(j.completed_at) - new Date(j.started_at)) / 1000)
+        : null;
+      const durStr = dur !== null ? (dur >= 60 ? `${Math.floor(dur/60)}m ${dur%60}s` : `${dur}s`) : 'running…';
+      return `<div class="job-item">
+        <div class="job-head">
+          <span class="run-dot ${conclusionClass(j.conclusion || j.status)}"></span>
+          <span class="job-name">${j.name}</span>
+          <span class="status-badge status-${conclusionClass(j.conclusion || j.status)}">${j.conclusion || j.status}</span>
+        </div>
+        <div class="job-meta">
+          <span>⏱ ${durStr}</span>
+          <a href="${j.html_url}" target="_blank">View full log →</a>
+        </div>
+      </div>`;
+    }).join('');
+  } catch (e) {
+    container.innerHTML = `<div class="empty">❌ Failed to load jobs: ${e.message}</div>`;
+  }
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeLogModal();
+});
+document.getElementById('logModal').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeLogModal();
+});
+
+// ═══════════════════════════════════════════════════
+//  PUSH NOTIFICATIONS (Service Worker)
+// ═══════════════════════════════════════════════════
+let notifPermission = Notification.permission || 'default';
+
+function updateNotifBtn() {
+  const btn = document.getElementById('notifBtn');
+  if (!btn) return;
+  if (notifPermission === 'granted') { btn.textContent = '🔔'; btn.title = 'Notifications: ON'; }
+  else if (notifPermission === 'denied') { btn.textContent = '🔕'; btn.title = 'Notifications: Blocked'; }
+  else { btn.textContent = '🔔'; btn.title = 'Enable notifications'; }
+}
+
+async function requestNotifPermission() {
+  if (!('Notification' in window)) { toast('⚠️ Notifications not supported'); return; }
+  const result = await Notification.requestPermission();
+  notifPermission = result;
+  updateNotifBtn();
+  if (result === 'granted') toast('🔔 Notifications enabled');
+  else if (result === 'denied') toast('🔕 Notifications blocked by browser');
+}
+
+function checkForNewFailures(allRuns) {
+  if (notifPermission !== 'granted') return;
+  const knownStr = sessionStorage.getItem('wf_known_failures') || '[]';
+  const knownIds = new Set(JSON.parse(knownStr));
+  const newFailures = allRuns.filter(r =>
+    r.status === 'completed' && r.conclusion === 'failure' && !knownIds.has(r.id)
+  );
+
+  for (const r of newFailures) {
+    const wf = r._wf || {};
+    try {
+      new Notification(`❌ ${wf.name || 'Workflow'} Failed`, {
+        body: `Run #${r.run_number} failed (${r.event})`,
+        icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">❌</text></svg>',
+        tag: `wf-fail-${r.id}`,
+      });
+    } catch { /* notifications may fail silently */ }
+  }
+
+  const allFailIds = allRuns
+    .filter(r => r.status === 'completed' && r.conclusion === 'failure')
+    .map(r => r.id);
+  sessionStorage.setItem('wf_known_failures', JSON.stringify(allFailIds));
+}
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+
+// ═══════════════════════════════════════════════════
+//  AUTO-LOCK TIMEOUT (15 minutes)
+// ═══════════════════════════════════════════════════
+let autoLockTimer = null;
+let countdownTimer = null;
+let lastActivity = Date.now();
+
+function resetActivity() {
+  lastActivity = Date.now();
+  hideAutoLockWarning();
+}
+
+function startAutoLock() {
+  const events = ['click', 'keypress', 'mousemove', 'touchstart', 'scroll'];
+  events.forEach(e => document.addEventListener(e, resetActivity, { passive: true }));
+  lastActivity = Date.now();
+  autoLockTimer = setInterval(checkAutoLock, 1000);
+}
+
+function stopAutoLock() {
+  clearInterval(autoLockTimer);
+  clearInterval(countdownTimer);
+  autoLockTimer = null;
+  countdownTimer = null;
+  const events = ['click', 'keypress', 'mousemove', 'touchstart', 'scroll'];
+  events.forEach(e => document.removeEventListener(e, resetActivity));
+  hideAutoLockWarning();
+}
+
+function checkAutoLock() {
+  if (!sessionToken) return;
+  const elapsed = Date.now() - lastActivity;
+  const remaining = AUTO_LOCK_MS - elapsed;
+
+  if (remaining <= 0) {
+    lock();
+    toast('🔒 Locked due to inactivity', 'warning');
+    return;
+  }
+
+  if (remaining <= 60000) {
+    const secs = Math.ceil(remaining / 1000);
+    showAutoLockWarning(secs);
+  } else {
+    hideAutoLockWarning();
+  }
+}
+
+function showAutoLockWarning(secs) {
+  const el = document.getElementById('toast');
+  el.textContent = `🔒 Auto-lock in ${secs}s — move mouse to stay`;
+  el.className = 'toast show warning';
+}
+
+function hideAutoLockWarning() {
+  const el = document.getElementById('toast');
+  if (el.textContent.startsWith('🔒 Auto-lock')) {
+    el.classList.remove('show');
+  }
+}
+
+// ═══════════════════════════════════════════════════
+//  COLLAPSIBLE SECTIONS
+// ═══════════════════════════════════════════════════
+function toggleCollapsible(headerEl, bodyId) {
+  headerEl.classList.toggle('open');
+  document.getElementById(bodyId).classList.toggle('open');
+}
+
+function toggleSettings() {
+  const sec = document.getElementById('settingsSection');
+  sec.style.display = sec.style.display === 'none' ? 'block' : 'none';
+  if (sec.style.display === 'block') sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// ═══════════════════════════════════════════════════
+//  CHANGE PASSPHRASE
+// ═══════════════════════════════════════════════════
+async function changePassphrase() {
+  const oldPass = document.getElementById('cpOldPass').value;
+  const newPass = document.getElementById('cpNewPass').value;
+  const confirmPass = document.getElementById('cpConfirmPass').value;
+  const errEl = document.getElementById('cpError');
+  errEl.style.display = 'none';
+
+  if (!oldPass) { errEl.textContent = 'Current passphrase is required'; errEl.style.display = 'block'; return; }
+  if (newPass.length < 6) { errEl.textContent = 'New passphrase must be 6+ characters'; errEl.style.display = 'block'; return; }
+  if (newPass !== confirmPass) { errEl.textContent = 'New passphrases do not match'; errEl.style.display = 'block'; return; }
+
+  const stored = localStorage.getItem(STORAGE_KEY);
+  if (!stored) { errEl.textContent = 'No vault found'; errEl.style.display = 'block'; return; }
+
+  try {
+    const token = await decryptToken(stored, oldPass);
+    const reEncrypted = await encryptToken(token, newPass);
+    localStorage.setItem(STORAGE_KEY, reEncrypted);
+    document.getElementById('cpOldPass').value = '';
+    document.getElementById('cpNewPass').value = '';
+    document.getElementById('cpConfirmPass').value = '';
+    toast('✅ Passphrase changed successfully');
+  } catch {
+    errEl.textContent = 'Wrong current passphrase';
+    errEl.style.display = 'block';
+  }
+}
+
+// ═══════════════════════════════════════════════════
+//  EXPORT / IMPORT VAULT
+// ═══════════════════════════════════════════════════
+function exportVault() {
+  const stored = localStorage.getItem(STORAGE_KEY);
+  if (!stored) { toast('⚠️ No vault to export'); return; }
+  const payload = JSON.stringify({ version: 1, vault: stored, exported: new Date().toISOString() }, null, 2);
+  const blob = new Blob([payload], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `wf-dash-vault-${new Date().toISOString().slice(0,10)}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  toast('📥 Vault exported');
+}
+
+function importVault(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const data = JSON.parse(e.target.result);
+      if (!data.vault || typeof data.vault !== 'string') throw new Error('Invalid vault file');
+      Uint8Array.from(atob(data.vault), c => c.charCodeAt(0));
+      localStorage.setItem(STORAGE_KEY, data.vault);
+      toast('📤 Vault imported! Lock and re-unlock to use it.');
+      lock();
+    } catch (err) {
+      toast(`❌ Import failed: ${err.message}`);
+    }
+  };
+  reader.readAsText(file);
+  event.target.value = '';
+}
+
+// ═══════════════════════════════════════════════════
+//  MAIN REFRESH
+// ═══════════════════════════════════════════════════
 async function refresh() {
   const grid = document.getElementById('workflowGrid');
   const recentEl = document.getElementById('recentRuns');
@@ -400,23 +880,28 @@ async function refresh() {
       )
     );
 
+    renderHealthBar(results);
+
     grid.innerHTML = results.map(({ wf, runs }) => {
       allRuns.push(...runs.map(r => ({ ...r, _wf: wf })));
       return renderWorkflowCard(wf, runs);
     }).join('');
 
     allRuns.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
     recentEl.innerHTML = allRuns.slice(0, 12).map(r => `
-      <li class="run-item">
+      <li class="run-item" onclick="openLogModal(${r.id}, '${r._wf.icon} ${r._wf.name} #${r.run_number}')">
         <span class="run-dot ${conclusionClass(r.conclusion || r.status)}"></span>
         <span style="font-weight:500">${r._wf.icon} ${r._wf.name}</span>
         <span class="run-event">${r.event}</span>
-        <a href="${r.html_url}" target="_blank">#${r.run_number}</a>
+        <a href="${r.html_url}" target="_blank" onclick="event.stopPropagation()">#${r.run_number}</a>
         <span class="run-time">${timeAgo(r.created_at)}</span>
       </li>
     `).join('');
 
-    document.getElementById('lastUpdate').textContent = `Updated: ${new Date().toLocaleTimeString('ja-JP', {timeZone:'Asia/Tokyo'})} JST`;
+    document.getElementById('lastUpdate').textContent = `Updated: ${new Date().toLocaleTimeString('ja-JP', { timeZone: 'Asia/Tokyo' })} JST`;
+
+    checkForNewFailures(allRuns);
   } catch (e) {
     grid.innerHTML = `<div class="empty">❌ Failed to load: ${e.message}</div>`;
   }
@@ -425,7 +910,8 @@ async function refresh() {
 // Auto-refresh every 60s while unlocked
 setInterval(() => { if (sessionToken) refresh(); }, 60000);
 
-// Init: show setup tab if no vault exists
+// Init
+updateNotifBtn();
 if (!hasVault()) {
   switchTab('setup');
   document.getElementById('authDesc').textContent = 'First time? Set up your encrypted vault.';

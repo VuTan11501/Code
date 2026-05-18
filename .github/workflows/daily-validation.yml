@@ -1,0 +1,41 @@
+name: Daily Attendance Validation
+
+on:
+  schedule:
+    - cron: '0 10 * * 1-5'  # 19:00 JST Mon-Fri (after work hours)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  TZ: Asia/Tokyo
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            .github/scripts
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Validate attendance
+        env:
+          AZURE_REFRESH_TOKEN: ${{ secrets.AZURE_REFRESH_TOKEN }}
+        run: python .github/scripts/daily_validation.py
+
+      - name: Alert on failure
+        if: failure()
+        env:
+          LINE_NOTIFY_TOKEN: ${{ secrets.LINE_NOTIFY_TOKEN }}
+        run: |
+          echo "::warning::Attendance validation failed! Check DokoKin status."
+          python .github/scripts/line_notify.py "⚠️ Attendance validation FAILED! Check DokoKin status."

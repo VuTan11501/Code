@@ -79,12 +79,13 @@ jobs:
             git push || true
           fi
 
-      - name: Notify on failure
+      - name: Notify on failure (Email + LINE)
         if: failure()
         env:
           SMTP_USER: ${{ secrets.SMTP_USER }}
           SMTP_PASS: ${{ secrets.SMTP_PASS }}
           NOTIFY_EMAIL: ${{ secrets.NOTIFY_EMAIL }}
+          LINE_NOTIFY_TOKEN: ${{ secrets.LINE_NOTIFY_TOKEN }}
         run: |
           python -c "
           import smtplib, os
@@ -99,3 +100,4 @@ jobs:
               s.send_message(msg)
           print('Failure notification sent')
           "
+          python .github/scripts/line_notify.py "🚨 JPY Forecast FAILED - Run #${{ github.run_number }} ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"

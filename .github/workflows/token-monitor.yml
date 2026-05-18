@@ -1,0 +1,64 @@
+name: Token Health Monitor
+
+on:
+  schedule:
+    - cron: '0 21 * * *'  # 06:00 JST daily
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  TZ: Asia/Tokyo
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            .github/scripts
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Check token health
+        id: token_check
+        env:
+          AZURE_REFRESH_TOKEN: ${{ secrets.AZURE_REFRESH_TOKEN }}
+        run: python .github/scripts/token_monitor.py
+
+      - name: Update secret if token rotated
+        if: always() && steps.token_check.outputs.token_rotated == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+          NEW_REFRESH_TOKEN: ${{ steps.token_check.outputs.new_refresh_token }}
+        run: |
+          if [ -n "$NEW_REFRESH_TOKEN" ] && [ -n "$GH_TOKEN" ]; then
+            gh secret set AZURE_REFRESH_TOKEN --body "$NEW_REFRESH_TOKEN" --repo "$GITHUB_REPOSITORY"
+            echo "✅ Secret updated with rotated token"
+          fi
+
+      - name: Alert on expiry
+        if: failure()
+        env:
+          LINE_NOTIFY_TOKEN: ${{ secrets.LINE_NOTIFY_TOKEN }}
+        run: python .github/scripts/line_notify.py "🚨 DokoKin token is UNHEALTHY! Run dokokin_auth_login to refresh."
+
+      - name: Send email alert on expiry
+        if: failure()
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 587
+          username: ${{ secrets.SMTP_USER }}
+          password: ${{ secrets.SMTP_PASS }}
+          subject: "⚠️ DokoKin Token Expiring Soon"
+          to: ${{ secrets.NOTIFY_EMAIL }}
+          from: ${{ secrets.SMTP_USER }}
+          body: "The DokoKin authentication token is unhealthy or expiring soon. Please run `dokokin_auth_login` to refresh it."

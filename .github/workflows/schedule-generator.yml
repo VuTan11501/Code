@@ -1,0 +1,80 @@
+name: Generate Monthly Schedule
+
+on:
+  schedule:
+    - cron: '0 15 25 * *'  # 00:00 JST on 25th of each month (generate for next month)
+  workflow_dispatch:
+    inputs:
+      year:
+        description: 'Year (default: next month year)'
+        type: number
+      month:
+        description: 'Month (default: next month)'
+        type: number
+      ot_dates:
+        description: 'Night OT day numbers (comma-separated, e.g. 2,5,9,12)'
+        type: string
+      sunday_ot:
+        description: 'Sunday OT day numbers (comma-separated, e.g. 7,14,21,28)'
+        type: string
+
+permissions:
+  contents: write
+
+env:
+  TZ: Asia/Tokyo
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Generate schedule
+        run: |
+          ARGS=""
+          if [ -n "${{ inputs.year }}" ]; then
+            ARGS="$ARGS --year ${{ inputs.year }}"
+          fi
+          if [ -n "${{ inputs.month }}" ]; then
+            ARGS="$ARGS --month ${{ inputs.month }}"
+          fi
+          if [ -n "${{ inputs.ot_dates }}" ]; then
+            ARGS="$ARGS --ot-dates ${{ inputs.ot_dates }}"
+          fi
+          if [ -n "${{ inputs.sunday_ot }}" ]; then
+            ARGS="$ARGS --sunday-ot ${{ inputs.sunday_ot }}"
+          fi
+          python .github/scripts/generate_schedule.py $ARGS
+
+      - name: Commit if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .github/scripts/schedule.json
+          if ! git diff --staged --quiet; then
+            MONTH_LABEL=$(python -c "
+          from datetime import date
+          d = date.today()
+          y, m = (d.year + 1, 1) if d.month == 12 else (d.year, d.month + 1)
+          print(f'{y}-{m:02d}')
+          ")
+            git commit -m "chore: auto-generate schedule for $MONTH_LABEL"
+            git push
+            echo "✅ Schedule committed for $MONTH_LABEL"
+          else
+            echo "No changes to schedule.json"
+          fi
+
+      - name: Notify on failure
+        if: failure()
+        env:
+          LINE_NOTIFY_TOKEN: ${{ secrets.LINE_NOTIFY_TOKEN }}
+        run: python .github/scripts/line_notify.py "⚠️ Schedule generation failed! Check GitHub Actions."

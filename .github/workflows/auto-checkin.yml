@@ -77,6 +77,12 @@ jobs:
           NOTIFY_EMAIL: ${{ secrets.NOTIFY_EMAIL }}
         run: python .github/scripts/gh_checkin.py
 
+      - name: LINE Notify on failure
+        if: failure()
+        env:
+          LINE_NOTIFY_TOKEN: ${{ secrets.LINE_NOTIFY_TOKEN }}
+        run: python .github/scripts/line_notify.py "❌ Auto Checkin FAILED - Run #${{ github.run_number }} ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
       - name: Update secret if token rotated
         if: always() && steps.checkin.outputs.token_rotated == 'true'
         env:
