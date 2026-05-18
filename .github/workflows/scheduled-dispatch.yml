@@ -27,7 +27,7 @@ jobs:
 
       - name: Process scheduled runs
         env:
-          GH_TOKEN: ${{ secrets.GH_PAT }}
+          GH_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           python3 << 'EOF'
