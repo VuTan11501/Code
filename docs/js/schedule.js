@@ -2,6 +2,7 @@
 //  SCHEDULE PAGE — Calendar, Scheduled Runs, Pickers
 // ═══════════════════════════════════════════════════
 let scheduleInitialized = false;
+let dispatchCheckInterval = null;
 
 function initSchedulePage() {
   if (scheduleInitialized) return;
@@ -29,6 +30,27 @@ function initSchedulePage() {
   const todayStr = formatDate(now.getFullYear(), now.getMonth(), now.getDate());
   calSelect('calPicker', todayStr);
   loadScheduledRuns();
+
+  // Periodic dispatch check every 30s — catches overdue entries without manual refresh
+  if (!dispatchCheckInterval) {
+    dispatchCheckInterval = setInterval(checkAndDispatchOverdue, 30000);
+  }
+}
+
+async function checkAndDispatchOverdue() {
+  if (!sessionToken) return;
+  try {
+    const gist = await apiFetch(`/gists/${GIST_ID}`);
+    const file = gist.files['scheduled-runs.json'];
+    if (!file) return;
+    const entries = JSON.parse(file.content);
+    const hadDispatches = await clientSideDispatchOverdue(entries);
+    if (hadDispatches) {
+      // Refresh UI to show updated status
+      renderScheduleCalendar(entries);
+      renderScheduledQueue(entries);
+    }
+  } catch {}
 }
 
 // ═══════════════════════════════════════════════════
@@ -441,7 +463,7 @@ async function loadScheduledRuns() {
 
 // Fallback: if GitHub cron hasn't fired, dispatch overdue runs from the browser
 async function clientSideDispatchOverdue(entries) {
-  if (!sessionToken || !entries.length) return;
+  if (!sessionToken || !entries.length) return false;
   const now = new Date();
   const nowJST = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
   const todayStr = formatDate(nowJST.getFullYear(), nowJST.getMonth(), nowJST.getDate());
@@ -450,8 +472,8 @@ async function clientSideDispatchOverdue(entries) {
   for (const entry of entries) {
     if (entry.type === 'once' && entry.run_at && !entry.dispatched) {
       const runAt = new Date(entry.run_at);
-      // If run_at has passed (with 1 min tolerance)
-      if (now - runAt > 60000) {
+      // If run_at has passed (with 30s tolerance — quick enough for user-created entries)
+      if (now - runAt > 30000) {
         try {
           const inputs = entry.location ? { location: entry.location } : {};
           const res = await fetch(`${API}/repos/${OWNER}/${REPO}/actions/workflows/${entry.workflow}/dispatches`, {
@@ -514,6 +536,7 @@ async function clientSideDispatchOverdue(entries) {
   if (dispatched > 0) {
     try { await saveToGist(entries); } catch {}
   }
+  return dispatched > 0;
 }
 
 function renderScheduledQueue(entries) {
