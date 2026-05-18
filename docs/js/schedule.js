@@ -433,7 +433,7 @@ async function duplicateScheduledRun(entryIdx) {
     }
     copy.note = (copy.note ? copy.note + ' ' : '') + '(copy)';
     const conflict = detectCheckinConflict(copy, entries, -1);
-    if (conflict && !confirm(conflict + '\n\nDuplicate anyway?')) return;
+    if (conflict && !await uiConfirm({ title: 'Checkin conflict', message: conflict + '\n\nDuplicate anyway?', confirmText: 'Duplicate', danger: true })) return;
     entries.push(copy);
     await saveToGist(entries);
     toast('📋 Duplicated');
@@ -1117,7 +1117,7 @@ async function saveScheduledEntry(newEntry) {
   try {
     const entries = await loadEntriesFromGist();
     const conflict = detectCheckinConflict(newEntry, entries, -1);
-    if (conflict && !confirm(conflict + '\n\nProceed anyway?')) return;
+    if (conflict && !await uiConfirm({ title: 'Checkin conflict', message: conflict + '\n\nProceed anyway?', confirmText: 'Add anyway', danger: true })) return;
     entries.push(newEntry);
     await saveToGist(entries);
     toast('✅ Schedule added');
@@ -1173,7 +1173,7 @@ function _ciDaySet(entry) {
 }
 
 async function deleteScheduledRun(index) {
-  if (!confirm('Delete this scheduled run?')) return;
+  if (!await uiConfirm({ title: 'Delete schedule?', message: 'Delete this scheduled run?', confirmText: 'Delete', danger: true })) return;
   try {
     const entries = await loadEntriesFromGist();
     entries.splice(index, 1);
@@ -1478,7 +1478,7 @@ async function saveEditSchedule() {
   try {
     const entries = await loadEntriesFromGist();
     const conflict = detectCheckinConflict(updatedEntry, entries, index);
-    if (conflict && !confirm(conflict + '\n\nProceed anyway?')) return;
+    if (conflict && !await uiConfirm({ title: 'Checkin conflict', message: conflict + '\n\nProceed anyway?', confirmText: 'Save anyway', danger: true })) return;
     entries[index] = updatedEntry;
     await saveToGist(entries);
     toast('✅ Schedule updated');

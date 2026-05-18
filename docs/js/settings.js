@@ -297,7 +297,7 @@ function closeAzureReauthModal() {
 
 async function startAzureReauth() {
   if (!sessionToken) { toast('🔒 Unlock vault first'); return; }
-  if (!confirm('Start Azure AD re-authentication?\n\nA workflow will run a device-code login. You will see a code to enter on microsoft.com/devicelogin from any device.')) return;
+  if (!await uiConfirm({ title: 'Start re-authentication?', message: 'A workflow will run a device-code login. You will see a code to enter on microsoft.com/devicelogin from any device.', confirmText: 'Start' })) return;
   openAzureReauthModal();
   const body = document.getElementById('azureReauthBody');
   body.innerHTML = '<div class="text-sm text-muted-foreground p-4 text-center">Starting workflow…</div>';

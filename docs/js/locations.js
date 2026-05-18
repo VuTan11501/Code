@@ -143,10 +143,16 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
 }
 
-function confirmDeleteLocation(key) {
+async function confirmDeleteLocation(key) {
   const loc = getLocation(key);
   if (!loc) return;
-  if (!confirm(`Delete location "${loc.name}"?\n\nNote: existing schedule entries using this location will fall back to office.`)) return;
+  const ok = await uiConfirm({
+    title: 'Delete location?',
+    message: `Delete location "${loc.name}"?\n\nExisting schedule entries using this location will fall back to office.`,
+    confirmText: 'Delete',
+    danger: true,
+  });
+  if (!ok) return;
   if (deleteCustomLocation(key)) {
     renderLocationList();
     populateLocationDropdowns();

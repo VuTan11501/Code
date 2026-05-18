@@ -249,6 +249,80 @@ function toast(msg, cls) {
 }
 
 // ═══════════════════════════════════════════════════
+//  UI CONFIRM (shadcn-style dialog — replaces window.confirm)
+// ═══════════════════════════════════════════════════
+let _uiConfirmResolve = null;
+let _uiConfirmKeyHandler = null;
+
+function uiConfirm(opts = {}) {
+  const {
+    title = 'Confirm',
+    message = 'Are you sure?',
+    confirmText = 'Confirm',
+    cancelText = 'Cancel',
+    danger = false,
+  } = (typeof opts === 'string' ? { message: opts } : opts);
+
+  return new Promise(resolve => {
+    const dlg = document.getElementById('uiConfirmDialog');
+    if (!dlg) { resolve(window.confirm(message)); return; }
+    document.getElementById('uiConfirmTitle').textContent = title;
+    document.getElementById('uiConfirmMessage').textContent = message;
+    const okBtn = document.getElementById('uiConfirmOkBtn');
+    const cancelBtn = document.getElementById('uiConfirmCancelBtn');
+    okBtn.textContent = confirmText;
+    cancelBtn.textContent = cancelText;
+    okBtn.className = 'btn sm ' + (danger ? 'danger' : 'primary');
+    _uiConfirmResolve = resolve;
+    dlg.classList.add('open');
+    // Focus the safe button (cancel) by default
+    setTimeout(() => cancelBtn.focus(), 50);
+    // ESC to cancel, Enter to confirm
+    _uiConfirmKeyHandler = (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); _uiConfirmClose(false); }
+      else if (e.key === 'Enter') { e.preventDefault(); _uiConfirmClose(true); }
+    };
+    document.addEventListener('keydown', _uiConfirmKeyHandler);
+  });
+}
+
+function _uiConfirmClose(value) {
+  const dlg = document.getElementById('uiConfirmDialog');
+  if (dlg) dlg.classList.remove('open');
+  if (_uiConfirmKeyHandler) {
+    document.removeEventListener('keydown', _uiConfirmKeyHandler);
+    _uiConfirmKeyHandler = null;
+  }
+  const r = _uiConfirmResolve;
+  _uiConfirmResolve = null;
+  if (r) r(!!value);
+}
+
+// Wire up buttons + overlay click on DOM ready
+document.addEventListener('DOMContentLoaded', () => {
+  const dlg = document.getElementById('uiConfirmDialog');
+  if (!dlg) return;
+  document.getElementById('uiConfirmOkBtn').addEventListener('click', () => _uiConfirmClose(true));
+  document.getElementById('uiConfirmCancelBtn').addEventListener('click', () => _uiConfirmClose(false));
+  dlg.addEventListener('click', (e) => { if (e.target === dlg) _uiConfirmClose(false); });
+});
+
+// Replacement for the inline "delete vault" handler (was using window.confirm in HTML)
+async function deleteVault() {
+  const ok = await uiConfirm({
+    title: 'Delete vault?',
+    message: 'This will permanently delete the vault and all stored data. This cannot be undone.',
+    confirmText: 'Delete vault',
+    danger: true,
+  });
+  if (!ok) return;
+  localStorage.removeItem(STORAGE_KEY);
+  localStorage.removeItem('wf_dash_vault_meta');
+  lock();
+  toast('Vault deleted', 'warning');
+}
+
+// ═══════════════════════════════════════════════════
 //  API & UTILITIES
 // ═══════════════════════════════════════════════════
 // ETag cache for conditional requests (304 = no change, very fast)
@@ -534,7 +608,7 @@ function checkForNewFailures(allRuns) {
 
 if ('serviceWorker' in navigator) {
   // Bump query string to force update of stale SW on existing PWA installs
-  navigator.serviceWorker.register('sw.js?v=6').catch(() => {});
+  navigator.serviceWorker.register('sw.js?v=7').catch(() => {});
 }
 
 // ═══════════════════════════════════════════════════

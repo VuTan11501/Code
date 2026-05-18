@@ -236,7 +236,7 @@ async function triggerWorkflow(file) {
 
 async function cancelWorkflowRun(runId) {
   if (!sessionToken) { toast('⚠️ Not authenticated'); return; }
-  if (!confirm('Cancel this workflow run?')) return;
+  if (!await uiConfirm({ title: 'Cancel run?', message: 'Cancel this workflow run?', confirmText: 'Cancel run', danger: true })) return;
   try {
     const res = await fetch(`${API}/repos/${OWNER}/${REPO}/actions/runs/${runId}/cancel`, {
       method: 'POST',

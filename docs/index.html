@@ -66,7 +66,7 @@ tailwind.config = {
   },
 }
 </script>
-<link rel="stylesheet" href="css/style.css?v=6">
+<link rel="stylesheet" href="css/style.css?v=7">
 <link rel="preconnect" href="https://api.github.com">
 </head>
 <body class="bg-background text-foreground font-sans text-sm antialiased min-h-dvh overflow-x-hidden">
@@ -130,7 +130,7 @@ tailwind.config = {
           <span class="live-interval" id="liveInterval">30s</span>
         </div>
         <span class="text-xs text-muted-foreground" id="lastUpdate" aria-live="polite"></span>
-        <button class="btn btn-icon p-2 min-w-[36px] min-h-[36px]" id="notifBtn" onclick="requestNotifPermission()" title="Notifications" aria-label="Toggle notifications"><span data-icon="bell" data-size="16"></span></button>
+        <button class="btn btn-icon p-2 min-w-[36px] min-h-[36px]" id="notifBtn" onclick="requestNotifPermission()" data-tooltip="Notifications" aria-label="Toggle notifications"><span data-icon="bell" data-size="16"></span></button>
         <button class="btn danger sm" onclick="lock()" aria-label="Lock dashboard"><span data-icon="lock" data-size="14"></span> Lock</button>
       </div>
     </header>
@@ -347,7 +347,7 @@ tailwind.config = {
         <nav role="navigation" aria-label="pagination" class="sched-pagination mt-3" id="schedulePagination"></nav>
         <div class="flex items-center justify-between mt-3 text-xs text-muted-foreground" id="tableFooter">
           <span id="tableCount">0 entries</span>
-          <button class="btn sm" onclick="loadScheduledRuns()" title="Refresh"><span data-icon="refresh" data-size="14"></span> Refresh</button>
+          <button class="btn sm" onclick="loadScheduledRuns()" data-tooltip="Refresh"><span data-icon="refresh" data-size="14"></span> Refresh</button>
         </div>
       </section>
     </div>
@@ -400,7 +400,7 @@ tailwind.config = {
                 <span data-icon="upload" data-size="14"></span> Import Vault
                 <input type="file" accept=".json" onchange="importVault(event)" class="hidden" aria-label="Import vault file">
               </label>
-              <button class="btn btn-outline sm danger-outline" onclick="if(confirm('Delete vault and all data? This cannot be undone.')){localStorage.removeItem(STORAGE_KEY);localStorage.removeItem('wf_dash_vault_meta');lock();toast('Vault deleted','warning')}" type="button">
+              <button class="btn btn-outline sm danger-outline" onclick="deleteVault()" type="button">
                 <span data-icon="trash" data-size="14"></span> Delete Vault
               </button>
             </div>
@@ -677,13 +677,29 @@ tailwind.config = {
   </div>
 </div>
 
+<!-- UI Confirm Dialog (shadcn-style replacement for browser confirm/alert) -->
+<div class="dialog-overlay modal-overlay" id="uiConfirmDialog" role="alertdialog" aria-modal="true" aria-labelledby="uiConfirmTitle" aria-describedby="uiConfirmMessage">
+  <div class="dialog-content modal" style="max-width:420px;">
+    <div class="dialog-header modal-header">
+      <h3 class="dialog-title text-base font-semibold" id="uiConfirmTitle">Confirm</h3>
+    </div>
+    <div class="dialog-body modal-body">
+      <p id="uiConfirmMessage" class="text-sm text-muted-foreground leading-relaxed whitespace-pre-line m-0"></p>
+    </div>
+    <div class="dialog-footer flex justify-end gap-2 px-5 pb-5">
+      <button type="button" class="btn btn-outline sm" id="uiConfirmCancelBtn">Cancel</button>
+      <button type="button" class="btn primary sm" id="uiConfirmOkBtn">Confirm</button>
+    </div>
+  </div>
+</div>
+
 <!-- Toast -->
 <div class="toast-container">
   <div class="toast" id="toast" role="alert" aria-live="assertive"></div>
 </div>
 
 <!-- Scripts (order matters) -->
-<script src="js/icons.js?v=6"></script>
+<script src="js/icons.js?v=7"></script>
 <script src="js/no-autofill.js?v=8"></script>
 <script src="js/locations.js?v=8"></script>
 <script src="js/app.js?v=8"></script>
