@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="dark">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
@@ -11,48 +11,103 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = {
+  darkMode: 'class',
+  theme: {
+    extend: {
+      colors: {
+        border: 'rgba(255,255,255,0.08)',
+        input: 'rgba(255,255,255,0.12)',
+        ring: '#3b82f6',
+        background: '#09090b',
+        foreground: '#fafafa',
+        primary: { DEFAULT: '#3b82f6', foreground: '#ffffff' },
+        secondary: { DEFAULT: '#1e1e1e', foreground: '#fafafa' },
+        destructive: { DEFAULT: '#dc2626', foreground: '#fafafa' },
+        muted: { DEFAULT: '#171717', foreground: '#a1a1aa' },
+        accent: { DEFAULT: '#1a1a2e', foreground: '#fafafa' },
+        card: { DEFAULT: '#0a0a0a', foreground: '#fafafa' },
+        popover: { DEFAULT: '#0a0a0a', foreground: '#fafafa' },
+        success: { DEFAULT: '#22c55e', foreground: '#ffffff' },
+        warning: { DEFAULT: '#eab308', foreground: '#1c1917' },
+      },
+      fontFamily: {
+        sans: ['Inter', 'ui-sans-serif', 'system-ui', '-apple-system', 'sans-serif'],
+        mono: ['"JetBrains Mono"', '"SF Mono"', '"Fira Code"', 'ui-monospace', 'monospace'],
+      },
+      borderRadius: {
+        lg: '0.625rem',
+        md: '0.5rem',
+        sm: '0.375rem',
+      },
+      keyframes: {
+        'shimmer': { '0%': { backgroundPosition: '200% 0' }, '100%': { backgroundPosition: '-200% 0' } },
+        'fade-in': { from: { opacity: '0' }, to: { opacity: '1' } },
+        'modal-in': { from: { opacity: '0', transform: 'scale(0.96) translateY(8px)' }, to: { opacity: '1', transform: 'scale(1) translateY(0)' } },
+        'page-in': { from: { opacity: '0', transform: 'translateY(6px)' }, to: { opacity: '1', transform: 'translateY(0)' } },
+        'sheet-up': { from: { transform: 'translateY(100%)' }, to: { transform: 'translateY(0)' } },
+        'live-pulse': { '0%, 100%': { opacity: '1' }, '50%': { opacity: '0.3' } },
+        'status-flash': { '0%': { boxShadow: '0 0 0 3px rgba(59,130,246,0.15)' }, '100%': { boxShadow: 'none' } },
+        'picker-slide': { from: { opacity: '0', transform: 'translateY(-6px)' }, to: { opacity: '1', transform: 'translateY(0)' } },
+      },
+      animation: {
+        'shimmer': 'shimmer 1.8s infinite',
+        'fade-in': 'fade-in 150ms ease',
+        'modal-in': 'modal-in 300ms cubic-bezier(0.16,1,0.3,1)',
+        'page-in': 'page-in 300ms cubic-bezier(0.16,1,0.3,1)',
+        'sheet-up': 'sheet-up 300ms cubic-bezier(0.16,1,0.3,1)',
+        'live-pulse': 'live-pulse 2s infinite',
+        'status-flash': 'status-flash 1s cubic-bezier(0.16,1,0.3,1)',
+        'picker-slide': 'picker-slide 200ms cubic-bezier(0.16,1,0.3,1)',
+      },
+    },
+  },
+}
+</script>
 <link rel="stylesheet" href="css/style.css">
 <link rel="preconnect" href="https://api.github.com">
 </head>
-<body>
+<body class="bg-background text-foreground font-sans text-sm antialiased min-h-dvh overflow-x-hidden">
 
 <!-- Auth Screen -->
-<section id="authScreen" class="auth-screen" role="main" aria-label="Authentication">
-  <div class="card auth-card">
-    <div class="card-header" style="text-align:center">
-      <div class="lock-icon" aria-hidden="true">🔐</div>
-      <div class="card-title"><h2>Workflow Dashboard</h2></div>
-      <div class="card-description" id="authDesc">Enter passphrase to unlock</div>
+<section id="authScreen" class="auth-screen flex items-center justify-center min-h-dvh p-5" role="main" aria-label="Authentication">
+  <div class="card auth-card bg-card border border-border rounded-xl p-10 max-w-[400px] w-full text-center">
+    <div class="card-header flex flex-col items-center gap-2 pb-5 border-b border-border mb-5" style="text-align:center">
+      <div class="text-[40px] mb-4" aria-hidden="true">🔐</div>
+      <div class="card-title text-base font-semibold tracking-tight"><h2>Workflow Dashboard</h2></div>
+      <div class="card-description text-sm text-muted-foreground" id="authDesc">Enter passphrase to unlock</div>
     </div>
     <div class="card-content">
-      <div class="tabs-list" id="authTabs" role="tablist" aria-label="Authentication method">
-        <button class="tabs-trigger active" role="tab" aria-selected="true" aria-controls="unlockForm" onclick="switchTab('unlock')">Unlock</button>
-        <button class="tabs-trigger" role="tab" aria-selected="false" aria-controls="setupForm" onclick="switchTab('setup')">Setup</button>
+      <div class="tabs-list inline-flex gap-1 bg-muted rounded-lg p-1 mb-5 w-full" id="authTabs" role="tablist" aria-label="Authentication method">
+        <button class="tabs-trigger flex-1 px-3 py-2 rounded-md text-sm font-medium text-muted-foreground transition-all active" role="tab" aria-selected="true" aria-controls="unlockForm" onclick="switchTab('unlock')">Unlock</button>
+        <button class="tabs-trigger flex-1 px-3 py-2 rounded-md text-sm font-medium text-muted-foreground transition-all" role="tab" aria-selected="false" aria-controls="setupForm" onclick="switchTab('setup')">Setup</button>
       </div>
 
       <!-- Unlock form -->
       <form id="unlockForm" onsubmit="event.preventDefault();unlock()" role="tabpanel" aria-labelledby="authTabs">
-        <div class="field">
-          <input type="password" class="input" id="passphrase" placeholder="Passphrase" autocomplete="current-password" aria-label="Passphrase">
+        <div class="field flex flex-col gap-2 mb-3">
+          <input type="password" class="input w-full px-3.5 py-2.5 rounded-md border border-input bg-transparent text-foreground text-sm transition-colors focus:outline-none focus:border-ring focus:ring-2 focus:ring-ring/25 placeholder:text-muted-foreground" id="passphrase" placeholder="Passphrase" autocomplete="current-password" aria-label="Passphrase">
         </div>
-        <button type="submit" class="btn primary">🔓 Unlock</button>
+        <button type="submit" class="btn primary w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-md bg-success border border-success text-white font-semibold text-sm transition-all hover:bg-green-600 active:opacity-85 mt-2">🔓 Unlock</button>
         <div class="error" id="unlockError" role="alert">Wrong passphrase</div>
       </form>
 
       <!-- Setup form -->
       <form id="setupForm" style="display:none" onsubmit="event.preventDefault();setup()" role="tabpanel" aria-labelledby="authTabs">
-        <div class="field">
-          <input type="password" class="input" id="newToken" placeholder="GitHub PAT (ghp_... or github_pat_...)" autocomplete="off" aria-label="GitHub Personal Access Token">
+        <div class="field flex flex-col gap-2 mb-3">
+          <input type="password" class="input w-full px-3.5 py-2.5 rounded-md border border-input bg-transparent text-foreground text-sm transition-colors focus:outline-none focus:border-ring focus:ring-2 focus:ring-ring/25 placeholder:text-muted-foreground" id="newToken" placeholder="GitHub PAT (ghp_... or github_pat_...)" autocomplete="off" aria-label="GitHub Personal Access Token">
         </div>
-        <div class="field">
-          <input type="password" class="input" id="newPass" placeholder="Create passphrase (6+ chars)" autocomplete="new-password" aria-label="New passphrase">
+        <div class="field flex flex-col gap-2 mb-3">
+          <input type="password" class="input w-full px-3.5 py-2.5 rounded-md border border-input bg-transparent text-foreground text-sm transition-colors focus:outline-none focus:border-ring focus:ring-2 focus:ring-ring/25 placeholder:text-muted-foreground" id="newPass" placeholder="Create passphrase (6+ chars)" autocomplete="new-password" aria-label="New passphrase">
         </div>
-        <div class="field">
-          <input type="password" class="input" id="confirmPass" placeholder="Confirm passphrase" autocomplete="new-password" aria-label="Confirm passphrase">
+        <div class="field flex flex-col gap-2 mb-3">
+          <input type="password" class="input w-full px-3.5 py-2.5 rounded-md border border-input bg-transparent text-foreground text-sm transition-colors focus:outline-none focus:border-ring focus:ring-2 focus:ring-ring/25 placeholder:text-muted-foreground" id="confirmPass" placeholder="Confirm passphrase" autocomplete="new-password" aria-label="Confirm passphrase">
         </div>
-        <button type="submit" class="btn primary">🔑 Encrypt & Save</button>
+        <button type="submit" class="btn primary w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-md bg-success border border-success text-white font-semibold text-sm transition-all hover:bg-green-600 active:opacity-85 mt-2">🔑 Encrypt & Save</button>
         <div class="error" id="setupError" role="alert"></div>
-        <p class="field-description hint">
+        <p class="text-xs text-muted-foreground mt-4 leading-relaxed opacity-70">
           PAT is encrypted with AES-256-GCM using your passphrase.<br>
           Never stored in plaintext. Session expires on tab close.
         </p>
@@ -63,82 +118,74 @@
 
 <!-- Dashboard (hidden until authenticated) -->
 <main id="dashboard" style="display:none" role="main" aria-label="Dashboard">
-  <div class="container">
-    <header>
-      <h1><span class="icon" aria-hidden="true">⚡</span> Workflow Dashboard</h1>
-      <div class="header-actions">
+  <div class="container max-w-[1200px] mx-auto px-5 py-6 pb-8">
+    <header class="flex items-center justify-between mb-6 gap-3">
+      <h1 class="text-xl font-semibold flex items-center gap-2 tracking-tight"><span class="text-[22px]" aria-hidden="true">⚡</span> Workflow Dashboard</h1>
+      <div class="header-actions flex gap-2 items-center">
         <div class="live-indicator active" id="liveIndicator" role="status" aria-live="polite">
           <span class="live-dot" aria-hidden="true"></span>
           <span id="liveStatus">Live</span>
           <span class="live-interval" id="liveInterval">30s</span>
         </div>
-        <span class="last-update text-muted" id="lastUpdate" aria-live="polite"></span>
-        <button class="btn btn-icon icon-btn" id="notifBtn" onclick="requestNotifPermission()" title="Notifications" aria-label="Toggle notifications">🔔</button>
-        <button class="btn btn-destructive danger" onclick="lock()" aria-label="Lock dashboard">🔒 Lock</button>
+        <span class="text-xs text-muted-foreground" id="lastUpdate" aria-live="polite"></span>
+        <button class="btn btn-icon inline-flex items-center justify-center p-2 min-w-[36px] min-h-[36px] rounded-md border border-transparent bg-secondary text-foreground text-base transition-all hover:bg-[#262626] hover:border-white/15" id="notifBtn" onclick="requestNotifPermission()" title="Notifications" aria-label="Toggle notifications">🔔</button>
+        <button class="btn btn-destructive danger inline-flex items-center justify-center gap-2 px-4 py-2 rounded-md bg-red-500/10 border border-red-500/30 text-red-500 text-sm font-medium transition-all hover:bg-red-500/15 hover:border-red-500" onclick="lock()" aria-label="Lock dashboard">🔒 Lock</button>
       </div>
     </header>
 
     <!-- Navigation -->
-    <nav class="tabs-list nav-bar" role="tablist" aria-label="Main navigation">
-      <a class="tabs-trigger nav-item active" data-page="dashboard" href="#dashboard" role="tab" aria-selected="true" onclick="navigate('#dashboard')">📊 Dashboard</a>
-      <a class="tabs-trigger nav-item" data-page="schedule" href="#schedule" role="tab" aria-selected="false" onclick="navigate('#schedule')">📅 Schedule</a>
-      <a class="tabs-trigger nav-item" data-page="settings" href="#settings" role="tab" aria-selected="false" onclick="navigate('#settings')">⚙️ Settings</a>
+    <nav class="tabs-list nav-bar flex gap-1 bg-muted rounded-lg p-1 mb-6" role="tablist" aria-label="Main navigation">
+      <a class="tabs-trigger nav-item flex-1 text-center px-3 py-2 rounded-md text-sm font-medium text-muted-foreground cursor-pointer transition-all flex items-center justify-center gap-2 no-underline active" data-page="dashboard" href="#dashboard" role="tab" aria-selected="true" onclick="navigate('#dashboard')">📊 Dashboard</a>
+      <a class="tabs-trigger nav-item flex-1 text-center px-3 py-2 rounded-md text-sm font-medium text-muted-foreground cursor-pointer transition-all flex items-center justify-center gap-2 no-underline" data-page="schedule" href="#schedule" role="tab" aria-selected="false" onclick="navigate('#schedule')">📅 Schedule</a>
+      <a class="tabs-trigger nav-item flex-1 text-center px-3 py-2 rounded-md text-sm font-medium text-muted-foreground cursor-pointer transition-all flex items-center justify-center gap-2 no-underline" data-page="settings" href="#settings" role="tab" aria-selected="false" onclick="navigate('#settings')">⚙️ Settings</a>
     </nav>
 
-    <!-- ═══════════════════════════════════════════
-         PAGE: DASHBOARD
-         ═══════════════════════════════════════════ -->
+    <!-- PAGE: DASHBOARD -->
     <div class="page active" id="page-dashboard" role="tabpanel" aria-label="Dashboard page">
-      <!-- Health Score Bar -->
       <section class="health-bar" id="healthBar" aria-label="Workflow health scores">
         <div class="skeleton skeleton-health"></div>
         <div class="skeleton skeleton-health"></div>
         <div class="skeleton skeleton-health"></div>
       </section>
 
-      <div class="separator"></div>
+      <div class="separator h-px w-full bg-border my-4"></div>
 
-      <!-- Workflow Cards Grid -->
       <section class="grid" id="workflowGrid" aria-label="Workflow status cards">
         <div class="skeleton skeleton-card"></div>
         <div class="skeleton skeleton-card"></div>
         <div class="skeleton skeleton-card"></div>
       </section>
 
-      <div class="separator"></div>
+      <div class="separator h-px w-full bg-border my-4"></div>
 
       <!-- Recent Activity -->
       <section aria-label="Recent activity">
-        <div class="section-title">Recent Activity</div>
-        <div class="card">
-          <div class="card-content">
+        <div class="section-title text-sm font-medium text-muted-foreground mb-4 flex items-center gap-2">Recent Activity</div>
+        <div class="card bg-card border border-border rounded-lg overflow-hidden transition-colors hover:border-white/[0.14]">
+          <div class="card-content p-4 px-5">
             <ul class="run-list" id="recentRuns" aria-label="Recent workflow runs">
-              <li class="empty">Loading...</li>
+              <li class="empty text-muted-foreground text-sm p-5 text-center">Loading...</li>
             </ul>
           </div>
         </div>
       </section>
     </div>
 
-    <!-- ═══════════════════════════════════════════
-         PAGE: SCHEDULE
-         ═══════════════════════════════════════════ -->
+    <!-- PAGE: SCHEDULE -->
     <div class="page" id="page-schedule" role="tabpanel" aria-label="Schedule page">
-      <!-- Schedule Calendar -->
       <section aria-label="Weekly schedule">
-        <div class="section-title">📅 Weekly Schedule (JST)</div>
+        <div class="section-title text-sm font-medium text-muted-foreground mb-4 flex items-center gap-2">📅 Weekly Schedule (JST)</div>
         <div id="scheduleCalendar"></div>
       </section>
 
-      <div class="separator" style="margin-top:var(--sp-6)"></div>
+      <div class="separator h-px w-full bg-border mt-6 mb-4"></div>
 
-      <!-- Scheduled Runs -->
       <section aria-label="Scheduled runs">
-        <div class="section-title">⏰ Scheduled Runs</div>
+        <div class="section-title text-sm font-medium text-muted-foreground mb-4 flex items-center gap-2">⏰ Scheduled Runs</div>
         <div class="scheduler-panel">
           <div class="scheduler-form" role="form" aria-label="Create scheduled run">
             <div class="field scheduler-field">
-              <label class="field-label" for="schedWorkflow">Workflow</label>
+              <label class="field-label text-xs text-muted-foreground font-medium block mb-1" for="schedWorkflow">Workflow</label>
               <select class="input select-trigger" id="schedWorkflow">
                 <option value="auto-checkin.yml">🕐 Auto Checkin/Checkout</option>
                 <option value="auto-ot.yml">⏰ Auto OT Creator</option>
@@ -146,7 +193,7 @@
               </select>
             </div>
             <div class="field scheduler-field">
-              <label class="field-label" for="schedType">Type</label>
+              <label class="field-label text-xs text-muted-foreground font-medium block mb-1" for="schedType">Type</label>
               <select class="input select-trigger" id="schedType" onchange="toggleScheduleType(this.value)">
                 <option value="once">One-time</option>
                 <option value="recurring">Recurring</option>
@@ -156,7 +203,7 @@
             <!-- One-time fields -->
             <div id="onceFields">
               <div class="field scheduler-field">
-                <label class="field-label">Date (JST)</label>
+                <label class="field-label text-xs text-muted-foreground font-medium block mb-1">Date (JST)</label>
                 <div class="cal-picker" id="calPickerWrap">
                   <input type="text" class="cal-input input" id="schedDateInput" placeholder="Tap to pick date" readonly onclick="togglePicker('calPickerBody')" aria-label="Select date">
                   <div class="cal-picker-body popover-content" id="calPickerBody">
@@ -170,7 +217,7 @@
             <!-- Recurring fields -->
             <div id="recurFields" style="display:none">
               <div class="field scheduler-field">
-                <label class="field-label" for="schedPattern">Pattern</label>
+                <label class="field-label text-xs text-muted-foreground font-medium block mb-1" for="schedPattern">Pattern</label>
                 <select class="input select-trigger" id="schedPattern" onchange="togglePatternUI()">
                   <option value="daily">Every day</option>
                   <option value="weekdays">Weekdays (Mon-Fri)</option>
@@ -179,7 +226,7 @@
                 </select>
               </div>
               <div class="field scheduler-field" id="weeklyDaysField" style="display:none">
-                <label class="field-label">Days of week</label>
+                <label class="field-label text-xs text-muted-foreground font-medium block mb-1">Days of week</label>
                 <div class="day-picker" role="group" aria-label="Select days of week">
                   <label class="day-chip"><input type="checkbox" value="0"><span>Sun</span></label>
                   <label class="day-chip"><input type="checkbox" value="1" checked><span>Mon</span></label>
@@ -191,11 +238,11 @@
                 </div>
               </div>
               <div class="field scheduler-field" id="monthlyDatesField" style="display:none">
-                <label class="field-label">Days of month</label>
+                <label class="field-label text-xs text-muted-foreground font-medium block mb-1">Days of month</label>
                 <div class="month-date-grid" id="monthDateGrid" role="group" aria-label="Select days of month"></div>
               </div>
               <div class="field scheduler-field">
-                <label class="field-label">Start from</label>
+                <label class="field-label text-xs text-muted-foreground font-medium block mb-1">Start from</label>
                 <div class="cal-picker cal-picker-sm" id="calPickerStartWrap">
                   <input type="text" class="cal-input input" id="schedStartDateInput" placeholder="Tap to pick start date" readonly onclick="togglePicker('calPickerStartBody')" aria-label="Start date">
                   <div class="cal-picker-body popover-content" id="calPickerStartBody">
@@ -205,7 +252,7 @@
                 <input type="hidden" id="schedStartDate">
               </div>
               <div class="field scheduler-field">
-                <label class="field-label">End date (optional)</label>
+                <label class="field-label text-xs text-muted-foreground font-medium block mb-1">End date (optional)</label>
                 <div class="cal-picker cal-picker-sm" id="calPickerEndWrap">
                   <input type="text" class="cal-input input" id="schedEndDateInput" placeholder="No end date" readonly onclick="togglePicker('calPickerEndBody')" aria-label="End date">
                   <div class="cal-picker-body popover-content" id="calPickerEndBody">
@@ -218,33 +265,31 @@
 
             <!-- Common fields -->
             <div class="field scheduler-field">
-              <label class="field-label">Time (JST)</label>
+              <label class="field-label text-xs text-muted-foreground font-medium block mb-1">Time (JST)</label>
               <div class="time-picker" id="timePickerWrap">
                 <input type="text" class="time-input input" id="schedTimeInput" value="" readonly onclick="togglePicker('timePickerBody')" aria-label="Select time">
                 <div class="time-picker-body popover-content" id="timePickerBody">
                   <div id="timePicker"></div>
                 </div>
               </div>
-                <input type="hidden" id="schedTime" value="">
+              <input type="hidden" id="schedTime" value="">
             </div>
             <div class="field scheduler-field">
-              <label class="field-label" for="schedNote">Note (optional)</label>
-              <input type="text" class="input" id="schedNote" placeholder="e.g. makeup run, daily report">
+              <label class="field-label text-xs text-muted-foreground font-medium block mb-1" for="schedNote">Note (optional)</label>
+              <input type="text" class="input w-full px-3.5 py-2.5 rounded-md border border-input bg-transparent text-foreground text-sm transition-colors focus:outline-none focus:border-ring focus:ring-2 focus:ring-ring/25 placeholder:text-muted-foreground" id="schedNote" placeholder="e.g. makeup run, daily report">
             </div>
-            <button class="btn primary" onclick="addScheduledRun()">➕ Add Schedule</button>
+            <button class="btn primary w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-md bg-success border border-success text-white font-semibold text-sm transition-all hover:bg-green-600 active:opacity-85" onclick="addScheduledRun()">➕ Add Schedule</button>
           </div>
           <div class="scheduler-queue" id="schedulerQueue" aria-label="Scheduled runs queue">
-            <div class="empty" style="padding:16px">Loading scheduled runs...</div>
+            <div class="empty text-muted-foreground text-sm p-4 text-center">Loading scheduled runs...</div>
           </div>
         </div>
       </section>
     </div>
 
-    <!-- ═══════════════════════════════════════════
-         PAGE: SETTINGS
-         ═══════════════════════════════════════════ -->
+    <!-- PAGE: SETTINGS -->
     <div class="page" id="page-settings" role="tabpanel" aria-label="Settings page">
-      <div class="section-title">⚙️ Settings</div>
+      <div class="section-title text-sm font-medium text-muted-foreground mb-4 flex items-center gap-2">⚙️ Settings</div>
       <div class="settings-body">
         <!-- Change Passphrase -->
         <div class="card settings-card">
@@ -253,17 +298,17 @@
             <div class="card-description">Re-encrypt vault with a new passphrase.</div>
           </div>
           <div class="card-content">
-            <div class="field">
-              <input type="password" class="input" id="cpOldPass" placeholder="Current passphrase" autocomplete="current-password" aria-label="Current passphrase">
+            <div class="field flex flex-col gap-2 mb-2">
+              <input type="password" class="input w-full px-3.5 py-2.5 rounded-md border border-input bg-transparent text-foreground text-sm transition-colors focus:outline-none focus:border-ring focus:ring-2 focus:ring-ring/25 placeholder:text-muted-foreground" id="cpOldPass" placeholder="Current passphrase" autocomplete="current-password" aria-label="Current passphrase">
             </div>
-            <div class="field">
-              <input type="password" class="input" id="cpNewPass" placeholder="New passphrase (6+ chars)" autocomplete="new-password" aria-label="New passphrase">
+            <div class="field flex flex-col gap-2 mb-2">
+              <input type="password" class="input w-full px-3.5 py-2.5 rounded-md border border-input bg-transparent text-foreground text-sm transition-colors focus:outline-none focus:border-ring focus:ring-2 focus:ring-ring/25 placeholder:text-muted-foreground" id="cpNewPass" placeholder="New passphrase (6+ chars)" autocomplete="new-password" aria-label="New passphrase">
             </div>
-            <div class="field">
-              <input type="password" class="input" id="cpConfirmPass" placeholder="Confirm new passphrase" autocomplete="new-password" aria-label="Confirm new passphrase">
+            <div class="field flex flex-col gap-2 mb-2">
+              <input type="password" class="input w-full px-3.5 py-2.5 rounded-md border border-input bg-transparent text-foreground text-sm transition-colors focus:outline-none focus:border-ring focus:ring-2 focus:ring-ring/25 placeholder:text-muted-foreground" id="cpConfirmPass" placeholder="Confirm new passphrase" autocomplete="new-password" aria-label="Confirm new passphrase">
             </div>
-            <button class="btn primary btn-sm" onclick="changePassphrase()">Change Passphrase</button>
-            <div class="error" id="cpError" role="alert" style="display:none"></div>
+            <button class="btn primary inline-flex items-center justify-center gap-2 px-3 py-1.5 rounded-sm bg-success border border-success text-white font-semibold text-xs transition-all hover:bg-green-600 active:opacity-85 mt-2" onclick="changePassphrase()">Change Passphrase</button>
+            <div class="error" id="cpError" role="alert"></div>
           </div>
         </div>
 
@@ -274,11 +319,11 @@
             <div class="card-description">Transfer encrypted vault between devices.</div>
           </div>
           <div class="card-content">
-            <button class="btn btn-outline btn-sm" onclick="exportVault()" style="margin-bottom:10px">📥 Export Vault (.json)</button>
+            <button class="btn btn-outline inline-flex items-center justify-center gap-2 px-3 py-1.5 rounded-sm border border-input bg-transparent text-foreground text-xs font-medium transition-all hover:bg-accent hover:border-white/15 mb-2.5" onclick="exportVault()">📥 Export Vault (.json)</button>
             <br>
-            <label class="file-input-label">
+            <label class="file-input-label inline-flex items-center gap-2 px-4 py-2 rounded-md border border-border bg-secondary text-foreground cursor-pointer text-sm font-medium transition-all hover:bg-[#262626] hover:border-white/15">
               📤 Import Vault (.json)
-              <input type="file" accept=".json" onchange="importVault(event)" style="display:none" aria-label="Import vault file">
+              <input type="file" accept=".json" onchange="importVault(event)" class="hidden" aria-label="Import vault file">
             </label>
           </div>
         </div>
@@ -290,7 +335,7 @@
             <div class="card-description">Get browser notifications when workflows fail or complete.</div>
           </div>
           <div class="card-content">
-            <button class="btn btn-outline btn-sm" onclick="requestNotifPermission()">Enable Notifications</button>
+            <button class="btn btn-outline inline-flex items-center justify-center gap-2 px-3 py-1.5 rounded-sm border border-input bg-transparent text-foreground text-xs font-medium transition-all hover:bg-accent hover:border-white/15" onclick="requestNotifPermission()">Enable Notifications</button>
           </div>
         </div>
 
@@ -301,7 +346,7 @@
             <div class="card-description">Workflow Dashboard v3.0 — Multi-page SPA with encrypted vault. Data refreshes every 10-30s automatically.</div>
           </div>
           <div class="card-content">
-            <button class="btn btn-destructive danger btn-sm" onclick="if(confirm('Delete vault and all data?')){localStorage.removeItem(STORAGE_KEY);lock();toast('Vault deleted','warning')}">🗑 Delete Vault</button>
+            <button class="btn btn-destructive danger inline-flex items-center justify-center gap-2 px-3 py-1.5 rounded-sm bg-red-500/10 border border-red-500/30 text-red-500 text-xs font-medium transition-all hover:bg-red-500/15 hover:border-red-500" onclick="if(confirm('Delete vault and all data?')){localStorage.removeItem(STORAGE_KEY);lock();toast('Vault deleted','warning')}">🗑 Delete Vault</button>
           </div>
         </div>
       </div>
@@ -314,11 +359,11 @@
 <div class="dialog-overlay modal-overlay" id="logModal" role="dialog" aria-modal="true" aria-labelledby="logModalTitle">
   <div class="dialog-content modal">
     <div class="dialog-header modal-header">
-      <h3 class="dialog-title" id="logModalTitle">Run Logs</h3>
+      <h3 class="dialog-title text-lg font-semibold" id="logModalTitle">Run Logs</h3>
       <button class="btn btn-ghost btn-icon modal-close" onclick="closeLogModal()" aria-label="Close modal">&times;</button>
     </div>
     <div class="dialog-body modal-body" id="logModalBody">
-      <div class="empty">Loading jobs...</div>
+      <div class="empty text-muted-foreground text-sm p-5 text-center">Loading jobs...</div>
     </div>
   </div>
 </div>
