@@ -57,6 +57,7 @@ function saveSession(token) {
 function clearSession() {
   sessionToken = null;
   sessionStorage.removeItem(SESSION_KEY);
+  if (typeof cachedGithubUser !== 'undefined') cachedGithubUser = null;
 }
 
 async function deriveKey(passphrase, salt) {
