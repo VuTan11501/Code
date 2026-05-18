@@ -124,9 +124,9 @@ function renderHealthBar(workflowResults) {
 
     return `<div class="health-item">
       <div class="health-ring">
-        <svg width="52" height="52" viewBox="0 0 52 52">
-          <circle class="ring-bg" cx="26" cy="26" r="20"/>
-          <circle class="ring-fg" cx="26" cy="26" r="20" stroke="${color}"
+        <svg viewBox="0 0 48 48" aria-hidden="true">
+          <circle class="ring-bg" cx="24" cy="24" r="20"/>
+          <circle class="ring-fg" cx="24" cy="24" r="20" stroke="${color}"
             stroke-dasharray="${circ}" stroke-dashoffset="${offset}"/>
         </svg>
         <span class="health-pct" style="color:${color}">${display}</span>
@@ -370,9 +370,14 @@ async function refresh() {
     consecutiveErrors++;
     updateLiveIndicator('error', pollInterval);
     if (grid) {
-      grid.innerHTML = `<div class="empty">❌ ${e.message}<br><small>Retrying automatically… (attempt ${consecutiveErrors})</small></div>`;
+      grid.innerHTML = `<div class="card" style="grid-column:1/-1">
+        <div class="card-body" style="text-align:center;padding:var(--sp-8)">
+          <div style="font-size:32px;margin-bottom:var(--sp-3)">⚠️</div>
+          <div style="font-weight:600;margin-bottom:var(--sp-2)">${e.message}</div>
+          <div class="text-muted" style="font-size:var(--fs-sm)">Retrying automatically… (attempt ${consecutiveErrors})</div>
+        </div>
+      </div>`;
     }
-    // Show toast on first error so mobile users see it
     if (consecutiveErrors === 1) toast(`❌ ${e.message}`, 'error');
   } finally {
     isPolling = false;

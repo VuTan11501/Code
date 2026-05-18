@@ -173,11 +173,17 @@ function showDashboard() {
 function navigate(hash) {
   const page = hash.replace('#', '') || 'dashboard';
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => {
+    n.classList.remove('active');
+    n.setAttribute('aria-selected', 'false');
+  });
   const target = document.getElementById('page-' + page);
   const nav = document.querySelector(`[data-page="${page}"]`);
   if (target) target.classList.add('active');
-  if (nav) nav.classList.add('active');
+  if (nav) {
+    nav.classList.add('active');
+    nav.setAttribute('aria-selected', 'true');
+  }
 
   // Initialize page-specific content
   if (page === 'schedule' && typeof initSchedulePage === 'function') initSchedulePage();
@@ -197,7 +203,9 @@ function toast(msg, cls) {
   el.textContent = msg;
   el.className = 'toast show' + (cls ? ' ' + cls : '');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.remove('show'), 4000);
+  // Errors persist longer
+  const duration = cls === 'error' ? 8000 : cls === 'warning' ? 6000 : 4000;
+  toastTimer = setTimeout(() => el.classList.remove('show'), duration);
 }
 
 // ═══════════════════════════════════════════════════

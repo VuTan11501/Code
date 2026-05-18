@@ -6,88 +6,94 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#0d1117">
+<meta name="color-scheme" content="dark">
 <title>Workflow Dashboard</title>
 <link rel="stylesheet" href="css/style.css">
+<link rel="preconnect" href="https://api.github.com">
 </head>
 <body>
 
 <!-- Auth Screen -->
-<div id="authScreen" class="auth-screen">
+<div id="authScreen" class="auth-screen" role="main" aria-label="Authentication">
   <div class="auth-card">
-    <div class="lock-icon">🔐</div>
+    <div class="lock-icon" aria-hidden="true">🔐</div>
     <h2>Workflow Dashboard</h2>
     <p id="authDesc">Enter passphrase to unlock</p>
 
-    <div class="auth-tabs" id="authTabs">
-      <button class="auth-tab active" onclick="switchTab('unlock')">Unlock</button>
-      <button class="auth-tab" onclick="switchTab('setup')">Setup</button>
+    <div class="auth-tabs" id="authTabs" role="tablist">
+      <button class="auth-tab active" role="tab" aria-selected="true" onclick="switchTab('unlock')">Unlock</button>
+      <button class="auth-tab" role="tab" aria-selected="false" onclick="switchTab('setup')">Setup</button>
     </div>
 
     <!-- Unlock form -->
-    <div id="unlockForm">
-      <input type="password" id="passphrase" placeholder="Passphrase" autocomplete="off" onkeydown="if(event.key==='Enter')unlock()">
-      <button class="btn primary" onclick="unlock()">🔓 Unlock</button>
-      <div class="error" id="unlockError">Wrong passphrase</div>
-    </div>
+    <form id="unlockForm" onsubmit="event.preventDefault();unlock()">
+      <input type="password" id="passphrase" placeholder="Passphrase" autocomplete="current-password" aria-label="Passphrase">
+      <button type="submit" class="btn primary">🔓 Unlock</button>
+      <div class="error" id="unlockError" role="alert">Wrong passphrase</div>
+    </form>
 
     <!-- Setup form -->
-    <div id="setupForm" style="display:none">
-      <input type="password" id="newToken" placeholder="GitHub PAT (ghp_... or github_pat_...)">
-      <input type="password" id="newPass" placeholder="Create passphrase (6+ chars)">
-      <input type="password" id="confirmPass" placeholder="Confirm passphrase" onkeydown="if(event.key==='Enter')setup()">
-      <button class="btn primary" onclick="setup()">🔑 Encrypt & Save</button>
-      <div class="error" id="setupError"></div>
+    <form id="setupForm" style="display:none" onsubmit="event.preventDefault();setup()">
+      <input type="password" id="newToken" placeholder="GitHub PAT (ghp_... or github_pat_...)" autocomplete="off" aria-label="GitHub Personal Access Token">
+      <input type="password" id="newPass" placeholder="Create passphrase (6+ chars)" autocomplete="new-password" aria-label="New passphrase">
+      <input type="password" id="confirmPass" placeholder="Confirm passphrase" autocomplete="new-password" aria-label="Confirm passphrase">
+      <button type="submit" class="btn primary">🔑 Encrypt & Save</button>
+      <div class="error" id="setupError" role="alert"></div>
       <div class="hint">
         PAT is encrypted with AES-256-GCM using your passphrase.<br>
         Never stored in plaintext. Session expires on tab close.
       </div>
-    </div>
+    </form>
   </div>
 </div>
 
 <!-- Dashboard (hidden until authenticated) -->
-<div id="dashboard" style="display:none">
+<div id="dashboard" style="display:none" role="main" aria-label="Dashboard">
   <div class="container">
     <header>
-      <h1><span class="icon">⚡</span> Workflow Dashboard</h1>
+      <h1><span class="icon" aria-hidden="true">⚡</span> Workflow Dashboard</h1>
       <div class="header-actions">
-        <div class="live-indicator active" id="liveIndicator">
-          <span class="live-dot"></span>
+        <div class="live-indicator active" id="liveIndicator" role="status" aria-live="polite">
+          <span class="live-dot" aria-hidden="true"></span>
           <span id="liveStatus">Live</span>
           <span class="live-interval" id="liveInterval">30s</span>
         </div>
-        <span class="last-update" id="lastUpdate"></span>
-        <button class="btn icon-btn" id="notifBtn" onclick="requestNotifPermission()" title="Notifications">🔔</button>
-        <button class="btn danger" onclick="lock()">🔒 Lock</button>
+        <span class="last-update text-muted" id="lastUpdate" aria-live="polite"></span>
+        <button class="btn icon-btn" id="notifBtn" onclick="requestNotifPermission()" title="Notifications" aria-label="Toggle notifications">🔔</button>
+        <button class="btn danger" onclick="lock()" aria-label="Lock dashboard">🔒 Lock</button>
       </div>
     </header>
 
     <!-- Navigation -->
-    <nav class="nav-bar">
-      <a class="nav-item active" data-page="dashboard" href="#dashboard" onclick="navigate('#dashboard')">📊 Dashboard</a>
-      <a class="nav-item" data-page="schedule" href="#schedule" onclick="navigate('#schedule')">📅 Schedule</a>
-      <a class="nav-item" data-page="settings" href="#settings" onclick="navigate('#settings')">⚙️ Settings</a>
+    <nav class="nav-bar" role="tablist" aria-label="Main navigation">
+      <a class="nav-item active" data-page="dashboard" href="#dashboard" role="tab" aria-selected="true" onclick="navigate('#dashboard')">📊 Dashboard</a>
+      <a class="nav-item" data-page="schedule" href="#schedule" role="tab" aria-selected="false" onclick="navigate('#schedule')">📅 Schedule</a>
+      <a class="nav-item" data-page="settings" href="#settings" role="tab" aria-selected="false" onclick="navigate('#settings')">⚙️ Settings</a>
     </nav>
 
     <!-- ═══════════════════════════════════════════
          PAGE: DASHBOARD
          ═══════════════════════════════════════════ -->
-    <div class="page active" id="page-dashboard">
+    <div class="page active" id="page-dashboard" role="tabpanel">
       <!-- Health Score Bar -->
-      <div class="health-bar" id="healthBar">
-        <div class="empty" style="width:100%">Loading health...</div>
+      <div class="health-bar" id="healthBar" aria-label="Workflow health scores">
+        <div class="skeleton skeleton-health"></div>
+        <div class="skeleton skeleton-health"></div>
+        <div class="skeleton skeleton-health"></div>
       </div>
 
       <!-- Workflow Cards Grid -->
-      <div class="grid" id="workflowGrid">
-        <div class="empty">Loading workflows...</div>
+      <div class="grid" id="workflowGrid" aria-label="Workflow status cards">
+        <div class="skeleton skeleton-card"></div>
+        <div class="skeleton skeleton-card"></div>
+        <div class="skeleton skeleton-card"></div>
       </div>
 
       <!-- Recent Activity -->
       <div class="section-title">Recent Activity</div>
       <div class="card">
         <div class="card-body">
-          <ul class="run-list" id="recentRuns">
+          <ul class="run-list" id="recentRuns" aria-label="Recent workflow runs">
             <li class="empty">Loading...</li>
           </ul>
         </div>
@@ -97,17 +103,17 @@
     <!-- ═══════════════════════════════════════════
          PAGE: SCHEDULE
          ═══════════════════════════════════════════ -->
-    <div class="page" id="page-schedule">
+    <div class="page" id="page-schedule" role="tabpanel">
       <!-- Schedule Calendar -->
       <div class="section-title">📅 Weekly Schedule (JST)</div>
       <div id="scheduleCalendar"></div>
 
       <!-- Scheduled Runs -->
-      <div class="section-title" style="margin-top:24px">⏰ Scheduled Runs</div>
+      <div class="section-title" style="margin-top:var(--sp-6)">⏰ Scheduled Runs</div>
       <div class="scheduler-panel">
-        <div class="scheduler-form">
+        <div class="scheduler-form" role="form" aria-label="Create scheduled run">
           <div class="scheduler-field">
-            <label>Workflow</label>
+            <label for="schedWorkflow">Workflow</label>
             <select id="schedWorkflow">
               <option value="auto-checkin.yml">🕐 Auto Checkin/Checkout</option>
               <option value="auto-ot.yml">⏰ Auto OT Creator</option>
@@ -115,7 +121,7 @@
             </select>
           </div>
           <div class="scheduler-field">
-            <label>Type</label>
+            <label for="schedType">Type</label>
             <select id="schedType" onchange="toggleScheduleType(this.value)">
               <option value="once">One-time</option>
               <option value="recurring">Recurring</option>
@@ -127,7 +133,7 @@
             <div class="scheduler-field">
               <label>Date (JST)</label>
               <div class="cal-picker" id="calPickerWrap">
-                <input type="text" class="cal-input" id="schedDateInput" placeholder="Tap to pick date" readonly onclick="togglePicker('calPickerBody')">
+                <input type="text" class="cal-input" id="schedDateInput" placeholder="Tap to pick date" readonly onclick="togglePicker('calPickerBody')" aria-label="Select date">
                 <div class="cal-picker-body" id="calPickerBody">
                   <div id="calPicker"></div>
                 </div>
@@ -139,7 +145,7 @@
           <!-- Recurring fields -->
           <div id="recurFields" style="display:none">
             <div class="scheduler-field">
-              <label>Pattern</label>
+              <label for="schedPattern">Pattern</label>
               <select id="schedPattern" onchange="togglePatternUI()">
                 <option value="daily">Every day</option>
                 <option value="weekdays">Weekdays (Mon-Fri)</option>
@@ -149,7 +155,7 @@
             </div>
             <div class="scheduler-field" id="weeklyDaysField" style="display:none">
               <label>Days of week</label>
-              <div class="day-picker">
+              <div class="day-picker" role="group" aria-label="Select days of week">
                 <label class="day-chip"><input type="checkbox" value="0"><span>Sun</span></label>
                 <label class="day-chip"><input type="checkbox" value="1" checked><span>Mon</span></label>
                 <label class="day-chip"><input type="checkbox" value="2" checked><span>Tue</span></label>
@@ -161,12 +167,12 @@
             </div>
             <div class="scheduler-field" id="monthlyDatesField" style="display:none">
               <label>Days of month</label>
-              <div class="month-date-grid" id="monthDateGrid"></div>
+              <div class="month-date-grid" id="monthDateGrid" role="group" aria-label="Select days of month"></div>
             </div>
             <div class="scheduler-field">
               <label>Start from</label>
               <div class="cal-picker cal-picker-sm" id="calPickerStartWrap">
-                <input type="text" class="cal-input" id="schedStartDateInput" placeholder="Tap to pick start date" readonly onclick="togglePicker('calPickerStartBody')">
+                <input type="text" class="cal-input" id="schedStartDateInput" placeholder="Tap to pick start date" readonly onclick="togglePicker('calPickerStartBody')" aria-label="Start date">
                 <div class="cal-picker-body" id="calPickerStartBody">
                   <div id="calPickerStart"></div>
                 </div>
@@ -176,7 +182,7 @@
             <div class="scheduler-field">
               <label>End date (optional)</label>
               <div class="cal-picker cal-picker-sm" id="calPickerEndWrap">
-                <input type="text" class="cal-input" id="schedEndDateInput" placeholder="Tap to pick end date" readonly onclick="togglePicker('calPickerEndBody')">
+                <input type="text" class="cal-input" id="schedEndDateInput" placeholder="No end date" readonly onclick="togglePicker('calPickerEndBody')" aria-label="End date">
                 <div class="cal-picker-body" id="calPickerEndBody">
                   <div id="calPickerEnd"></div>
                 </div>
@@ -189,7 +195,7 @@
           <div class="scheduler-field">
             <label>Time (JST)</label>
             <div class="time-picker" id="timePickerWrap">
-              <input type="text" class="time-input" id="schedTimeInput" value="09:00" readonly onclick="togglePicker('timePickerBody')">
+              <input type="text" class="time-input" id="schedTimeInput" value="09:00" readonly onclick="togglePicker('timePickerBody')" aria-label="Select time">
               <div class="time-picker-body" id="timePickerBody">
                 <div id="timePicker"></div>
               </div>
@@ -197,12 +203,12 @@
             <input type="hidden" id="schedTime" value="09:00">
           </div>
           <div class="scheduler-field">
-            <label>Note (optional)</label>
+            <label for="schedNote">Note (optional)</label>
             <input type="text" id="schedNote" placeholder="e.g. makeup run, daily report">
           </div>
           <button class="btn primary" onclick="addScheduledRun()">➕ Add Schedule</button>
         </div>
-        <div class="scheduler-queue" id="schedulerQueue">
+        <div class="scheduler-queue" id="schedulerQueue" aria-label="Scheduled runs queue">
           <div class="empty" style="padding:16px">Loading scheduled runs...</div>
         </div>
       </div>
@@ -211,18 +217,18 @@
     <!-- ═══════════════════════════════════════════
          PAGE: SETTINGS
          ═══════════════════════════════════════════ -->
-    <div class="page" id="page-settings">
+    <div class="page" id="page-settings" role="tabpanel">
       <div class="section-title">⚙️ Settings</div>
       <div class="settings-body">
         <!-- Change Passphrase -->
         <div class="settings-card">
           <h4>🔑 Change Passphrase</h4>
           <p>Re-encrypt vault with a new passphrase.</p>
-          <input type="password" id="cpOldPass" placeholder="Current passphrase">
-          <input type="password" id="cpNewPass" placeholder="New passphrase (6+ chars)">
-          <input type="password" id="cpConfirmPass" placeholder="Confirm new passphrase">
+          <input type="password" id="cpOldPass" placeholder="Current passphrase" autocomplete="current-password">
+          <input type="password" id="cpNewPass" placeholder="New passphrase (6+ chars)" autocomplete="new-password">
+          <input type="password" id="cpConfirmPass" placeholder="Confirm new passphrase" autocomplete="new-password">
           <button class="btn primary sm" onclick="changePassphrase()">Change Passphrase</button>
-          <div class="error" id="cpError" style="display:none"></div>
+          <div class="error" id="cpError" role="alert" style="display:none"></div>
         </div>
         <!-- Export / Import Vault -->
         <div class="settings-card">
@@ -232,20 +238,20 @@
           <br>
           <label class="file-input-label">
             📤 Import Vault (.json)
-            <input type="file" accept=".json" onchange="importVault(event)" style="display:none">
+            <input type="file" accept=".json" onchange="importVault(event)" style="display:none" aria-label="Import vault file">
           </label>
         </div>
         <!-- Notifications -->
         <div class="settings-card">
           <h4>🔔 Notifications</h4>
-          <p>Get browser notifications when workflows fail.</p>
+          <p>Get browser notifications when workflows fail or complete.</p>
           <button class="btn sm" onclick="requestNotifPermission()">Enable Notifications</button>
         </div>
         <!-- About -->
         <div class="settings-card">
           <h4>ℹ️ About</h4>
-          <p>Workflow Dashboard v2.0<br>Multi-page SPA with encrypted vault.<br>Data refreshes every 10-30s automatically.</p>
-          <button class="btn danger sm" onclick="if(confirm('Delete vault?')){localStorage.removeItem(STORAGE_KEY);lock();toast('Vault deleted')}">🗑 Delete Vault</button>
+          <p>Workflow Dashboard v3.0<br>Multi-page SPA with encrypted vault.<br>Data refreshes every 10-30s automatically.</p>
+          <button class="btn danger sm" onclick="if(confirm('Delete vault and all data?')){localStorage.removeItem(STORAGE_KEY);lock();toast('Vault deleted','warning')}">🗑 Delete Vault</button>
         </div>
       </div>
     </div>
@@ -254,11 +260,11 @@
 </div>
 
 <!-- Log Viewer Modal -->
-<div class="modal-overlay" id="logModal">
+<div class="modal-overlay" id="logModal" role="dialog" aria-modal="true" aria-labelledby="logModalTitle">
   <div class="modal">
     <div class="modal-header">
       <h3 id="logModalTitle">Run Logs</h3>
-      <button class="modal-close" onclick="closeLogModal()">&times;</button>
+      <button class="modal-close" onclick="closeLogModal()" aria-label="Close modal">&times;</button>
     </div>
     <div class="modal-body" id="logModalBody">
       <div class="empty">Loading jobs...</div>
@@ -267,7 +273,7 @@
 </div>
 
 <!-- Toast -->
-<div class="toast" id="toast"></div>
+<div class="toast" id="toast" role="alert" aria-live="assertive"></div>
 
 <!-- Scripts (order matters) -->
 <script src="js/app.js"></script>
