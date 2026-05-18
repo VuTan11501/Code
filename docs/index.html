@@ -115,7 +115,8 @@ a:hover { text-decoration: underline; }
 .collapsible-body.open { max-height: 2000px; }
 
 /* Schedule Calendar */
-.schedule-grid { display: grid; grid-template-columns: 60px repeat(7, 1fr); gap: 1px; background: var(--border); border-radius: 8px; overflow: hidden; margin-bottom: 24px; font-size: 12px; }
+.schedule-grid { display: grid; grid-template-columns: 60px repeat(7, 1fr); gap: 1px; background: var(--border); border-radius: 8px; overflow: hidden; margin-bottom: 24px; font-size: 12px; min-width: 380px; }
+.schedule-grid-wrapper { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 0 -4px; padding: 0 4px; }
 .schedule-cell { background: var(--surface); padding: 6px 4px; min-height: 36px; display: flex; flex-direction: column; gap: 2px; align-items: center; }
 .schedule-cell.header { font-weight: 600; color: var(--muted); text-transform: uppercase; font-size: 11px; justify-content: center; }
 .schedule-cell.time-label { justify-content: center; font-weight: 500; color: var(--muted); font-size: 11px; font-family: monospace; }
@@ -209,9 +210,15 @@ a:hover { text-decoration: underline; }
 .sched-toggle.active::after { transform: translateX(18px); background: #fff; }
 
 /* Custom Calendar Picker */
-.cal-picker { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 12px; user-select: none; }
+.cal-picker { user-select: none; }
+.cal-picker-body { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 12px; margin-top: 6px; display: none; animation: pickerSlide 0.2s ease; }
+.cal-picker-body.open { display: block; }
+@keyframes pickerSlide { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
+.cal-input { width: 100%; padding: 12px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 16px; cursor: pointer; -webkit-appearance: none; }
+.cal-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(88,166,255,0.15); }
+.cal-input::placeholder { color: var(--muted); }
 .cal-picker-sm .cal-grid { font-size: 11px; }
-.cal-picker-sm { padding: 8px; }
+.cal-picker-sm .cal-picker-body { padding: 8px; }
 .cal-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
 .cal-nav button { background: none; border: none; color: var(--accent); font-size: 18px; cursor: pointer; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; transition: background 0.15s; -webkit-tap-highlight-color: transparent; }
 .cal-nav button:hover, .cal-nav button:active { background: rgba(88,166,255,0.1); }
@@ -231,7 +238,11 @@ a:hover { text-decoration: underline; }
 .cal-grid .cal-day.selected.sun, .cal-grid .cal-day.selected.sat { color: #fff; }
 
 /* Custom Time Picker */
-.time-picker { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 12px; }
+.time-picker { user-select: none; }
+.time-input { width: 100%; padding: 12px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 16px; cursor: pointer; -webkit-appearance: none; font-family: 'SF Mono', 'Menlo', monospace; }
+.time-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(88,166,255,0.15); }
+.time-picker-body { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 12px; margin-top: 6px; display: none; animation: pickerSlide 0.2s ease; }
+.time-picker-body.open { display: block; }
 .time-display { text-align: center; font-size: 28px; font-weight: 700; font-family: 'SF Mono', 'Menlo', monospace; color: var(--accent); margin-bottom: 12px; letter-spacing: 2px; }
 .time-section { margin-bottom: 10px; }
 .time-section-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
@@ -288,8 +299,15 @@ a:hover { text-decoration: underline; }
   .day-chip span { padding: 10px 12px; font-size: 13px; min-width: 40px; }
   .quick-pick { padding: 8px 14px; font-size: 13px; }
 
-  .schedule-grid { font-size: 10px; gap: 2px; }
+  .schedule-grid { font-size: 10px; gap: 2px; min-width: 360px; }
+  .schedule-grid-wrapper { margin: 0 -12px; padding: 0 12px; }
   .schedule-cell { padding: 4px 2px; }
+
+  /* Picker inputs on mobile */
+  .cal-input, .time-input { padding: 14px; font-size: 16px; border-radius: 10px; }
+  .cal-picker-body, .time-picker-body { border-radius: 12px; }
+  .time-grid .time-btn { min-width: 38px; padding: 10px 8px; }
+  .cal-grid .cal-day { min-height: 40px; font-size: 14px; }
 
   .sched-item { padding: 12px 0; gap: 6px; }
   .sched-item .sched-wf { font-size: 13px; flex-basis: 100%; }
@@ -429,7 +447,12 @@ a:hover { text-decoration: underline; }
           <div id="onceFields">
             <div class="scheduler-field">
               <label>Date (JST)</label>
-              <div class="cal-picker" id="calPicker"></div>
+              <div class="cal-picker" id="calPickerWrap">
+                <input type="text" class="cal-input" id="schedDateInput" placeholder="Tap to pick date" readonly onclick="togglePicker('calPickerBody')">
+                <div class="cal-picker-body" id="calPickerBody">
+                  <div id="calPicker"></div>
+                </div>
+              </div>
               <input type="hidden" id="schedDate">
             </div>
           </div>
@@ -463,12 +486,22 @@ a:hover { text-decoration: underline; }
             </div>
             <div class="scheduler-field">
               <label>Start from</label>
-              <div class="cal-picker cal-picker-sm" id="calPickerStart"></div>
+              <div class="cal-picker cal-picker-sm" id="calPickerStartWrap">
+                <input type="text" class="cal-input" id="schedStartDateInput" placeholder="Tap to pick start date" readonly onclick="togglePicker('calPickerStartBody')">
+                <div class="cal-picker-body" id="calPickerStartBody">
+                  <div id="calPickerStart"></div>
+                </div>
+              </div>
               <input type="hidden" id="schedStartDate">
             </div>
             <div class="scheduler-field">
               <label>End date (optional)</label>
-              <div class="cal-picker cal-picker-sm" id="calPickerEnd"></div>
+              <div class="cal-picker cal-picker-sm" id="calPickerEndWrap">
+                <input type="text" class="cal-input" id="schedEndDateInput" placeholder="Tap to pick end date" readonly onclick="togglePicker('calPickerEndBody')">
+                <div class="cal-picker-body" id="calPickerEndBody">
+                  <div id="calPickerEnd"></div>
+                </div>
+              </div>
               <input type="hidden" id="schedEndDate">
             </div>
           </div>
@@ -476,7 +509,12 @@ a:hover { text-decoration: underline; }
           <!-- Common fields -->
           <div class="scheduler-field">
             <label>Time (JST)</label>
-            <div class="time-picker" id="timePicker"></div>
+            <div class="time-picker" id="timePickerWrap">
+              <input type="text" class="time-input" id="schedTimeInput" value="09:00" readonly onclick="togglePicker('timePickerBody')">
+              <div class="time-picker-body" id="timePickerBody">
+                <div id="timePicker"></div>
+              </div>
+            </div>
             <input type="hidden" id="schedTime" value="09:00">
           </div>
           <div class="scheduler-field">
@@ -695,10 +733,10 @@ function showDashboard() {
   document.getElementById('authScreen').style.display = 'none';
   document.getElementById('dashboard').style.display = 'block';
   renderScheduleCalendar();
-  // Initialize custom pickers
-  initCalendar('calPicker', 'schedDate');
-  initCalendar('calPickerStart', 'schedStartDate', { allowPast: false });
-  initCalendar('calPickerEnd', 'schedEndDate', { allowPast: false });
+  // Initialize custom pickers (containerId, hiddenInputId, displayInputId, options)
+  initCalendar('calPicker', 'schedDate', 'schedDateInput', { allowPast: false });
+  initCalendar('calPickerStart', 'schedStartDate', 'schedStartDateInput', { allowPast: true });
+  initCalendar('calPickerEnd', 'schedEndDate', 'schedEndDateInput', { allowPast: true });
   renderTimePicker();
   renderMonthDateGrid();
   // Select tomorrow by default
@@ -731,6 +769,15 @@ async function apiFetch(path) {
   const headers = { 'Accept': 'application/vnd.github+json' };
   if (sessionToken) headers['Authorization'] = `Bearer ${sessionToken}`;
   const res = await fetch(`${API}${path}`, { headers });
+  if (res.status === 403) {
+    const remaining = res.headers.get('X-RateLimit-Remaining');
+    const reset = res.headers.get('X-RateLimit-Reset');
+    if (remaining === '0') {
+      const resetTime = reset ? new Date(parseInt(reset) * 1000).toLocaleTimeString('ja-JP', { timeZone: 'Asia/Tokyo' }) : '?';
+      throw new Error(`Rate limit exceeded. Resets at ${resetTime} JST. Try adding your PAT in vault.`);
+    }
+    throw new Error(`API 403 Forbidden`);
+  }
   if (!res.ok) throw new Error(`API ${res.status}`);
   return res.json();
 }
@@ -882,7 +929,7 @@ function renderScheduleCalendar() {
   }
   const times = [...allTimes].sort();
 
-  let html = '<div class="schedule-grid">';
+  let html = '<div class="schedule-grid-wrapper"><div class="schedule-grid">';
   html += '<div class="schedule-cell header"></div>';
   for (const d of dayNames) html += `<div class="schedule-cell header">${d}</div>`;
 
@@ -901,7 +948,7 @@ function renderScheduleCalendar() {
       html += '</div>';
     }
   }
-  html += '</div>';
+  html += '</div></div>';
   document.getElementById('scheduleCalendar').innerHTML = html;
 }
 
@@ -939,9 +986,10 @@ function formatDate(y, m, d) {
 }
 
 class CalendarPicker {
-  constructor(containerId, inputId, options = {}) {
+  constructor(containerId, inputId, displayInputId, options = {}) {
     this.container = document.getElementById(containerId);
     this.input = document.getElementById(inputId);
+    this.displayInput = document.getElementById(displayInputId);
     this.allowPast = options.allowPast || false;
     this.onSelect = options.onSelect || null;
     const now = jstNow();
@@ -963,10 +1011,9 @@ class CalendarPicker {
       <button onclick="calNav('${this.container.id}', 1)">›</button>
     </div>`;
     html += '<div class="cal-grid">';
-    const dows = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    const dows = ['Su','Mo','Tu','We','Th','Fr','Sa'];
     for (const d of dows) html += `<div class="cal-dow">${d}</div>`;
 
-    // Empty cells before first day
     for (let i = 0; i < firstDay; i++) html += '<div class="cal-day empty"></div>';
 
     for (let day = 1; day <= daysInMonth; day++) {
@@ -1000,6 +1047,7 @@ class CalendarPicker {
   select(dateStr) {
     this.selected = dateStr;
     this.input.value = dateStr;
+    if (this.displayInput) this.displayInput.value = dateStr;
     this.render();
     if (this.onSelect) this.onSelect(dateStr);
   }
@@ -1007,8 +1055,8 @@ class CalendarPicker {
 
 const calendarInstances = {};
 
-function initCalendar(containerId, inputId, options) {
-  calendarInstances[containerId] = new CalendarPicker(containerId, inputId, options);
+function initCalendar(containerId, inputId, displayInputId, options) {
+  calendarInstances[containerId] = new CalendarPicker(containerId, inputId, displayInputId, options);
 }
 
 function calNav(containerId, offset) {
@@ -1018,6 +1066,23 @@ function calNav(containerId, offset) {
 function calSelect(containerId, dateStr) {
   calendarInstances[containerId]?.select(dateStr);
 }
+
+function togglePicker(bodyId) {
+  const body = document.getElementById(bodyId);
+  const isOpen = body.classList.contains('open');
+  // Close all other pickers
+  document.querySelectorAll('.cal-picker-body.open, .time-picker-body.open').forEach(el => {
+    if (el.id !== bodyId) el.classList.remove('open');
+  });
+  body.classList.toggle('open', !isOpen);
+}
+
+// Close pickers when clicking outside
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('.cal-picker') && !e.target.closest('.time-picker')) {
+    document.querySelectorAll('.cal-picker-body.open, .time-picker-body.open').forEach(el => el.classList.remove('open'));
+  }
+});
 
 // ═══════════════════════════════════════════════════
 //  CUSTOM TIME PICKER
@@ -1038,6 +1103,7 @@ function renderTimePicker() {
   const container = document.getElementById('timePicker');
   const timeStr = `${String(selectedHour).padStart(2,'0')}:${String(selectedMinute).padStart(2,'0')}`;
   document.getElementById('schedTime').value = timeStr;
+  document.getElementById('schedTimeInput').value = timeStr;
 
   let html = `<div class="time-display">${timeStr}</div>`;
 
