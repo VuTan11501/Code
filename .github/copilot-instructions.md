@@ -469,3 +469,230 @@ dispatcher-watchdog.yml (cron */20)
 | Worker tách riêng từng nghiệp vụ | Dễ debug, retry độc lập, idempotent dễ verify |
 | PWA dark-only zero-build | Triển khai 1 click qua GH Pages, không cần CI build |
 | Skill local + Worker GH Actions song song | Skill = reference impl + emergency manual; Worker = production automation |
+
+---
+
+## 10. 🫀 Scheduled Run Dispatcher — deep dive
+
+> **Đây là component quan trọng NHẤT của hệ thống.** Mọi schedule (checkin/checkout/OT/forecast) đều phụ thuộc vào nó. Khi đụng đến file `scheduled-dispatch.yml`, đọc kỹ section này trước.
+
+### 10.1 Hồ sơ kỹ thuật
+
+| Thuộc tính | Giá trị |
+|---|---|
+| File | `.github/workflows/scheduled-dispatch.yml` |
+| Workflow name | `Scheduled Run Dispatcher` |
+| Runner | `ubuntu-latest` |
+| Job timeout | **350 phút** (5h50m, cao hơn loop 50 phút để cho buffer cleanup) |
+| Loop duration | **300 phút mặc định** (5h, có thể override qua `loop_minutes` input, max ~330) |
+| Check interval | **30 giây** (`CHECK_INTERVAL_SEC = 30`) |
+| Permissions | `contents: read`, `actions: write` (cần `actions:write` để dispatch worker) |
+| Concurrency | `group: scheduled-dispatch`, `cancel-in-progress: false` (không cancel run đang chạy khi trigger mới) |
+| Triggers | `cron: '*/15 * * * *'` (backup) + `workflow_dispatch` (self re-chain) |
+| Dependencies | Chỉ Python stdlib (`urllib`, `json`, `time`, `datetime`) — không `pip install` để cold-start nhanh |
+| Secrets | `GH_PAT` (PAT classic với scope `repo` + `workflow` + `gist`) |
+| State | Stateless trong từng run; persistent state trong Gist + ETag cache trong-process |
+
+### 10.2 Anatomy — 2 steps trong job
+
+```
+job: dispatch
+├── step 1: "Self-looping dispatcher (checks every 30s)"
+│   └── inline Python script (~150 lines, heredoc `python3 << 'EOF'`)
+│       runs the 5h loop
+│
+└── step 2: "Re-trigger self (chain next run)"   ← always() runs even on failure
+    ├── gh api .../workflows/scheduled-dispatch.yml/enable --method PUT
+    │   (giữ workflow enabled — GitHub auto-disable workflow 60 ngày không hoạt động)
+    └── gh workflow run scheduled-dispatch.yml --ref main
+        (tự chain → loop tiếp tục vô tận)
+```
+
+### 10.3 The main loop (pseudocode)
+
+```python
+loop_start = now()
+loop_end   = loop_start + 5h
+iteration  = 0
+gist_etag  = None       # ETag cache (in-process)
+cached_runs = None      # data cache khi server trả 304
+
+while now() < loop_end:
+    iteration += 1
+    try:
+        triggered = process_runs()    # ← core logic, xem 10.4
+        if triggered > 0:
+            log(f"[iter {iteration}] dispatched {triggered}")
+    except Exception as e:
+        log(f"[iter {iteration}] error: {e}")    # nuốt exception, không crash loop
+    sleep(min(30s, time_remaining))
+
+# Loop ended — step 2 chain next run
+```
+
+**Đặc điểm quan trọng**:
+- ✅ Exception trong iteration KHÔNG crash loop (try/except wrap)
+- ✅ Sleep tối đa = `min(30s, remaining)` → không sleep quá thời gian loop_end
+- ✅ Iteration count + dispatch count log mỗi vòng → dễ trace
+- ❌ KHÔNG có graceful shutdown signal handler (SIGTERM → loop chết, step 2 vẫn fire vì `if: always()`)
+
+### 10.4 `process_runs()` — core algorithm
+
+```python
+def process_runs() -> int:
+    runs = gist_read()                        # ETag conditional GET
+    if not runs: return 0
+    now     = utc_now()
+    now_jst = now.astimezone(JST)
+    triggered = 0; changed = False
+    
+    for entry in runs:
+        # Build inputs cho workflow dispatch
+        inputs = {}
+        if entry.get('location'):     inputs['location']  = entry['location']
+        if entry.get('location_lat'): inputs['latitude']  = str(entry['location_lat'])
+        if entry.get('location_lon'): inputs['longitude'] = str(entry['location_lon'])
+        
+        if entry['type'] == 'recurring':
+            # daily / weekdays / weekly / monthly
+            if should_run_recurring(entry, now_jst):
+                dispatch_workflow(entry['workflow'], "[recurring]", inputs)
+                entry['last_run'] = now.isoformat()   # mark, KHÔNG mark dispatched
+                triggered += 1; changed = True
+        else:    # 'once'
+            if entry.get('dispatched'):     continue   # skip, giữ history
+            run_at = parse_iso(entry['run_at'])
+            if run_at <= now:
+                dispatch_workflow(entry['workflow'], "[one-time]", inputs)
+                entry['dispatched'] = True            # mark dispatched
+                entry['last_run']   = now.isoformat()
+                triggered += 1; changed = True
+    
+    if changed: gist_write(runs)              # PATCH Gist với entries đã update
+    return triggered
+```
+
+**Invariants** (đừng phá vỡ khi sửa):
+1. **Once entries KHÔNG bị xóa** sau khi dispatch → set `dispatched: true` + `last_run`. UI dùng để hiển thị history.
+2. **Recurring entries CHỈ chạy 1 lần / ngày** — `should_run_recurring()` check `last_run.date() == today`.
+3. **Cửa sổ "đúng giờ"**: entry chỉ fire khi `now >= run_at` (one-time) hoặc `now >= sched_dt` (recurring). KHÔNG có tolerance window (worst-case 30s latency là OK).
+4. **Inputs build từ entry fields**: `location`, `location_lat`, `location_lon` → worker nhận qua `inputs.{location,latitude,longitude}`.
+
+### 10.5 Recurrence patterns (`should_run_recurring`)
+
+| Pattern | Field | Logic |
+|---|---|---|
+| `daily` | — | Mỗi ngày, tại `time` |
+| `weekdays` | — | Mon-Fri (JS DOW `[1,2,3,4,5]`), tại `time` |
+| `weekly` | `days: [int]` | Các DOW chỉ định (JS: Sun=0), tại `time` |
+| `monthly` | `dates: [int]` | Các ngày trong tháng (1-31), tại `time` |
+
+Validation chung:
+- `enabled: false` → skip
+- `start_date` / `end_date` (YYYY-MM-DD) → ràng buộc cửa sổ
+- `last_run` cùng ngày → skip (đảm bảo 1 lần/ngày)
+- `now < sched_dt` (chưa tới giờ) → skip
+
+⚠️ **DOW convention pitfall**: Python `weekday()` Mon=0..Sun=6. Gist/JS Sun=0..Sat=6. Conversion line 136:
+```python
+js_dow = (dow + 1) % 7 if dow < 6 else 0
+```
+
+### 10.6 ETag caching strategy
+
+```python
+# Trong gist_read():
+if gist_etag:
+    req.add_header('If-None-Match', gist_etag)
+try:
+    resp = urlopen(req)
+    gist_etag   = resp.headers.get('ETag')
+    cached_runs = parse(resp)
+    return cached_runs
+except HTTPError as e:
+    if e.code == 304 and cached_runs is not None:
+        return cached_runs     # ← server không trả body, dùng cache
+```
+
+**Lợi ích**: GitHub không tính 304 vào rate limit. Với check 30s × 600 iter = 1200 req/h → vẫn dưới 5000/h limit. **Quan trọng**: ETag chỉ tồn tại trong process — chain next run = reset cache (lần đầu là 200 OK lại).
+
+### 10.7 3 cơ chế redundancy chống chết
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  Level 1: SELF-CHAIN (primary)                              │
+│  Step 2 cuối job → gh workflow run self                     │
+│  ✓ Liên tục 24/7                                            │
+│  ✗ Chết nếu: workflow bị disable, GH_PAT hết hạn, gh fail   │
+└─────────────────────────────────────────────────────────────┘
+                          ▼
+┌─────────────────────────────────────────────────────────────┐
+│  Level 2: BACKUP CRON (every 15 min)                        │
+│  cron: '*/15 * * * *' trong on.schedule                     │
+│  ✓ Bắt được lúc chain chết                                  │
+│  ✗ GitHub cron có thể trễ 5-30 phút, latency tệ            │
+└─────────────────────────────────────────────────────────────┘
+                          ▼
+┌─────────────────────────────────────────────────────────────┐
+│  Level 3: WATCHDOG (dispatcher-watchdog.yml, every 20 min)  │
+│  Workflow độc lập, scan recent runs                         │
+│  ✓ Detect dead dispatcher + resurrect + email alert         │
+│  ✗ Watchdog cũng chết → cần manual intervention             │
+└─────────────────────────────────────────────────────────────┘
+                          ▼
+┌─────────────────────────────────────────────────────────────┐
+│  Level 4: MANUAL (last resort)                              │
+│  gh workflow run scheduled-dispatch.yml --ref main          │
+│  hoặc click "Run workflow" trong Actions UI                 │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 10.8 Lifecycle timeline ví dụ
+
+```
+T=00:00  cron fire → Run #100 bắt đầu
+T=00:00  loop iter 1: read Gist (200 OK, ETag=W/"abc")
+T=00:30  loop iter 2: read Gist (304 Not Modified, dùng cache)
+…
+T=09:00  loop iter ~1080: phát hiện entry "auto-checkin 09:00"
+         → POST /dispatches auto-checkin.yml { inputs: {location:office} }
+         → Worker #500 (auto-checkin) trigger song song
+T=09:00  PATCH Gist với entry.last_run=09:00:30
+T=09:01  loop iter ~1082: should_run_recurring → False (last_run today)
+…
+T=05:00  loop kết thúc (300 min)
+T=05:00  step 2: gh workflow run self → Run #101 bắt đầu
+T=05:00  Run #101 chain seamlessly, không gap
+```
+
+### 10.9 Failure modes & cách xử lý
+
+| Triệu chứng | Nguyên nhân | Fix |
+|---|---|---|
+| Schedule không fire | Dispatcher chết, không có run in_progress | Watchdog resurrect tự động ≤ 20 min, hoặc manual trigger |
+| Fix code không có hiệu lực | Loop đang chạy dùng code load tại T=0 | **Cancel run hiện tại** + manual trigger (KHÔNG đợi 5h) |
+| Entry fire 2 lần | Race giữa client setTimeout + server loop | Server check `entry.dispatched` ngăn dup; client cũng check |
+| Gist write 409 conflict | Concurrent PATCH (rất hiếm) | Iter tiếp theo sẽ refetch + retry tự nhiên |
+| Workflow bị disable | 60 ngày không activity | Step 2 luôn gọi `gh api enable` trước re-dispatch |
+| GH_PAT hết hạn | Token expire | Update secret + manual trigger; cân nhắc dùng fine-grained PAT |
+| Loop iter trễ > 30s | Network slow tới `api.github.com` | Bình thường — loop dùng `sleep(min(30, remaining))`, dispatch chỉ trễ vài giây |
+
+### 10.10 Quy tắc khi sửa `scheduled-dispatch.yml`
+
+1. ⛔ **KHÔNG xóa step 2** (self re-chain) — sẽ làm gãy chuỗi, chỉ còn lại backup cron 15 min latency.
+2. ⛔ **KHÔNG remove `if: always()`** trên step 2 — phải re-chain kể cả khi step 1 fail.
+3. ⛔ **KHÔNG remove `concurrency: cancel-in-progress: false`** — nếu cancel, watchdog trigger sẽ kill loop đang chạy.
+4. ⚠️ **KHÔNG đổi `CHECK_INTERVAL_SEC` < 10s** — sẽ làm tăng rate limit consumption và tăng noise log.
+5. ⚠️ **KHÔNG đổi `loop_minutes` > 330** — job timeout 350m, cần buffer cho step 2.
+6. ⚠️ Sau khi push fix → **manually cancel** run hiện tại + trigger lại (xem 10.9 fix #2).
+7. ✅ Mỗi lần thêm field mới vào entry → update cả `process_runs` (server), `addScheduledRun` (client schedule.js), và data model trong section 9.7.
+8. ✅ Mỗi lần thêm pattern recurrence → update `should_run_recurring` + UI form + docs.
+9. ✅ Log mọi action (dispatch, gist write, error) — log là source of truth khi debug.
+10. ✅ Test bằng cách tạo entry `once` cho 2 phút sau → quan sát Actions log → verify dispatch happens trong 30-60s.
+
+### 10.11 Monitoring & observability
+
+- **GitHub Actions logs**: stdout từ Python loop → search keywords `🔹 One-time`, `🔁 Recurring`, `✅ Triggered`, `❌`
+- **Dashboard "Live" indicator**: nếu thấy nhiều run của `Scheduled Run Dispatcher` liên tiếp = healthy
+- **Watchdog email**: nếu nhận được `🚨 Dispatcher was dead, resurrected` → check WHY (PAT? rate limit?)
+- **Gist version history**: GitHub Gist tự track mọi PATCH → `https://gist.github.com/<user>/abc2a47c…/revisions`
