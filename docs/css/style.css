@@ -817,3 +817,50 @@ input[type="time"], input[type="date"], input[type="datetime-local"] {
 .sched-table .badge-warning { background: var(--yellow-subtle, rgba(234,179,8,0.1)); color: var(--yellow, #eab308); padding: 2px 8px; border-radius: var(--radius-full); font-size: 11px; font-weight: 500; display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
 .sched-table .actions-cell { display: flex; gap: 4px; justify-content: center; }
 .sched-table .actions-cell .btn { min-height: 28px; padding: 4px 8px; font-size: 11px; }
+
+/* ─── PAGINATION (shadcn/ui style) ─── */
+.sched-pagination { display: flex; justify-content: center; width: 100%; }
+.sched-pagination .pagination-list {
+  display: flex; flex-direction: row; align-items: center; gap: 4px;
+  list-style: none; margin: 0; padding: 0;
+}
+.sched-pagination .pagination-link {
+  display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+  min-height: 36px; min-width: 36px; padding: 0 10px;
+  font-size: 13px; font-weight: 500; line-height: 1;
+  color: var(--foreground);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md, 6px);
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color 120ms, color 120ms, border-color 120ms;
+  user-select: none;
+}
+.sched-pagination .pagination-link:hover {
+  background: var(--muted, rgba(255,255,255,0.06));
+  color: var(--foreground);
+}
+.sched-pagination .pagination-link.active {
+  background: var(--background, transparent);
+  border-color: var(--border, rgba(255,255,255,0.12));
+  color: var(--foreground);
+  cursor: default;
+}
+.sched-pagination .pagination-link.disabled {
+  opacity: 0.4; cursor: not-allowed; pointer-events: none;
+}
+.sched-pagination .pagination-prev,
+.sched-pagination .pagination-next { padding: 0 12px; gap: 6px; }
+.sched-pagination .pagination-ellipsis {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-height: 36px; min-width: 36px;
+  color: var(--muted-foreground);
+  user-select: none;
+}
+@media (max-width: 640px) {
+  .sched-pagination .pagination-prev span,
+  .sched-pagination .pagination-next span { display: none; }
+  .sched-pagination .pagination-prev,
+  .sched-pagination .pagination-next { padding: 0 10px; min-width: 36px; }
+}

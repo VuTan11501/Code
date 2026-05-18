@@ -867,31 +867,90 @@ async function toggleScheduleEntry(index) {
 }
 
 // ═══════════════════════════════════════════════════
-//  SCHEDULE DATA TABLE
+//  SCHEDULE DATA TABLE (paginated, 10/page, shadcn pagination)
 // ═══════════════════════════════════════════════════
 let scheduleTableData = [];
+let tablePage = 1;
+const TABLE_PAGE_SIZE = 10;
+
+function resetTablePage() { tablePage = 1; renderScheduleTable(); }
+function goToTablePage(p) {
+  const total = getFilteredEntries().length;
+  const pages = Math.max(1, Math.ceil(total / TABLE_PAGE_SIZE));
+  tablePage = Math.max(1, Math.min(pages, p));
+  renderScheduleTable();
+  // Scroll table into view so the user sees the new page
+  document.getElementById('scheduleTable')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function getFilteredEntries() {
+  const filterType = document.getElementById('tableFilterType')?.value || 'all';
+  const filterWf = document.getElementById('tableFilterWf')?.value || 'all';
+  let filtered = scheduleTableData;
+  if (filterType !== 'all') filtered = filtered.filter(e => e.type === filterType);
+  if (filterWf !== 'all') filtered = filtered.filter(e => e.workflow === filterWf);
+  return filtered;
+}
+
+function renderPagination(totalItems, currentPage, pageSize) {
+  const nav = document.getElementById('schedulePagination');
+  if (!nav) return;
+  const totalPages = Math.ceil(totalItems / pageSize);
+  if (totalPages <= 1) { nav.innerHTML = ''; return; }
+
+  // Build set of page numbers to show: 1, current-1, current, current+1, last + ellipsis
+  const pages = new Set([1, totalPages, currentPage - 1, currentPage, currentPage + 1]);
+  const visible = [...pages].filter(p => p >= 1 && p <= totalPages).sort((a, b) => a - b);
+
+  const items = [];
+  // Previous
+  items.push(currentPage > 1
+    ? `<li><a class="pagination-link pagination-prev" href="#" onclick="event.preventDefault();goToTablePage(${currentPage - 1})" aria-label="Go to previous page">${ICON('chevronLeft', 14)}<span>Previous</span></a></li>`
+    : `<li><span class="pagination-link pagination-prev disabled" aria-disabled="true">${ICON('chevronLeft', 14)}<span>Previous</span></span></li>`);
+
+  // Page numbers with ellipsis
+  let prev = 0;
+  for (const p of visible) {
+    if (p - prev > 1) {
+      items.push(`<li><span class="pagination-ellipsis" aria-hidden="true">&hellip;</span></li>`);
+    }
+    const active = p === currentPage;
+    items.push(active
+      ? `<li><span class="pagination-link active" aria-current="page">${p}</span></li>`
+      : `<li><a class="pagination-link" href="#" onclick="event.preventDefault();goToTablePage(${p})" aria-label="Go to page ${p}">${p}</a></li>`);
+    prev = p;
+  }
+
+  // Next
+  items.push(currentPage < totalPages
+    ? `<li><a class="pagination-link pagination-next" href="#" onclick="event.preventDefault();goToTablePage(${currentPage + 1})" aria-label="Go to next page"><span>Next</span>${ICON('chevronRight', 14)}</a></li>`
+    : `<li><span class="pagination-link pagination-next disabled" aria-disabled="true"><span>Next</span>${ICON('chevronRight', 14)}</span></li>`);
+
+  nav.innerHTML = `<ul class="pagination-list">${items.join('')}</ul>`;
+}
 
 function renderScheduleTable() {
   const tbody = document.getElementById('scheduleTableBody');
   const countEl = document.getElementById('tableCount');
   if (!tbody) return;
 
-  const filterType = document.getElementById('tableFilterType')?.value || 'all';
-  const filterWf = document.getElementById('tableFilterWf')?.value || 'all';
-
-  let filtered = scheduleTableData;
-  if (filterType !== 'all') filtered = filtered.filter(e => e.type === filterType);
-  if (filterWf !== 'all') filtered = filtered.filter(e => e.workflow === filterWf);
+  const filtered = getFilteredEntries();
+  const totalPages = Math.max(1, Math.ceil(filtered.length / TABLE_PAGE_SIZE));
+  if (tablePage > totalPages) tablePage = totalPages;
+  if (tablePage < 1) tablePage = 1;
+  const start = (tablePage - 1) * TABLE_PAGE_SIZE;
+  const pageItems = filtered.slice(start, start + TABLE_PAGE_SIZE);
 
   if (!filtered.length) {
     tbody.innerHTML = `<tr><td colspan="8" class="text-center py-8"><div class="text-muted-foreground text-sm flex items-center justify-center gap-2">${ICON('clipboard', 16)} No schedules found</div><div class="text-xs text-muted-foreground mt-1 opacity-60">Create your first automated workflow run above</div></td></tr>`;
     if (countEl) countEl.textContent = '0 entries';
+    renderPagination(0, 1, TABLE_PAGE_SIZE);
     return;
   }
 
   const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
-  tbody.innerHTML = filtered.map((entry, filteredIdx) => {
+  tbody.innerHTML = pageItems.map((entry) => {
     const realIdx = scheduleTableData.indexOf(entry);
     const wf = WORKFLOWS.find(w => w.file === entry.workflow);
     const wfName = wf ? `<span class="inline-flex items-center gap-1.5">${ICON(wf.iconName || 'play', 14)} ${wf.name}</span>` : entry.workflow;
@@ -946,7 +1005,15 @@ function renderScheduleTable() {
     </tr>`;
   }).join('');
 
-  if (countEl) countEl.textContent = `${filtered.length} of ${scheduleTableData.length} entries`;
+  if (countEl) {
+    const showingFrom = start + 1;
+    const showingTo = Math.min(start + TABLE_PAGE_SIZE, filtered.length);
+    countEl.textContent = filtered.length > TABLE_PAGE_SIZE
+      ? `Showing ${showingFrom}–${showingTo} of ${filtered.length}${filtered.length !== scheduleTableData.length ? ` (filtered from ${scheduleTableData.length})` : ''}`
+      : `${filtered.length} of ${scheduleTableData.length} entries`;
+  }
+
+  renderPagination(filtered.length, tablePage, TABLE_PAGE_SIZE);
 }
 
 // ═══════════════════════════════════════════════════

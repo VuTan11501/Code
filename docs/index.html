@@ -311,12 +311,12 @@ tailwind.config = {
         <div class="flex items-center justify-between mb-4">
           <div class="section-title text-sm font-medium text-muted-foreground flex items-center gap-2 mb-0"><span data-icon="clipboard" data-size="16"></span> All Schedules</div>
           <div class="flex items-center gap-2">
-            <select id="tableFilterType" class="input input-sm select-trigger" onchange="renderScheduleTable()">
+            <select id="tableFilterType" class="input input-sm select-trigger" onchange="resetTablePage()">
               <option value="all">All Types</option>
               <option value="once">One-time</option>
               <option value="recurring">Recurring</option>
             </select>
-            <select id="tableFilterWf" class="input input-sm select-trigger" onchange="renderScheduleTable()">
+            <select id="tableFilterWf" class="input input-sm select-trigger" onchange="resetTablePage()">
               <option value="all">All Workflows</option>
               <option value="auto-checkin.yml">Auto Checkin</option>
               <option value="auto-checkout.yml">Auto Checkout</option>
@@ -344,6 +344,7 @@ tailwind.config = {
             </tbody>
           </table>
         </div>
+        <nav role="navigation" aria-label="pagination" class="sched-pagination mt-3" id="schedulePagination"></nav>
         <div class="flex items-center justify-between mt-3 text-xs text-muted-foreground" id="tableFooter">
           <span id="tableCount">0 entries</span>
           <button class="btn sm" onclick="loadScheduledRuns()" title="Refresh"><span data-icon="refresh" data-size="14"></span> Refresh</button>
