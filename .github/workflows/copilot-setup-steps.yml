@@ -1,0 +1,79 @@
+name: "Copilot Setup Steps"
+
+# Cho phép validate file qua Actions tab, và auto-run khi chính file này thay đổi.
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/copilot-setup-steps.yml
+  pull_request:
+    paths:
+      - .github/workflows/copilot-setup-steps.yml
+
+jobs:
+  # Job name BẮT BUỘC là `copilot-setup-steps`, không đổi.
+  copilot-setup-steps:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    permissions:
+      contents: read
+
+    env:
+      TZ: Asia/Tokyo
+      PYTHONUNBUFFERED: "1"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install Python dev tooling
+        run: |
+          python -m pip install --upgrade pip
+          # Repo prod chỉ dùng stdlib, nhưng agent cần các tool này để lint/test/format
+          # khi sửa script trong .github/scripts/ và skills.
+          pip install \
+            ruff \
+            pytest \
+            yamllint \
+            requests \
+            python-dateutil \
+            pyyaml
+
+      - name: Install actionlint (validate workflow YAML)
+        run: |
+          bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+          sudo mv ./actionlint /usr/local/bin/actionlint
+          actionlint -version
+
+      - name: Set up Node.js 20 (cho docs/ PWA)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install JS dev tooling (prettier cho docs/)
+        run: |
+          npm install -g prettier@3
+
+      - name: Show toolchain summary
+        run: |
+          echo "=== Toolchain ready for Copilot agent ==="
+          python --version
+          pip --version
+          node --version
+          npm --version
+          prettier --version
+          actionlint -version
+          yamllint --version
+          ruff --version
+          shellcheck --version | head -2
+          echo "TZ=$TZ"
+          echo "CWD=$(pwd)"
+          echo "=== Workflows ==="
+          ls -la .github/workflows/
