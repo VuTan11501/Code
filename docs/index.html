@@ -162,6 +162,22 @@ a:hover { text-decoration: underline; }
 .status-change-flash { animation: statusFlash 1s ease; }
 @keyframes statusFlash { 0% { box-shadow: 0 0 0 2px var(--accent); } 100% { box-shadow: none; } }
 
+/* Scheduler Panel */
+.scheduler-panel { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 12px 0; }
+@media (max-width: 800px) { .scheduler-panel { grid-template-columns: 1fr; } }
+.scheduler-form { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+.scheduler-field label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 4px; }
+.scheduler-field select, .scheduler-field input { width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 13px; }
+.scheduler-field select:focus, .scheduler-field input:focus { outline: none; border-color: var(--accent); }
+.scheduler-queue { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; max-height: 320px; overflow-y: auto; }
+.scheduler-queue h4 { font-size: 13px; font-weight: 600; margin-bottom: 10px; color: var(--muted); }
+.sched-item { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+.sched-item:last-child { border-bottom: none; }
+.sched-item .sched-wf { font-weight: 500; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sched-item .sched-time { color: var(--accent); font-family: monospace; font-size: 12px; }
+.sched-item .sched-note { color: var(--muted); font-size: 11px; }
+.sched-item .btn.danger.sm { padding: 2px 8px; font-size: 11px; }
+
 @media (max-width: 600px) {
   .grid { grid-template-columns: 1fr; }
   header { flex-direction: column; align-items: flex-start; }
@@ -243,6 +259,42 @@ a:hover { text-decoration: underline; }
     </div>
     <div class="collapsible-body" id="scheduleBody">
       <div id="scheduleCalendar"></div>
+    </div>
+
+    <!-- Scheduled Runs -->
+    <div class="collapsible-header" onclick="toggleCollapsible(this, 'scheduledRunsBody')" style="margin-top:24px">
+      <span class="section-title" style="margin-bottom:0">⏰ Scheduled Runs</span>
+      <span class="chevron">▼</span>
+    </div>
+    <div class="collapsible-body" id="scheduledRunsBody">
+      <div class="scheduler-panel">
+        <div class="scheduler-form">
+          <div class="scheduler-field">
+            <label>Workflow</label>
+            <select id="schedWf">
+              <option value="auto-checkin.yml">🕐 Auto Checkin/Checkout</option>
+              <option value="auto-ot-creator.yml">⏰ Auto OT Creator</option>
+              <option value="jpy-forecast.yml">💹 JPY Forecast Daily Report</option>
+            </select>
+          </div>
+          <div class="scheduler-field">
+            <label>Date (JST)</label>
+            <input type="date" id="schedDate">
+          </div>
+          <div class="scheduler-field">
+            <label>Time (JST)</label>
+            <input type="time" id="schedTime" value="09:00">
+          </div>
+          <div class="scheduler-field">
+            <label>Note (optional)</label>
+            <input type="text" id="schedNote" placeholder="e.g. makeup run">
+          </div>
+          <button class="btn primary" onclick="addScheduledRun()">➕ Schedule Run</button>
+        </div>
+        <div class="scheduler-queue" id="schedulerQueue">
+          <div class="empty" style="padding:16px">Loading scheduled runs...</div>
+        </div>
+      </div>
     </div>
 
     <!-- Recent Activity -->
@@ -449,6 +501,10 @@ function showDashboard() {
   document.getElementById('authScreen').style.display = 'none';
   document.getElementById('dashboard').style.display = 'block';
   renderScheduleCalendar();
+  // Set default date to tomorrow JST
+  const tomorrow = new Date(Date.now() + 24*60*60*1000);
+  document.getElementById('schedDate').value = tomorrow.toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' });
+  loadScheduledRuns();
   startAutoLock();
   refresh();
   startPolling();
@@ -645,6 +701,153 @@ function renderScheduleCalendar() {
   }
   html += '</div>';
   document.getElementById('scheduleCalendar').innerHTML = html;
+}
+
+// ═══════════════════════════════════════════════════
+//  SCHEDULED RUNS (user-defined timed dispatches)
+// ═══════════════════════════════════════════════════
+const SCHED_FILE = '.github/scheduled-runs.json';
+
+async function loadScheduledRuns() {
+  const container = document.getElementById('schedulerQueue');
+  try {
+    const data = await apiFetch(`/repos/${OWNER}/${REPO}/contents/${SCHED_FILE}`);
+    const runs = JSON.parse(atob(data.content));
+    renderScheduledRuns(runs, data.sha);
+  } catch (e) {
+    if (e.message.includes('404')) {
+      renderScheduledRuns([], null);
+    } else {
+      container.innerHTML = `<div class="empty">⚠️ ${e.message}</div>`;
+    }
+  }
+}
+
+function renderScheduledRuns(runs, sha) {
+  const container = document.getElementById('schedulerQueue');
+  // Store sha for updates
+  container.dataset.sha = sha || '';
+
+  if (!runs.length) {
+    container.innerHTML = '<h4>📋 Pending Queue</h4><div class="empty" style="padding:12px;font-size:13px">No scheduled runs. Use the form to add one.</div>';
+    return;
+  }
+
+  // Sort by datetime
+  runs.sort((a, b) => new Date(a.run_at) - new Date(b.run_at));
+
+  const wfNames = {
+    'auto-checkin.yml': '🕐 Auto Checkin',
+    'auto-ot-creator.yml': '⏰ Auto OT',
+    'jpy-forecast.yml': '💹 JPY Forecast',
+  };
+
+  container.innerHTML = `<h4>📋 Pending Queue (${runs.length})</h4>` + runs.map((r, i) => {
+    const dt = new Date(r.run_at);
+    const dateStr = dt.toLocaleDateString('ja-JP', { timeZone: 'Asia/Tokyo', month: 'short', day: 'numeric', weekday: 'short' });
+    const timeStr = dt.toLocaleTimeString('ja-JP', { timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit' });
+    const isPast = dt.getTime() < Date.now();
+    return `<div class="sched-item${isPast ? ' past' : ''}">
+      <span class="sched-wf">${wfNames[r.workflow] || r.workflow}</span>
+      <span class="sched-time">${dateStr} ${timeStr}</span>
+      ${r.note ? `<span class="sched-note">${r.note}</span>` : ''}
+      <button class="btn danger sm" onclick="removeScheduledRun(${i})" title="Cancel">✕</button>
+    </div>`;
+  }).join('');
+}
+
+async function addScheduledRun() {
+  const workflow = document.getElementById('schedWf').value;
+  const date = document.getElementById('schedDate').value;
+  const time = document.getElementById('schedTime').value;
+  const note = document.getElementById('schedNote').value.trim();
+
+  if (!date) { toast('⚠️ Please select a date'); return; }
+  if (!time) { toast('⚠️ Please select a time'); return; }
+  if (!sessionToken) { toast('⚠️ Not authenticated'); return; }
+
+  // Convert JST date+time to ISO string (JST = UTC+9)
+  const jstDateTime = `${date}T${time}:00+09:00`;
+  const runAt = new Date(jstDateTime).toISOString();
+
+  // Check if in the past
+  if (new Date(runAt) < new Date()) {
+    toast('⚠️ Cannot schedule in the past'); return;
+  }
+
+  const entry = { workflow, run_at: runAt, note: note || undefined, created: new Date().toISOString() };
+
+  try {
+    // Load current file
+    let runs = [];
+    let sha = null;
+    try {
+      const data = await apiFetch(`/repos/${OWNER}/${REPO}/contents/${SCHED_FILE}`);
+      runs = JSON.parse(atob(data.content));
+      sha = data.sha;
+    } catch { /* file doesn't exist yet */ }
+
+    runs.push(entry);
+
+    // Write back via GitHub API
+    const body = {
+      message: `sched: add ${workflow} at ${date} ${time} JST`,
+      content: btoa(unescape(encodeURIComponent(JSON.stringify(runs, null, 2)))),
+      branch: 'main',
+    };
+    if (sha) body.sha = sha;
+
+    const res = await fetch(`${API}/repos/${OWNER}/${REPO}/contents/${SCHED_FILE}`, {
+      method: 'PUT',
+      headers: { 'Authorization': `Bearer ${sessionToken}`, 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+    if (res.ok) {
+      toast(`✅ Scheduled ${workflow.replace('.yml','')} for ${date} ${time} JST`);
+      document.getElementById('schedNote').value = '';
+      loadScheduledRuns();
+    } else {
+      const err = await res.json();
+      toast(`❌ Failed: ${err.message || res.status}`);
+    }
+  } catch (e) {
+    toast(`❌ ${e.message}`);
+  }
+}
+
+async function removeScheduledRun(index) {
+  if (!sessionToken) { toast('⚠️ Not authenticated'); return; }
+
+  try {
+    const data = await apiFetch(`/repos/${OWNER}/${REPO}/contents/${SCHED_FILE}`);
+    const runs = JSON.parse(atob(data.content));
+
+    if (index < 0 || index >= runs.length) { toast('⚠️ Invalid index'); return; }
+    const removed = runs.splice(index, 1)[0];
+
+    const body = {
+      message: `sched: remove ${removed.workflow} at ${removed.run_at}`,
+      content: btoa(unescape(encodeURIComponent(JSON.stringify(runs, null, 2)))),
+      sha: data.sha,
+      branch: 'main',
+    };
+
+    const res = await fetch(`${API}/repos/${OWNER}/${REPO}/contents/${SCHED_FILE}`, {
+      method: 'PUT',
+      headers: { 'Authorization': `Bearer ${sessionToken}`, 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+    if (res.ok) {
+      toast('🗑️ Scheduled run removed');
+      loadScheduledRuns();
+    } else {
+      toast(`❌ Failed to remove`);
+    }
+  } catch (e) {
+    toast(`❌ ${e.message}`);
+  }
 }
 
 // ═══════════════════════════════════════════════════
