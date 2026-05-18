@@ -1,4 +1,4 @@
-name: Auto Checkin
+name: Auto Checkout
 
 on:
   workflow_dispatch:
@@ -16,14 +16,14 @@ permissions:
   contents: read
 
 concurrency:
-  group: auto-checkin
+  group: auto-checkout
   cancel-in-progress: false
 
 env:
   TZ: Asia/Tokyo
 
 jobs:
-  checkin:
+  checkout:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -38,11 +38,11 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Run checkin script
-        id: checkin
+      - name: Run checkout script
+        id: checkout_step
         env:
           AZURE_REFRESH_TOKEN: ${{ secrets.AZURE_REFRESH_TOKEN }}
-          FORCE_ACTION: checkin
+          FORCE_ACTION: checkout
           FORCE_LOCATION: ${{ inputs.location || 'office' }}
           SMTP_USER: ${{ secrets.SMTP_USER }}
           SMTP_PASS: ${{ secrets.SMTP_PASS }}
@@ -53,14 +53,14 @@ jobs:
         if: failure()
         env:
           LINE_NOTIFY_TOKEN: ${{ secrets.LINE_NOTIFY_TOKEN }}
-        run: python .github/scripts/line_notify.py "❌ Auto Checkin FAILED - Run #${{ github.run_number }} ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+        run: python .github/scripts/line_notify.py "❌ Auto Checkout FAILED - Run #${{ github.run_number }} ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
       - name: Update secret if token rotated
-        if: always() && steps.checkin.outputs.token_rotated == 'true'
+        if: always() && steps.checkout_step.outputs.token_rotated == 'true'
         continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
-          NEW_REFRESH_TOKEN: ${{ steps.checkin.outputs.new_refresh_token }}
+          NEW_REFRESH_TOKEN: ${{ steps.checkout_step.outputs.new_refresh_token }}
         run: |
           if [ -n "$NEW_REFRESH_TOKEN" ] && [ -n "$GH_TOKEN" ]; then
             gh secret set AZURE_REFRESH_TOKEN --body "$NEW_REFRESH_TOKEN" --repo "$GITHUB_REPOSITORY"
