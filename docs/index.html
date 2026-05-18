@@ -17,41 +17,52 @@
 <body>
 
 <!-- Auth Screen -->
-<div id="authScreen" class="auth-screen" role="main" aria-label="Authentication">
-  <div class="auth-card">
-    <div class="lock-icon" aria-hidden="true">🔐</div>
-    <h2>Workflow Dashboard</h2>
-    <p id="authDesc">Enter passphrase to unlock</p>
-
-    <div class="auth-tabs" id="authTabs" role="tablist">
-      <button class="auth-tab active" role="tab" aria-selected="true" onclick="switchTab('unlock')">Unlock</button>
-      <button class="auth-tab" role="tab" aria-selected="false" onclick="switchTab('setup')">Setup</button>
+<section id="authScreen" class="auth-screen" role="main" aria-label="Authentication">
+  <div class="card auth-card">
+    <div class="card-header" style="text-align:center">
+      <div class="lock-icon" aria-hidden="true">🔐</div>
+      <div class="card-title"><h2>Workflow Dashboard</h2></div>
+      <div class="card-description" id="authDesc">Enter passphrase to unlock</div>
     </div>
-
-    <!-- Unlock form -->
-    <form id="unlockForm" onsubmit="event.preventDefault();unlock()">
-      <input type="password" id="passphrase" placeholder="Passphrase" autocomplete="current-password" aria-label="Passphrase">
-      <button type="submit" class="btn primary">🔓 Unlock</button>
-      <div class="error" id="unlockError" role="alert">Wrong passphrase</div>
-    </form>
-
-    <!-- Setup form -->
-    <form id="setupForm" style="display:none" onsubmit="event.preventDefault();setup()">
-      <input type="password" id="newToken" placeholder="GitHub PAT (ghp_... or github_pat_...)" autocomplete="off" aria-label="GitHub Personal Access Token">
-      <input type="password" id="newPass" placeholder="Create passphrase (6+ chars)" autocomplete="new-password" aria-label="New passphrase">
-      <input type="password" id="confirmPass" placeholder="Confirm passphrase" autocomplete="new-password" aria-label="Confirm passphrase">
-      <button type="submit" class="btn primary">🔑 Encrypt & Save</button>
-      <div class="error" id="setupError" role="alert"></div>
-      <div class="hint">
-        PAT is encrypted with AES-256-GCM using your passphrase.<br>
-        Never stored in plaintext. Session expires on tab close.
+    <div class="card-content">
+      <div class="tabs-list" id="authTabs" role="tablist" aria-label="Authentication method">
+        <button class="tabs-trigger active" role="tab" aria-selected="true" aria-controls="unlockForm" onclick="switchTab('unlock')">Unlock</button>
+        <button class="tabs-trigger" role="tab" aria-selected="false" aria-controls="setupForm" onclick="switchTab('setup')">Setup</button>
       </div>
-    </form>
+
+      <!-- Unlock form -->
+      <form id="unlockForm" onsubmit="event.preventDefault();unlock()" role="tabpanel" aria-labelledby="authTabs">
+        <div class="field">
+          <input type="password" class="input" id="passphrase" placeholder="Passphrase" autocomplete="current-password" aria-label="Passphrase">
+        </div>
+        <button type="submit" class="btn primary">🔓 Unlock</button>
+        <div class="error" id="unlockError" role="alert">Wrong passphrase</div>
+      </form>
+
+      <!-- Setup form -->
+      <form id="setupForm" style="display:none" onsubmit="event.preventDefault();setup()" role="tabpanel" aria-labelledby="authTabs">
+        <div class="field">
+          <input type="password" class="input" id="newToken" placeholder="GitHub PAT (ghp_... or github_pat_...)" autocomplete="off" aria-label="GitHub Personal Access Token">
+        </div>
+        <div class="field">
+          <input type="password" class="input" id="newPass" placeholder="Create passphrase (6+ chars)" autocomplete="new-password" aria-label="New passphrase">
+        </div>
+        <div class="field">
+          <input type="password" class="input" id="confirmPass" placeholder="Confirm passphrase" autocomplete="new-password" aria-label="Confirm passphrase">
+        </div>
+        <button type="submit" class="btn primary">🔑 Encrypt & Save</button>
+        <div class="error" id="setupError" role="alert"></div>
+        <p class="field-description hint">
+          PAT is encrypted with AES-256-GCM using your passphrase.<br>
+          Never stored in plaintext. Session expires on tab close.
+        </p>
+      </form>
+    </div>
   </div>
-</div>
+</section>
 
 <!-- Dashboard (hidden until authenticated) -->
-<div id="dashboard" style="display:none" role="main" aria-label="Dashboard">
+<main id="dashboard" style="display:none" role="main" aria-label="Dashboard">
   <div class="container">
     <header>
       <h1><span class="icon" aria-hidden="true">⚡</span> Workflow Dashboard</h1>
@@ -62,221 +73,260 @@
           <span class="live-interval" id="liveInterval">30s</span>
         </div>
         <span class="last-update text-muted" id="lastUpdate" aria-live="polite"></span>
-        <button class="btn icon-btn" id="notifBtn" onclick="requestNotifPermission()" title="Notifications" aria-label="Toggle notifications">🔔</button>
-        <button class="btn danger" onclick="lock()" aria-label="Lock dashboard">🔒 Lock</button>
+        <button class="btn btn-icon icon-btn" id="notifBtn" onclick="requestNotifPermission()" title="Notifications" aria-label="Toggle notifications">🔔</button>
+        <button class="btn btn-destructive danger" onclick="lock()" aria-label="Lock dashboard">🔒 Lock</button>
       </div>
     </header>
 
     <!-- Navigation -->
-    <nav class="nav-bar" role="tablist" aria-label="Main navigation">
-      <a class="nav-item active" data-page="dashboard" href="#dashboard" role="tab" aria-selected="true" onclick="navigate('#dashboard')">📊 Dashboard</a>
-      <a class="nav-item" data-page="schedule" href="#schedule" role="tab" aria-selected="false" onclick="navigate('#schedule')">📅 Schedule</a>
-      <a class="nav-item" data-page="settings" href="#settings" role="tab" aria-selected="false" onclick="navigate('#settings')">⚙️ Settings</a>
+    <nav class="tabs-list nav-bar" role="tablist" aria-label="Main navigation">
+      <a class="tabs-trigger nav-item active" data-page="dashboard" href="#dashboard" role="tab" aria-selected="true" onclick="navigate('#dashboard')">📊 Dashboard</a>
+      <a class="tabs-trigger nav-item" data-page="schedule" href="#schedule" role="tab" aria-selected="false" onclick="navigate('#schedule')">📅 Schedule</a>
+      <a class="tabs-trigger nav-item" data-page="settings" href="#settings" role="tab" aria-selected="false" onclick="navigate('#settings')">⚙️ Settings</a>
     </nav>
 
     <!-- ═══════════════════════════════════════════
          PAGE: DASHBOARD
          ═══════════════════════════════════════════ -->
-    <div class="page active" id="page-dashboard" role="tabpanel">
+    <div class="page active" id="page-dashboard" role="tabpanel" aria-label="Dashboard page">
       <!-- Health Score Bar -->
-      <div class="health-bar" id="healthBar" aria-label="Workflow health scores">
+      <section class="health-bar" id="healthBar" aria-label="Workflow health scores">
         <div class="skeleton skeleton-health"></div>
         <div class="skeleton skeleton-health"></div>
         <div class="skeleton skeleton-health"></div>
-      </div>
+      </section>
+
+      <div class="separator"></div>
 
       <!-- Workflow Cards Grid -->
-      <div class="grid" id="workflowGrid" aria-label="Workflow status cards">
+      <section class="grid" id="workflowGrid" aria-label="Workflow status cards">
         <div class="skeleton skeleton-card"></div>
         <div class="skeleton skeleton-card"></div>
         <div class="skeleton skeleton-card"></div>
-      </div>
+      </section>
+
+      <div class="separator"></div>
 
       <!-- Recent Activity -->
-      <div class="section-title">Recent Activity</div>
-      <div class="card">
-        <div class="card-body">
-          <ul class="run-list" id="recentRuns" aria-label="Recent workflow runs">
-            <li class="empty">Loading...</li>
-          </ul>
+      <section aria-label="Recent activity">
+        <div class="section-title">Recent Activity</div>
+        <div class="card">
+          <div class="card-content">
+            <ul class="run-list" id="recentRuns" aria-label="Recent workflow runs">
+              <li class="empty">Loading...</li>
+            </ul>
+          </div>
         </div>
-      </div>
+      </section>
     </div>
 
     <!-- ═══════════════════════════════════════════
          PAGE: SCHEDULE
          ═══════════════════════════════════════════ -->
-    <div class="page" id="page-schedule" role="tabpanel">
+    <div class="page" id="page-schedule" role="tabpanel" aria-label="Schedule page">
       <!-- Schedule Calendar -->
-      <div class="section-title">📅 Weekly Schedule (JST)</div>
-      <div id="scheduleCalendar"></div>
+      <section aria-label="Weekly schedule">
+        <div class="section-title">📅 Weekly Schedule (JST)</div>
+        <div id="scheduleCalendar"></div>
+      </section>
+
+      <div class="separator" style="margin-top:var(--sp-6)"></div>
 
       <!-- Scheduled Runs -->
-      <div class="section-title" style="margin-top:var(--sp-6)">⏰ Scheduled Runs</div>
-      <div class="scheduler-panel">
-        <div class="scheduler-form" role="form" aria-label="Create scheduled run">
-          <div class="scheduler-field">
-            <label for="schedWorkflow">Workflow</label>
-            <select id="schedWorkflow">
-              <option value="auto-checkin.yml">🕐 Auto Checkin/Checkout</option>
-              <option value="auto-ot.yml">⏰ Auto OT Creator</option>
-              <option value="jpy-forecast.yml">💹 JPY Forecast</option>
-            </select>
-          </div>
-          <div class="scheduler-field">
-            <label for="schedType">Type</label>
-            <select id="schedType" onchange="toggleScheduleType(this.value)">
-              <option value="once">One-time</option>
-              <option value="recurring">Recurring</option>
-            </select>
-          </div>
-
-          <!-- One-time fields -->
-          <div id="onceFields">
-            <div class="scheduler-field">
-              <label>Date (JST)</label>
-              <div class="cal-picker" id="calPickerWrap">
-                <input type="text" class="cal-input" id="schedDateInput" placeholder="Tap to pick date" readonly onclick="togglePicker('calPickerBody')" aria-label="Select date">
-                <div class="cal-picker-body" id="calPickerBody">
-                  <div id="calPicker"></div>
-                </div>
-              </div>
-              <input type="hidden" id="schedDate">
-            </div>
-          </div>
-
-          <!-- Recurring fields -->
-          <div id="recurFields" style="display:none">
-            <div class="scheduler-field">
-              <label for="schedPattern">Pattern</label>
-              <select id="schedPattern" onchange="togglePatternUI()">
-                <option value="daily">Every day</option>
-                <option value="weekdays">Weekdays (Mon-Fri)</option>
-                <option value="weekly">Weekly (pick days)</option>
-                <option value="monthly">Monthly (pick dates)</option>
+      <section aria-label="Scheduled runs">
+        <div class="section-title">⏰ Scheduled Runs</div>
+        <div class="scheduler-panel">
+          <div class="scheduler-form" role="form" aria-label="Create scheduled run">
+            <div class="field scheduler-field">
+              <label class="field-label" for="schedWorkflow">Workflow</label>
+              <select class="input select-trigger" id="schedWorkflow">
+                <option value="auto-checkin.yml">🕐 Auto Checkin/Checkout</option>
+                <option value="auto-ot.yml">⏰ Auto OT Creator</option>
+                <option value="jpy-forecast.yml">💹 JPY Forecast</option>
               </select>
             </div>
-            <div class="scheduler-field" id="weeklyDaysField" style="display:none">
-              <label>Days of week</label>
-              <div class="day-picker" role="group" aria-label="Select days of week">
-                <label class="day-chip"><input type="checkbox" value="0"><span>Sun</span></label>
-                <label class="day-chip"><input type="checkbox" value="1" checked><span>Mon</span></label>
-                <label class="day-chip"><input type="checkbox" value="2" checked><span>Tue</span></label>
-                <label class="day-chip"><input type="checkbox" value="3" checked><span>Wed</span></label>
-                <label class="day-chip"><input type="checkbox" value="4" checked><span>Thu</span></label>
-                <label class="day-chip"><input type="checkbox" value="5" checked><span>Fri</span></label>
-                <label class="day-chip"><input type="checkbox" value="6"><span>Sat</span></label>
-              </div>
+            <div class="field scheduler-field">
+              <label class="field-label" for="schedType">Type</label>
+              <select class="input select-trigger" id="schedType" onchange="toggleScheduleType(this.value)">
+                <option value="once">One-time</option>
+                <option value="recurring">Recurring</option>
+              </select>
             </div>
-            <div class="scheduler-field" id="monthlyDatesField" style="display:none">
-              <label>Days of month</label>
-              <div class="month-date-grid" id="monthDateGrid" role="group" aria-label="Select days of month"></div>
-            </div>
-            <div class="scheduler-field">
-              <label>Start from</label>
-              <div class="cal-picker cal-picker-sm" id="calPickerStartWrap">
-                <input type="text" class="cal-input" id="schedStartDateInput" placeholder="Tap to pick start date" readonly onclick="togglePicker('calPickerStartBody')" aria-label="Start date">
-                <div class="cal-picker-body" id="calPickerStartBody">
-                  <div id="calPickerStart"></div>
-                </div>
-              </div>
-              <input type="hidden" id="schedStartDate">
-            </div>
-            <div class="scheduler-field">
-              <label>End date (optional)</label>
-              <div class="cal-picker cal-picker-sm" id="calPickerEndWrap">
-                <input type="text" class="cal-input" id="schedEndDateInput" placeholder="No end date" readonly onclick="togglePicker('calPickerEndBody')" aria-label="End date">
-                <div class="cal-picker-body" id="calPickerEndBody">
-                  <div id="calPickerEnd"></div>
-                </div>
-              </div>
-              <input type="hidden" id="schedEndDate">
-            </div>
-          </div>
 
-          <!-- Common fields -->
-          <div class="scheduler-field">
-            <label>Time (JST)</label>
-            <div class="time-picker" id="timePickerWrap">
-              <input type="text" class="time-input" id="schedTimeInput" value="09:00" readonly onclick="togglePicker('timePickerBody')" aria-label="Select time">
-              <div class="time-picker-body" id="timePickerBody">
-                <div id="timePicker"></div>
+            <!-- One-time fields -->
+            <div id="onceFields">
+              <div class="field scheduler-field">
+                <label class="field-label">Date (JST)</label>
+                <div class="cal-picker" id="calPickerWrap">
+                  <input type="text" class="cal-input input" id="schedDateInput" placeholder="Tap to pick date" readonly onclick="togglePicker('calPickerBody')" aria-label="Select date">
+                  <div class="cal-picker-body popover-content" id="calPickerBody">
+                    <div id="calPicker"></div>
+                  </div>
+                </div>
+                <input type="hidden" id="schedDate">
               </div>
             </div>
-            <input type="hidden" id="schedTime" value="09:00">
+
+            <!-- Recurring fields -->
+            <div id="recurFields" style="display:none">
+              <div class="field scheduler-field">
+                <label class="field-label" for="schedPattern">Pattern</label>
+                <select class="input select-trigger" id="schedPattern" onchange="togglePatternUI()">
+                  <option value="daily">Every day</option>
+                  <option value="weekdays">Weekdays (Mon-Fri)</option>
+                  <option value="weekly">Weekly (pick days)</option>
+                  <option value="monthly">Monthly (pick dates)</option>
+                </select>
+              </div>
+              <div class="field scheduler-field" id="weeklyDaysField" style="display:none">
+                <label class="field-label">Days of week</label>
+                <div class="day-picker" role="group" aria-label="Select days of week">
+                  <label class="day-chip"><input type="checkbox" value="0"><span>Sun</span></label>
+                  <label class="day-chip"><input type="checkbox" value="1" checked><span>Mon</span></label>
+                  <label class="day-chip"><input type="checkbox" value="2" checked><span>Tue</span></label>
+                  <label class="day-chip"><input type="checkbox" value="3" checked><span>Wed</span></label>
+                  <label class="day-chip"><input type="checkbox" value="4" checked><span>Thu</span></label>
+                  <label class="day-chip"><input type="checkbox" value="5" checked><span>Fri</span></label>
+                  <label class="day-chip"><input type="checkbox" value="6"><span>Sat</span></label>
+                </div>
+              </div>
+              <div class="field scheduler-field" id="monthlyDatesField" style="display:none">
+                <label class="field-label">Days of month</label>
+                <div class="month-date-grid" id="monthDateGrid" role="group" aria-label="Select days of month"></div>
+              </div>
+              <div class="field scheduler-field">
+                <label class="field-label">Start from</label>
+                <div class="cal-picker cal-picker-sm" id="calPickerStartWrap">
+                  <input type="text" class="cal-input input" id="schedStartDateInput" placeholder="Tap to pick start date" readonly onclick="togglePicker('calPickerStartBody')" aria-label="Start date">
+                  <div class="cal-picker-body popover-content" id="calPickerStartBody">
+                    <div id="calPickerStart"></div>
+                  </div>
+                </div>
+                <input type="hidden" id="schedStartDate">
+              </div>
+              <div class="field scheduler-field">
+                <label class="field-label">End date (optional)</label>
+                <div class="cal-picker cal-picker-sm" id="calPickerEndWrap">
+                  <input type="text" class="cal-input input" id="schedEndDateInput" placeholder="No end date" readonly onclick="togglePicker('calPickerEndBody')" aria-label="End date">
+                  <div class="cal-picker-body popover-content" id="calPickerEndBody">
+                    <div id="calPickerEnd"></div>
+                  </div>
+                </div>
+                <input type="hidden" id="schedEndDate">
+              </div>
+            </div>
+
+            <!-- Common fields -->
+            <div class="field scheduler-field">
+              <label class="field-label">Time (JST)</label>
+              <div class="time-picker" id="timePickerWrap">
+                <input type="text" class="time-input input" id="schedTimeInput" value="09:00" readonly onclick="togglePicker('timePickerBody')" aria-label="Select time">
+                <div class="time-picker-body popover-content" id="timePickerBody">
+                  <div id="timePicker"></div>
+                </div>
+              </div>
+              <input type="hidden" id="schedTime" value="09:00">
+            </div>
+            <div class="field scheduler-field">
+              <label class="field-label" for="schedNote">Note (optional)</label>
+              <input type="text" class="input" id="schedNote" placeholder="e.g. makeup run, daily report">
+            </div>
+            <button class="btn primary" onclick="addScheduledRun()">➕ Add Schedule</button>
           </div>
-          <div class="scheduler-field">
-            <label for="schedNote">Note (optional)</label>
-            <input type="text" id="schedNote" placeholder="e.g. makeup run, daily report">
+          <div class="scheduler-queue" id="schedulerQueue" aria-label="Scheduled runs queue">
+            <div class="empty" style="padding:16px">Loading scheduled runs...</div>
           </div>
-          <button class="btn primary" onclick="addScheduledRun()">➕ Add Schedule</button>
         </div>
-        <div class="scheduler-queue" id="schedulerQueue" aria-label="Scheduled runs queue">
-          <div class="empty" style="padding:16px">Loading scheduled runs...</div>
-        </div>
-      </div>
+      </section>
     </div>
 
     <!-- ═══════════════════════════════════════════
          PAGE: SETTINGS
          ═══════════════════════════════════════════ -->
-    <div class="page" id="page-settings" role="tabpanel">
+    <div class="page" id="page-settings" role="tabpanel" aria-label="Settings page">
       <div class="section-title">⚙️ Settings</div>
       <div class="settings-body">
         <!-- Change Passphrase -->
-        <div class="settings-card">
-          <h4>🔑 Change Passphrase</h4>
-          <p>Re-encrypt vault with a new passphrase.</p>
-          <input type="password" id="cpOldPass" placeholder="Current passphrase" autocomplete="current-password">
-          <input type="password" id="cpNewPass" placeholder="New passphrase (6+ chars)" autocomplete="new-password">
-          <input type="password" id="cpConfirmPass" placeholder="Confirm new passphrase" autocomplete="new-password">
-          <button class="btn primary sm" onclick="changePassphrase()">Change Passphrase</button>
-          <div class="error" id="cpError" role="alert" style="display:none"></div>
+        <div class="card settings-card">
+          <div class="card-header">
+            <div class="card-title">🔑 Change Passphrase</div>
+            <div class="card-description">Re-encrypt vault with a new passphrase.</div>
+          </div>
+          <div class="card-content">
+            <div class="field">
+              <input type="password" class="input" id="cpOldPass" placeholder="Current passphrase" autocomplete="current-password" aria-label="Current passphrase">
+            </div>
+            <div class="field">
+              <input type="password" class="input" id="cpNewPass" placeholder="New passphrase (6+ chars)" autocomplete="new-password" aria-label="New passphrase">
+            </div>
+            <div class="field">
+              <input type="password" class="input" id="cpConfirmPass" placeholder="Confirm new passphrase" autocomplete="new-password" aria-label="Confirm new passphrase">
+            </div>
+            <button class="btn primary btn-sm" onclick="changePassphrase()">Change Passphrase</button>
+            <div class="error" id="cpError" role="alert" style="display:none"></div>
+          </div>
         </div>
+
         <!-- Export / Import Vault -->
-        <div class="settings-card">
-          <h4>💾 Export / Import Vault</h4>
-          <p>Transfer encrypted vault between devices.</p>
-          <button class="btn sm" onclick="exportVault()" style="margin-bottom:10px">📥 Export Vault (.json)</button>
-          <br>
-          <label class="file-input-label">
-            📤 Import Vault (.json)
-            <input type="file" accept=".json" onchange="importVault(event)" style="display:none" aria-label="Import vault file">
-          </label>
+        <div class="card settings-card">
+          <div class="card-header">
+            <div class="card-title">💾 Export / Import Vault</div>
+            <div class="card-description">Transfer encrypted vault between devices.</div>
+          </div>
+          <div class="card-content">
+            <button class="btn btn-outline btn-sm" onclick="exportVault()" style="margin-bottom:10px">📥 Export Vault (.json)</button>
+            <br>
+            <label class="file-input-label">
+              📤 Import Vault (.json)
+              <input type="file" accept=".json" onchange="importVault(event)" style="display:none" aria-label="Import vault file">
+            </label>
+          </div>
         </div>
+
         <!-- Notifications -->
-        <div class="settings-card">
-          <h4>🔔 Notifications</h4>
-          <p>Get browser notifications when workflows fail or complete.</p>
-          <button class="btn sm" onclick="requestNotifPermission()">Enable Notifications</button>
+        <div class="card settings-card">
+          <div class="card-header">
+            <div class="card-title">🔔 Notifications</div>
+            <div class="card-description">Get browser notifications when workflows fail or complete.</div>
+          </div>
+          <div class="card-content">
+            <button class="btn btn-outline btn-sm" onclick="requestNotifPermission()">Enable Notifications</button>
+          </div>
         </div>
+
         <!-- About -->
-        <div class="settings-card">
-          <h4>ℹ️ About</h4>
-          <p>Workflow Dashboard v3.0<br>Multi-page SPA with encrypted vault.<br>Data refreshes every 10-30s automatically.</p>
-          <button class="btn danger sm" onclick="if(confirm('Delete vault and all data?')){localStorage.removeItem(STORAGE_KEY);lock();toast('Vault deleted','warning')}">🗑 Delete Vault</button>
+        <div class="card settings-card">
+          <div class="card-header">
+            <div class="card-title">ℹ️ About</div>
+            <div class="card-description">Workflow Dashboard v3.0 — Multi-page SPA with encrypted vault. Data refreshes every 10-30s automatically.</div>
+          </div>
+          <div class="card-content">
+            <button class="btn btn-destructive danger btn-sm" onclick="if(confirm('Delete vault and all data?')){localStorage.removeItem(STORAGE_KEY);lock();toast('Vault deleted','warning')}">🗑 Delete Vault</button>
+          </div>
         </div>
       </div>
     </div>
 
   </div>
-</div>
+</main>
 
 <!-- Log Viewer Modal -->
-<div class="modal-overlay" id="logModal" role="dialog" aria-modal="true" aria-labelledby="logModalTitle">
-  <div class="modal">
-    <div class="modal-header">
-      <h3 id="logModalTitle">Run Logs</h3>
-      <button class="modal-close" onclick="closeLogModal()" aria-label="Close modal">&times;</button>
+<div class="dialog-overlay modal-overlay" id="logModal" role="dialog" aria-modal="true" aria-labelledby="logModalTitle">
+  <div class="dialog-content modal">
+    <div class="dialog-header modal-header">
+      <h3 class="dialog-title" id="logModalTitle">Run Logs</h3>
+      <button class="btn btn-ghost btn-icon modal-close" onclick="closeLogModal()" aria-label="Close modal">&times;</button>
     </div>
-    <div class="modal-body" id="logModalBody">
+    <div class="dialog-body modal-body" id="logModalBody">
       <div class="empty">Loading jobs...</div>
     </div>
   </div>
 </div>
 
 <!-- Toast -->
-<div class="toast" id="toast" role="alert" aria-live="assertive"></div>
+<div class="toast-container">
+  <div class="toast" id="toast" role="alert" aria-live="assertive"></div>
+</div>
 
 <!-- Scripts (order matters) -->
 <script src="js/app.js"></script>
