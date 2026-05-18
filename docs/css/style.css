@@ -849,6 +849,11 @@ input[type="time"], input[type="date"], input[type="datetime-local"] {
   color: var(--foreground);
 }
 .toggle[data-state="on"]:hover { background: var(--secondary); }
+/* Fill the icon when toggle is on (Lucide icons use fill=none stroke=currentColor) */
+.toggle[data-state="on"] svg.icon,
+.toggle[aria-pressed="true"] svg.icon { fill: currentColor; }
+.toggle[data-state="on"] svg.icon path,
+.toggle[aria-pressed="true"] svg.icon path { fill: currentColor; }
 .toggle[disabled] { opacity: 0.5; pointer-events: none; }
 /* Variant: outline */
 .toggle.outline { border-color: var(--input); background: transparent; }
