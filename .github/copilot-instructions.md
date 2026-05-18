@@ -192,3 +192,80 @@ Tham khảo SKILL.md trước khi đụng vào lĩnh vực tương ứng:
 - Azure Login Skill: `.github/skills/dokokin-azure-login/SKILL.md`
 - Script gốc reference: `.github/skills/dokokin-auto-checkin/scripts/auto_checkin.py`
 - Lịch may 2026: `.github/skills/dokokin-auto-checkin/may2026-schedule.md`
+
+---
+
+## 8. UI / Design System
+
+Dashboard là một **PWA dark-mode-only** (`<html class="dark">`), mobile-first, không build step — phục vụ trực tiếp từ GitHub Pages.
+
+### Stack
+| Layer | Tool | Notes |
+|---|---|---|
+| CSS framework | **Tailwind CSS v3** (CDN: `cdn.tailwindcss.com`) | Cấu hình inline trong `<script>tailwind.config = …</script>` (xem `index.html` line ~17) |
+| Design system | **shadcn/ui tokens** (color + radius + spacing scale) | Không dùng React components — port sang vanilla HTML/CSS |
+| Font sans | **Inter** (400/500/600/700) — Google Fonts | `--font-sans` |
+| Font mono | **JetBrains Mono** (400/500/600/700) | `--font-mono` — dùng cho time, JSON, ID |
+| Icons | **Lucide-style SVG** inline (`docs/js/icons.js`) | Không phải lib ngoài — `ICON_PATHS` map + helper `ICON(name, size, extraClass)`. Thêm icon mới: thêm path vào `ICON_PATHS`. |
+| Animations | Tailwind keyframes + custom CSS | `shimmer`, `fade-in`, `modal-in`, `page-in`, `sheet-up` |
+| Static HTML | Tailwind utility classes trực tiếp | Style trong `<class="...">` |
+| JS-generated HTML | CSS classes + CSS variables từ `style.css` | Để dễ thay theme/token một chỗ |
+
+### Design tokens — `:root` trong `style.css`
+**Colors** (dark theme):
+- Background scale: `--background #09090b` → `--card #0a0a0a` → `--muted #171717` → `--secondary #1e1e1e`
+- Foreground: `--foreground #fafafa`, `--muted-foreground #a1a1aa`
+- Brand: `--primary #3b82f6` (blue), `--ring` same
+- Semantic: `--green #22c55e`, `--red #ef4444`, `--yellow #eab308`, `--purple #a855f7`, `--orange #f97316` + matching `*-subtle` rgba 0.1
+- Borders: `--border rgba(255,255,255,0.08)`, `--input rgba(255,255,255,0.12)`
+
+**Spacing** (4px base):
+- `--sp-1`..`--sp-8` = 4 / 8 / 12 / 16 / 20 / 24 / 32 px
+
+**Radius**:
+- `--radius-sm 0.375rem` / `--radius-md 0.5rem` / `--radius-lg 0.625rem` (default) / `--radius-xl 0.875rem` / `--radius-full 9999px`
+
+**Typography scale**:
+- `--fs-xs 12px` / `--fs-sm 13px` / `--fs-base 14px` / `--fs-md 16px`
+
+**Shadows**:
+- `--shadow-sm`, `--shadow-md`, `--shadow-lg`, `--shadow-glow` (blue focus ring)
+
+**Motion**:
+- `--duration-fast 150ms` / `--duration-normal 200ms` / `--duration-slow 300ms`
+- `--ease-out cubic-bezier(0.16, 1, 0.3, 1)` — chuẩn shadcn easing
+
+### Component patterns (đã port từ shadcn/ui)
+| Component | Tên class chính | File định nghĩa |
+|---|---|---|
+| Card | `.card` + `.card-header` / `.card-body` / `.card-footer` | `style.css` |
+| Button | `.btn`, `.btn-primary`, `.btn-secondary`, `.btn-ghost`, `.btn-destructive` | `style.css` |
+| Input | `.input`, `.select`, `.textarea` | `style.css` |
+| Badge / Status | `.status-badge`, `.status-running`, `.status-success`, `.status-failure` | `style.css` |
+| Modal / Dialog | `.modal` + `.modal-content` (animation `modal-in`) | `style.css` |
+| Toast | `#toast` + `.toast.show` + variants `error`/`warning` | `style.css` + `toast()` trong `app.js` |
+| Tabs | `.tabs-trigger.nav-item` + `aria-selected` | `index.html` + `navigate()` |
+| Live indicator | `.live-indicator.active/paused/error` | `style.css` + `updateLiveIndicator()` |
+| Page transition | `.page` + `.page.active` (animation `page-in`) | `style.css` |
+
+### Quy tắc khi thêm UI
+1. **Ưu tiên Tailwind utility** cho HTML tĩnh (`<div class="flex gap-2 …">`)
+2. **Dùng CSS variable** (`var(--primary)`) khi viết CSS hoặc JS-generated style — KHÔNG hardcode hex để giữ tính nhất quán
+3. **Icon mới**: thêm path SVG vào `ICON_PATHS` trong `icons.js` (giữ stroke-width 2, 24×24 viewBox)
+4. **Animation mới**: định nghĩa keyframe trong `tailwind.config.keyframes` HOẶC `style.css` `@keyframes`
+5. **Accessibility**: giữ `role`, `aria-label`, `aria-selected` trên tabs/buttons/dialogs
+6. **Mobile-first**: test với DevTools mobile emulator. Có `--mobile-nav-height 72px` cho bottom nav. Viewport `user-scalable=no` để PWA giống native.
+7. **Không thêm dark-mode toggle** — app cố tình dark-only (đỡ phức tạp + match brand)
+8. **Không import UI lib nặng** (React/Vue/Svelte/Material) — giữ zero-build, dependency tối thiểu
+
+### PWA assets
+- `theme-color` = `#09090b` (match background)
+- `apple-mobile-web-app-capable=yes` + `status-bar-style=black-translucent`
+- TODO: chưa có service worker / manifest.json đầy đủ — chỉ là "Add to Home Screen" capable
+
+### External CDN dependencies (cần kết nối internet để dashboard chạy)
+| URL | Purpose |
+|---|---|
+| `https://cdn.tailwindcss.com` | Tailwind runtime |
+| `https://fonts.googleapis.com/css2?family=Inter…JetBrains+Mono…` | Web fonts |
+| `https://api.github.com/*` | GitHub REST API (workflows, runs, gists) |
