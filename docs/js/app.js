@@ -30,7 +30,28 @@ const SCHEDULE = {
 //  CRYPTO: AES-256-GCM with PBKDF2 key derivation
 // ═══════════════════════════════════════════════════
 const STORAGE_KEY = 'wf_dash_vault';
+const SESSION_KEY = 'wf_dash_session';
 let sessionToken = null;
+
+// Restore session from sessionStorage (survives reload, cleared on tab close)
+function restoreSession() {
+  const saved = sessionStorage.getItem(SESSION_KEY);
+  if (saved) {
+    sessionToken = saved;
+    return true;
+  }
+  return false;
+}
+
+function saveSession(token) {
+  sessionToken = token;
+  sessionStorage.setItem(SESSION_KEY, token);
+}
+
+function clearSession() {
+  sessionToken = null;
+  sessionStorage.removeItem(SESSION_KEY);
+}
 
 async function deriveKey(passphrase, salt) {
   const enc = new TextEncoder();
@@ -99,7 +120,7 @@ async function setup() {
   try {
     const encrypted = await encryptToken(token, pass);
     localStorage.setItem(STORAGE_KEY, encrypted);
-    sessionToken = token;
+    saveSession(token);
     showDashboard();
     toast('✅ Setup complete! Dashboard unlocked.');
   } catch (e) {
@@ -116,7 +137,8 @@ async function unlock() {
   if (!stored) { switchTab('setup'); return; }
 
   try {
-    sessionToken = await decryptToken(stored, pass);
+    const token = await decryptToken(stored, pass);
+    saveSession(token);
     showDashboard();
   } catch {
     errEl.style.display = 'block';
@@ -126,7 +148,7 @@ async function unlock() {
 }
 
 function lock() {
-  sessionToken = null;
+  clearSession();
   stopAutoLock();
   stopPolling();
   updateLiveIndicator('paused', 0);
@@ -316,7 +338,10 @@ if ('serviceWorker' in navigator) {
 //  INIT
 // ═══════════════════════════════════════════════════
 updateNotifBtn();
-if (!hasVault()) {
+if (restoreSession()) {
+  // Session survived reload — go straight to dashboard
+  showDashboard();
+} else if (!hasVault()) {
   switchTab('setup');
   document.getElementById('authDesc').textContent = 'First time? Set up your encrypted vault.';
 } else {

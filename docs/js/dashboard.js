@@ -317,13 +317,20 @@ async function refresh() {
 
   try {
     const allRuns = [];
+    let firstError = null;
     const results = await Promise.all(
       WORKFLOWS.map(wf =>
         apiFetch(`/repos/${OWNER}/${REPO}/actions/workflows/${wf.id}/runs?per_page=10`)
           .then(data => ({ wf, runs: data.workflow_runs || [] }))
-          .catch(() => ({ wf, runs: [] }))
+          .catch(err => { if (!firstError) firstError = err; return { wf, runs: [] }; })
       )
     );
+
+    // If all workflows returned empty and there was an error, show it
+    const totalRuns = results.reduce((sum, r) => sum + r.runs.length, 0);
+    if (totalRuns === 0 && firstError) {
+      throw firstError;
+    }
 
     renderHealthBar(results);
 
@@ -361,10 +368,12 @@ async function refresh() {
     if (!document.hidden) updateLiveIndicator('active', pollInterval);
   } catch (e) {
     consecutiveErrors++;
-    if (consecutiveErrors >= 3) {
-      updateLiveIndicator('error', pollInterval);
-      if (grid) grid.innerHTML = `<div class="empty">❌ ${e.message}<br><small>Retrying automatically...</small></div>`;
+    updateLiveIndicator('error', pollInterval);
+    if (grid) {
+      grid.innerHTML = `<div class="empty">❌ ${e.message}<br><small>Retrying automatically… (attempt ${consecutiveErrors})</small></div>`;
     }
+    // Show toast on first error so mobile users see it
+    if (consecutiveErrors === 1) toast(`❌ ${e.message}`, 'error');
   } finally {
     isPolling = false;
   }
