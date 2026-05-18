@@ -110,6 +110,23 @@ html { touch-action: manipulation; }
   100% { box-shadow: none; }
 }
 
+/* ─── ICONS (Lucide line-style — global) ─── */
+.icon {
+  display: inline-block;
+  vertical-align: -0.18em;
+  flex-shrink: 0;
+}
+[data-icon] {
+  display: inline-flex; align-items: center; justify-content: center;
+  line-height: 1;
+}
+/* Icon wrappers in titles should inherit color */
+.section-title [data-icon], .card-title [data-icon] {
+  color: var(--primary);
+}
+/* Icon-only buttons keep a square shape */
+.btn .icon, .btn [data-icon] .icon { flex-shrink: 0; }
+
 /* ─── TABS & NAV (active toggled by JS) ─── */
 .nav-icon {
   display: inline-flex; align-items: center; justify-content: center;
@@ -352,7 +369,7 @@ html { touch-action: manipulation; }
   pointer-events: none;
 }
 .switch.active .switch-thumb {
-  transform: translateX(calc(1rem - 4px));
+  transform: translateX(1rem);
   background: var(--primary-foreground);
 }
 .sched-toggle::after {
@@ -363,7 +380,7 @@ html { touch-action: manipulation; }
   transition: transform 150ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 .sched-toggle.active::after {
-  transform: translateX(calc(1rem - 4px));
+  transform: translateX(1rem);
   background: var(--primary-foreground);
 }
 .switch[data-disabled], .sched-toggle[data-disabled] {
