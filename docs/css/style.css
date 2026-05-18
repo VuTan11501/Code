@@ -453,14 +453,35 @@ select option { background: var(--card); color: var(--foreground); }
 .schedule-pip.disabled { opacity: 0.35; text-decoration: line-through; }
 
 .schedule-legend {
-  display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
-  font-size: var(--fs-xs); color: var(--muted-foreground);
-  padding: 0 4px 8px;
+  display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center;
+  font-size: var(--fs-xs); color: var(--foreground);
+  padding: 10px 4px 8px;
 }
-.schedule-legend .legend-item { display: inline-flex; align-items: center; gap: 4px; }
-.schedule-legend .legend-dot { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
-.schedule-legend .legend-dot.today-col { background: rgba(59,130,246,0.4); }
-.schedule-legend .legend-dot.next-time { background: var(--green); }
+.schedule-legend .legend-item { display: inline-flex; align-items: center; gap: 6px; color: var(--foreground); font-weight: 500; }
+.schedule-legend .legend-dot { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.schedule-legend .legend-dot.today-col { background: rgba(59,130,246,0.5); box-shadow: inset 0 0 0 1px rgba(59,130,246,0.7); }
+.schedule-legend .legend-dot.next-time { background: var(--green); box-shadow: inset 0 0 0 1px rgba(34,197,94,0.7); }
+.schedule-legend .legend-divider {
+  width: 1px; height: 14px; background: var(--border); margin: 0 2px;
+}
+.schedule-legend .legend-hint {
+  display: inline-flex; align-items: center; gap: 6px;
+  color: var(--muted-foreground);
+}
+.schedule-legend .legend-kbd {
+  display: inline-flex; align-items: center;
+  padding: 2px 6px; min-height: 18px;
+  font: 500 11px/1 ui-monospace, SFMono-Regular, Consolas, monospace;
+  color: var(--foreground);
+  background: var(--muted, rgba(255,255,255,0.06));
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  box-shadow: inset 0 -1px 0 rgba(0,0,0,0.2);
+}
+@media (max-width: 480px) {
+  .schedule-legend { gap: 6px 10px; }
+  .schedule-legend .legend-divider { display: none; }
+}
 
 /* Pip action popover */
 .pip-popover {

@@ -275,7 +275,10 @@ function renderScheduleCalendar(gistEntries) {
   html += '<div class="schedule-legend">';
   html += '<span class="legend-item"><span class="legend-dot today-col"></span>Today</span>';
   html += '<span class="legend-item"><span class="legend-dot next-time"></span>Next slot</span>';
-  html += '<span class="legend-item text-muted">Tap empty cell to add · Tap pip for actions · Long-press to toggle</span>';
+  html += '<span class="legend-divider" aria-hidden="true"></span>';
+  html += '<span class="legend-hint"><kbd class="legend-kbd">Tap empty</kbd> add</span>';
+  html += '<span class="legend-hint"><kbd class="legend-kbd">Tap pip</kbd> actions</span>';
+  html += '<span class="legend-hint"><kbd class="legend-kbd">Long-press</kbd> toggle</span>';
   html += '</div></div>';
   container.innerHTML = html;
 
