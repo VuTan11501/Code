@@ -95,15 +95,16 @@ async function decryptToken(stored, passphrase) {
 function hasVault() { return !!localStorage.getItem(STORAGE_KEY); }
 
 function switchTab(tab) {
-  document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
+  const tabs = document.querySelectorAll('#authTabs .tabs-trigger');
+  tabs.forEach(t => t.classList.remove('active'));
   if (tab === 'setup') {
     document.getElementById('setupForm').style.display = 'block';
     document.getElementById('unlockForm').style.display = 'none';
-    document.querySelectorAll('.auth-tab')[1].classList.add('active');
+    if (tabs[1]) tabs[1].classList.add('active');
   } else {
     document.getElementById('setupForm').style.display = 'none';
     document.getElementById('unlockForm').style.display = 'block';
-    document.querySelectorAll('.auth-tab')[0].classList.add('active');
+    if (tabs[0]) tabs[0].classList.add('active');
   }
 }
 
