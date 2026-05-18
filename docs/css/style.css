@@ -805,18 +805,79 @@ header h1 .icon { font-size: 24px; }
   animation: pickerSlide var(--duration-normal) var(--ease-out);
 }
 .time-picker-body.open { display: block; }
-.time-display {
-  text-align: center;
-  font-size: var(--fs-2xl);
+
+/* iOS-style Wheel Picker */
+.wheel-picker-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  height: 220px;
+  gap: 0;
+  margin-bottom: var(--sp-3);
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  background: var(--bg);
+}
+.wheel-picker-highlight {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 85%;
+  height: 44px;
+  background: var(--accent-subtle);
+  border-radius: var(--radius-md);
+  border-top: 1px solid rgba(88,166,255,0.25);
+  border-bottom: 1px solid rgba(88,166,255,0.25);
+  pointer-events: none;
+  z-index: 1;
+}
+.wheel-column {
+  height: 100%;
+  overflow-y: scroll;
+  scroll-snap-type: y mandatory;
+  -webkit-overflow-scrolling: touch;
+  flex: 1;
+  max-width: 80px;
+  position: relative;
+  z-index: 2;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.wheel-column::-webkit-scrollbar { display: none; }
+.wheel-item {
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  font-family: var(--font-mono);
+  font-weight: 500;
+  color: var(--muted);
+  scroll-snap-align: center;
+  cursor: pointer;
+  transition: color 0.15s, transform 0.15s, opacity 0.15s;
+  opacity: 0.4;
+  -webkit-tap-highlight-color: transparent;
+}
+.wheel-item.active {
+  color: var(--text);
+  font-weight: 700;
+  font-size: 26px;
+  opacity: 1;
+}
+.wheel-separator {
+  font-size: 28px;
   font-weight: 700;
   font-family: var(--font-mono);
   color: var(--accent);
-  margin-bottom: var(--sp-4);
-  letter-spacing: 2px;
-  padding: var(--sp-2) 0;
-  background: var(--accent-subtle);
-  border-radius: var(--radius-md);
+  padding: 0 var(--sp-1);
+  z-index: 2;
 }
+
+/* Keep old grid styles for backward compat (hidden) */
+.time-display { display: none; }
 .time-section { margin-bottom: var(--sp-3); }
 .time-section-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.6px; font-weight: 600; margin-bottom: var(--sp-2); }
 .time-grid { display: flex; gap: var(--sp-2); flex-wrap: wrap; }
@@ -994,6 +1055,10 @@ header h1 .icon { font-size: 24px; }
   .cal-picker-body, .time-picker-body { border-radius: var(--radius-lg); padding: var(--sp-4); }
   .cal-grid .cal-day { min-height: 42px; font-size: var(--fs-base); }
   .time-grid .time-btn { min-width: 40px; padding: var(--sp-3) var(--sp-2); min-height: 40px; }
+  .wheel-picker-container { height: 220px; }
+  .wheel-column { max-width: 90px; }
+  .wheel-item { font-size: 24px; }
+  .wheel-item.active { font-size: 28px; }
 
   /* Schedule items */
   .sched-item { padding: var(--sp-3) 0; gap: var(--sp-2); }

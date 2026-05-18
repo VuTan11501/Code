@@ -143,7 +143,7 @@ document.addEventListener('click', function(e) {
 });
 
 // ═══════════════════════════════════════════════════
-//  CUSTOM TIME PICKER
+//  iOS-STYLE WHEEL TIME PICKER
 // ═══════════════════════════════════════════════════
 let selectedHour = 9;
 let selectedMinute = 0;
@@ -160,38 +160,104 @@ const TIME_PRESETS = [
 function renderTimePicker() {
   const container = document.getElementById('timePicker');
   if (!container) return;
-  const timeStr = `${String(selectedHour).padStart(2,'0')}:${String(selectedMinute).padStart(2,'0')}`;
-  document.getElementById('schedTime').value = timeStr;
-  const dispInput = document.getElementById('schedTimeInput');
-  if (dispInput) dispInput.value = timeStr;
+  updateTimeDisplay();
 
-  let html = `<div class="time-display">${timeStr}</div>`;
-  html += '<div class="time-section"><div class="time-section-label">Hour</div><div class="time-grid">';
-  for (let h = 0; h < 24; h++) {
-    const sel = h === selectedHour ? ' selected' : '';
-    html += `<div class="time-btn${sel}" onclick="pickHour(${h})">${String(h).padStart(2,'0')}</div>`;
-  }
-  html += '</div></div>';
-
-  html += '<div class="time-section"><div class="time-section-label">Minute</div><div class="time-grid">';
-  for (const m of [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55]) {
-    const sel = m === selectedMinute ? ' selected' : '';
-    html += `<div class="time-btn${sel}" onclick="pickMinute(${m})">:${String(m).padStart(2,'0')}</div>`;
-  }
-  html += '</div></div>';
+  let html = `<div class="wheel-picker-container">
+    <div class="wheel-picker-highlight"></div>
+    <div class="wheel-column" id="wheelHour"></div>
+    <div class="wheel-separator">:</div>
+    <div class="wheel-column" id="wheelMinute"></div>
+  </div>`;
 
   html += '<div class="time-presets"><div class="time-presets-label">Quick presets</div><div class="time-presets-grid">';
   for (const p of TIME_PRESETS) {
     const sel = (selectedHour === p.h && selectedMinute === p.m) ? ' selected' : '';
-    html += `<div class="time-preset${sel}" onclick="pickPreset(${p.h},${p.m})">${p.label}<br><small style="opacity:0.7">${p.desc}</small></div>`;
+    html += `<div class="time-preset${sel}" onclick="pickPreset(${p.h},${p.m})">${p.label} <span class="text-muted">${p.desc}</span></div>`;
   }
   html += '</div></div>';
   container.innerHTML = html;
+
+  // Initialize wheel columns
+  initWheel('wheelHour', 24, selectedHour, (val) => { selectedHour = val; updateTimeDisplay(); });
+  initWheel('wheelMinute', 12, selectedMinute / 5, (val) => { selectedMinute = val * 5; updateTimeDisplay(); }, true);
 }
 
+function updateTimeDisplay() {
+  const timeStr = `${String(selectedHour).padStart(2,'0')}:${String(selectedMinute).padStart(2,'0')}`;
+  document.getElementById('schedTime').value = timeStr;
+  const dispInput = document.getElementById('schedTimeInput');
+  if (dispInput) dispInput.value = timeStr;
+}
+
+function initWheel(id, count, initialIndex, onChange, isMinute) {
+  const col = document.getElementById(id);
+  if (!col) return;
+
+  // Generate items
+  let html = '';
+  for (let i = 0; i < count; i++) {
+    const label = isMinute ? String(i * 5).padStart(2, '0') : String(i).padStart(2, '0');
+    html += `<div class="wheel-item" data-index="${i}">${label}</div>`;
+  }
+  col.innerHTML = html;
+
+  const itemHeight = 44;
+  const visibleItems = 5;
+  const padding = itemHeight * Math.floor(visibleItems / 2);
+
+  // Set padding so first/last items can center
+  col.style.paddingTop = padding + 'px';
+  col.style.paddingBottom = padding + 'px';
+
+  // Scroll to initial selection
+  col.scrollTop = initialIndex * itemHeight;
+
+  // Handle scroll with snap
+  let scrollTimeout;
+  col.addEventListener('scroll', () => {
+    clearTimeout(scrollTimeout);
+    scrollTimeout = setTimeout(() => {
+      const index = Math.round(col.scrollTop / itemHeight);
+      const clamped = Math.max(0, Math.min(count - 1, index));
+      col.scrollTo({ top: clamped * itemHeight, behavior: 'smooth' });
+
+      // Update selection highlighting
+      col.querySelectorAll('.wheel-item').forEach((el, i) => {
+        el.classList.toggle('active', i === clamped);
+      });
+      onChange(clamped);
+    }, 80);
+  }, { passive: true });
+
+  // Mark initial active
+  col.querySelectorAll('.wheel-item')[initialIndex]?.classList.add('active');
+
+  // Click to select
+  col.querySelectorAll('.wheel-item').forEach((item) => {
+    item.addEventListener('click', () => {
+      const idx = parseInt(item.dataset.index);
+      col.scrollTo({ top: idx * itemHeight, behavior: 'smooth' });
+    });
+  });
+}
+
+function pickPreset(h, m) {
+  selectedHour = h;
+  selectedMinute = m;
+  updateTimeDisplay();
+  // Re-scroll wheels
+  const hCol = document.getElementById('wheelHour');
+  const mCol = document.getElementById('wheelMinute');
+  if (hCol) hCol.scrollTo({ top: h * 44, behavior: 'smooth' });
+  if (mCol) mCol.scrollTo({ top: (m / 5) * 44, behavior: 'smooth' });
+  // Update active states
+  hCol?.querySelectorAll('.wheel-item').forEach((el, i) => el.classList.toggle('active', i === h));
+  mCol?.querySelectorAll('.wheel-item').forEach((el, i) => el.classList.toggle('active', i === m / 5));
+}
+
+// Keep old functions for backward compat
 function pickHour(h) { selectedHour = h; renderTimePicker(); }
 function pickMinute(m) { selectedMinute = m; renderTimePicker(); }
-function pickPreset(h, m) { selectedHour = h; selectedMinute = m; renderTimePicker(); }
 
 // ═══════════════════════════════════════════════════
 //  MONTHLY DATE GRID PICKER
