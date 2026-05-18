@@ -490,8 +490,10 @@ select option { background: var(--card); color: var(--foreground); }
 .schedule-cell.time-label.next-time { color: var(--green); font-weight: 700; background: var(--green-subtle); }
 .schedule-cell.now-slot { box-shadow: inset 0 0 0 1px var(--green); }
 .schedule-cell.sc-slot.empty-slot { cursor: pointer; -webkit-tap-highlight-color: transparent; }
-.schedule-cell.sc-slot.empty-slot:hover { background: var(--muted); }
-.schedule-cell.sc-slot.empty-slot.today-col:hover { background: rgba(59,130,246,0.16); }
+@media (hover: hover) {
+  .schedule-cell.sc-slot.empty-slot:hover { background: var(--muted); }
+  .schedule-cell.sc-slot.empty-slot.today-col:hover { background: rgba(59,130,246,0.16); }
+}
 .schedule-cell.sc-slot.empty-slot:active { background: var(--secondary); }
 .schedule-pip {
   padding: 1px 4px; border-radius: var(--radius-sm); font-size: 8px; white-space: nowrap;
