@@ -1331,17 +1331,17 @@ input[type="time"], input[type="date"], input[type="datetime-local"] {
 .tooltip-portal {
   position: fixed;
   z-index: 9999;
-  max-width: 320px;
+  max-width: 360px;
   width: max-content;
   padding: 6px 10px;
   font-size: 12px;
-  line-height: 1.4;
+  line-height: 1.45;
   font-weight: 400;
   color: var(--background, #0a0a0a);
   background: var(--foreground, #fafafa);
   border-radius: var(--radius-md, 0.5rem);
   box-shadow: 0 4px 12px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.06);
-  white-space: normal;
+  white-space: pre-line;
   word-break: break-word;
   pointer-events: none;
   opacity: 0;
