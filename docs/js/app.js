@@ -193,6 +193,7 @@ function showDashboard() {
     window.CloudSync.register('ot_takehome_profile_v1', 'OT Profile',                'ot_profile');
     window.CloudSync.register('wf_dash_notif_prefs',    'Notification preferences',  'notif_prefs');
     window.CloudSync.register('sched_pip_filter_v1',    'Schedule filter',           'schedule_filter');
+    window.CloudSync.register('wf_dash_theme',          'Theme (light/dark/auto)',   'theme');
     window.CloudSync.pull().then(r => {
       if (r && r.applied) window.CloudSync.applyToUI();
     });
@@ -848,6 +849,9 @@ if ('serviceWorker' in navigator) {
 //   and the dashboard never starts polling on reload.)
 // ═══════════════════════════════════════════════════
 function bootstrap() {
+  if (window.Theme && typeof window.Theme.init === 'function') {
+    try { window.Theme.init(); } catch {}
+  }
   updateNotifBtn();
   if (restoreSession()) {
     // Session survived reload — go straight to dashboard

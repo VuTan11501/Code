@@ -11,6 +11,29 @@ function initSettingsPage() {
   loadTokenStatus();
   renderCloudSyncStatus();
   renderBiometricStatus();
+  renderThemeStatus();
+}
+
+function setTheme(mode) {
+  if (!window.Theme) return;
+  window.Theme.set(mode);
+  renderThemeStatus();
+}
+
+function renderThemeStatus() {
+  if (!window.Theme) return;
+  const mode = window.Theme.getMode();
+  const sys = window.Theme.systemPref();
+  document.querySelectorAll('#themeSwitcher [data-theme-opt]').forEach(btn => {
+    btn.classList.toggle('is-active', btn.getAttribute('data-theme-opt') === mode);
+    btn.setAttribute('aria-checked', String(btn.getAttribute('data-theme-opt') === mode));
+  });
+  const help = document.getElementById('themeHelp');
+  if (help) {
+    help.textContent = mode === 'auto'
+      ? `Currently following your system (${sys}). Will switch automatically when the OS theme changes.`
+      : `Forced to ${mode} on every device that pulls this setting.`;
+  }
 }
 
 async function renderBiometricStatus() {

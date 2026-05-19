@@ -1,39 +1,55 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en" data-theme="dark">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="theme-color" content="#09090b">
+<meta name="theme-color" content="#09090b" id="themeColorMeta">
 <meta name="color-scheme" content="dark">
 <title>Workflow Dashboard</title>
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="favicon.svg">
+<link rel="manifest" href="manifest.json">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script>
+/* Theme init — runs before Tailwind/CSS so first paint matches user pref */
+(function () {
+  try {
+    var mode = localStorage.getItem('wf_dash_theme') || 'auto';
+    var resolved = mode;
+    if (mode === 'auto') {
+      resolved = (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) ? 'light' : 'dark';
+    }
+    document.documentElement.setAttribute('data-theme', resolved);
+    var meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', resolved === 'light' ? '#ffffff' : '#09090b');
+  } catch (e) {}
+})();
+</script>
 <script src="https://cdn.tailwindcss.com"></script>
 <script>
 tailwind.config = {
-  darkMode: 'class',
+  darkMode: ['selector', '[data-theme="dark"]'],
   theme: {
     extend: {
       colors: {
-        border: 'rgba(255,255,255,0.08)',
-        input: 'rgba(255,255,255,0.12)',
-        ring: '#3b82f6',
-        background: '#09090b',
-        foreground: '#fafafa',
-        primary: { DEFAULT: '#3b82f6', foreground: '#ffffff' },
-        secondary: { DEFAULT: '#1e1e1e', foreground: '#fafafa' },
-        destructive: { DEFAULT: '#dc2626', foreground: '#fafafa' },
-        muted: { DEFAULT: '#171717', foreground: '#a1a1aa' },
-        accent: { DEFAULT: '#1a1a2e', foreground: '#fafafa' },
-        card: { DEFAULT: '#0a0a0a', foreground: '#fafafa' },
-        popover: { DEFAULT: '#0a0a0a', foreground: '#fafafa' },
-        success: { DEFAULT: '#22c55e', foreground: '#ffffff' },
-        warning: { DEFAULT: '#eab308', foreground: '#1c1917' },
+        border: 'var(--border)',
+        input: 'var(--input)',
+        ring: 'var(--ring)',
+        background: 'var(--background)',
+        foreground: 'var(--foreground)',
+        primary: { DEFAULT: 'var(--primary)', foreground: 'var(--primary-foreground)' },
+        secondary: { DEFAULT: 'var(--secondary)', foreground: 'var(--secondary-foreground)' },
+        destructive: { DEFAULT: 'var(--destructive)', foreground: '#ffffff' },
+        muted: { DEFAULT: 'var(--muted)', foreground: 'var(--muted-foreground)' },
+        accent: { DEFAULT: 'var(--accent)', foreground: 'var(--accent-foreground)' },
+        card: { DEFAULT: 'var(--card)', foreground: 'var(--card-foreground)' },
+        popover: { DEFAULT: 'var(--card)', foreground: 'var(--card-foreground)' },
+        success: { DEFAULT: 'var(--green)', foreground: '#ffffff' },
+        warning: { DEFAULT: 'var(--yellow)', foreground: '#1c1917' },
       },
       fontFamily: {
         sans: ['Inter', 'ui-sans-serif', 'system-ui', '-apple-system', 'sans-serif'],
@@ -68,7 +84,7 @@ tailwind.config = {
   },
 }
 </script>
-<link rel="stylesheet" href="css/style.css?v=45">
+<link rel="stylesheet" href="css/style.css?v=46">
 <link rel="preconnect" href="https://api.github.com">
 </head>
 <body class="bg-background text-foreground font-sans text-sm antialiased min-h-dvh overflow-x-hidden">
@@ -427,6 +443,22 @@ tailwind.config = {
     <div class="page" id="page-settings" role="tabpanel" aria-label="Settings page">
       <div class="section-title text-sm font-medium text-muted-foreground mb-4 flex items-center gap-2"><span data-icon="settings" data-size="16"></span> Settings</div>
       <div class="settings-body">
+        <!-- Appearance / Theme -->
+        <div class="card settings-card">
+          <div class="card-header">
+            <div class="card-title"><span data-icon="sun" data-size="16"></span> Appearance</div>
+            <div class="card-description">Light, Dark, or follow your system. Synced across devices.</div>
+          </div>
+          <div class="card-content">
+            <div id="themeSwitcher" role="radiogroup" aria-label="Theme" style="display:flex;gap:8px;flex-wrap:wrap">
+              <button type="button" class="btn" data-theme-opt="auto" onclick="setTheme('auto')"><span data-icon="monitor" data-size="14"></span> Auto</button>
+              <button type="button" class="btn" data-theme-opt="light" onclick="setTheme('light')"><span data-icon="sun" data-size="14"></span> Light</button>
+              <button type="button" class="btn" data-theme-opt="dark" onclick="setTheme('dark')"><span data-icon="moon" data-size="14"></span> Dark</button>
+            </div>
+            <p class="text-xs text-muted-foreground mt-3 leading-relaxed opacity-70" id="themeHelp"></p>
+          </div>
+        </div>
+
         <!-- Change Passphrase -->
         <div class="card settings-card">
           <div class="card-header">
@@ -941,16 +973,17 @@ tailwind.config = {
 </div>
 
 <!-- Scripts (order matters) -->
-<script src="js/icons.js?v=41"></script>
+<script src="js/icons.js?v=42"></script>
 <script src="js/no-autofill.js?v=26"></script>
+<script src="js/theme.js?v=1"></script>
 <script src="js/locations.js?v=27"></script>
 <script src="js/biometric.js?v=2"></script>
-<script src="js/cloud-sync.js?v=3"></script>
-<script src="js/app.js?v=32"></script>
+<script src="js/cloud-sync.js?v=4"></script>
+<script src="js/app.js?v=33"></script>
 <script src="js/dashboard.js?v=28"></script>
 <script src="js/schedule.js?v=27"></script>
 <script src="js/ot-salary.js?v=37"></script>
 <script src="js/ot-planner.js?v=49"></script>
-<script src="js/settings.js?v=30"></script>
+<script src="js/settings.js?v=31"></script>
 </body>
 </html>

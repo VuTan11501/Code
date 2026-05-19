@@ -214,6 +214,8 @@ window.CloudSync = (function () {
     // Convenience: re-render UI bits that depend on synced settings.
     // Call after a successful pull on the active page.
     applyToUI: function () {
+      // Theme is special — apply BEFORE re-rendering so colors are right
+      if (window.Theme) { try { window.Theme.apply(window.Theme.getMode()); } catch {} }
       const calls = [
         'renderLocationList',        // locations.js
         'renderNotifSettings',       // app.js
@@ -223,6 +225,7 @@ window.CloudSync = (function () {
         'renderOtList',              // ot-planner.js
         'renderScheduleTable',       // schedule.js (pip filter applies here)
         'renderScheduleCalendar',    // schedule.js
+        'renderThemeStatus',         // settings.js
       ];
       for (const name of calls) {
         const fn = window[name];
