@@ -1612,8 +1612,10 @@ function _pickOptimalMix(sun, wk, remainingHours, target, maxMode) {
 
 function runOtOptimizer() {
   const targetEl = document.getElementById('otOptTarget');
+  const targetHoursEl = document.getElementById('otOptTargetHours');
   const maxMode = document.getElementById('otOptMax').checked;
   const target = maxMode ? Infinity : Math.max(0, Number(targetEl.value) || 0);
+  const targetHours = maxMode ? Infinity : Math.max(0, Number(targetHoursEl.value) || Infinity);
 
   const y = _otState.viewYear;
   const m = _otState.viewMonth;
@@ -1624,14 +1626,19 @@ function runOtOptimizer() {
 
   const sal = window.OT_SALARY.calcMonthlySummary(existing);
   const S = window.OT_SALARY.SALARY;
-  const remainingHours = S.MAX_HOURS_PER_MONTH - sal.totalHours;
+  let remainingHours = S.MAX_HOURS_PER_MONTH - sal.totalHours;
+
+  // Also cap by target hours if specified
+  if (targetHours !== Infinity) {
+    remainingHours = Math.min(remainingHours, Math.max(0, targetHours - sal.totalHours));
+  }
 
   if (remainingHours <= 0) {
     document.getElementById('otOptResults').innerHTML =
       `<div class="empty text-warning text-sm p-3 text-center">${ICON('alertTriangle', 14)} Monthly budget already full: ${sal.totalHours}/${S.MAX_HOURS_PER_MONTH}h. Nothing to optimize.</div>`;
     return;
   }
-  if (!maxMode && target <= sal.gross) {
+  if (!maxMode && target <= sal.gross && targetHours === Infinity) {
     document.getElementById('otOptResults').innerHTML =
       `<div class="empty text-success text-sm p-3 text-center">${ICON('check', 14)} Target ${window.OT_SALARY.formatYen(target)} already met (current ${window.OT_SALARY.formatYen(sal.gross)}).</div>`;
     return;
@@ -1805,7 +1812,9 @@ function closeOtOptimizer() {
 function _toggleOtOptTarget() {
   const max = document.getElementById('otOptMax').checked;
   const inp = document.getElementById('otOptTarget');
+  const inpH = document.getElementById('otOptTargetHours');
   if (inp) inp.disabled = max;
+  if (inpH) inpH.disabled = max;
 }
 // ═══════════════════════════════════════════════════
 //  PAYSLIP DETAIL MODAL — full breakdown like steps-list

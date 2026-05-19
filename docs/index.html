@@ -934,10 +934,14 @@ tailwind.config = {
     </div>
     <div class="dialog-body modal-body" style="padding:20px">
       <div class="text-xs text-muted-foreground mb-3">Suggests optimal OT schedule respecting 75h/month + 12h/day caps + Labor Law §34 (≤6h no break required). Strategy: pack pure-night 22:00→04:00 (6h) shifts — Sundays first (¥2,500/h, Sun+Night premiums stack), then weekdays (¥2,344/h). Last shift may be partial (≥3h) to fill the cap exactly.</div>
-      <div class="grid grid-cols-[1fr_auto] gap-3 items-end mb-4">
+      <div class="grid grid-cols-[1fr_1fr_auto] gap-3 items-end mb-4">
         <div class="field">
           <label class="field-label text-xs text-muted-foreground font-medium block mb-1" for="otOptTarget">Target income (¥)</label>
           <input type="number" class="input w-full font-mono" id="otOptTarget" placeholder="e.g. 150000" min="0" step="10000" disabled>
+        </div>
+        <div class="field">
+          <label class="field-label text-xs text-muted-foreground font-medium block mb-1" for="otOptTargetHours">Target hours (h)</label>
+          <input type="number" class="input w-full font-mono" id="otOptTargetHours" placeholder="e.g. 45" min="0" step="1" disabled>
         </div>
         <label class="flex items-center gap-2 text-sm pb-2">
           <input type="checkbox" id="otOptMax" checked onchange="_toggleOtOptTarget()"> Max budget
@@ -984,7 +988,7 @@ tailwind.config = {
 <script src="js/dashboard.js?v=28"></script>
 <script src="js/schedule.js?v=27"></script>
 <script src="js/ot-salary.js?v=37"></script>
-<script src="js/ot-planner.js?v=50"></script>
+<script src="js/ot-planner.js?v=51"></script>
 <script src="js/settings.js?v=31"></script>
 </body>
 </html>
