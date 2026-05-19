@@ -257,7 +257,9 @@ function renderScheduleCalendar(gistEntries) {
     if (h * 60 + m >= nowMin) { nextTimeIdx = i; break; }
   }
 
-  const dayNames = ['S','M','T','W','T','F','S'];
+  // Week starts Monday; column index maps to JS day-of-week
+  const colToDow = [1, 2, 3, 4, 5, 6, 0];
+  const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   let html = '';
 
   // Stats bar
@@ -282,15 +284,17 @@ function renderScheduleCalendar(gistEntries) {
   // Grid
   html += '<div class="schedule-grid-wrapper"><div class="schedule-grid">';
   html += '<div class="schedule-cell header"></div>';
-  for (let d = 0; d < 7; d++) {
+  for (let col = 0; col < 7; col++) {
+    const d = colToDow[col];
     const cls = d === todayDow ? 'header today-col' : 'header';
-    html += `<div class="schedule-cell ${cls}">${dayNames[d]}</div>`;
+    html += `<div class="schedule-cell ${cls}">${dayNames[col]}</div>`;
   }
   for (let ti = 0; ti < times.length; ti++) {
     const time = times[ti];
     const rowCls = ti === nextTimeIdx ? 'time-label next-time' : 'time-label';
     html += `<div class="schedule-cell ${rowCls}"${ti === nextTimeIdx ? ' data-tooltip="Next upcoming slot"' : ''}>${time}</div>`;
-    for (let day = 0; day < 7; day++) {
+    for (let col = 0; col < 7; col++) {
+      const day = colToDow[col];
       const cellPips = visiblePips.filter(p => p.dayIdx === day && p.time === time);
       const isToday = day === todayDow;
       const isNext = ti === nextTimeIdx;
