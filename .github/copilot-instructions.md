@@ -738,3 +738,276 @@ T=05:00  Run #101 chain seamlessly, không gap
 - **Dashboard "Live" indicator**: nếu thấy nhiều run của `Scheduled Run Dispatcher` liên tiếp = healthy
 - **Watchdog email**: nếu nhận được `🚨 Dispatcher was dead, resurrected` → check WHY (PAT? rate limit?)
 - **Gist version history**: GitHub Gist tự track mọi PATCH → `https://gist.github.com/<user>/abc2a47c…/revisions`
+
+
+---
+
+## 11. ☁️ Cross-device Sync (CloudSync)
+
+**File**: `docs/js/cloud-sync.js`. Shipped May 19 2026.
+
+**Mục đích**: đồng bộ user-level settings giữa các thiết bị (máy chính, iPhone PWA, tablet) qua cùng 1 GitHub PAT/Gist. Auth & vault vẫn local-only.
+
+### Storage
+- **Cùng Gist** `abc2a47c0a396025a72a6580227ff493`, file mới `user-settings.json`
+- Rolling backup `user-settings.json.bak` được ghi atomically trong cùng 1 PATCH
+- Schema:
+  ```jsonc
+  {
+    "_version": 1,
+    "_updated_at": "2026-05-19T17:25:00+09:00",  // ISO timestamp LWW
+    "_updated_by": "chrome-win-a7f2",            // device fingerprint
+    "settings": {
+      "locations":       { ... },   // workflow_locations_v1
+      "ot_profile":      { ... },   // ot_takehome_profile_v1
+      "notif_prefs":     { ... },   // wf_dash_notif_prefs
+      "schedule_filter": { ... },   // sched_pip_filter_v1
+      "theme":           "auto"     // wf_dash_theme (string scalar)
+    }
+  }
+  ```
+
+### 5 keys được sync (CHỈ 5 này — đừng đoán)
+| localStorage key | shortKey trong Gist | Module owner |
+|---|---|---|
+| `workflow_locations_v1` | `locations` | locations.js |
+| `ot_takehome_profile_v1` | `ot_profile` | ot-planner.js |
+| `wf_dash_notif_prefs` | `notif_prefs` | app.js |
+| `sched_pip_filter_v1` | `schedule_filter` | schedule.js |
+| `wf_dash_theme` | `theme` | theme.js |
+
+### Conflict resolution
+- **Last-Write-Wins** trên `_updated_at` (ISO ms)
+- `localStorage.wf_dash_settings_updated_at` track timestamp đã apply lần cuối → idempotent pull
+- **First-time-on-device** (no local timestamp) → adopt remote bất kể, không hỏi
+- **Caveat**: 2 devices edit trong cùng debounce window 3s → có thể mất 1 nhánh. Với 1 user/multi-device là chấp nhận được.
+
+### Triggers
+| Event | Action |
+|---|---|
+| `showDashboard()` (after auth) | init + register 5 keys + pull |
+| `window.focus` | pull (silent nếu unchanged) |
+| `visibilitychange` → visible | pull |
+| `setItem` của 1 trong 5 keys → bất kỳ module nào | `CloudSync.markDirty()` → debounced 3s → push |
+| Settings card "Cross-device Sync" buttons | force pull/push |
+
+### Mutex / safety
+- `_pullPromise` mutex — concurrent pulls join cùng 1 promise
+- `_pushing` flag — chặn parallel push, chỉ 1 PATCH at a time
+- ETag cache — 304 Not Modified → dùng cached, không tốn rate limit
+
+### `applyToUI()` — single re-render hub
+Sau khi pull thành công, gọi list defensive các render fn (typeof + try/catch wrap). **Khi thêm setting mới được sync → phải thêm render fn tương ứng vào list này**, nếu không UI sẽ ko refresh sau pull.
+
+```javascript
+// docs/js/cloud-sync.js applyToUI() body
+const calls = [
+  'renderLocationList',     // locations.js
+  'renderNotifSettings',    // app.js
+  'renderOtBudget', 'renderOtStats', 'renderOtCalendar', 'renderOtList',
+  'renderScheduleTable', 'renderScheduleCalendar',
+  'renderThemeStatus',      // settings.js
+];
+```
+
+**Theme là special**: được apply TRƯỚC khi render children để colors đúng từ frame đầu.
+
+### Quy tắc khi sửa
+1. ⛔ **KHÔNG đổi tên key** localStorage hoặc shortKey — sẽ break tất cả devices đã sync
+2. ⛔ **KHÔNG xóa key cũ** khỏi `register()` calls — devices cũ vẫn ghi → sẽ lệch
+3. ⚠️ Thêm key mới → register ở `app.js` showDashboard + thêm render fn vào `applyToUI`
+4. ⚠️ Schema migration → bump `_version` + handle ở pull side, KHÔNG break v1
+5. ✅ Mọi `setItem` cho 5 keys trên → gọi `CloudSync.markDirty()` ngay sau
+
+---
+
+## 12. 🔐 Biometric Auto-Unlock (Face ID / Touch ID / Windows Hello)
+
+**File**: `docs/js/biometric.js`. Shipped May 19 2026. **PWA-only**.
+
+### Tier 1 — PRF (crypto-bound, iOS 18+ / Chrome 119+ / macOS recent)
+- WebAuthn PRF extension derive 32-byte secret deterministic từ authenticator
+- PAT được AES-GCM encrypt bằng PRF key
+- Authenticator chết = key chết = PAT không decrypt được (defense-in-depth thật)
+- Probe pattern khi enroll: create credential → immediate assertion với same prfSalt để test PRF có thực sự work (một số authenticators chỉ trả PRF tại assert-time)
+
+### Tier 2 — Gate (fallback cho browser cũ)
+- Random AES key + encrypted PAT đều stored local
+- Key CHỈ được release sau `navigator.credentials.get()` thành công với `userVerification: 'required'`
+- Là UI gate, không phải crypto bind. Equivalent practical security cho personal device PWAs.
+
+### Storage (single localStorage entry)
+```js
+'wf_dash_biometric' = {
+  v: 2,
+  tier: 'prf' | 'gate',
+  credentialId: '<b64url>',
+  payload: { /* tier-specific encrypted blob */ }
+}
+```
+
+### Auth ceremonies
+- **Create**: `{ authenticatorAttachment: 'platform', userVerification: 'required', residentKey: 'required' }`
+- **Assert**: `allowCredentials: [{ id: credentialId, type: 'public-key' }]`
+- `rp.id` = `window.location.hostname` (works on `*.github.io`)
+
+### PWA-only gating (CRITICAL)
+`Biometric.isPwa()` check 4 conditions:
+1. `matchMedia('(display-mode: standalone)')`
+2. `matchMedia('(display-mode: fullscreen)')`
+3. `matchMedia('(display-mode: minimal-ui)')`
+4. `navigator.standalone === true` (iOS Safari)
+
+Nếu KHÔNG phải PWA:
+- Settings card "Biometric Auto-Unlock" → `display: none` (toàn bộ card biến mất)
+- Auth screen Face ID button → ẩn
+- Bootstrap auto-trigger → silent skip
+- `enrollBiometric()` API → toast "Install as PWA first"
+
+**Lý do PWA-only**: trong browser tab thường, user đã có thể paste passphrase ở đâu cũng được, không có ích bảo mật. iOS Safari ngoài standalone cũng có flaky UX cho WebAuthn assertions.
+
+### Triggers
+| Event | Action |
+|---|---|
+| `bootstrap()` khi có vault nhưng no session | `tryBiometricAutoUnlock()` — silent fail về passphrase form nếu user cancel |
+| User tap nút "Unlock with Face ID" trên auth screen | `unlockWithBiometric()` (toast on error) |
+| Settings → "Enable on this device" | `enrollBiometric(sessionToken)` — yêu cầu phải đang unlocked |
+| Settings → "Disable on this device" | confirm dialog → `Biometric.disable()` |
+
+### iOS Safari caveat
+Auto-triggered `credentials.get()` trong bootstrap có thể bị block không có user gesture. Vẫn có nút explicit "Unlock with Face ID" trên auth screen làm primary path → tap = user gesture → reliable.
+
+### Quy tắc khi sửa
+1. ⛔ Đừng bỏ check `isPwa()` ở Settings render — sẽ leak UI ra browser tab
+2. ⛔ Đừng đổi `STORE_KEY` = `'wf_dash_biometric'` — devices đã enroll sẽ mất
+3. ⚠️ Đổi tier schema → bump `v` field, handle backward compat khi load
+4. ⚠️ `rp.id` thay đổi (vd domain mới) = tất cả credentials cũ vô hiệu → user phải re-enroll
+
+---
+
+## 13. 🎨 Theme System (Light / Dark / Auto)
+
+**File**: `docs/js/theme.js`. Shipped May 19 2026.
+
+### Mode persisted ∈ {auto, dark, light}
+- localStorage `wf_dash_theme`
+- `auto` = follow `prefers-color-scheme` (mặc định khi chưa set)
+- Synced cross-device qua CloudSync (key thứ 5)
+
+### Resolution
+- `Theme.getMode()` → raw value
+- `Theme.resolve(mode)` → 'dark' | 'light' (auto → systemPref)
+- `Theme.apply(mode)` → set `data-theme="<resolved>"` trên `<html>` + cập nhật `<meta name="theme-color">`
+
+### CSS architecture — single source of truth
+- `:root` (default dark) định nghĩa tất cả color vars + `--tint: 255,255,255`
+- `[data-theme="light"]` block override toàn bộ + `--tint: 0,0,0`
+- **42 hardcoded `rgba(255,255,255,X)`** trong style.css đã được rewrite → `rgba(var(--tint),X)` → 1 toggle flip tất cả hover/border/scrim overlays
+- `color-scheme: dark/light` cho native form controls + scrollbars auto-adapt
+- Light palette dùng shadcn defaults: bg `#ffffff`, fg `#09090b`, muted `#f4f4f5`, primary `#2563eb` (blue-600), softer shadows
+
+### Tailwind CDN config
+Colors được map sang CSS vars qua `'var(--card)'`, `'var(--foreground)'`, vv → utility classes `bg-card`, `text-foreground`, `border-border`... đều follow theme tự động. **Trade-off**: tailwind opacity modifiers (`bg-muted/50`) sẽ fallback về full opacity vì CSS var không phân tích được alpha — chỉ 4 chỗ dùng, chấp nhận.
+
+`darkMode` retargeted `[data-theme="dark"]` (chứ ko phải class) — phòng future `dark:` utilities.
+
+### FOUC prevention
+Inline `<script>` trong `<head>` (TRƯỚC khi tailwind CDN + style.css load):
+```js
+var mode = localStorage.getItem('wf_dash_theme') || 'auto';
+var resolved = mode === 'auto'
+  ? (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark')
+  : mode;
+document.documentElement.setAttribute('data-theme', resolved);
+```
+→ First paint đã đúng theme, không có flash.
+
+### Live OS-pref subscription
+`Theme.init()` subscribe `matchMedia('(prefers-color-scheme: light)').addEventListener('change', ...)` → khi user đổi iOS/Windows theme, PWA flip realtime nếu đang ở Auto mode.
+
+### Settings UI
+Card "Appearance" trên đầu Settings page → 3 nút segmented Auto / Light / Dark. Nút active có `.is-active` class (primary background). Help text dưới hiển thị resolved system pref khi Auto.
+
+### Quy tắc khi sửa
+1. ⛔ KHÔNG hardcode hex màu mới trong style.css — luôn dùng `var(--*)` để hoạt động ở cả 2 themes
+2. ⛔ KHÔNG dùng `rgba(255,255,255,X)` — dùng `rgba(var(--tint),X)`
+3. ⚠️ Thêm semantic color mới → định nghĩa ở CẢ `:root` VÀ `[data-theme="light"]`
+4. ⚠️ Tailwind color mới → thêm vào tailwind config cũng phải dạng `var(--*)`
+5. ✅ Test ở cả 2 themes trước khi commit (mở DevTools → Application → Local Storage → set `wf_dash_theme: 'light'` → reload)
+
+---
+
+## 14. 💰 OT Optimizer rev3 (pure-night greedy)
+
+**File**: `docs/js/ot-planner.js`. Shipped May 19 2026 (commits `602a1f8` → `f486cb7`).
+
+### Mục đích
+Suggest OT schedule tối ưu lương cho 1 tháng, respect cap 75h/month + 12h/day. Dùng trong OT Planner page → modal "OT Optimizer".
+
+### Rate analysis (vì sao pure-night thắng)
+| Shift type | Multiplier | ¥/h | Notes |
+|---|---|---|---|
+| Sun pure-night 22:00→04:00 (6h) | 1.25 + 0.10 Sun + 0.25 Night = **1.60×** | **¥2,500** | Best |
+| Wk pure-night 22:00→04:00 (6h) | 1.25 + 0.25 Night = **1.50×** | **¥2,344** | 2nd |
+| Sun day 12h shift | mixed avg | ¥2,289 | Worse |
+| Sun 12h with break | 11h paid | ¥2,110 | Worst |
+
+→ **6h shift = sweet spot**: Labor Law §34 chỉ require break khi working hours STRICTLY > 6h → 6h shift không cần trừ 60min break → tận dụng full hours.
+
+### Algorithm
+1. **Candidates**: cho mỗi ngày trong tháng → 1 candidate `22:00→04:00 (6h)` (Sun và Wk dùng cùng template)
+2. **Enum mix**: `(k_sun_full, k_wk_full) ≤ floor(cap/6)` + optional partial last shift trong `[3, 6)` giờ
+3. **Score**: vì rateSun > rateWk → ưu tiên Sundays trước
+4. **Partial materialize**: clone candidate kế tiếp, override `end = '22:00 + partialHours'`, recompute gross qua `calcOtBreakdown`
+5. Result example (June 2026, target 75h): **4 Sun×6h + 8 Wk×6h + 1 Wk×3h = 75.0h / ¥179,573** (+¥6,908 vs rev2 knapsack)
+
+### UI
+- Modal "OT Optimizer" trong OT Planner
+- Input: target income (¥) hoặc max budget
+- Output: bảng (date, time, hours, income, status="queued") + summary projected total + estimated net take-home delta (qua ot-salary engine)
+- Apply button: bulk-create OT requests via Gist write
+
+### Constraints
+- 75h/month hard cap (Labor Law)
+- 12h/day cap mỗi date
+- Respect existing requests (subtract from remaining budget)
+- KHÔNG suggest cho past dates
+- Cross-midnight handling: 22:00→04:00 attribute hours về ngày bắt đầu (workday đó)
+
+### Quy tắc khi sửa
+1. ⛔ KHÔNG suggest > 75h tổng — Labor Law violation
+2. ⛔ KHÔNG break Rule 2 kintai (xem section 3): nếu suggest cross-midnight cho workday đã có recurring CO 18:00 → phải đồng thời thêm `skip_dates` hoặc explicit CO entry, nếu không OT sẽ bị mất
+3. ⚠️ Thay đổi rate table → cập nhật cả `ot-salary.js` (calc engine) lẫn rate analysis ở đây
+4. ✅ Test với month boundary (cuối tháng) để đảm bảo partial shift không cross sang tháng sau gây sai stats
+
+---
+
+## 15. 📋 Session changelog (May 19 2026)
+
+Major features delivered hôm nay:
+
+| # | Feature | Files | Key commits |
+|---|---|---|---|
+| 1 | OT Optimizer rev3 (pure-night greedy, full 75h) | `ot-planner.js` | `602a1f8`, `c5d7778`, `f486cb7` |
+| 2 | CloudSync module + Settings card | `cloud-sync.js` (new), `app.js`, `dashboard.js`, `settings.js`, 4× setItem callsites | `f7216e5`, `07092d2`, `c88f139` |
+| 3 | Biometric Face ID auto-unlock (WebAuthn 2-tier) | `biometric.js` (new), `app.js`, `settings.js`, `icons.js`, `index.html` | `fe5cdfd`, `e47e91f` (PWA-only gating) |
+| 4 | PWA manifest.json | `docs/manifest.json` (new) | `2220fff` |
+| 5 | Light / Dark / Auto theme system | `theme.js` (new), `style.css` (42 rgba rewrites + light block), `index.html` (Tailwind config + FOUC bootstrap), `settings.js` | `e61ace4`, `33ab018`, `b4766bf`, `5b73d7b` |
+| 6 | Misc UI polish | scrollbar shadcn-style, tab border flash, run-item hover, favicon zap | `94bd1b0`, `b2516fe`, `e329462`, `7e9ec67` |
+
+### Module load order (current, in `index.html`)
+```
+icons.js?v=42 → no-autofill.js?v=26 → theme.js?v=1 → locations.js?v=27
+  → biometric.js?v=2 → cloud-sync.js?v=4 → app.js?v=33
+  → dashboard.js?v=28 → schedule.js?v=27 → ot-salary.js?v=37
+  → ot-planner.js?v=49 → settings.js?v=31
+style.css?v=46
+```
+
+### Bootstrap orchestration trong `app.js bootstrap()`
+1. `Theme.init()` — apply persisted/auto theme + subscribe OS pref
+2. `updateNotifBtn()`
+3. Path branch:
+   - Có session restorable → `showDashboard()` (sẽ init CloudSync)
+   - Không có vault → setup form
+   - Có vault, no session → focus passphrase + `tryBiometricAutoUnlock()` (silent skip nếu non-PWA hoặc not enrolled)
