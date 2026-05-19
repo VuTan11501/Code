@@ -18,3 +18,7 @@ copilot-session-*.md
 
 .github/skills/dokokin-auto-checkin/scripts/*.log
 .github/skills/dokokin-auto-checkin/scripts/.azure_tokens.json
+
+# Private docs - keep out of repo
+README.md
+
