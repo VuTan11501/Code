@@ -66,7 +66,7 @@ tailwind.config = {
   },
 }
 </script>
-<link rel="stylesheet" href="css/style.css?v=41">
+<link rel="stylesheet" href="css/style.css?v=42">
 <link rel="preconnect" href="https://api.github.com">
 </head>
 <body class="bg-background text-foreground font-sans text-sm antialiased min-h-dvh overflow-x-hidden">
@@ -384,9 +384,9 @@ tailwind.config = {
         <div class="section-title text-sm font-medium text-muted-foreground mb-4 flex items-center justify-between gap-2">
           <span class="flex items-center gap-2"><span data-icon="clipboard" data-size="16"></span> OT Requests</span>
           <div class="flex items-center gap-2">
-            <button class="btn sm" onclick="openOtOptimizer()" data-tooltip="Suggest optimal OT schedule for this month"><span data-icon="target" data-size="14"></span> Optimize</button>
-            <button class="btn sm" onclick="openOtTemplateManager()" data-tooltip="Manage OT templates"><span data-icon="list" data-size="14"></span> Templates</button>
-            <button class="btn sm primary" onclick="openOtForm()"><span data-icon="plus" data-size="14"></span> Add OT</button>
+            <button id="otOptBtn" class="btn sm" onclick="openOtOptimizer()" data-tooltip="Suggest optimal OT schedule for this month"><span data-icon="target" data-size="14"></span> Optimize</button>
+            <button id="otTplBtn" class="btn sm" onclick="openOtTemplateManager()" data-tooltip="Manage OT templates"><span data-icon="list" data-size="14"></span> Templates</button>
+            <button id="otAddBtn" class="btn sm primary" onclick="openOtForm()"><span data-icon="plus" data-size="14"></span> Add OT</button>
           </div>
         </div>
         <div class="sched-table-wrap overflow-x-auto rounded-lg border border-border">
@@ -892,14 +892,14 @@ tailwind.config = {
 </div>
 
 <!-- Scripts (order matters) -->
-<script src="js/icons.js?v=39"></script>
+<script src="js/icons.js?v=40"></script>
 <script src="js/no-autofill.js?v=26"></script>
 <script src="js/locations.js?v=26"></script>
 <script src="js/app.js?v=26"></script>
 <script src="js/dashboard.js?v=26"></script>
 <script src="js/schedule.js?v=26"></script>
 <script src="js/ot-salary.js?v=37"></script>
-<script src="js/ot-planner.js?v=42"></script>
+<script src="js/ot-planner.js?v=43"></script>
 <script src="js/settings.js?v=26"></script>
 </body>
 </html>

@@ -224,11 +224,49 @@ function _showOutOfWindowToast(dateStr) {
   }
 }
 
+// ─── Read-only mode for past-month views ───
+// DokoKin only accepts OT changes from yesterday onward, so when the user
+// navigates the calendar to a past month, hide mutation actions to make
+// the view clearly "history-only".
+function _isViewMonthPast() {
+  const now = jstNow();
+  const curY = now.getFullYear();
+  const curM = now.getMonth();
+  const vY = _otState.viewYear;
+  const vM = _otState.viewMonth;
+  if (vY == null || vM == null) return false;
+  return (vY < curY) || (vY === curY && vM < curM);
+}
+
+function _updateOtMutationButtons() {
+  const isPast = _isViewMonthPast();
+  const ids = ['otAddBtn', 'otOptBtn', 'otTplBtn', 'otSyncBtn'];
+  const tip = 'View only — past month. Switch to current/future month to edit.';
+  for (const id of ids) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    if (isPast) {
+      el.setAttribute('disabled', '');
+      el.classList.add('is-readonly');
+      el.setAttribute('data-tooltip', tip);
+    } else {
+      el.removeAttribute('disabled');
+      el.classList.remove('is-readonly');
+      // Restore original tooltips
+      if (id === 'otAddBtn') el.removeAttribute('data-tooltip');
+      if (id === 'otOptBtn') el.setAttribute('data-tooltip', 'Suggest optimal OT schedule for this month');
+      if (id === 'otTplBtn') el.setAttribute('data-tooltip', 'Manage OT templates');
+      if (id === 'otSyncBtn') el.setAttribute('data-tooltip', 'Trigger Auto OT Creator now (~60–90s)');
+    }
+  }
+}
+
 function renderOtCalendar() {
   const grid = document.getElementById('otCalendar');
   if (!grid) return;
   renderOtStats();
   renderOtBudget();
+  _updateOtMutationButtons();
   const y = _otState.viewYear, m = _otState.viewMonth;
   const monthLabel = document.getElementById('otMonthLabel');
   const monthName = new Date(y, m, 1).toLocaleString('en-US', { month: 'long', year: 'numeric' });
@@ -258,6 +296,7 @@ function renderOtCalendar() {
     const isToday = isCurrentMonth && todayJ.getDate() === d;
     const inWindow = _isDateInWindow(dateStr);
     const isPast = dateStr < win.today;
+    const isPastMonth = _isViewMonthPast();
     const classes = ['ot-cell'];
     if (ots.length) classes.push('has-ot');
     if (isToday) classes.push('is-today');
@@ -266,9 +305,16 @@ function renderOtCalendar() {
     const totalH = ots.reduce((s, o) => s + (o.hours || 0), 0);
     const hasConflict = ots.some(o => detectConflict(o).hasConflict);
     if (hasConflict) classes.push('has-conflict');
-    const click = inWindow
-      ? `openOtForm('${dateStr}')`
-      : (ots.length ? `openOtForm(null, '${ots[0].id}')` : `_showOutOfWindowToast('${dateStr}')`);
+    let click;
+    if (isPastMonth) {
+      click = ots.length
+        ? `toast('📅 ${dateStr}: ${ots.length} OT entr${ots.length === 1 ? 'y' : 'ies'} (past month, view only)', 'info')`
+        : `toast('📅 Past month — view only', 'info')`;
+    } else {
+      click = inWindow
+        ? `openOtForm('${dateStr}')`
+        : (ots.length ? `openOtForm(null, '${ots[0].id}')` : `_showOutOfWindowToast('${dateStr}')`);
+    }
     const label = `${dateStr}${ots.length ? `, ${ots.length} OT` : ''}${!inWindow && !ots.length ? ' (không thể tạo)' : ''}`;
     html += `<div class="${classes.join(' ')}" onclick="${click}" role="button" tabindex="0" aria-label="${label}" aria-disabled="${!inWindow && !ots.length}">`;
     html += `<div class="ot-cell-num">${d}</div>`;
@@ -373,6 +419,14 @@ function _renderOtRow(ot, idx, isPast) {
     ? `<button class="btn sm" style="color:var(--orange);border-color:rgba(249,115,22,0.32)" onclick="autoFixOtConflict('${ot.id}')" data-tooltip="Auto-fix conflict">${ICON('sparkles', 14)}</button>`
     : '';
 
+  const actionsCell = isPast
+    ? `<div class="actions-cell"><span class="badge-readonly" data-tooltip="Past month — view only">${ICON('eye', 14)}</span></div>`
+    : `<div class="actions-cell">
+        ${fixBtn}
+        <button class="btn sm" onclick="openOtForm(null, '${ot.id}')" data-tooltip="Edit">${ICON('edit', 14)}</button>
+        <button class="btn danger sm" onclick="deleteOtRequest('${ot.id}')" data-tooltip="Delete">${ICON('trash', 14)}</button>
+      </div>`;
+
   return `<tr${isPast ? ' class="opacity-60"' : ''}>
     <td data-label="#" class="text-muted-foreground font-mono">${idx + 1}</td>
     <td data-label="Date">
@@ -386,11 +440,7 @@ function _renderOtRow(ot, idx, isPast) {
     <td data-label="Income" class="font-mono text-right" data-tooltip="${_esc(_otIncomeTooltip(ot))}">${_otIncomeCell(ot)}</td>
     <td data-label="Reason" class="text-muted-foreground">${reasonCell}</td>
     <td data-label="Status">${statusBadge}</td>
-    <td class="actions-cell"><div class="actions-cell">
-      ${fixBtn}
-      <button class="btn sm" onclick="openOtForm(null, '${ot.id}')" data-tooltip="Edit">${ICON('edit', 14)}</button>
-      <button class="btn danger sm" onclick="deleteOtRequest('${ot.id}')" data-tooltip="Delete">${ICON('trash', 14)}</button>
-    </div></td>
+    <td class="actions-cell">${actionsCell}</td>
   </tr>`;
 }
 
