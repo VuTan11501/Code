@@ -36,6 +36,16 @@ function initOtPlannerPage() {
     const now = jstNow();
     _otState.viewYear = now.getFullYear();
     _otState.viewMonth = now.getMonth();
+    // Click delegation for take-home widget → open payslip detail modal
+    document.addEventListener('click', (e) => {
+      const tgt = e.target.closest('.ot-takehome-clickable');
+      if (tgt) {
+        e.preventDefault();
+        const month = tgt.getAttribute('data-payslip-month');
+        const isEst = tgt.getAttribute('data-payslip-estimate') === '1';
+        openPayslipDetail(month, isEst);
+      }
+    });
   }
   loadOtData();
 }
@@ -1041,7 +1051,7 @@ function renderOtBudget() {
     if (w.ot_hours) tipLines.push(`(OT: ${w.ot_hours}h, Sun ${w.sunday_hours||0}h, Night ${w.night_hours||0}h)`);
     const tip = tipLines.join('\n');
     netHtml = `
-      <div class="ot-budget-takehome" data-tooltip="${_esc(tip)}">
+      <div class="ot-budget-takehome ot-takehome-clickable" data-tooltip="Click for full payslip detail" data-payslip-month="${monthKey}">
         <span class="ot-takehome-label">${ICON('wallet', 12)} Net take-home <span class="ot-takehome-est ot-real-badge">actual</span></span>
         <span class="ot-takehome-val">${F(realSlip.take_home)}</span>
       </div>`;
@@ -1073,7 +1083,7 @@ function renderOtBudget() {
     ];
     const tip = tipLines.join('\n');
     netHtml = `
-      <div class="ot-budget-takehome" data-tooltip="${_esc(tip)}">
+      <div class="ot-budget-takehome ot-takehome-clickable" data-tooltip="Click for full payslip detail (estimated)" data-payslip-month="${monthKey}" data-payslip-estimate="1">
         <span class="ot-takehome-label">${ICON('wallet', 12)} Net take-home <span class="ot-takehome-est">est.</span></span>
         <span class="ot-takehome-val">${F(est.takeHome)}</span>
       </div>`;
@@ -1490,4 +1500,147 @@ function _toggleOtOptTarget() {
   const max = document.getElementById('otOptMax').checked;
   const inp = document.getElementById('otOptTarget');
   if (inp) inp.disabled = max;
+}
+// ═══════════════════════════════════════════════════
+//  PAYSLIP DETAIL MODAL — full breakdown like steps-list
+// ═══════════════════════════════════════════════════
+function openPayslipDetail(monthKey, isEstimate) {
+  const body = document.getElementById('otPayslipBody');
+  const titleEl = document.getElementById('otPayslipTitle');
+  const modal = document.getElementById('otPayslipModal');
+  if (!body || !modal) return;
+  const F = window.OT_SALARY.formatYen;
+
+  let slip = window.OT_SALARY.findPayslipForMonth(_otState.payslips, monthKey);
+  let source = 'actual';
+  if (!slip || isEstimate) {
+    // Build a synthetic "slip" from estimate
+    const baseline = window.OT_SALARY.pickBaselinePayslip(_otState.payslips, monthKey);
+    if (!baseline) {
+      body.innerHTML = '<div class="empty text-muted-foreground text-sm p-4 text-center">No payslip data available.</div>';
+      modal.classList.add('open');
+      return;
+    }
+    const monthPrefix = monthKey + '-';
+    const entries = (_otState.requests || []).filter(o => o.date && o.date.startsWith(monthPrefix));
+    const sal = window.OT_SALARY.calcMonthlySummary(entries);
+    const est = window.OT_SALARY.calcFullMonthEstimate(sal.gross, baseline, { basicSalaryIndex: 1.0 });
+    slip = {
+      month: monthKey,
+      bonus: false,
+      estimated: true,
+      baselineMonth: baseline.month,
+      contract: baseline.contract,
+      work: {
+        ot_hours: sal.totalHours, sunday_hours: sal.sundayHours,
+        night_hours: sal.nightHours, basic_index: 1.0,
+      },
+      gross: est.gross,
+      gross_breakdown: {
+        basic_a_paid: baseline.contract?.basic_a || 0,
+        basic_b_paid: baseline.contract?.basic_b || 0,
+        fixed_allowance_paid: baseline.contract?.fixed_allowance || 0,
+        ot_allowance: Math.round(sal.baseOTLine || 0),
+        sunday_ot_allowance: Math.round(sal.sundayLine || 0),
+        night_allowance: Math.round(sal.nightLine || 0),
+      },
+      deductions: {
+        health_insurance: est.health, welfare_insurance: est.welfare,
+        unemployment_insurance: est.unemployment, insurance_total: est.insuranceTotal,
+        income_tax: est.incomeTax, resident_tax: est.residentTax,
+        total_payable_to_gov: est.insuranceTotal + est.incomeTax + est.residentTax,
+        taxable_income: est.taxable,
+      },
+      company_receivables: baseline.company_receivables,
+      net_after_tax: est.netAfterTax,
+      take_home: est.takeHome,
+    };
+    source = 'estimate';
+  }
+
+  titleEl.innerHTML = `${ICON('wallet', 18)} Payslip ${slip.month} ` +
+    (source === 'estimate'
+      ? `<span class="ot-takehome-est" style="margin-left:6px">est. (baseline ${slip.baselineMonth})</span>`
+      : `<span class="ot-takehome-est ot-real-badge" style="margin-left:6px">actual</span>`);
+
+  const c = slip.contract || {};
+  const w = slip.work || {};
+  const gb = slip.gross_breakdown || {};
+  const d = slip.deductions || {};
+  const cr = slip.company_receivables || {};
+
+  const section = (title, lines, totalLabel, totalVal, totalCls) => {
+    let html = `<div class="payslip-section"><div class="payslip-section-head">${title}</div>`;
+    for (const ln of lines) {
+      if (ln.value == null) continue;
+      html += `<div class="payslip-row"><span class="payslip-label">${ln.label}</span><span class="payslip-val">${typeof ln.value === 'number' ? F(ln.value) : ln.value}</span></div>`;
+    }
+    if (totalLabel) {
+      html += `<div class="payslip-row payslip-total ${totalCls||''}"><span class="payslip-label">${totalLabel}</span><span class="payslip-val">${F(totalVal)}</span></div>`;
+    }
+    return html + '</div>';
+  };
+
+  let html = '';
+
+  html += section('Contract base (1.x / 3.x)', [
+    { label: 'Basic salary A', value: gb.basic_a_paid ?? c.basic_a },
+    { label: 'Basic salary B (Life design + DC)', value: gb.basic_b_paid ?? c.basic_b },
+    { label: 'Fixed allowance', value: gb.fixed_allowance_paid ?? c.fixed_allowance },
+    c.travel_allowance ? { label: 'Travel allowance', value: c.travel_allowance } : { label:'', value:null },
+    { label: `Basic index (work ratio)`, value: (w.basic_index ?? 1).toFixed(2) },
+  ], null, null, null);
+
+  html += section('OT income (3.x)', [
+    { label: `Base OT 125% — ${(w.ot_hours||0).toFixed(2)}h`, value: gb.ot_allowance },
+    w.sunday_hours ? { label: `Sunday +10% — ${(w.sunday_hours||0).toFixed(2)}h`, value: gb.sunday_ot_allowance } : { label:'', value:null },
+    w.night_hours ? { label: `Night +25% — ${(w.night_hours||0).toFixed(2)}h`, value: gb.night_allowance } : { label:'', value:null },
+  ], 'Gross income (line 3)', slip.gross, 'is-income');
+
+  html += section('Deductions — insurance (4.x)', [
+    { label: 'Health insurance', value: d.health_insurance },
+    { label: 'Welfare (pension) insurance', value: d.welfare_insurance },
+    { label: 'Unemployment insurance (0.5%)', value: d.unemployment_insurance },
+  ], 'Total insurance', d.insurance_total, 'is-deduction');
+
+  html += section('Deductions — taxes (4.x / 6.x)', [
+    { label: `Taxable income`, value: d.taxable_income },
+    { label: 'Income tax (源泉徴収)', value: d.income_tax },
+    { label: 'Resident tax (住民税)', value: d.resident_tax },
+  ], 'Total to government', d.total_payable_to_gov, 'is-deduction');
+
+  html += `<div class="payslip-section">
+    <div class="payslip-row payslip-subtotal">
+      <span class="payslip-label">= Net after tax (line 7)</span>
+      <span class="payslip-val">${F(slip.net_after_tax)}</span>
+    </div>
+  </div>`;
+
+  // Company receivables
+  if (cr && (cr.total || (cr.items && cr.items.length))) {
+    const items = (cr.items || []).map(it => ({ label: it.label || `Item ${it.sub}`, value: it.value }));
+    html += section('Company receivables (rent, fees…)', items, 'Total receivables', cr.total || 0, 'is-deduction');
+  }
+
+  html += `<div class="payslip-section payslip-final">
+    <div class="payslip-row payslip-grand-total">
+      <span class="payslip-label">${ICON('wallet', 14)} Net take-home (line 8)</span>
+      <span class="payslip-val">${F(slip.take_home)}</span>
+    </div>
+  </div>`;
+
+  if (source === 'estimate') {
+    html += `<div class="text-xs text-muted-foreground mt-3" style="line-height:1.5">
+      ★ Estimated using payslip <strong>${slip.baselineMonth}</strong> as fixed-cost baseline.
+      OT income from this month's entries. Final payslip is authoritative.
+    </div>`;
+  }
+
+  body.innerHTML = html;
+  modal.classList.add('open');
+}
+
+function closePayslipDetail() {
+  const m = document.getElementById('otPayslipModal');
+  if (m) m.classList.remove('open');
 }
