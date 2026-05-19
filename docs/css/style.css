@@ -837,8 +837,15 @@ select option { background: var(--card); color: var(--foreground); }
   background: rgba(34, 197, 94, 0.15) !important;
   color: var(--green) !important;
 }
-.ot-takehome-clickable { cursor: pointer; transition: background var(--duration-fast) var(--ease-out); }
-.ot-takehome-clickable:hover { background: rgba(var(--tint),0.04); }
+.ot-takehome-clickable { cursor: pointer; transition: color var(--duration-fast) var(--ease-out); }
+.ot-takehome-clickable:hover { color: var(--primary); }
+.ot-takehome-eye {
+  display: inline-flex; align-items: center; justify-content: center;
+  background: none; border: none; padding: 2px 4px; margin-left: 8px;
+  color: var(--muted-foreground); border-radius: var(--radius-sm);
+  vertical-align: middle;
+}
+.ot-takehome-eye:hover { color: var(--primary); background: rgba(var(--tint),0.06); }
 
 /* Payslip detail modal — rows like steps-list */
 .payslip-section { display: flex; flex-direction: column; gap: 2px; margin-bottom: var(--sp-3); }

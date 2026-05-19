@@ -1243,25 +1243,10 @@ function renderOtBudget() {
   let netHtml = '';
   if (realSlip && realSlip.take_home != null) {
     // ━━ ACTUAL from payslip ━━
-    const d = realSlip.deductions || {};
-    const cr = realSlip.company_receivables || {};
-    const w = realSlip.work || {};
-    const tipLines = [`Actual net take-home from payslip ${monthKey}:`,
-      `• Gross income: ${F(realSlip.gross || 0)}`,
-      `• − Health ins: ${F(d.health_insurance || 0)}`,
-      `• − Welfare ins: ${F(d.welfare_insurance || 0)}`,
-      `• − Unemployment: ${F(d.unemployment_insurance || 0)}`,
-      `• − Income tax: ${F(d.income_tax || 0)}`,
-      `• − Resident tax: ${F(d.resident_tax || 0)}`,
-      `• − Company receivables: ${F(cr.total || 0)}`,
-      `= Take-home: ${F(realSlip.take_home)}`,
-    ];
-    if (w.ot_hours) tipLines.push(`(OT: ${w.ot_hours}h, Sun ${w.sunday_hours||0}h, Night ${w.night_hours||0}h)`);
-    const tip = tipLines.join('\n');
     netHtml = `
-      <div class="ot-budget-takehome ot-takehome-clickable" data-tooltip="Click for full payslip detail" data-payslip-month="${monthKey}">
+      <div class="ot-budget-takehome" data-payslip-month="${monthKey}">
         <span class="ot-takehome-label">${ICON('wallet', 12)} Net take-home <span class="ot-takehome-est ot-real-badge">actual</span></span>
-        <span class="ot-takehome-val">${F(realSlip.take_home)}</span>
+        <span class="ot-takehome-val">${F(realSlip.take_home)}<button class="ot-takehome-eye ot-takehome-clickable" data-payslip-month="${monthKey}" aria-label="View payslip detail">${ICON('eye', 14)}</button></span>
       </div>`;
   } else if (baseline) {
     // ━━ ESTIMATE using baseline payslip fixed components ━━
@@ -1273,41 +1258,18 @@ function renderOtBudget() {
       idx = 1.0;
     }
     const est = window.OT_SALARY.calcFullMonthEstimate(sal.gross, baseline, { basicSalaryIndex: idx });
-    const tipLines = [`Estimated net take-home for ${monthKey}:`,
-      `(baseline: payslip ${baseline.month})`,
-      `• Contract gross (×${idx.toFixed(2)} idx): ${F(est.contractGross)}`,
-      `• + OT gross (this month): ${F(est.otGross)}`,
-      `• = Total gross: ${F(est.gross)}`,
-      `• − Health ins: ${F(est.health)}`,
-      `• − Welfare ins: ${F(est.welfare)}`,
-      `• − Unemployment (0.5%): ${F(est.unemployment)}`,
-      `• − Income tax (源泉徴収): ${F(est.incomeTax)}`,
-      `• − Resident tax: ${F(est.residentTax)}`,
-      `• − Company receivables: ${F(est.companyReceivables)}`,
-      `= Take-home: ${F(est.takeHome)}`,
-      ``,
-      `★ Fixed components from payslip ${baseline.month}.`,
-      `★ Estimate ±¥2,000. Actual depends on final OT, leave days, year-end adj.`,
-    ];
-    const tip = tipLines.join('\n');
     netHtml = `
-      <div class="ot-budget-takehome ot-takehome-clickable" data-tooltip="Click for full payslip detail (estimated)" data-payslip-month="${monthKey}" data-payslip-estimate="1">
+      <div class="ot-budget-takehome" data-payslip-month="${monthKey}" data-payslip-estimate="1">
         <span class="ot-takehome-label">${ICON('wallet', 12)} Net take-home <span class="ot-takehome-est">est.</span></span>
-        <span class="ot-takehome-val">${F(est.takeHome)}</span>
+        <span class="ot-takehome-val">${F(est.takeHome)}<button class="ot-takehome-eye ot-takehome-clickable" data-payslip-month="${monthKey}" data-payslip-estimate="1" aria-label="View payslip detail">${ICON('eye', 14)}</button></span>
       </div>`;
   } else {
     // ━━ No payslip data at all — fall back to OT-delta only ━━
     const profile = _otGetProfile();
     const delta = window.OT_SALARY.calcTakeHomeDelta(sal.gross, profile);
     const keepPct = delta.effectiveKeepRate > 0 ? (delta.effectiveKeepRate * 100).toFixed(1) : '—';
-    const tip = `Net OT take-home (delta vs zero OT):
-• Gross OT: ${F(delta.grossDelta)}
-• − Unemployment ins: ${F(delta.insuranceDelta)}
-• − Income tax: ${F(delta.taxDelta)}
-= Net OT: ${F(delta.takeHomeDelta)} (keep ${keepPct}%)
-Upload payslip-history.json to Gist for full take-home estimate.`;
     netHtml = `
-      <div class="ot-budget-takehome" data-tooltip="${_esc(tip)}">
+      <div class="ot-budget-takehome">
         <span class="ot-takehome-label">${ICON('wallet', 12)} Net OT delta <span class="ot-takehome-est">est.</span></span>
         <span class="ot-takehome-val">${F(delta.takeHomeDelta)} <span class="ot-takehome-pct">(${keepPct}%)</span></span>
       </div>`;
