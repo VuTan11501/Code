@@ -1594,6 +1594,7 @@ function openPayslipDetail(monthKey, isEstimate) {
     { label: 'Fixed allowance', value: gb.fixed_allowance_paid ?? c.fixed_allowance },
     c.travel_allowance ? { label: 'Travel allowance', value: c.travel_allowance } : { label:'', value:null },
     { label: `Basic index (work ratio)`, value: (w.basic_index ?? 1).toFixed(2) },
+    { label: 'Standard insurance grade (標準報酬月額)', value: stdIns },
   ], null, null, null);
 
   html += section('OT income', [
