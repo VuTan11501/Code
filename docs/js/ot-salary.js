@@ -213,35 +213,41 @@ const DEDUCTIONS = Object.freeze({
 });
 
 // ─── Japan 源泉徴収月額表 甲欄 (dependents=0) ───
-// CALIBRATED against TanVC's real 2026 payslips (FJP, 4 months):
-//   • Apr 2026: A=351,790 → real tax ¥11,730  (anchor)
-//   • Mar 2026: A=510,168 → real tax ¥29,660  (anchor)
-//   • Feb 2026: A=534,526 → real tax ¥33,580  (anchor)
-//   • Jan 2026: A= 83,901 → real tax ¥0       (under 88k threshold)
-// Low-end values follow National Tax Agency 「令和7年分 源泉徴収税額表」 甲欄.
-// Mid/high values are anchored to the real payslips above so that the marginal
-// rate on OT income matches what actually appears on the user's slip.
-// Linear interpolation between points. Accuracy: ±¥300 within anchored range.
+// CALIBRATED against TanVC's real payslip history (FJP, 21 monthly slips
+// 2024-08 → 2026-04). Anchors are actual (A, tax) pairs from payslips:
+//
+//   PRIMARY (2026 table — used for OT estimates today):
+//     • Jan 2026: A=  83,901 → ¥0       (under 88k threshold)
+//     • Apr 2026: A= 351,790 → ¥11,730
+//     • Mar 2026: A= 510,168 → ¥29,660
+//     • Feb 2026: A= 534,526 → ¥33,580
+//
+//   SECONDARY (2025 H2 — fills lower brackets where 2026 has no data;
+//   2025 rates are slightly higher than 2026 for the same A, so this is
+//   a mildly conservative approximation):
+//     • Jul 2025: A= 226,815 → ¥5,680
+//     • Sep 2025: A= 252,083 → ¥6,640
+//     • Oct 2025: A= 295,658 → ¥8,140
+//
+// 2024 H2 data deliberately excluded (distorted by 定額減税 ¥30k tax cut).
+// Linear interpolation between points. Accuracy: exact at anchors, ±¥300
+// elsewhere in the 200k–540k range. Above 600k extrapolated at ~16%.
 const _INCOME_TAX_TABLE = [
   // [A_yen, monthly_tax_yen]
   [0,        0],
   [88000,    0],
-  [105000,   430],
-  [125000,   720],
-  [150000,   1060],
-  [175000,   1640],
-  [200000,   2420],
-  [225000,   3200],
-  [250000,   4000],
-  [275000,   4900],
-  [300000,   5800],
-  [325000,   7700],
-  [351790,   11730],   // ★ ANCHOR — Apr 2026 payslip
-  [400000,   17170],
-  [450000,   22830],
-  [510168,   29660],   // ★ ANCHOR — Mar 2026 payslip
-  [534526,   33580],   // ★ ANCHOR — Feb 2026 payslip
-  [600000,   44100],
+  [105000,   700],
+  [150000,   2500],
+  [200000,   4500],
+  [226815,   5680],    // 2025-H2 anchor
+  [252083,   6640],    // 2025-H2 anchor
+  [295658,   8140],    // 2025-H2 anchor
+  [351790,   11730],   // ★ 2026 anchor — Apr 2026 payslip
+  [400000,   17000],   // interp (~9% marginal)
+  [450000,   23000],   // interp (~12% marginal)
+  [510168,   29660],   // ★ 2026 anchor — Mar 2026 payslip
+  [534526,   33580],   // ★ 2026 anchor — Feb 2026 payslip
+  [600000,   44100],   // extrap (~16% marginal)
   [700000,   60100],
   [800000,   76100],
   [900000,   92100],
@@ -330,10 +336,102 @@ function calcTakeHomeDelta(otGrossDelta, profile = {}, currentMonthOtGross = 0) 
   };
 }
 
+// ─── Full-month NET take-home: uses real payslip as fixed-cost baseline ───
+// Inputs:
+//   otGross         — total OT gross income for the month (from calcMonthlySummary)
+//   baselinePayslip — most recent parsed payslip object (from payslip-history.json)
+//                     used to extract "fixed-ish" components: rent, mgmt fee,
+//                     resident tax, standard insurance amount, etc.
+//   opts.basicSalaryIndex — override the 2.3 "Basic salary index" (default 1.0,
+//                           which means full month worked)
+//
+// Returns full breakdown matching payslip lines:
+//   gross           — base contract × index + fixed allowance + OT gross
+//   insurance_total — health + welfare (from baseline) + unemployment (computed)
+//   income_tax      — from calibrated _INCOME_TAX_TABLE
+//   resident_tax    — from baseline
+//   total_deductions, net_after_tax (line 7)
+//   company_receivables — copied from baseline (rent, net fee, mgmt fee, …)
+//   take_home       — line 8 equivalent
+function calcFullMonthEstimate(otGross, baselinePayslip, opts = {}) {
+  const idx = Number(opts.basicSalaryIndex ?? 1.0);
+  const baseA = baselinePayslip?.contract?.basic_a ?? 195000;
+  const baseB = baselinePayslip?.contract?.basic_b ?? 55000;
+  const fixedAllow = baselinePayslip?.contract?.fixed_allowance ?? 20000;
+  const stdIns = baselinePayslip?.contract?.standard_insurance
+    ?? baselinePayslip?.deductions?.insurance_total
+    ?? DEDUCTIONS.STANDARD_INSURANCE_AMOUNT;
+  const health = baselinePayslip?.deductions?.health_insurance
+    ?? Math.floor(stdIns * DEDUCTIONS.HEALTH_RATE);
+  const welfare = baselinePayslip?.deductions?.welfare_insurance
+    ?? Math.floor(stdIns * DEDUCTIONS.WELFARE_RATE);
+  const residentTax = baselinePayslip?.deductions?.resident_tax ?? DEDUCTIONS.RESIDENT_TAX;
+  const travelAllow = baselinePayslip?.contract?.travel_allowance ?? DEDUCTIONS.TRAVEL_ALLOWANCE;
+  const companyRecv = baselinePayslip?.company_receivables?.total ?? 0;
+
+  // Gross: base scales with index, OT is already month-actual
+  const contractGross = Math.floor((baseA + baseB + fixedAllow) * idx);
+  const gross = contractGross + Math.round(otGross);
+
+  // Unemployment scales with gross
+  const unemployment = Math.floor(gross * DEDUCTIONS.UNEMPLOYMENT_RATE);
+  const insuranceTotal = health + welfare + unemployment;
+
+  // Income tax (calibrated table)
+  const taxable = gross - insuranceTotal - travelAllow;
+  const incomeTax = _incomeTaxMonthlyWithholding(taxable, opts.dependents ?? 0);
+
+  const totalDeductions = insuranceTotal + incomeTax + residentTax;
+  const netAfterTax = gross - totalDeductions;
+  const takeHome = netAfterTax - companyRecv;
+
+  return {
+    estimated: true,
+    basicSalaryIndex: idx,
+    contractGross,
+    otGross: Math.round(otGross),
+    gross,
+    health, welfare, unemployment,
+    insuranceTotal,
+    taxable,
+    incomeTax,
+    residentTax,
+    totalDeductions,
+    companyReceivables: companyRecv,
+    netAfterTax,
+    takeHome,
+  };
+}
+
+// Lookup most recent payslip from a parsed payslip-history list.
+// Returns the latest non-bonus monthly slip whose month <= targetMonth ('YYYY-MM'),
+// or the most recent one if no target given.
+function pickBaselinePayslip(payslips, targetMonth) {
+  if (!Array.isArray(payslips) || !payslips.length) return null;
+  const monthlies = payslips.filter(p => p && !p.bonus && p.month && p.take_home);
+  if (!monthlies.length) return null;
+  monthlies.sort((a, b) => (a.month < b.month ? -1 : 1));
+  if (!targetMonth) return monthlies[monthlies.length - 1];
+  // Find latest with month < targetMonth (so estimates use PRIOR slip, not current)
+  let best = null;
+  for (const p of monthlies) {
+    if (p.month < targetMonth) best = p;
+    else break;
+  }
+  return best || monthlies[0];
+}
+
+// Convenience: find exact-match payslip for a month
+function findPayslipForMonth(payslips, month) {
+  if (!Array.isArray(payslips) || !month) return null;
+  return payslips.find(p => p && p.month === month && !p.bonus) || null;
+}
+
 // Expose for ot-planner.js (vanilla, no module system)
 window.OT_SALARY = {
   SALARY, FIXED_ALLOWANCE_HOURS, DEDUCTIONS,
   splitOtByDay, calcOtBreakdown, calcMonthlySummary,
   calcMonthlyEstimate, calcTakeHomeDelta,
+  calcFullMonthEstimate, pickBaselinePayslip, findPayslipForMonth,
   formatYen, formatHours,
 };

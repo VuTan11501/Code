@@ -4,6 +4,7 @@
 //  Phase 3: schema is {requests: [...], templates: [...]} (legacy array still read).
 // ═══════════════════════════════════════════════════
 const OT_FILE = 'ot-requests.json';
+const PAYSLIP_FILE = 'payslip-history.json';
 const OT_CHECKOUT_WF = 'auto-checkout.yml';
 const OT_CREATOR_WF = 'auto-ot-creator.yml';
 const OT_CREATION_WINDOW_DAYS = 7;   // forward: today + 7 days
@@ -21,6 +22,7 @@ let _otState = {
   requests: [],          // array of OT entries
   templates: [],         // user-defined templates (Gist-persisted)
   scheduleEntries: [],   // cached scheduled-runs.json (for conflict checks)
+  payslips: [],          // parsed payslip-history.json {payslips:[...]}
   viewYear: null,
   viewMonth: null,       // 0-indexed
   editId: null,
@@ -81,6 +83,17 @@ async function loadOtData(opts) {
       catch { _otState.scheduleEntries = []; }
     } else {
       _otState.scheduleEntries = [];
+    }
+    // Payslip history (for real net take-home display)
+    const payFile = gist.files && gist.files[PAYSLIP_FILE];
+    if (payFile && payFile.content) {
+      try {
+        const parsed = JSON.parse(payFile.content) || {};
+        _otState.payslips = Array.isArray(parsed.payslips) ? parsed.payslips : [];
+      }
+      catch { _otState.payslips = []; }
+    } else {
+      _otState.payslips = [];
     }
     renderOtCalendar();
     renderOtList();
@@ -896,19 +909,87 @@ function renderOtBudget() {
   const nightCls = sal.nightPctRemark >= 1 ? 'is-danger' : (sal.nightPctRemark >= 0.85 ? 'is-warning' : '');
 
   const monthName = new Date(y, m, 1).toLocaleString('en-US', { month: 'long', year: 'numeric' });
+  const monthKey = `${y}-${String(m + 1).padStart(2, '0')}`;
+  const today = jstNow();
+  const todayMonthKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+  const isPastMonth = monthKey < todayMonthKey;
 
-  // Phase 3: take-home delta (estimate)
-  const profile = _otGetProfile();
-  const delta = window.OT_SALARY.calcTakeHomeDelta(sal.gross, profile);
-  const keepPct = delta.effectiveKeepRate > 0 ? (delta.effectiveKeepRate * 100).toFixed(1) : '—';
-  const takeHomeStr = F(delta.takeHomeDelta);
-  const takeHomeTip = `Estimated net OT take-home (delta vs zero OT):
+  // Net take-home: prefer real payslip when available; otherwise estimate
+  // using the latest payslip as fixed-cost baseline (insurance, rent, …).
+  const realSlip = window.OT_SALARY.findPayslipForMonth(_otState.payslips, monthKey);
+  const baseline = window.OT_SALARY.pickBaselinePayslip(_otState.payslips, monthKey);
+  let netHtml = '';
+  if (realSlip && realSlip.take_home != null) {
+    // ━━ ACTUAL from payslip ━━
+    const d = realSlip.deductions || {};
+    const cr = realSlip.company_receivables || {};
+    const w = realSlip.work || {};
+    const tipLines = [`Actual net take-home from payslip ${monthKey}:`,
+      `• Gross income: ${F(realSlip.gross || 0)}`,
+      `• − Health ins: ${F(d.health_insurance || 0)}`,
+      `• − Welfare ins: ${F(d.welfare_insurance || 0)}`,
+      `• − Unemployment: ${F(d.unemployment_insurance || 0)}`,
+      `• − Income tax: ${F(d.income_tax || 0)}`,
+      `• − Resident tax: ${F(d.resident_tax || 0)}`,
+      `• − Company receivables: ${F(cr.total || 0)}`,
+      `= Take-home: ${F(realSlip.take_home)}`,
+    ];
+    if (w.ot_hours) tipLines.push(`(OT: ${w.ot_hours}h, Sun ${w.sunday_hours||0}h, Night ${w.night_hours||0}h)`);
+    const tip = tipLines.join('\n');
+    netHtml = `
+      <div class="ot-budget-takehome" data-tooltip="${_esc(tip)}">
+        <span class="ot-takehome-label">${ICON('wallet', 12)} Net take-home <span class="ot-takehome-est ot-real-badge">actual</span></span>
+        <span class="ot-takehome-val">${F(realSlip.take_home)}</span>
+      </div>`;
+  } else if (baseline) {
+    // ━━ ESTIMATE using baseline payslip fixed components ━━
+    // For past months with no slip yet: index=1.0. For current month: estimate
+    // index from working day ratio elapsed (rough). For future months: index=1.0.
+    let idx = 1.0;
+    if (monthKey === todayMonthKey) {
+      // Rough: don't reduce index — assume user will work the rest of the month.
+      idx = 1.0;
+    }
+    const est = window.OT_SALARY.calcFullMonthEstimate(sal.gross, baseline, { basicSalaryIndex: idx });
+    const tipLines = [`Estimated net take-home for ${monthKey}:`,
+      `(baseline: payslip ${baseline.month})`,
+      `• Contract gross (×${idx.toFixed(2)} idx): ${F(est.contractGross)}`,
+      `• + OT gross (this month): ${F(est.otGross)}`,
+      `• = Total gross: ${F(est.gross)}`,
+      `• − Health ins: ${F(est.health)}`,
+      `• − Welfare ins: ${F(est.welfare)}`,
+      `• − Unemployment (0.5%): ${F(est.unemployment)}`,
+      `• − Income tax (源泉徴収): ${F(est.incomeTax)}`,
+      `• − Resident tax: ${F(est.residentTax)}`,
+      `• − Company receivables: ${F(est.companyReceivables)}`,
+      `= Take-home: ${F(est.takeHome)}`,
+      ``,
+      `★ Fixed components from payslip ${baseline.month}.`,
+      `★ Estimate ±¥2,000. Actual depends on final OT, leave days, year-end adj.`,
+    ];
+    const tip = tipLines.join('\n');
+    netHtml = `
+      <div class="ot-budget-takehome" data-tooltip="${_esc(tip)}">
+        <span class="ot-takehome-label">${ICON('wallet', 12)} Net take-home <span class="ot-takehome-est">est.</span></span>
+        <span class="ot-takehome-val">${F(est.takeHome)}</span>
+      </div>`;
+  } else {
+    // ━━ No payslip data at all — fall back to OT-delta only ━━
+    const profile = _otGetProfile();
+    const delta = window.OT_SALARY.calcTakeHomeDelta(sal.gross, profile);
+    const keepPct = delta.effectiveKeepRate > 0 ? (delta.effectiveKeepRate * 100).toFixed(1) : '—';
+    const tip = `Net OT take-home (delta vs zero OT):
 • Gross OT: ${F(delta.grossDelta)}
-• − Unemployment ins (0.5%): ${F(delta.insuranceDelta)}
-• − Income tax (源泉徴収月額表 estimate): ${F(delta.taxDelta)}
-• = Net OT: ${F(delta.takeHomeDelta)} (keep ${keepPct}%)
-Resident tax & health/pension don't change with this month's OT.
-★ Estimate ±¥500. Final payslip authoritative.`;
+• − Unemployment ins: ${F(delta.insuranceDelta)}
+• − Income tax: ${F(delta.taxDelta)}
+= Net OT: ${F(delta.takeHomeDelta)} (keep ${keepPct}%)
+Upload payslip-history.json to Gist for full take-home estimate.`;
+    netHtml = `
+      <div class="ot-budget-takehome" data-tooltip="${_esc(tip)}">
+        <span class="ot-takehome-label">${ICON('wallet', 12)} Net OT delta <span class="ot-takehome-est">est.</span></span>
+        <span class="ot-takehome-val">${F(delta.takeHomeDelta)} <span class="ot-takehome-pct">(${keepPct}%)</span></span>
+      </div>`;
+  }
 
   host.innerHTML = `
     <div class="ot-budget-card">
@@ -934,10 +1015,7 @@ Resident tax & health/pension don't change with this month's OT.
           <div class="ot-progress-fill" style="width:${nightPct}%"></div>
         </div>
       </div>
-      <div class="ot-budget-takehome" data-tooltip="${_esc(takeHomeTip)}">
-        <span class="ot-takehome-label">${ICON('wallet', 12)} Net OT take-home <span class="ot-takehome-est">est.</span></span>
-        <span class="ot-takehome-val">${takeHomeStr} <span class="ot-takehome-pct">(${keepPct}%)</span></span>
-      </div>
+      ${netHtml}
       <div class="ot-budget-breakdown">
         <span data-tooltip="125% rate on all OT hours — ${F(sal.baseOTLine)}">${ICON('clock', 11)} Base ${F(sal.baseOTLine)}</span>
         <span data-tooltip="+10% extra on Sunday hours">☀️ Sun ${H(sal.sundayHours)} · ${F(sal.sundayLine)}</span>
