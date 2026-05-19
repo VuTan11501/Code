@@ -323,66 +323,14 @@ def send_email(subject, body, html=None):
 
 
 # ═══════════════════════════════════════════════════════════
-#  GIST LOADER (OT requests)
+#  GIST LOADER (OT requests) — delegated to shared helper
 # ═══════════════════════════════════════════════════════════
 
+from ot_gist import load_ot_from_gist as _load_ot_from_gist_shared
+
+
 def load_ot_from_gist():
-    """Load OT requests from Gist file `ot-requests.json`.
-    Returns:
-      - list of OT entries if file exists (even if empty — authoritative)
-      - None if file missing OR Gist read fails (caller falls back to schedule.json)
-    """
-    pat = os.environ.get("GH_PAT")
-    if not pat:
-        log("GH_PAT not set; cannot read Gist OT requests, fallback to schedule.json")
-        return None
-    url = f"https://api.github.com/gists/{GIST_ID}"
-    req = urllib.request.Request(url, headers={
-        "Authorization": f"Bearer {pat}",
-        "Accept": "application/vnd.github+json",
-    })
-    try:
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            data = json.loads(resp.read())
-    except Exception as e:
-        log(f"⚠️ Gist read failed: {e}. Fallback to schedule.json")
-        return None
-    files = data.get("files") or {}
-    f = files.get(OT_GIST_FILE)
-    if not f:
-        log(f"Gist file {OT_GIST_FILE} not found, fallback to schedule.json")
-        return None
-    content = f.get("content") or "[]"
-    try:
-        data = json.loads(content)
-    except Exception as e:
-        log(f"⚠️ Gist {OT_GIST_FILE} invalid JSON: {e}. Fallback to schedule.json")
-        return None
-    # Phase 3: accept both legacy array shape AND new {requests, templates} wrapper.
-    if isinstance(data, dict) and "requests" in data:
-        arr = data.get("requests") or []
-    elif isinstance(data, list):
-        arr = data
-    else:
-        log(f"⚠️ Gist {OT_GIST_FILE} unexpected shape ({type(data).__name__}). Fallback to schedule.json")
-        return None
-    if not isinstance(arr, list):
-        log(f"⚠️ Gist {OT_GIST_FILE} requests not an array. Fallback to schedule.json")
-        return None
-    # Normalize to schedule.json shape — only keep fields backend cares about
-    normalized = []
-    for entry in arr:
-        if not isinstance(entry, dict): continue
-        if not entry.get("date") or not entry.get("start") or not entry.get("end"):
-            continue
-        normalized.append({
-            "date":   entry["date"],
-            "start":  entry["start"],
-            "end":    entry["end"],
-            "hours":  entry.get("hours", 0),
-            "reason": entry.get("reason", "task"),
-        })
-    return normalized
+    return _load_ot_from_gist_shared(log=log)
 
 
 def write_back_kintai_status(created_dates, existing_dates):

@@ -16,6 +16,9 @@ import os
 import sys
 from datetime import date, datetime, timedelta
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from ot_gist import load_ot_from_gist  # noqa: E402
+
 DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
 RATES = {
@@ -253,10 +256,20 @@ def main():
     year = args.year or (int(os.environ["INPUT_YEAR"]) if os.environ.get("INPUT_YEAR") else None)
     month = args.month or (int(os.environ["INPUT_MONTH"]) if os.environ.get("INPUT_MONTH") else None)
 
-    # Load schedule
+    # Load schedule from Gist (authoritative) with schedule.json fallback
+    def _log(m): print(m, file=sys.stderr)
+    gist_pending = load_ot_from_gist(log=_log)
+
     sched_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "schedule.json")
     with open(sched_path, encoding="utf-8") as f:
         schedule = json.load(f)
+
+    if gist_pending is not None:
+        schedule["pending_ot"] = gist_pending
+        print(f"☁️ OT source: Gist ({len(gist_pending)} entries)", file=sys.stderr)
+    else:
+        print(f"📂 OT source: schedule.json ({len(schedule.get('pending_ot', []))} entries)",
+              file=sys.stderr)
 
     # Auto-detect year/month from first pending_ot entry if not specified
     if not year or not month:

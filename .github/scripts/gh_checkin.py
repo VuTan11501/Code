@@ -10,6 +10,10 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import smtplib
 
+# Make sibling modules in same dir importable when run via `python path/to/script.py`
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from ot_gist import load_ot_from_gist  # noqa: E402
+
 JST = timezone(timedelta(hours=9))
 
 # ── Azure AD / DokoKin config ──
@@ -673,7 +677,13 @@ def main():
         # Kintai Rule 2: don't close the shift at 18:00 if OT runs until 03:30
         # next-day — that would clip OT hours. The 03:30 CO entry will close it.
         if is_checkout and not is_checkout_yesterday:
-            pending_ot = schedule.get("pending_ot", []) or []
+            # Phase 1 migration: Gist is source-of-truth; schedule.json is fallback.
+            pending_ot = load_ot_from_gist(log=log)
+            if pending_ot is None:
+                pending_ot = schedule.get("pending_ot", []) or []
+                log(f"📂 OT source: schedule.json ({len(pending_ot)} entries)")
+            else:
+                log(f"☁️ OT source: Gist ({len(pending_ot)} entries)")
             has_ot_today = any(ot.get("date") == today_str for ot in pending_ot)
             entry_dt_for_check = None
             try:
