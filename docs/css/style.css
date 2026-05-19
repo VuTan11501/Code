@@ -310,6 +310,8 @@ html { touch-action: manipulation; }
 .toast.success { border-color: rgba(34,197,94,0.4); background: color-mix(in srgb, var(--card), var(--green) 4%); }
 
 /* ─── MODAL / DIALOG ─── */
+body.modal-open { overflow: hidden; }
+
 .modal-overlay, .dialog-overlay {
   position: fixed; inset: 0; background: rgba(0,0,0,0.8);
   backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);

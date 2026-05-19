@@ -868,6 +868,18 @@ if (document.readyState === 'loading') {
   setTimeout(bootstrap, 0);
 }
 
+// ─── Body scroll-lock when any modal/dialog overlay is open ───
+(function initScrollLock() {
+  function syncScrollLock() {
+    const hasOpen = document.querySelector('.modal-overlay.open, .dialog-overlay.open, .spinner-overlay.open');
+    document.body.classList.toggle('modal-open', !!hasOpen);
+  }
+  const observer = new MutationObserver(syncScrollLock);
+  observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'], subtree: true });
+  // Also listen on DOMContentLoaded in case overlays exist at load
+  document.addEventListener('DOMContentLoaded', syncScrollLock);
+})();
+
 // ─── Global tooltip portal (shadcn-style) ───
 // Any element with [data-tooltip] gets a floating tooltip on hover/focus.
 (function initTooltipPortal() {
