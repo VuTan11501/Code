@@ -222,8 +222,8 @@ function renderScheduleCalendar(gistEntries) {
     const name = wf ? wf.name : entry.workflow;
     const typeKey = _pipTypeOf(entry.workflow);
     const dateStr = `${parts.year}-${parts.month}-${parts.day}`;
-    pips.push({ entryIdx: i, dayIdx, time, name, wfFile: entry.workflow, enabled: true, typeKey, once: true, dateStr });
-    typeCounts[typeKey] = (typeCounts[typeKey] || 0) + 1;
+    pips.push({ entryIdx: i, dayIdx, time, name, wfFile: entry.workflow, enabled: entry.enabled !== false, typeKey, once: true, dateStr });
+    if (entry.enabled !== false) typeCounts[typeKey] = (typeCounts[typeKey] || 0) + 1;
   }
 
   const todayDateStr = formatDate(_nowJ.getFullYear(), _nowJ.getMonth(), _nowJ.getDate());
@@ -408,9 +408,9 @@ function openPipActions(entryIdx, pipEl) {
     subtitle = `${time} · ${describeRecurrence(entry.recurrence || {})}${nextFireStr}`;
   }
 
-  const toggleBtn = isOnce
+  const toggleBtn = (isOnce && entry.dispatched)
     ? ''
-    : `<button class="btn sm" onclick="toggleRecurringEnabled(${entryIdx})">${ICON(enabled ? 'pause' : 'play', 14)} ${enabled ? 'Disable' : 'Enable'}</button>`;
+    : `<button class="btn sm" onclick="toggleScheduleEntryEnabled(${entryIdx}); closePipPopover();">${ICON(enabled ? 'pause' : 'play', 14)} ${enabled ? 'Disable' : 'Enable'}</button>`;
 
   const pop = document.createElement('div');
   pop.id = 'pipActionsPopover';
@@ -1257,6 +1257,22 @@ async function toggleScheduleEntry(index) {
   } catch (e) { toast(`❌ ${e.message}`); }
 }
 
+async function toggleScheduleEntryEnabled(index) {
+  try {
+    const entries = await loadEntriesFromGist();
+    const entry = entries[index];
+    if (!entry) return;
+    if (entry.type === 'once' && entry.dispatched) {
+      toast('⚠️ Already dispatched');
+      return;
+    }
+    entry.enabled = entry.enabled === false ? true : false;
+    await saveToGist(entries);
+    toast(entry.enabled ? '▶ Enabled' : '⏸ Disabled');
+    loadScheduledRuns();
+  } catch (e) { toast(`❌ ${e.message}`); }
+}
+
 // ═══════════════════════════════════════════════════
 //  SCHEDULE DATA TABLE (paginated, 10/page, shadcn pagination)
 // ═══════════════════════════════════════════════════
@@ -1370,13 +1386,19 @@ function renderScheduleTable() {
         const isPast = entry.run_at && new Date(entry.run_at) < new Date();
         statusBadge = isPast
           ? `<span class="badge-warning">${ICON('hourglass', 11)} Pending dispatch</span>`
-          : '<span class="badge-enabled">Pending</span>';
+          : `<span class="${enabled ? 'badge-enabled' : 'badge-disabled'}">${enabled ? 'Pending' : 'Paused'}</span>`;
       }
     } else {
       statusBadge = enabled
         ? '<span class="badge-enabled">Active</span>'
         : '<span class="badge-disabled">Disabled</span>';
     }
+
+    // Switch: hide for dispatched once entries (immutable history), show for everything else
+    const showSwitch = !(isOnce && entry.dispatched);
+    const switchHtml = showSwitch
+      ? `<button class="sched-toggle${enabled ? ' active' : ''}" role="switch" aria-checked="${enabled}" onclick="toggleScheduleEntryEnabled(${realIdx})" data-tooltip="${enabled ? 'Disable' : 'Enable'}" aria-label="${enabled ? 'Disable' : 'Enable'} ${wf?.name || entry.workflow}"></button>`
+      : '';
 
     // Created date
     const created = entry.created ? new Date(entry.created).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' }) : '—';
@@ -1392,7 +1414,7 @@ function renderScheduleTable() {
         if (n.length <= 30) return escapeHtml(n);
         return `<span class="tooltip-trigger" tabindex="0" data-tooltip="${escapeHtml(n)}" aria-label="${escapeHtml(n)}">${escapeHtml(n.slice(0, 30))}…</span>`;
       })()}</td>
-      <td data-label="Status">${statusBadge}</td>
+      <td data-label="Status"><div class="flex items-center gap-2">${switchHtml}${statusBadge}</div></td>
       <td data-label="Created" class="text-muted-foreground text-xs">${created}</td>
       <td class="actions-cell"><div class="actions-cell">
         <button class="btn sm" onclick="openEditSchedModal(${realIdx})" data-tooltip="Edit">${ICON('edit', 14)}</button>
