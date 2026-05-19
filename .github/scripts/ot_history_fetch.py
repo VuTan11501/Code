@@ -24,6 +24,11 @@ from gh_ot_creator import (  # type: ignore
     refresh_azure_token, get_kintai_token,
     api_headers,
 )
+from gist_safety import (  # type: ignore
+    read_gist_file, safe_patch_gist_file,
+    sanity_check_ot_requests, validate_ot_requests_shape,
+    GistSafetyError, RaceDetected, SanityCheckFailed,
+)
 
 
 def search_ot_requests_verbose(token, year, month):
@@ -320,17 +325,27 @@ def main():
     log(f"Data range covered: {first_data_month or '—'} → {last_data_month or '—'}")
 
     log("Reading Gist…")
-    wrapper, arr = _read_gist_ot_file(pat)
-    if arr is None:
-        log("Gist file not found, creating new array")
-        arr = []
+    snapshot = read_gist_file(pat, GIST_ID, OT_GIST_FILE, log=log)
+    raw = snapshot["parsed"]
+    if isinstance(raw, dict) and "requests" in raw:
+        wrapper = raw
+        arr = list(raw.get("requests") or [])
+    elif isinstance(raw, list):
         wrapper = None
+        arr = list(raw)
+    else:
+        log("Gist file not found or empty, creating new array")
+        wrapper = None
+        arr = []
+
+    # Snapshot original array for sanity diff (deep-copied via json round-trip)
+    old_arr_snapshot = json.loads(json.dumps(arr))
 
     seeds_removed = 0
     if clean_seeds:
         seeds_removed = _clean_seed_entries(arr)
         if seeds_removed:
-            log(f"🧹 Removed {seeds_removed} seed/mock entries")
+            log(f"🧹 Removed {seeds_removed} PAST seed/mock entries")
 
     before = len(arr)
     updated, added = _merge(arr, fetched_all)
@@ -350,9 +365,40 @@ def main():
             _emit_token_rotation(new_refresh)
         return
 
-    log("PATCHing Gist…")
-    st = _patch_gist_ot_file(pat, wrapper, arr)
-    log(f"Gist PATCH HTTP {st} ✓")
+    # ── SAFETY GATE: refuse to write if too destructive ──────────────
+    try:
+        sanity_check_ot_requests(old_arr_snapshot, arr, log=log)
+    except SanityCheckFailed as e:
+        log(str(e))
+        log("⛔ Aborting write to prevent data loss. Original gist content "
+            "preserved unchanged. Investigate logs above for what tried to "
+            "remove the entries.")
+        sys.exit(2)
+
+    # Build new content
+    if wrapper is not None:
+        wrapper["requests"] = arr
+        new_content = json.dumps(wrapper, indent=2, ensure_ascii=False)
+    else:
+        new_content = json.dumps(arr, indent=2, ensure_ascii=False)
+
+    log("PATCHing Gist (with rolling backup + race detection)…")
+    try:
+        st = safe_patch_gist_file(
+            pat, GIST_ID, OT_GIST_FILE,
+            new_content=new_content,
+            snapshot=snapshot,
+            shape_validator=validate_ot_requests_shape,
+            log=log,
+        )
+        log(f"Gist PATCH HTTP {st} ✓  (rolling backup → ot-requests.bak.json)")
+    except RaceDetected as e:
+        log(str(e))
+        log("⛔ Aborting — will retry on next scheduled run (every hour).")
+        sys.exit(3)
+    except GistSafetyError as e:
+        log(f"⛔ Safety check failed: {e}")
+        sys.exit(2)
 
     if new_refresh != refresh_token:
         _emit_token_rotation(new_refresh)

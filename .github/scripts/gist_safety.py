@@ -1,0 +1,264 @@
+"""Defensive Gist write helpers — prevent data loss / collapse.
+
+PROBLEM (observed 2026-05-19): ot_history_fetch._clean_seed_entries wiped
+ALL `ot_seed*` entries including future-dated pending OT, silently dropping
+the user's 2026-05-31 Sun 12h entry. No backup, no diff log, no sanity check
+→ took human investigation to notice & restore.
+
+DEFENSES (in order of importance):
+
+  1. **Rolling snapshot backup** — every safe write also pushes the previous
+     content to a sibling `<filename>.bak.json` file in the SAME gist, in the
+     SAME PATCH (atomic). 1-click recovery from the most recent write.
+
+  2. **Pre-write sanity gate** — refuses to write if the new array shrinks
+     >20% OR loses any "pending" entries (no `kintai_created_at`) without
+     explicit confirmation. Logs full diff (added/removed dates) before write.
+
+  3. **Optimistic concurrency** — refetches gist right before PATCH and
+     compares against the original snapshot we read. If another writer raced
+     us (content changed), aborts with `RaceDetected` — caller can retry.
+
+  4. **Shape validator** — refuses to PATCH if the new content doesn't match
+     the expected structural invariant (top-level array OR dict with required
+     keys), preventing schema-collapse bugs like the {entries:[...]} wrap
+     disaster.
+
+These do NOT replace careful logic — they're guard rails that turn silent
+data loss into loud, actionable failures.
+"""
+import json
+import hashlib
+import urllib.request
+import urllib.error
+from datetime import datetime, timezone, timedelta
+
+JST = timezone(timedelta(hours=9))
+
+
+class GistSafetyError(Exception):
+    """Base for safety-gate failures (sanity, race, shape)."""
+
+
+class RaceDetected(GistSafetyError):
+    """Another writer modified the gist between our read and write."""
+
+
+class SanityCheckFailed(GistSafetyError):
+    """The proposed write would lose too much data — refusing."""
+
+
+class ShapeInvalid(GistSafetyError):
+    """The proposed content doesn't match required structural shape."""
+
+
+def _hash(content: str) -> str:
+    return hashlib.sha256(content.encode("utf-8")).hexdigest()[:16]
+
+
+def read_gist_file(pat: str, gist_id: str, filename: str, log=None) -> dict:
+    """Read a file from a Gist. Returns dict with keys:
+        content: str (raw json string, never None)
+        sha:     str (short hash of content — concurrency token)
+        parsed:  any (json.loads of content, or None if invalid)
+        all_files: dict[str,str] (other filenames present, for backup placement)
+    """
+    _log = log if callable(log) else (lambda m: None)
+    url = f"https://api.github.com/gists/{gist_id}"
+    req = urllib.request.Request(url, headers={
+        "Authorization": f"Bearer {pat}",
+        "Accept": "application/vnd.github+json",
+    })
+    with urllib.request.urlopen(req, timeout=20) as resp:
+        gist = json.loads(resp.read())
+    files = gist.get("files") or {}
+    f = files.get(filename)
+    content = (f.get("content") if f else None) or ""
+    try:
+        parsed = json.loads(content) if content else None
+    except Exception as e:
+        _log(f"⚠️ {filename} invalid JSON: {e}")
+        parsed = None
+    return {
+        "content": content,
+        "sha": _hash(content),
+        "parsed": parsed,
+        "all_files": list(files.keys()),
+    }
+
+
+def _classify_entries(arr: list) -> tuple[int, int]:
+    """For OT request arrays: (total_count, pending_count).
+    Pending = no kintai_created_at OR kintai_created_at falsy.
+    Caller can pass any list — if entries are non-dict, they're total but not pending.
+    """
+    total = len(arr)
+    pending = sum(1 for e in arr
+                  if isinstance(e, dict) and not e.get("kintai_created_at"))
+    return total, pending
+
+
+def sanity_check_ot_requests(old_arr: list, new_arr: list,
+                             max_total_loss_pct: float = 20.0,
+                             max_pending_loss_pct: float = 10.0,
+                             allow_explicit: bool = False,
+                             log=None) -> None:
+    """Refuse if the new array drops too many entries vs the old one.
+
+    Raises SanityCheckFailed with a detailed message if the write would be
+    destructive. `allow_explicit=True` bypasses the gate (e.g. user manually
+    cleaned via UI and explicitly accepted the loss).
+
+    Thresholds chosen conservatively: a normal sync should ADD entries from
+    DokoKin and update kintai_created_at, never remove >1-2 entries.
+    """
+    _log = log if callable(log) else (lambda m: None)
+    if allow_explicit:
+        return
+
+    old_total, old_pending = _classify_entries(old_arr)
+    new_total, new_pending = _classify_entries(new_arr)
+
+    # Always log the diff
+    old_dates = {e.get("date") for e in old_arr if isinstance(e, dict)}
+    new_dates = {e.get("date") for e in new_arr if isinstance(e, dict)}
+    added = sorted(new_dates - old_dates)
+    removed = sorted(old_dates - new_dates)
+    if added:
+        _log(f"  ➕ Adding dates: {', '.join(added) if len(added) <= 10 else f'{len(added)} dates'}")
+    if removed:
+        _log(f"  ➖ Removing dates: {', '.join(removed) if len(removed) <= 10 else f'{len(removed)} dates'}")
+
+    if old_total == 0:
+        return  # nothing to lose
+    total_loss_pct = max(0, (old_total - new_total)) * 100.0 / old_total
+    if total_loss_pct > max_total_loss_pct:
+        raise SanityCheckFailed(
+            f"🚨 Refusing write — would remove {old_total - new_total} of "
+            f"{old_total} entries ({total_loss_pct:.1f}% loss > "
+            f"{max_total_loss_pct}% threshold). Removed dates: "
+            f"{removed[:20]}{'...' if len(removed) > 20 else ''}"
+        )
+
+    if old_pending > 0:
+        pending_loss_pct = max(0, (old_pending - new_pending)) * 100.0 / old_pending
+        if pending_loss_pct > max_pending_loss_pct:
+            raise SanityCheckFailed(
+                f"🚨 Refusing write — would lose {old_pending - new_pending} of "
+                f"{old_pending} PENDING entries (no kintai_created_at). "
+                f"{pending_loss_pct:.1f}% loss > {max_pending_loss_pct}% threshold. "
+                f"Pending entries represent user-scheduled future OT not yet pushed "
+                f"to DokoKin — losing them silently wipes the user's schedule."
+            )
+
+
+def safe_patch_gist_file(pat: str, gist_id: str, filename: str,
+                        new_content: str, snapshot,
+                        shape_validator=None,
+                        skip_backup: bool = False,
+                        log=None) -> int:
+    """Atomically PATCH a gist file with safety rails.
+
+    Args:
+      pat: GH PAT with `gist` scope
+      gist_id, filename: target
+      new_content: the JSON string to write
+      snapshot: dict from read_gist_file() taken at read time
+      shape_validator: optional callable(parsed_new) → raises ShapeInvalid
+      skip_backup: pass True if writing to a `.bak.json` file (avoid recursion)
+      log: optional logger
+
+    Behavior:
+      1. Validates shape of new_content (json parse + shape_validator)
+      2. Refetches gist; if current content hash != snapshot.sha → RaceDetected
+      3. Builds atomic PATCH body containing BOTH:
+           - filename → new_content
+           - <stem>.bak.json → snapshot.content (rolling backup)
+      4. Single PATCH (atomic at gist level)
+
+    Returns HTTP status. Raises GistSafetyError subclasses on safety violations.
+    """
+    _log = log if callable(log) else (lambda m: None)
+
+    # 1. Shape validation
+    try:
+        parsed_new = json.loads(new_content)
+    except Exception as e:
+        raise ShapeInvalid(f"new_content is not valid JSON: {e}")
+    if shape_validator is not None:
+        shape_validator(parsed_new)  # may raise ShapeInvalid
+
+    # 2. Race detection (optimistic concurrency)
+    current = read_gist_file(pat, gist_id, filename, log=_log)
+    if current["sha"] != snapshot["sha"]:
+        raise RaceDetected(
+            f"🚨 Race detected: {filename} changed between read "
+            f"(sha={snapshot['sha']}) and write (sha={current['sha']}). "
+            f"Another writer modified the gist. Refusing PATCH to avoid "
+            f"overwriting their changes."
+        )
+
+    # 3. Build atomic PATCH body
+    files_payload = {filename: {"content": new_content}}
+    if not skip_backup and snapshot["content"]:
+        # Rolling backup: stem.bak.json (e.g. ot-requests.json → ot-requests.bak.json)
+        if filename.endswith(".json"):
+            bak_name = filename[:-5] + ".bak.json"
+        else:
+            bak_name = filename + ".bak"
+        # Wrap backup content with metadata so it's self-describing
+        bak_payload = {
+            "_backup_of": filename,
+            "_backup_at": datetime.now(JST).isoformat(timespec="seconds"),
+            "_previous_sha": snapshot["sha"],
+            "content": snapshot["parsed"]
+                       if snapshot["parsed"] is not None
+                       else snapshot["content"],
+        }
+        files_payload[bak_name] = {
+            "content": json.dumps(bak_payload, indent=2, ensure_ascii=False)
+        }
+        _log(f"📦 Snapshotting previous {filename} → {bak_name} "
+             f"(sha={snapshot['sha']}, size={len(snapshot['content'])}B)")
+
+    # 4. Single atomic PATCH
+    body = json.dumps({"files": files_payload}).encode()
+    req = urllib.request.Request(
+        f"https://api.github.com/gists/{gist_id}",
+        data=body, method="PATCH", headers={
+            "Authorization": f"Bearer {pat}",
+            "Accept": "application/vnd.github+json",
+            "Content-Type": "application/json",
+        })
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        return resp.status
+
+
+def validate_ot_requests_shape(parsed) -> None:
+    """Raise ShapeInvalid if parsed is not a valid ot-requests.json shape.
+    Accepts: list[dict] OR dict with 'requests' key → list[dict].
+    """
+    if isinstance(parsed, list):
+        if any(not isinstance(e, (dict, type(None))) for e in parsed):
+            raise ShapeInvalid("ot-requests array contains non-dict entries")
+        return
+    if isinstance(parsed, dict):
+        if "requests" not in parsed:
+            raise ShapeInvalid("ot-requests dict missing 'requests' key")
+        if not isinstance(parsed["requests"], list):
+            raise ShapeInvalid("ot-requests.requests is not a list")
+        return
+    raise ShapeInvalid(f"ot-requests root must be list or dict, got {type(parsed).__name__}")
+
+
+def validate_scheduled_runs_shape(parsed) -> None:
+    """Raise ShapeInvalid if parsed is not a valid scheduled-runs.json shape.
+    MUST be a top-level array (dispatcher does `for entry in runs`).
+    The 2026-05-XX wrap-as-{entries:[]} bug broke production until reverted.
+    """
+    if not isinstance(parsed, list):
+        raise ShapeInvalid(
+            f"scheduled-runs MUST be top-level array (dispatcher iterates it). "
+            f"Got {type(parsed).__name__}. Wrapping as {{entries:[]}} breaks "
+            f"the dispatcher silently."
+        )

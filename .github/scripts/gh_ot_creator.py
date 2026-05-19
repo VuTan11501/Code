@@ -347,39 +347,31 @@ def write_back_kintai_status(created_dates, existing_dates):
                     for d in (set(created_dates) | set(existing_dates))}
     if not target_dates:
         return 0
-    url = f"https://api.github.com/gists/{GIST_ID}"
-    req = urllib.request.Request(url, headers={
-        "Authorization": f"Bearer {pat}",
-        "Accept": "application/vnd.github+json",
-    })
+
+    # Use defensive read/write helpers (rolling backup + race detection + sanity gate)
+    from gist_safety import (
+        read_gist_file, safe_patch_gist_file,
+        sanity_check_ot_requests, validate_ot_requests_shape,
+        GistSafetyError,
+    )
     try:
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            data = json.loads(resp.read())
+        snapshot = read_gist_file(pat, GIST_ID, OT_GIST_FILE, log=log)
     except Exception as e:
         log(f"⚠️ Gist read failed for write-back: {e}")
         return 0
-    files = data.get("files") or {}
-    f = files.get(OT_GIST_FILE)
-    if not f:
-        log(f"Gist file {OT_GIST_FILE} not found, skip write-back")
-        return 0
-    try:
-        raw = json.loads(f.get("content") or "[]")
-    except Exception as e:
-        log(f"⚠️ Gist {OT_GIST_FILE} invalid JSON: {e}")
-        return 0
-    # Phase 3: accept both legacy array AND new {requests, templates} wrapper.
-    # Preserve wrapper shape on write-back so templates aren't lost.
+    raw = snapshot["parsed"]
     if isinstance(raw, dict) and "requests" in raw:
         wrapper = raw
         arr = raw.get("requests") or []
     elif isinstance(raw, list):
         wrapper = None
-        arr = raw
+        arr = list(raw)
     else:
+        log(f"⚠️ Gist {OT_GIST_FILE} unexpected shape; skip write-back")
         return 0
     if not isinstance(arr, list):
         return 0
+    old_arr_snapshot = json.loads(json.dumps(arr))
     now_iso = datetime.now(JST).isoformat(timespec="seconds")
     updated = 0
     for entry in arr:
@@ -391,23 +383,27 @@ def write_back_kintai_status(created_dates, existing_dates):
     if updated == 0:
         log("Gist write-back: nothing to mark (all entries already tagged)")
         return 0
+    # This op only mutates — should never remove. Sanity check will catch bugs.
+    try:
+        sanity_check_ot_requests(old_arr_snapshot, arr, log=log)
+    except GistSafetyError as e:
+        log(f"⚠️ Gist write-back blocked by safety gate: {e}")
+        return 0
     if wrapper is not None:
         wrapper["requests"] = arr
         new_content = json.dumps(wrapper, indent=2, ensure_ascii=False)
     else:
         new_content = json.dumps(arr, indent=2, ensure_ascii=False)
-    patch_body = json.dumps({
-        "files": {OT_GIST_FILE: {"content": new_content}}
-    }).encode()
-    patch_req = urllib.request.Request(url, data=patch_body, method="PATCH", headers={
-        "Authorization": f"Bearer {pat}",
-        "Accept": "application/vnd.github+json",
-        "Content-Type": "application/json",
-    })
     try:
-        with urllib.request.urlopen(patch_req, timeout=15) as resp:
-            log(f"✓ Gist write-back: marked {updated} entries as kintai_created (HTTP {resp.status})")
-            return updated
+        st = safe_patch_gist_file(
+            pat, GIST_ID, OT_GIST_FILE,
+            new_content=new_content,
+            snapshot=snapshot,
+            shape_validator=validate_ot_requests_shape,
+            log=log,
+        )
+        log(f"✓ Gist write-back: marked {updated} entries as kintai_created (HTTP {st}, backup written)")
+        return updated
     except Exception as e:
         log(f"⚠️ Gist write-back PATCH failed: {e}")
         return 0
