@@ -1326,11 +1326,12 @@ function renderScheduledQueue(entries) {
       }
     } else {
       // Recurring
-      if (bucket === 2 && nextFireMs == null) {
+      if (ranToday) {
+        // Already ran today → keep informative "Done today" badge regardless of sort bucket
         nextInfo = `<span class="sched-status done">${ICON('check', 11)} Done today</span>`;
       } else if (bucket === 2) {
-        // ran today, has future slot
-        nextInfo = `<span class="sched-status done">${ICON('check', 11)} Done today</span>`;
+        // No future fire and never ran today (e.g. disabled day pattern)
+        nextInfo = `<span class="sched-status done">${ICON('check', 11)} —</span>`;
       } else if (bucket === 0) {
         nextInfo = `<span class="sched-status overdue">${ICON('hourglass', 11)} Pending</span>`;
       } else if (nextFireMs) {
