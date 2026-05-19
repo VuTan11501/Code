@@ -857,7 +857,81 @@ function bootstrap() {
     document.getElementById('authDesc').textContent = 'First time? Set up your encrypted vault.';
   } else {
     document.getElementById('passphrase').focus();
+    // Try biometric auto-unlock if enrolled on this device
+    tryBiometricAutoUnlock();
   }
+}
+
+async function tryBiometricAutoUnlock() {
+  if (!window.Biometric || !window.Biometric.isEnabled()) {
+    updateBiometricButton();
+    return;
+  }
+  updateBiometricButton();
+  // Auto-trigger Face ID on app open if enrolled
+  try {
+    const token = await window.Biometric.unlock();
+    if (token) {
+      saveSession(token);
+      showDashboard();
+      toast('🔓 Unlocked with biometric');
+    }
+  } catch (e) {
+    console.log('[Biometric] auto-unlock skipped:', e.message || e);
+    // Silent fallback — user can tap passphrase or button
+  }
+}
+
+async function unlockWithBiometric() {
+  if (!window.Biometric || !window.Biometric.isEnabled()) {
+    toast('Biometric not enrolled on this device', 'warning');
+    return;
+  }
+  try {
+    const token = await window.Biometric.unlock();
+    saveSession(token);
+    showDashboard();
+    toast('🔓 Unlocked with biometric');
+  } catch (e) {
+    toast('❌ Biometric unlock failed: ' + (e.message || e), 'error');
+  }
+}
+
+function updateBiometricButton() {
+  const btn = document.getElementById('biometricUnlockBtn');
+  if (!btn) return;
+  if (window.Biometric && window.Biometric.isEnabled()) {
+    btn.style.display = 'flex';
+  } else {
+    btn.style.display = 'none';
+  }
+}
+
+async function enrollBiometric() {
+  if (!window.Biometric) return;
+  if (!await window.Biometric.isPlatformAuthenticatorAvailable()) {
+    toast('❌ Face ID / Touch ID / Windows Hello not available on this device', 'error');
+    return;
+  }
+  if (!sessionToken) { toast('Unlock with passphrase first', 'warning'); return; }
+  try {
+    const r = await window.Biometric.enroll(sessionToken);
+    if (r.ok) {
+      toast(`✅ Biometric enabled (${r.tier === 'prf' ? 'crypto-bound' : 'gated'})`);
+      if (typeof renderBiometricStatus === 'function') renderBiometricStatus();
+    }
+  } catch (e) {
+    toast('❌ Enrollment failed: ' + (e.message || e), 'error');
+  }
+}
+
+function disableBiometric() {
+  if (!window.Biometric) return;
+  if (!confirm('Disable biometric auto-unlock on this device? You\'ll need to enter passphrase on next launch.')) return;
+  window.Biometric.disable();
+  toast('Biometric disabled on this device');
+  if (typeof renderBiometricStatus === 'function') renderBiometricStatus();
+  updateBiometricButton();
 }
 
 if (document.readyState === 'loading') {

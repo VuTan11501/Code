@@ -72,7 +72,7 @@ tailwind.config = {
 <body class="bg-background text-foreground font-sans text-sm antialiased min-h-dvh overflow-x-hidden">
 
 <!-- Auth Screen -->
-<section id="authScreen" class="auth-screen flex items-center justify-center min-h-dvh p-5" role="main" aria-label="Authentication">
+<section id="authScreen" class="auth-screen fixed inset-0 flex items-center justify-center p-5 overflow-hidden bg-background" role="main" aria-label="Authentication">
   <div class="card auth-card bg-card border border-border rounded-xl p-10 max-w-[400px] w-full text-center">
     <div class="card-header flex flex-col items-center gap-2 pb-5 border-b border-border mb-5">
       <div class="auth-icon w-14 h-14 rounded-full grid place-items-center mb-2" aria-hidden="true">
@@ -89,10 +89,13 @@ tailwind.config = {
 
       <!-- Unlock form -->
       <form id="unlockForm" onsubmit="event.preventDefault();unlock()" role="tabpanel" aria-labelledby="authTabs">
+        <button type="button" id="biometricUnlockBtn" class="btn primary w-full px-4 py-2.5 mb-3" style="display:none;align-items:center;justify-content:center;gap:8px" onclick="unlockWithBiometric()">
+          <span data-icon="fingerprint" data-size="18"></span> Unlock with Face ID / Touch ID
+        </button>
         <div class="field flex flex-col gap-2 mb-3">
           <input type="password" class="input" id="passphrase" placeholder="Passphrase" autocomplete="current-password" aria-label="Passphrase">
         </div>
-        <button type="submit" class="btn primary w-full px-4 py-2.5 mt-2"><span data-icon="unlock" data-size="16"></span> Unlock</button>
+        <button type="submit" class="btn secondary w-full px-4 py-2.5 mt-2"><span data-icon="unlock" data-size="16"></span> Unlock with passphrase</button>
         <div class="error" id="unlockError" role="alert">Wrong passphrase</div>
       </form>
 
