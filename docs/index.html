@@ -851,7 +851,7 @@ tailwind.config = {
       <button class="btn btn-ghost btn-icon modal-close" onclick="closeOtOptimizer()" aria-label="Close">&times;</button>
     </div>
     <div class="dialog-body modal-body" style="padding:20px">
-      <div class="text-xs text-muted-foreground mb-3">Suggests optimal OT schedule for the current month view, respecting 75h/month + 12h/day caps. Sunday 12h shifts and weeknight 22:00→03:30 shifts are prioritized by ¥/h.</div>
+      <div class="text-xs text-muted-foreground mb-3">Suggests optimal OT schedule respecting 75h/month + 12h/day caps + Labor Law §34 (≤6h no break required). Strategy: pack pure-night 22:00→04:00 (6h) shifts — Sundays first (¥2,500/h, Sun+Night premiums stack), then weekdays (¥2,344/h). Last shift may be partial (≥3h) to fill the cap exactly.</div>
       <div class="grid grid-cols-[1fr_auto] gap-3 items-end mb-4">
         <div class="field">
           <label class="field-label text-xs text-muted-foreground font-medium block mb-1" for="otOptTarget">Target income (¥)</label>
@@ -899,7 +899,7 @@ tailwind.config = {
 <script src="js/dashboard.js?v=26"></script>
 <script src="js/schedule.js?v=26"></script>
 <script src="js/ot-salary.js?v=37"></script>
-<script src="js/ot-planner.js?v=46"></script>
+<script src="js/ot-planner.js?v=47"></script>
 <script src="js/settings.js?v=26"></script>
 </body>
 </html>

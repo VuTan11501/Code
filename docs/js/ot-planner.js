@@ -1482,9 +1482,14 @@ async function deleteOtTemplate(id) {
 }
 
 // ─── Optimizer ───
-// Two fixed shift patterns dominate by ¥/h (per SKILL.md):
-//  - Sunday → 15:30→03:30 (12h, ~5.5h night + ~9.5h Sunday-day)
-//  - Other days → 22:00→03:30 (5.5h, all night, NO break per Labor Standards Act)
+// Strategy (post-knapsack rev2): pack 22:00→04:00 PURE-NIGHT 6h shifts.
+// Rate analysis (¥/h):
+//   - Sunday pure-night : 1.25 + 0.10 + 0.25 = 1.60×  → ¥2,500/h
+//   - Weekday pure-night: 1.25         + 0.25 = 1.50×  → ¥2,344/h
+//   - Sunday daytime    : 1.25 + 0.10         = 1.35×  → ¥2,110/h
+// Sundays first (highest rate), then weekdays. Labor Law §34 break only
+// triggers when working hours STRICTLY > 6h, so 6.0h shifts are break-free.
+// Last shift may be partial in [3, 6) hours so we hit the cap exactly.
 function _otOptimizerCandidates(year, monthZeroIdx, existingByDate) {
   const daysInMonth = new Date(year, monthZeroIdx + 1, 0).getDate();
   const todayStr = _todayJSTStr();
@@ -1495,9 +1500,9 @@ function _otOptimizerCandidates(year, monthZeroIdx, existingByDate) {
     if (existingByDate[dateStr]) continue;       // skip days with existing OT
     const dow = new Date(year, monthZeroIdx, d).getDay();
     const isSun = dow === 0;
-    const start = isSun ? '15:30' : '22:00';
-    const end = '03:30';
-    const hours = isSun ? 12 : 5.5;
+    const start = '22:00';
+    const end = '04:00';                          // 6h pure-night
+    const hours = 6;
     const ot = { date: dateStr, start, end, hours, reason: 'optimizer' };
     const breakdown = window.OT_SALARY.calcOtBreakdown(ot);
     const conf = detectConflict(ot);
@@ -1512,59 +1517,66 @@ function _otOptimizerCandidates(year, monthZeroIdx, existingByDate) {
     if (conf.hasConflict) continue;
     (isSun ? sun : wk).push(item);
   }
-  // Earliest dates first within each kind (deterministic selection when ties)
   const byDate = (a, b) => a.date < b.date ? -1 : 1;
   sun.sort(byDate); wk.sort(byDate);
   return { sun, wk };
 }
 
-// Exhaustive knapsack over (k_sun, k_wk) pairs subject to the hour cap.
-// All Sun shifts in a month yield identical gross; same for weekday shifts.
-// Returns {k_sun, k_wk, gross, hours} representing how many of each to pick.
+// Greedy fill subject to hour cap. Since rateSun > rateWk and both shifts
+// are 6h pure-night, optimal is: pack Sundays first up to min(num_sun,
+// floor(cap/6)), then weekdays. Allow ONE partial last shift in [3,6) to
+// consume the exact remainder.
+// Returns { picks: [{kind, hours}, ...indexed by slot order], k_sun, k_wk,
+// gross, hours, partial }. Materialization (which dates) is done by caller.
 function _pickOptimalMix(sun, wk, remainingHours, target, maxMode) {
-  const grossSun = sun[0]?.gross || 0;
-  const grossWk  = wk[0]?.gross || 0;
-  const hSun = 12, hWk = 5.5;
-  const maxKsun = Math.min(sun.length, Math.floor(remainingHours / hSun));
+  const rateSun = sun[0]?.ratio || 0;
+  const rateWk  = wk[0]?.ratio || 0;
+  const grossSun6 = sun[0]?.gross || 0;
+  const grossWk6  = wk[0]?.gross || 0;
 
-  let best = { k_sun: 0, k_wk: 0, gross: 0, hours: 0 };
-  // Helper: pick the better candidate per mode (maxMode: largest gross;
-  // target mode: smallest gross >= target, falling back to largest if no
-  // combination reaches target).
+  // Helper: given a (k_sun, k_wk_full, partialKind, partialHours), build candidate.
+  const mk = (ks, kwFull, pKind, pHrs) => {
+    let gross = ks * grossSun6 + kwFull * grossWk6;
+    if (pKind === 'sun') gross += pHrs * rateSun;
+    else if (pKind === 'wk') gross += pHrs * rateWk;
+    const hours = ks * 6 + kwFull * 6 + (pKind ? pHrs : 0);
+    return { k_sun: ks, k_wk: kwFull + (pKind === 'wk' ? 1 : 0),
+             k_sun_total: ks + (pKind === 'sun' ? 1 : 0),
+             partialKind: pKind, partialHours: pHrs || 0,
+             gross, hours };
+  };
   const better = (a, b) => {
     if (maxMode) return b.gross > a.gross ? b : a;
+    // target mode: smallest gross >= target; else largest below
     if (b.gross >= target && a.gross < target) return b;
     if (a.gross >= target && b.gross < target) return a;
     if (a.gross >= target && b.gross >= target) return b.gross < a.gross ? b : a;
-    return b.gross > a.gross ? b : a; // both below target → take larger
+    return b.gross > a.gross ? b : a;
   };
 
-  for (let ks = 0; ks <= maxKsun; ks++) {
-    const hoursAfterSun = ks * hSun;
-    const wkBudget = remainingHours - hoursAfterSun;
-    const maxKwk = Math.min(wk.length, Math.floor(wkBudget / hWk + 1e-9));
-    // For maxMode, we always want the largest wk count.
-    // For targetMode, scan from 0..maxKwk to find smallest reaching target.
-    if (maxMode) {
-      const candidate = {
-        k_sun: ks, k_wk: maxKwk,
-        gross: ks * grossSun + maxKwk * grossWk,
-        hours: hoursAfterSun + maxKwk * hWk,
-      };
-      best = better(best, candidate);
-    } else {
-      // Find smallest kw such that total gross >= target (if any), else use maxKwk
-      let pick = -1;
-      for (let kw = 0; kw <= maxKwk; kw++) {
-        if (ks * grossSun + kw * grossWk >= target) { pick = kw; break; }
+  // Build candidate set: enumerate all (k_sun_full, k_wk_full, partial) packings
+  // satisfying caps. Small search space (~num_sun × num_wk = ~80 combos).
+  let best = mk(0, 0, null, 0);
+  const numSun = sun.length, numWk = wk.length;
+  for (let ks = 0; ks <= Math.min(numSun, Math.floor(remainingHours / 6 + 1e-9)); ks++) {
+    const afterSun = ks * 6;
+    const wkBudget = remainingHours - afterSun;
+    const maxKwFull = Math.min(numWk, Math.floor(wkBudget / 6 + 1e-9));
+    for (let kw = 0; kw <= maxKwFull; kw++) {
+      const used = afterSun + kw * 6;
+      const leftover = remainingHours - used;
+      // Try no partial
+      best = better(best, mk(ks, kw, null, 0));
+      // Try partial weekday (if slot available, ≥3h, <6h)
+      if (kw < numWk && leftover >= 3 && leftover < 6 + 1e-9) {
+        const pHrs = Math.min(leftover, 6 - 0.01);  // strictly <6 to stay break-free; but we already split full vs partial
+        // Actually use exact leftover (which is <6 here)
+        best = better(best, mk(ks, kw, 'wk', leftover));
       }
-      if (pick === -1) pick = maxKwk;
-      const candidate = {
-        k_sun: ks, k_wk: pick,
-        gross: ks * grossSun + pick * grossWk,
-        hours: hoursAfterSun + pick * hWk,
-      };
-      best = better(best, candidate);
+      // Try partial sunday (only if extra Sun slots remain beyond ks)
+      if (ks < numSun && leftover >= 3 && leftover < 6 + 1e-9) {
+        best = better(best, mk(ks, kw, 'sun', leftover));
+      }
     }
   }
   return best;
@@ -1603,10 +1615,33 @@ function runOtOptimizer() {
   const targetDelta = maxMode ? Infinity : Math.max(0, target - sal.gross);
   const mix = _pickOptimalMix(sun, wk, remainingHours, targetDelta, maxMode);
 
-  // Materialize selected list: first mix.k_sun Sundays + first mix.k_wk weekdays,
-  // re-sorted by date for display
-  const selected = [...sun.slice(0, mix.k_sun), ...wk.slice(0, mix.k_wk)]
-    .sort((a, b) => a.date < b.date ? -1 : 1);
+  // Materialize: pick first k_sun_total Sundays (or k_sun if no partial),
+  // first k_wk weekdays. If partial, replace LAST slot of the partialKind
+  // with a shorter shift (22:00 → end = 22:00 + partialHours).
+  const sunFullCount = mix.k_sun;
+  const wkFullCount = mix.partialKind === 'wk' ? mix.k_wk - 1 : mix.k_wk;
+  const selected = [];
+  for (let i = 0; i < sunFullCount; i++) selected.push({ ...sun[i] });
+  for (let i = 0; i < wkFullCount; i++) selected.push({ ...wk[i] });
+  if (mix.partialKind === 'sun' && sunFullCount < sun.length) {
+    const base = sun[sunFullCount];
+    const endHr = (22 + mix.partialHours) % 24;
+    const endHH = String(Math.floor(endHr)).padStart(2,'0');
+    const endMM = String(Math.round((endHr - Math.floor(endHr)) * 60)).padStart(2,'0');
+    const partOt = { date: base.date, start: '22:00', end: `${endHH}:${endMM}`, hours: mix.partialHours, reason: 'optimizer' };
+    const bd = window.OT_SALARY.calcOtBreakdown(partOt);
+    selected.push({ ...base, start: partOt.start, end: partOt.end, hours: mix.partialHours, gross: bd.gross, ratio: bd.gross / mix.partialHours });
+  }
+  if (mix.partialKind === 'wk' && wkFullCount < wk.length) {
+    const base = wk[wkFullCount];
+    const endHr = (22 + mix.partialHours) % 24;
+    const endHH = String(Math.floor(endHr)).padStart(2,'0');
+    const endMM = String(Math.round((endHr - Math.floor(endHr)) * 60)).padStart(2,'0');
+    const partOt = { date: base.date, start: '22:00', end: `${endHH}:${endMM}`, hours: mix.partialHours, reason: 'optimizer' };
+    const bd = window.OT_SALARY.calcOtBreakdown(partOt);
+    selected.push({ ...base, start: partOt.start, end: partOt.end, hours: mix.partialHours, gross: bd.gross, ratio: bd.gross / mix.partialHours });
+  }
+  selected.sort((a, b) => a.date < b.date ? -1 : 1);
 
   _otState.optimizerResults = selected;
   renderOtOptimizerResults(selected, {
