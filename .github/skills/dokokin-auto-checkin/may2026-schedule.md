@@ -20,7 +20,7 @@
 - **Break**: ≤6h = 0min | >6h≤8h = 45min | >8h = 60min
 - **+1** = ngày hôm sau
 
-> 🚨 **CO closes workday permanently** — không thể "mở lại" session. Trên các ngày Work+OT có OT vắt qua nửa đêm (05/11, 05/18, 05/19, 05/21), recurring weekday CO 18:00 trong Gist phải có các date đó trong `recurrence.skip_dates`, và thay bằng explicit `once` CO tại 03:30+1 (hoặc 00:00+1 với OT 18:00→00:00).
+> 🚨 **CO closes workday permanently** — không thể "mở lại" session. Trên các ngày Work+OT có OT vắt qua nửa đêm (05/11, 05/18, 05/19, 05/20, 05/21), recurring weekday CO 18:00 trong Gist phải có các date đó trong `recurrence.skip_dates`, và thay bằng explicit `once` CO tại 03:30+1 (hoặc 00:00+1 với OT 18:00→00:00).
 
 ## 🗓 Schedule
 
@@ -45,7 +45,7 @@
 | 05/17 | Sun | OT Full | 15:30 | home | 04:30+1 | home | #725073 | 12.0h | ☀️🌙 day+night, break 1h |
 | 05/18 | Mon | Work+OT | 09:00 | office | 03:30+1 | home | ⏳ PENDING | 5.5h | 🌙 OT 22:00→03:30 |
 | 05/19 | Tue | Work+OT | 09:00 | office | 03:30+1 | home | #726679 | 5.5h | 🌙 OT 22:00→03:30 |
-| 05/20 | Wed | Work | 09:00 | office | 18:00 | office | — | — | |
+| 05/20 | Wed | Work+OT | 09:00 | office | 03:30+1 | home | ⏳ PENDING | 5.5h | 🌙 OT 22:00→03:30 (moved from May15) |
 | 05/21 | Thu | Work+OT | 09:00 | office | 03:30+1 | home | #726678 | 5.5h | 🌙 OT 22:00→03:30 |
 | 05/22 | Fri | Work | 09:00 | office | 18:00 | office | — | — | |
 | 05/23 | Sat | OT Night | 22:00 | home | 03:30+1 | home | #726676 | 5.5h | 🌙 全night |

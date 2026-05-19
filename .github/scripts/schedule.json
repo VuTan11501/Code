@@ -38,8 +38,8 @@
     {"datetime": "2026-05-19 09:00", "action": "checkin",  "location": "office"},
     {"datetime": "2026-05-20 03:30", "action": "checkout", "location": "home", "note": "May19 OT night CO"},
 
-    {"datetime": "2026-05-20 09:00", "action": "checkin",  "location": "office"},
-    {"datetime": "2026-05-20 18:00", "action": "checkout", "location": "office"},
+    {"datetime": "2026-05-20 09:00", "action": "checkin",  "location": "office", "note": "Wed workday + OT (moved from May15)"},
+    {"datetime": "2026-05-21 03:30", "action": "checkout", "location": "home", "note": "May20 OT night CO"},
 
     {"datetime": "2026-05-21 09:00", "action": "checkin",  "location": "office"},
     {"datetime": "2026-05-22 03:30", "action": "checkout", "location": "home", "note": "May21 OT night CO"},
@@ -77,6 +77,7 @@
     {"date": "2026-05-17", "start": "14:30", "end": "03:30", "hours": 12.0, "reason": "task shishin"},
     {"date": "2026-05-18", "start": "22:00", "end": "03:30", "hours": 5.5, "reason": "task shishin"},
     {"date": "2026-05-19", "start": "22:00", "end": "03:30", "hours": 5.5, "reason": "task shishin"},
+    {"date": "2026-05-20", "start": "22:00", "end": "03:30", "hours": 5.5, "reason": "task shishin (moved from May15)"},
     {"date": "2026-05-21", "start": "22:00", "end": "03:30", "hours": 5.5, "reason": "task shishin"},
     {"date": "2026-05-23", "start": "22:00", "end": "03:30", "hours": 5.5, "reason": "task shishin"},
     {"date": "2026-05-24", "start": "14:30", "end": "03:30", "hours": 12.0, "reason": "task shishin"},
