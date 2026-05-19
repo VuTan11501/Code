@@ -169,7 +169,7 @@ function successRate(runs) {
 }
 
 function renderWorkflowCard(wf, runs) {
-  const last5 = runs.slice(0, 5);
+  const last5 = runs.slice(0, 4);
   return `
     <div class="card">
       <div class="card-header">
