@@ -237,11 +237,19 @@ def _merge(existing: list, fetched: list) -> tuple[int, int]:
 
 
 def _clean_seed_entries(arr: list) -> int:
-    """Remove pre-existing mock/seed entries (ids like 'ot_seed*')."""
+    """Remove PAST mock/seed entries (ids like 'ot_seed*'). Future-dated seed
+    entries are preserved — they represent user-scheduled OT that hasn't been
+    pushed to DokoKin yet (no `kintai_created_at`). Wiping them would silently
+    delete the user's pending schedule on every sync (this happened: 2026-05-31
+    Sun 12h was lost twice on 2026-05-19)."""
+    today_str = datetime.now(JST).strftime("%Y-%m-%d")
     removed = 0
     keep = []
     for e in arr:
-        if isinstance(e, dict) and isinstance(e.get("id"), str) and e["id"].startswith("ot_seed"):
+        if (isinstance(e, dict)
+                and isinstance(e.get("id"), str)
+                and e["id"].startswith("ot_seed")
+                and str(e.get("date", "")) < today_str):
             removed += 1
             continue
         keep.append(e)
