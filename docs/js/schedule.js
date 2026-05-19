@@ -201,6 +201,11 @@ async function checkAndDispatchOverdue() {
 let _calendarEntries = [];      // cached for pip-action handlers
 let _pressTimer = null;          // long-press detection
 let _pressMoved = false;
+let _pressStartX = 0;            // for movement-threshold check
+let _pressStartY = 0;
+const PRESS_MOVE_THRESHOLD = 10; // px — ignore micro-movements (mobile finger jitter)
+let _lastSlotTap = { key: '', t: 0 };  // for synthetic double-tap on empty slots
+const DBLTAP_MAX_MS = 350;       // window for second tap to register
 
 const PIP_FILTER_KEY = 'sched_pip_filter_v1';
 const PIP_TYPES = [
@@ -364,7 +369,7 @@ function renderScheduleCalendar(gistEntries) {
       if (isToday && isNext) classes.push('now-slot');
       if (cellPips.length === 0) classes.push('empty-slot');
       const onclick = cellPips.length === 0
-        ? `ondblclick="quickAddRecurring(${day}, '${time}')"`
+        ? `data-emptyslot="1"`
         : '';
       html += `<div class="${classes.join(' ')}" data-day="${day}" data-time="${time}" ${onclick}${cellPips.length === 0 ? ' data-tooltip="Double-tap to add"' : ''}>`;
       for (const p of cellPips) {
@@ -390,13 +395,16 @@ function renderScheduleCalendar(gistEntries) {
   html += '</div></div>';
   container.innerHTML = html;
 
-  // Wire up pip interactions
+  // Wire up pip interactions (mobile-friendly: pointer + movement threshold)
   container.querySelectorAll('.schedule-pip[data-entry]').forEach(pip => {
     const entryIdx = parseInt(pip.getAttribute('data-entry'));
     const isOnce = pip.classList.contains('once');
     pip.addEventListener('pointerdown', (e) => {
       e.stopPropagation();
       _pressMoved = false;
+      _pressStartX = e.clientX;
+      _pressStartY = e.clientY;
+      try { pip.setPointerCapture(e.pointerId); } catch {}
       _pressTimer = setTimeout(() => {
         _pressTimer = null;
         if (isOnce) {
@@ -406,7 +414,15 @@ function renderScheduleCalendar(gistEntries) {
         }
       }, 550);
     });
-    pip.addEventListener('pointermove', () => { _pressMoved = true; });
+    pip.addEventListener('pointermove', (e) => {
+      // Only treat as "moved" if past the threshold — ignores finger jitter on mobile
+      const dx = Math.abs(e.clientX - _pressStartX);
+      const dy = Math.abs(e.clientY - _pressStartY);
+      if (dx > PRESS_MOVE_THRESHOLD || dy > PRESS_MOVE_THRESHOLD) {
+        _pressMoved = true;
+        if (_pressTimer) { clearTimeout(_pressTimer); _pressTimer = null; }
+      }
+    });
     pip.addEventListener('pointerup', (e) => {
       e.stopPropagation();
       if (_pressTimer) {
@@ -416,6 +432,29 @@ function renderScheduleCalendar(gistEntries) {
     });
     pip.addEventListener('pointercancel', () => {
       if (_pressTimer) { clearTimeout(_pressTimer); _pressTimer = null; }
+    });
+    // Prevent native iOS callout / context menu from hijacking long-press
+    pip.addEventListener('contextmenu', (e) => e.preventDefault());
+  });
+
+  // Empty-slot double-tap to add — synthetic detection (works on iOS where
+  // native dblclick is unreliable + often intercepted as zoom/selection)
+  container.querySelectorAll('.sc-slot[data-emptyslot]').forEach(slot => {
+    const day = parseInt(slot.getAttribute('data-day'));
+    const time = slot.getAttribute('data-time');
+    const key = `${day}|${time}`;
+    slot.addEventListener('pointerup', (e) => {
+      // Only handle touch / mouse primary button
+      if (e.button !== undefined && e.button !== 0) return;
+      const now = Date.now();
+      if (_lastSlotTap.key === key && (now - _lastSlotTap.t) < DBLTAP_MAX_MS) {
+        e.preventDefault();
+        e.stopPropagation();
+        _lastSlotTap = { key: '', t: 0 };
+        quickAddRecurring(day, time);
+      } else {
+        _lastSlotTap = { key, t: now };
+      }
     });
   });
 
