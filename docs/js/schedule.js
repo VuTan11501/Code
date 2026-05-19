@@ -418,7 +418,7 @@ function renderScheduleCalendar(gistEntries) {
         }
         // Defer class removal so the user sees the completed fill flash
         setTimeout(() => pip.classList.remove('pressing'), 120);
-      }, 550);
+      }, 1000);
     });
     pip.addEventListener('pointermove', (e) => {
       // Only treat as "moved" if past the threshold — ignores finger jitter on mobile
