@@ -1279,12 +1279,25 @@ function renderScheduledQueue(entries) {
           const lrJST = new Date(new Date(e.last_run).toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
           ranToday = lrJST.toDateString() === nowJST.toDateString();
         }
-        if (!ranToday && nowJST > schedToday) {
-          bucket = 0; // overdue (today's slot passed but not yet run)
+        // Does today's date actually match this recurrence pattern? (DoW/date + skip_dates)
+        const todayDow = nowJST.getDay();
+        let todayMatches = false;
+        if (r.pattern === 'daily') todayMatches = true;
+        else if (r.pattern === 'weekdays') todayMatches = [1,2,3,4,5].includes(todayDow);
+        else if (r.pattern === 'weekly') todayMatches = (r.days || []).includes(todayDow);
+        else if (r.pattern === 'monthly') todayMatches = (r.dates || []).includes(nowJST.getDate());
+        if (todayMatches && Array.isArray(r.skip_dates)) {
+          const yyyy = nowJST.getFullYear();
+          const mm = String(nowJST.getMonth() + 1).padStart(2, '0');
+          const dd = String(nowJST.getDate()).padStart(2, '0');
+          if (r.skip_dates.includes(`${yyyy}-${mm}-${dd}`)) todayMatches = false;
+        }
+        if (!ranToday && todayMatches && nowJST > schedToday) {
+          bucket = 0; // overdue: today is a valid slot, time passed, not yet run
           nextFireMs = schedToday.getTime();
         } else {
-          // Either ranToday (next fire = tomorrow+) OR not-ran-but-future (next fire = today).
-          // Both sort as upcoming so daily entries don't get buried under weekly ones.
+          // Either ranToday OR today's slot is in the future OR today doesn't match pattern.
+          // In all cases, sort by the next valid future fire time.
           nextFireMs = computeEntryNextFire(e, nowJST, nowMs);
           bucket = nextFireMs ? 1 : 2;
         }
