@@ -1560,7 +1560,7 @@ input[type="time"], input[type="date"], input[type="datetime-local"] {
   /* OT Requests action buttons: collapse to icon-only on mobile */
   .ot-actions-bar { gap: 6px; flex-wrap: nowrap; }
   .ot-action-btn { padding: 0 10px; min-width: 36px; height: 32px; }
-  .ot-action-btn .btn-label { display: none; }
+  .btn-label { display: none; }
 }
 
 
