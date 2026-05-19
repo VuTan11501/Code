@@ -188,15 +188,24 @@ function _renderOtRow(ot, idx, isPast) {
   const crossMid = ot.end < ot.start;
   const dayName = new Date(ot.date + 'T00:00:00+09:00').toLocaleString('en-US', { weekday: 'short' });
   const fixed = !!ot.auto_co_id;
+  const created = !!ot.kintai_created_at;
 
-  // Status badge — matches Schedule table style
+  // Status badge — palette aligned with Schedule tab semantics:
+  //   blue (badge-once)     = pending / awaiting (like an upcoming once-entry)
+  //   green (badge-enabled) = created / active in DokoKin
+  //   purple (badge-recurring) = system-generated artifact (auto-fixed CO)
+  //   yellow (badge-warning) = needs attention (conflict)
+  //   grey (badge-disabled) = past / no longer actionable
   let statusBadge;
   if (isPast) {
     statusBadge = `<span class="badge-disabled">${ICON('check', 11)} Past</span>`;
   } else if (conf.hasConflict) {
     statusBadge = `<span class="badge-warning" data-tooltip="${_esc(conf.message)}">${ICON('alertTriangle', 11)} Conflict</span>`;
+  } else if (created) {
+    const ts = String(ot.kintai_created_at).slice(0, 16).replace('T', ' ');
+    statusBadge = `<span class="badge-enabled" data-tooltip="Created in DokoKin at ${_esc(ts)} JST">${ICON('check', 11)} Created</span>`;
   } else if (fixed) {
-    statusBadge = `<span class="badge-enabled">${ICON('check', 11)} Auto-fixed</span>`;
+    statusBadge = `<span class="badge-recurring" data-tooltip="Cross-midnight CO auto-scheduled">${ICON('sparkles', 11)} Auto-fixed</span>`;
   } else {
     statusBadge = `<span class="badge-once">${ICON('hourglass', 11)} Pending</span>`;
   }

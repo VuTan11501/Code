@@ -376,6 +376,71 @@ def load_ot_from_gist():
     return normalized
 
 
+def write_back_kintai_status(created_dates, existing_dates):
+    """Mark OT entries in Gist with `kintai_created_at` ISO timestamp when they
+    are confirmed present in DokoKin (either just created or already existed).
+    Idempotent — won't overwrite an existing `kintai_created_at`.
+    Returns count of entries updated. Best-effort: failure is logged, not raised.
+    """
+    pat = os.environ.get("GH_PAT")
+    if not pat:
+        log("GH_PAT not set; skip Gist write-back of kintai_created_at")
+        return 0
+    target_dates = {d.isoformat() if hasattr(d, 'isoformat') else str(d)
+                    for d in (set(created_dates) | set(existing_dates))}
+    if not target_dates:
+        return 0
+    url = f"https://api.github.com/gists/{GIST_ID}"
+    req = urllib.request.Request(url, headers={
+        "Authorization": f"Bearer {pat}",
+        "Accept": "application/vnd.github+json",
+    })
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            data = json.loads(resp.read())
+    except Exception as e:
+        log(f"⚠️ Gist read failed for write-back: {e}")
+        return 0
+    files = data.get("files") or {}
+    f = files.get(OT_GIST_FILE)
+    if not f:
+        log(f"Gist file {OT_GIST_FILE} not found, skip write-back")
+        return 0
+    try:
+        arr = json.loads(f.get("content") or "[]")
+    except Exception as e:
+        log(f"⚠️ Gist {OT_GIST_FILE} invalid JSON: {e}")
+        return 0
+    if not isinstance(arr, list):
+        return 0
+    now_iso = datetime.now(JST).isoformat(timespec="seconds")
+    updated = 0
+    for entry in arr:
+        if not isinstance(entry, dict):
+            continue
+        if entry.get("date") in target_dates and not entry.get("kintai_created_at"):
+            entry["kintai_created_at"] = now_iso
+            updated += 1
+    if updated == 0:
+        log("Gist write-back: nothing to mark (all entries already tagged)")
+        return 0
+    patch_body = json.dumps({
+        "files": {OT_GIST_FILE: {"content": json.dumps(arr, indent=2, ensure_ascii=False)}}
+    }).encode()
+    patch_req = urllib.request.Request(url, data=patch_body, method="PATCH", headers={
+        "Authorization": f"Bearer {pat}",
+        "Accept": "application/vnd.github+json",
+        "Content-Type": "application/json",
+    })
+    try:
+        with urllib.request.urlopen(patch_req, timeout=15) as resp:
+            log(f"✓ Gist write-back: marked {updated} entries as kintai_created (HTTP {resp.status})")
+            return updated
+    except Exception as e:
+        log(f"⚠️ Gist write-back PATCH failed: {e}")
+        return 0
+
+
 # ═══════════════════════════════════════════════════════════
 #  MAIN
 # ═══════════════════════════════════════════════════════════
@@ -485,6 +550,15 @@ def main():
                 with open(output_file, "a") as f:
                     f.write(f"token_rotated=true\n")
                     f.write(f"new_refresh_token={new_refresh}\n")
+
+        # Write back kintai_created_at to Gist (best-effort)
+        if source == "gist":
+            try:
+                created_dates_set = {e["date"] for e in created_items}
+                existing_dates_set = {e["date"] for e in existing_items}
+                write_back_kintai_status(created_dates_set, existing_dates_set)
+            except Exception as e:
+                log(f"⚠️ Write-back exception (non-fatal): {e}")
 
     except Exception as e:
         errors.append(str(e))
