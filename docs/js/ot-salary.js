@@ -53,16 +53,22 @@ function splitOtByDay(ot) {
   const startMin = sH * 60 + sM;
   let endMin = eH * 60 + eM;
   // Cross-midnight: end <= start means rollover. 24:00 case (rare) treated as next day 00:00.
-  let dayOffset = 0;
-  if (endMin <= startMin) { endMin += 24 * 60; }   // still 1-day overflow; multi-day rare but supported below
+  if (endMin <= startMin) { endMin += 24 * 60; }
+
+  // Honor `ot.hours` cap (DokoKin enforces max 12h/day; the stored hours field is
+  // authoritative when smaller than the raw time span — clamp the effective window
+  // so salary/night/sunday accounting matches what is actually paid).
+  if (ot.hours != null && !isNaN(ot.hours)) {
+    const capMin = Math.round(Number(ot.hours) * 60);
+    if (capMin > 0 && capMin < (endMin - startMin)) {
+      endMin = startMin + capMin;
+    }
+  }
 
   const segments = [];
   let cursor = startMin;
   let dateStr = ot.date;
   while (cursor < endMin) {
-    const dayEnd = (dayOffset + 1) * 24 * 60;   // wall-clock 24:00 boundary for current day in extended timeline
-    // Hmm — when dayOffset > 0 we need cursor relative to that day.
-    // Simpler: segEnd = min(endMin, ceilNext24)
     const segEnd = Math.min(endMin, Math.ceil((cursor + 1) / (24 * 60)) * (24 * 60));
     const segStartLocal = cursor % (24 * 60);
     const segEndLocal = segEnd % (24 * 60) === 0 && segEnd > cursor ? 24 * 60 : (segEnd % (24 * 60));
@@ -77,7 +83,6 @@ function splitOtByDay(ot) {
     cursor = segEnd;
     if (cursor < endMin) {
       dateStr = _addCalendarDays(dateStr, 1);
-      dayOffset++;
     }
   }
   return segments;
