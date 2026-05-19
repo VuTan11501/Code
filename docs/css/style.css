@@ -704,6 +704,7 @@ select option { background: var(--card); color: var(--foreground); }
 .stat-chip .stat-lbl { font-size: 10px; color: var(--muted-foreground); text-transform: uppercase; letter-spacing: 0.05em; }
 .stat-chip-next .stat-num { color: var(--green); }
 .stat-chip-income .stat-num { color: var(--blue); }
+.stat-chip-takehome .stat-num { color: var(--green); font-weight: 700; }
 
 /* ─── OT PLANNER — Phase 2: stats override + budget panel ─── */
 .schedule-stats.ot-stats { grid-template-columns: repeat(5, 1fr); }

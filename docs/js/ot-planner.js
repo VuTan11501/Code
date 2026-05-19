@@ -932,12 +932,28 @@ function renderOtStats() {
     ? `Monthly OT income (gross):\n• Base OT 125%: ${window.OT_SALARY.formatYen(sal.baseOTLine)}\n• Sunday +10%: ${window.OT_SALARY.formatYen(sal.sundayLine)}\n• Night +25%: ${window.OT_SALARY.formatYen(sal.nightLine)}\nPaid IN ADDITION to fixed allowance ¥20,000/mo.`
     : 'Salary engine unavailable';
 
+  // Take-home chip — real payslip if available, else estimate from baseline
+  let takeHomeStr = '—', takeHomeTip = 'No payslip data', takeHomeBadge = '';
+  if (window.OT_SALARY && sal) {
+    const realSlip = window.OT_SALARY.findPayslipForMonth(_otState.payslips, monthPrefix.slice(0, 7));
+    const baseline = window.OT_SALARY.pickBaselinePayslip(_otState.payslips, monthPrefix.slice(0, 7));
+    if (realSlip && realSlip.take_home != null) {
+      takeHomeStr = window.OT_SALARY.formatYen(realSlip.take_home);
+      takeHomeBadge = ' ✓';
+      takeHomeTip = `Actual take-home for ${realSlip.month} (from payslip):\n• Gross: ${window.OT_SALARY.formatYen(realSlip.gross || 0)}\n• Take-home: ${window.OT_SALARY.formatYen(realSlip.take_home)}\n(All deductions applied: insurance, taxes, rent, fees)`;
+    } else if (baseline) {
+      const est = window.OT_SALARY.calcFullMonthEstimate(sal.gross, baseline, { basicSalaryIndex: 1.0 });
+      takeHomeStr = window.OT_SALARY.formatYen(est.takeHome);
+      takeHomeTip = `Estimated take-home for ${monthPrefix.slice(0, 7)}\n(baseline: payslip ${baseline.month})\n• Total gross: ${window.OT_SALARY.formatYen(est.gross)}\n• − Insurance: ${window.OT_SALARY.formatYen(est.insuranceTotal)}\n• − Income tax: ${window.OT_SALARY.formatYen(est.incomeTax)}\n• − Resident tax: ${window.OT_SALARY.formatYen(est.residentTax)}\n• − Company receivables: ${window.OT_SALARY.formatYen(est.companyReceivables)}\n= ${window.OT_SALARY.formatYen(est.takeHome)}`;
+    }
+  }
+
   host.innerHTML = `
     <div class="stat-chip" data-tooltip="OT entries in this month view"><span class="stat-num">${monthTotal}</span><span class="stat-lbl">entries</span></div>
     <div class="stat-chip" data-tooltip="Total OT hours in this month view"><span class="stat-num">${hoursDisplay}</span><span class="stat-lbl">hours</span></div>
     <div class="stat-chip" data-tooltip="Already created in DokoKin / total this month"><span class="stat-num">${createdRatio}</span><span class="stat-lbl">created</span></div>
-    <div class="stat-chip stat-chip-income" data-tooltip="${_esc(incomeTip)}"><span class="stat-num">${incomeStr}</span><span class="stat-lbl">income</span></div>
-    <div class="stat-chip stat-chip-next" data-tooltip="${_esc(nextTooltip)}"><span class="stat-num">${nextStr}</span><span class="stat-lbl">next OT</span></div>
+    <div class="stat-chip stat-chip-income" data-tooltip="${_esc(incomeTip)}"><span class="stat-num">${incomeStr}</span><span class="stat-lbl">OT income</span></div>
+    <div class="stat-chip stat-chip-takehome" data-tooltip="${_esc(takeHomeTip)}"><span class="stat-num">${takeHomeStr}${takeHomeBadge}</span><span class="stat-lbl">take-home</span></div>
   `;
 }
 
