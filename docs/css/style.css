@@ -185,6 +185,10 @@ html { touch-action: manipulation; }
   box-shadow: var(--shadow-sm);
   border: 1px solid var(--border);
 }
+.tabs-trigger, .nav-item {
+  border: 1px solid transparent;
+  transition: background var(--duration-fast), color var(--duration-fast), box-shadow var(--duration-fast) !important;
+}
 .tabs-trigger.active .nav-icon,
 .nav-item.active .nav-icon { color: var(--primary); }
 
