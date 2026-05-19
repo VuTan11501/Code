@@ -821,6 +821,13 @@ select option { background: var(--card); color: var(--foreground); }
 }
 .payslip-grand-total .payslip-label { display: inline-flex; align-items: center; gap: 6px; color: var(--green); }
 .payslip-grand-total .payslip-val { color: var(--green); font-size: var(--fs-md); }
+.payslip-formula {
+  margin-top: 10px; padding: 10px 12px;
+  background: var(--muted); border-radius: var(--radius-sm);
+  font-size: var(--fs-xs); color: var(--muted-foreground); line-height: 1.6;
+}
+.payslip-formula-nums { font-family: var(--font-mono); color: var(--foreground); display: block; margin-top: 4px; }
+.payslip-formula-nums strong { color: var(--green); }
 
 /* Phase 3 — Template manager */
 .ot-template-list { display: flex; flex-direction: column; gap: var(--sp-2); }

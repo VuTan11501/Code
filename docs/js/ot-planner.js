@@ -1583,7 +1583,12 @@ function openPayslipDetail(monthKey, isEstimate) {
 
   let html = '';
 
-  html += section('Contract base (1.x / 3.x)', [
+  const stdIns = c.standard_insurance || window.OT_SALARY.DEDUCTIONS.STANDARD_INSURANCE_AMOUNT;
+  const HR = window.OT_SALARY.DEDUCTIONS.HEALTH_RATE;
+  const WR = window.OT_SALARY.DEDUCTIONS.WELFARE_RATE;
+  const UR = window.OT_SALARY.DEDUCTIONS.UNEMPLOYMENT_RATE;
+
+  html += section('Contract base', [
     { label: 'Basic salary A', value: gb.basic_a_paid ?? c.basic_a },
     { label: 'Basic salary B (Life design + DC)', value: gb.basic_b_paid ?? c.basic_b },
     { label: 'Fixed allowance', value: gb.fixed_allowance_paid ?? c.fixed_allowance },
@@ -1591,27 +1596,27 @@ function openPayslipDetail(monthKey, isEstimate) {
     { label: `Basic index (work ratio)`, value: (w.basic_index ?? 1).toFixed(2) },
   ], null, null, null);
 
-  html += section('OT income (3.x)', [
+  html += section('OT income', [
     { label: `Base OT 125% — ${(w.ot_hours||0).toFixed(2)}h`, value: gb.ot_allowance },
     w.sunday_hours ? { label: `Sunday +10% — ${(w.sunday_hours||0).toFixed(2)}h`, value: gb.sunday_ot_allowance } : { label:'', value:null },
     w.night_hours ? { label: `Night +25% — ${(w.night_hours||0).toFixed(2)}h`, value: gb.night_allowance } : { label:'', value:null },
-  ], 'Gross income (line 3)', slip.gross, 'is-income');
+  ], 'Gross income', slip.gross, 'is-income');
 
-  html += section('Deductions — insurance (4.x)', [
-    { label: 'Health insurance', value: d.health_insurance },
-    { label: 'Welfare (pension) insurance', value: d.welfare_insurance },
-    { label: 'Unemployment insurance (0.5%)', value: d.unemployment_insurance },
+  html += section('Deductions — insurance', [
+    { label: `Health insurance (${(HR*100).toFixed(2)}% × 標準報酬 ${F(stdIns)})`, value: d.health_insurance },
+    { label: `Welfare (pension) insurance (${(WR*100).toFixed(2)}% × 標準報酬 ${F(stdIns)})`, value: d.welfare_insurance },
+    { label: `Unemployment insurance (${(UR*100).toFixed(1)}% × Gross)`, value: d.unemployment_insurance },
   ], 'Total insurance', d.insurance_total, 'is-deduction');
 
-  html += section('Deductions — taxes (4.x / 6.x)', [
-    { label: `Taxable income`, value: d.taxable_income },
-    { label: 'Income tax (源泉徴収)', value: d.income_tax },
-    { label: 'Resident tax (住民税)', value: d.resident_tax },
+  html += section('Deductions — taxes', [
+    { label: `Taxable income (= Gross − Insurance − Travel allowance)`, value: d.taxable_income },
+    { label: 'Income tax (源泉徴収月額表 甲欄)', value: d.income_tax },
+    { label: 'Resident tax (住民税, fixed prev-year basis)', value: d.resident_tax },
   ], 'Total to government', d.total_payable_to_gov, 'is-deduction');
 
   html += `<div class="payslip-section">
     <div class="payslip-row payslip-subtotal">
-      <span class="payslip-label">= Net after tax (line 7)</span>
+      <span class="payslip-label">= Net after tax (Gross − Insurance − Taxes)</span>
       <span class="payslip-val">${F(slip.net_after_tax)}</span>
     </div>
   </div>`;
@@ -1622,10 +1627,15 @@ function openPayslipDetail(monthKey, isEstimate) {
     html += section('Company receivables (rent, fees…)', items, 'Total receivables', cr.total || 0, 'is-deduction');
   }
 
+  const crTotal = (cr && cr.total) ? cr.total : 0;
   html += `<div class="payslip-section payslip-final">
     <div class="payslip-row payslip-grand-total">
-      <span class="payslip-label">${ICON('wallet', 14)} Net take-home (line 8)</span>
+      <span class="payslip-label">${ICON('wallet', 14)} NET</span>
       <span class="payslip-val">${F(slip.take_home)}</span>
+    </div>
+    <div class="payslip-formula">
+      NET = Gross − Insurance − Income tax − Resident tax − Company receivables<br>
+      <span class="payslip-formula-nums">${F(slip.gross)} − ${F(d.insurance_total)} − ${F(d.income_tax)} − ${F(d.resident_tax)} − ${F(crTotal)} = <strong>${F(slip.take_home)}</strong></span>
     </div>
   </div>`;
 
