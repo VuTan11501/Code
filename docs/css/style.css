@@ -1309,6 +1309,7 @@ input[type="time"], input[type="date"], input[type="datetime-local"] {
   /* Cards */
   .grid { grid-template-columns: 1fr; gap: 12px; margin-bottom: 20px; }
   .trigger-actions .btn { flex: 1; padding: 0.75rem; min-height: 44px; }
+  .run-event { display: none; }
 
   /* Schedule grid — compact for mobile, no horizontal scroll */
   .schedule-grid { grid-template-columns: 36px repeat(7, 1fr); }
