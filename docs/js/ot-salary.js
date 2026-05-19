@@ -52,18 +52,28 @@ function splitOtByDay(ot) {
   const [eH, eM] = ot.end.split(':').map(Number);
   const startMin = sH * 60 + sM;
   let endMin = eH * 60 + eM;
-  // Cross-midnight: end <= start means rollover. 24:00 case (rare) treated as next day 00:00.
+  // Cross-midnight: end <= start means rollover.
   if (endMin <= startMin) { endMin += 24 * 60; }
 
-  // Honor `ot.hours` cap (DokoKin enforces max 12h/day; the stored hours field is
-  // authoritative when smaller than the raw time span — clamp the effective window
-  // so salary/night/sunday accounting matches what is actually paid).
+  // Determine paid duration:
+  //  - If ot.hours present, trust it (it's the API-authoritative value, already
+  //    accounting for any break deduction or 12h/day cap).
+  //  - If absent, clamp the raw span to MAX_HOURS_PER_DAY (defensive — without
+  //    ot.hours we cannot know the break, but DokoKin will never pay >12h/day).
+  const rawSpan = endMin - startMin;
+  let paidMin = rawSpan;
   if (ot.hours != null && !isNaN(ot.hours)) {
     const capMin = Math.round(Number(ot.hours) * 60);
-    if (capMin > 0 && capMin < (endMin - startMin)) {
-      endMin = startMin + capMin;
-    }
+    if (capMin > 0) paidMin = Math.min(rawSpan, capMin);
+  } else {
+    paidMin = Math.min(rawSpan, SALARY.MAX_HOURS_PER_DAY * 60);
   }
+  endMin = startMin + paidMin;
+
+  // Start-date day-of-week — used by salary engine for SUNDAY classification
+  // because DokoKin/payslip attribute Sunday premium by REQUEST START DATE
+  // (see gh_ot_creator.py: sundayWorkingtime = ot_hours if is_sun else 0).
+  const startDow = _dayOfWeekJST(ot.date);
 
   const segments = [];
   let cursor = startMin;
@@ -76,7 +86,8 @@ function splitOtByDay(ot) {
     const nightMinutes = _nightOverlapMinutes(segStartLocal, segEndLocal);
     segments.push({
       date: dateStr,
-      dayOfWeek: _dayOfWeekJST(dateStr),
+      dayOfWeek: _dayOfWeekJST(dateStr),    // calendar-day dow (for display)
+      startDow,                              // start-date dow (for Sunday rate)
       minutes,
       nightMinutes,
     });
@@ -100,25 +111,33 @@ function _nightOverlapMinutes(startMin, endMin) {
 }
 
 // ─── Per-entry breakdown (for table column display) ───
+// IMPORTANT: SUNDAY classification by START DATE (matches DokoKin payload
+// `sundayWorkingtime = ot_hours if is_sun else 0`), not by calendar segment.
+// NIGHT is segment-based (matches gh_ot_creator.calculate_night_hours which
+// counts minute-by-minute overlap with 22:00-05:00 across the whole window).
 function calcOtBreakdown(ot) {
   const segments = splitOtByDay(ot);
   let totalMin = 0, sundayMin = 0, nightMin = 0;
+  const startIsSunday = segments.length > 0 && segments[0].startDow === 0;
   for (const s of segments) {
     totalMin += s.minutes;
-    if (s.dayOfWeek === 0) sundayMin += s.minutes;
     nightMin += s.nightMinutes;
   }
+  if (startIsSunday) sundayMin = totalMin;     // entire OT counts as Sunday
   const w = SALARY.HOURLY_WAGE;
   const baseOT = (totalMin / 60) * w * SALARY.OT_BASE_RATE;
   const sundayPremium = (sundayMin / 60) * w * SALARY.SUNDAY_PREMIUM;
   const nightPremium = (nightMin / 60) * w * SALARY.NIGHT_PREMIUM;
+  // Use Math.floor per payslip evidence (Apr 2026 line 3.8: 54.52*1563*1.25 =
+  // 106519.5 → payslip shows 106,512, consistent with floor on exact minutes).
+  // Each line individually floored, then summed → matches payslip line-level math.
   return {
     totalHours: totalMin / 60,
     sundayHours: sundayMin / 60,
     nightHours: nightMin / 60,
     weekdayHours: (totalMin - sundayMin) / 60,
     baseOT, sundayPremium, nightPremium,
-    gross: Math.round(baseOT + sundayPremium + nightPremium),
+    gross: Math.floor(baseOT) + Math.floor(sundayPremium) + Math.floor(nightPremium),
     segments,
   };
 }
@@ -128,17 +147,22 @@ function calcMonthlySummary(otList) {
   let totalMin = 0, sundayMin = 0, nightMin = 0;
   for (const ot of (otList || [])) {
     const segs = splitOtByDay(ot);
+    if (segs.length === 0) continue;
+    const startIsSunday = segs[0].startDow === 0;
+    let entryTotal = 0, entryNight = 0;
     for (const s of segs) {
-      totalMin += s.minutes;
-      if (s.dayOfWeek === 0) sundayMin += s.minutes;
-      nightMin += s.nightMinutes;
+      entryTotal += s.minutes;
+      entryNight += s.nightMinutes;
     }
+    totalMin += entryTotal;
+    nightMin += entryNight;
+    if (startIsSunday) sundayMin += entryTotal;   // entire entry attributed to Sunday line
   }
   const w = SALARY.HOURLY_WAGE;
-  // Round per-line (payslip convention) then sum, so monthly matches payslip math.
-  const baseOTLine = Math.round((totalMin / 60) * w * SALARY.OT_BASE_RATE);
-  const sundayLine = Math.round((sundayMin / 60) * w * SALARY.SUNDAY_PREMIUM);
-  const nightLine = Math.round((nightMin / 60) * w * SALARY.NIGHT_PREMIUM);
+  // Floor per-line (matches payslip math; standard rounding overcounts vs payslip).
+  const baseOTLine = Math.floor((totalMin / 60) * w * SALARY.OT_BASE_RATE);
+  const sundayLine = Math.floor((sundayMin / 60) * w * SALARY.SUNDAY_PREMIUM);
+  const nightLine = Math.floor((nightMin / 60) * w * SALARY.NIGHT_PREMIUM);
   const gross = baseOTLine + sundayLine + nightLine;
   return {
     totalHours: totalMin / 60,
@@ -149,11 +173,9 @@ function calcMonthlySummary(otList) {
     sundayLine,
     nightLine,
     gross,
-    // Fixed allowance is paid regardless — show both gross (what's actually
-    // earned from OT lines) and netExtra (what's NEW vs a no-OT month).
     fixedAllowanceYen: SALARY.FIXED_ALLOWANCE_YEN,
     fixedAllowanceHours: FIXED_ALLOWANCE_HOURS,
-    netExtra: gross,   // gross OT lines are paid in addition to fixed allowance
+    netExtra: gross,
     hoursPctMonth: (totalMin / 60) / SALARY.MAX_HOURS_PER_MONTH,
     nightPctRemark: (nightMin / 60) / SALARY.NIGHT_REMARK_THRESHOLD,
   };
