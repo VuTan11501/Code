@@ -217,8 +217,20 @@ async function checkTokenScopes() {
 // ═══════════════════════════════════════════════════
 //  ROUTER
 // ═══════════════════════════════════════════════════
+// Per-tab scroll position memory — restored when returning to a tab so the
+// page doesn't keep the scroll offset of the previously visible tab. Lives
+// in-memory only (intentional: fresh reload always lands at the top).
+const _tabScroll = Object.create(null);
+
 function navigate(hash) {
   const page = hash.replace('#', '') || 'dashboard';
+
+  // Remember the scroll position of the tab we're leaving (if any)
+  const prevActive = document.querySelector('.page.active');
+  if (prevActive && prevActive.id) {
+    _tabScroll[prevActive.id] = window.scrollY || document.documentElement.scrollTop || 0;
+  }
+
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => {
     n.classList.remove('active');
@@ -242,6 +254,15 @@ function navigate(hash) {
     refresh();
     if (typeof startPolling === 'function' && !pollTimer) startPolling();
   }
+
+  // Restore scroll for the entered tab on the next frame so layout from
+  // the init calls above has settled. 'instant' avoids a jarring scroll
+  // animation when the user is just switching tabs.
+  const restoreTo = target ? (_tabScroll[target.id] || 0) : 0;
+  requestAnimationFrame(() => {
+    try { window.scrollTo({ top: restoreTo, left: 0, behavior: 'instant' }); }
+    catch { window.scrollTo(0, restoreTo); }
+  });
 }
 
 window.addEventListener('hashchange', () => {
