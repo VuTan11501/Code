@@ -122,9 +122,11 @@ jobs:
               sched_time = rec.get('time', '00:00')
               start_date = rec.get('start_date')
               end_date = rec.get('end_date')
+              skip_dates = rec.get('skip_dates') or []
               today_str = now_jst.strftime('%Y-%m-%d')
               if start_date and today_str < start_date: return False
               if end_date and today_str > end_date: return False
+              if today_str in skip_dates: return False
               last_run = entry.get('last_run')
               if last_run:
                   last_run_dt = datetime.fromisoformat(last_run.replace('Z', '+00:00'))

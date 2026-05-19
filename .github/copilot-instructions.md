@@ -101,12 +101,22 @@ Tham khảo SKILL.md trước khi đụng vào lĩnh vực tương ứng:
   → `generate_schedule.py` đã làm đúng (xem line 93-104: workday+OT → 1 CI + 1 CO next-day 03:30).
   → Khi review/sửa schedule, nếu thấy 2 entries `action: checkin` cùng ngày → **BUG**.
 
-**Rule 2 — Checkout phải xảy ra trước khi DokoKin coi đó là "ngày mới".** Mốc cut-off thực tế ~04:00 JST sáng hôm sau. Trong khoảng (00:00, 04:00) checkout vẫn attribute về workday hôm trước. Sau ~04:00 → ngày mới → fail (không có CI cho ngày mới).
+**Rule 2 — Checkout = ĐÓNG PHIÊN làm việc của workday đó. Không thể "mở lại".**
 
-  → OT đêm: checkout ở 03:30 ngày-sau là an toàn (đang trong cửa sổ attribute-về-workday-trước).
-  → ❌ **KHÔNG được dispatch checkout TRƯỚC giờ OT kết thúc** (vd 18:00 trên ngày có OT đến 03:30) — sẽ đóng phiên sớm, mất giờ OT.
-  → ❌ **KHÔNG được dispatch checkout SAU ~04:00 sáng hôm sau** — sẽ fail vì cross-day boundary.
-  → Khi schedule recurring checkout vào ngày làm OT, **disable hoặc skip** entry checkout 18:00 mặc định.
+  Khi gọi `POST api/dakoku` với CO, DokoKin set `endWorkingTime` của workday hiện tại = thời điểm CO. **Mọi giờ làm việc/OT SAU CO time đều KHÔNG được tính.** Re-run CO sau đó chỉ có thể UPDATE giờ ra **muộn hơn** (cùng workday), KHÔNG thể bắt đầu lại session.
+
+  → **Hệ quả nguy hiểm với OT vắt qua nửa đêm**: nếu workday có OT request (vd 22:00→03:30 hôm sau) mà có CO firing TRƯỚC giờ OT kết thúc (vd 18:00 cùng ngày, hoặc thậm chí 21:00), workday sẽ **bị đóng tại CO time đó** → **OT bị mất hoàn toàn** mặc dù OT request đã được approve.
+
+  → Ví dụ: ngày T2 CI 09:00, OT request 22:00→03:30(T3). Nếu CO recurring 18:00 (T2) fire trước → endWorkingTime=18:00 → khi 22:00 đến không có "session đang mở" để OT cộng vào. Dù CO 03:30(T3) có chạy đúng cũng vô nghĩa.
+
+  → **Cửa sổ CO hợp lệ cho workday-có-OT-cross-midnight**: CHỈ trong khoảng **[OT_end_time, ~04:00 next-day]**. CO sớm hơn → mất OT. CO muộn hơn ~04:00 → DokoKin coi là ngày mới → fail.
+
+  → **Cửa sổ CO hợp lệ cho workday thường (không OT)**: bất kỳ thời điểm nào sau giờ vào, idempotent re-run OK (chỉ update giờ ra muộn hơn).
+
+  → **Quy tắc cứng khi schedule**:
+     - Recurring weekday CO 18:00 (mặc định) → **PHẢI skip** trên những ngày có OT vắt qua nửa đêm (dùng field `skip_dates: [YYYY-MM-DD, ...]` trong recurrence của Gist entry).
+     - Trên các ngày đó, thay bằng explicit `once` CO entry tại giờ kết thúc OT (vd 00:00+1, 03:30+1).
+     - Mỗi khi tạo OT request cross-midnight cho workday → **đồng thời** thêm date đó vào `skip_dates` của recurring 18:00 CO.
 
 **Rule 3 — Saturday/Sunday OT là exception cho Rule 1**: cuối tuần KHÔNG có CI sáng mặc định, nên OT cuối tuần CẦN có CI riêng tại giờ bắt đầu OT (Sat 22:00, Sun 14:30). Đây không phải "CI lần 2".
 
