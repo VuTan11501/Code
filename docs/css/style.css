@@ -1547,6 +1547,33 @@ input[type="time"], input[type="date"], input[type="datetime-local"] {
 .ot-cell.has-conflict {
   border-color: var(--orange);
 }
+.ot-cell.is-disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+  background: transparent;
+  border-style: dashed;
+  border-color: rgba(255,255,255,0.06);
+}
+.ot-cell.is-disabled:hover {
+  background: rgba(255,255,255,0.02);
+  border-color: rgba(255,255,255,0.10);
+}
+.ot-cell.is-disabled .ot-cell-num {
+  color: var(--muted-foreground);
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+  text-decoration-color: rgba(255,255,255,0.15);
+}
+.ot-cell.is-disabled.has-ot {
+  /* Past entries with existing OT — keep purple visible but faded */
+  opacity: 0.55;
+  background: rgba(168, 85, 247, 0.05);
+  border-style: solid;
+  border-color: rgba(168, 85, 247, 0.18);
+}
+.ot-cell.is-disabled.has-ot .ot-cell-num {
+  text-decoration: none;
+}
 .ot-badge {
   margin-top: auto;
   align-self: flex-start;

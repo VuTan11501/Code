@@ -75,6 +75,30 @@ function otGoToday() {
   renderOtCalendar();
 }
 
+function _otCreationWindow() {
+  // OT API rule: only [today, today + 7 days] can be created via DokoKin API
+  const now = jstNow();
+  const today = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+  const max = new Date(now); max.setDate(max.getDate() + 7);
+  const maxStr = `${max.getFullYear()}-${String(max.getMonth()+1).padStart(2,'0')}-${String(max.getDate()).padStart(2,'0')}`;
+  return { today, maxStr, maxDays: 7 };
+}
+
+function _isDateInWindow(dateStr) {
+  const w = _otCreationWindow();
+  return dateStr >= w.today && dateStr <= w.maxStr;
+}
+
+function _showOutOfWindowToast(dateStr) {
+  const w = _otCreationWindow();
+  const isPast = dateStr < w.today;
+  if (isPast) {
+    toast(`📅 ${dateStr} đã qua — DokoKin chỉ tạo OT cho hôm nay trở đi`, 'warning');
+  } else {
+    toast(`📅 ${dateStr} vượt cửa sổ 7 ngày — chỉ có thể tạo OT đến ${w.maxStr}`, 'warning');
+  }
+}
+
 function renderOtCalendar() {
   const grid = document.getElementById('otCalendar');
   if (!grid) return;
@@ -87,6 +111,7 @@ function renderOtCalendar() {
   const daysInMonth = new Date(y, m + 1, 0).getDate();
   const todayJ = jstNow();
   const isCurrentMonth = todayJ.getFullYear() === y && todayJ.getMonth() === m;
+  const win = _otCreationWindow();
 
   const byDate = {};
   _otState.requests.forEach(ot => {
@@ -104,13 +129,21 @@ function renderOtCalendar() {
     const dateStr = `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
     const ots = byDate[dateStr] || [];
     const isToday = isCurrentMonth && todayJ.getDate() === d;
+    const inWindow = _isDateInWindow(dateStr);
+    const isPast = dateStr < win.today;
     const classes = ['ot-cell'];
     if (ots.length) classes.push('has-ot');
     if (isToday) classes.push('is-today');
+    if (!inWindow) classes.push('is-disabled');
+    if (isPast) classes.push('is-past');
     const totalH = ots.reduce((s, o) => s + (o.hours || 0), 0);
     const hasConflict = ots.some(o => detectConflict(o).hasConflict);
     if (hasConflict) classes.push('has-conflict');
-    html += `<div class="${classes.join(' ')}" onclick="openOtForm('${dateStr}')" role="button" tabindex="0" aria-label="${dateStr}${ots.length ? `, ${ots.length} OT request${ots.length>1?'s':''}` : ''}">`;
+    const click = inWindow
+      ? `openOtForm('${dateStr}')`
+      : `_showOutOfWindowToast('${dateStr}')`;
+    const label = `${dateStr}${ots.length ? `, ${ots.length} OT` : ''}${!inWindow ? ' (không thể tạo)' : ''}`;
+    html += `<div class="${classes.join(' ')}" onclick="${click}" role="button" tabindex="0" aria-label="${label}" aria-disabled="${!inWindow}">`;
     html += `<div class="ot-cell-num">${d}</div>`;
     if (ots.length) {
       html += `<div class="ot-badge" title="${totalH}h total">${totalH}h</div>`;
@@ -269,6 +302,17 @@ function openOtForm(dateStr, existingId) {
   if (!modal) return;
   _otState.editId = existingId || null;
   document.getElementById('otFormTitle').textContent = existingId ? 'Edit OT Request' : 'New OT Request';
+  // Constrain date input to creation window (only for new entries)
+  const dateInput = document.getElementById('otFormDate');
+  const win = _otCreationWindow();
+  if (existingId) {
+    // editing — allow any date (past included for delete/fix scenarios)
+    dateInput.removeAttribute('min');
+    dateInput.removeAttribute('max');
+  } else {
+    dateInput.min = win.today;
+    dateInput.max = win.maxStr;
+  }
   if (existingId) {
     const ot = _otState.requests.find(o => o.id === existingId);
     if (!ot) return;
@@ -277,7 +321,8 @@ function openOtForm(dateStr, existingId) {
     document.getElementById('otFormEnd').value = ot.end;
     document.getElementById('otFormReason').value = ot.reason || '';
   } else {
-    document.getElementById('otFormDate').value = dateStr || _todayJSTStr();
+    const initial = (dateStr && _isDateInWindow(dateStr)) ? dateStr : win.today;
+    document.getElementById('otFormDate').value = initial;
     document.getElementById('otFormStart').value = '22:00';
     document.getElementById('otFormEnd').value = '03:30';
     document.getElementById('otFormReason').value = '';
@@ -330,6 +375,11 @@ async function submitOtForm() {
   const end = document.getElementById('otFormEnd').value;
   const reason = document.getElementById('otFormReason').value.trim();
   if (!date) return toast('⚠️ Pick a date', 'warning');
+  // Only enforce window for NEW entries — existing entries can be edited/deleted even if past
+  if (!_otState.editId && !_isDateInWindow(date)) {
+    _showOutOfWindowToast(date);
+    return;
+  }
   if (!/^\d{2}:\d{2}$/.test(start) || !/^\d{2}:\d{2}$/.test(end)) return toast('⚠️ Invalid time', 'warning');
   if (start === end) return toast('⚠️ Start and end must differ', 'warning');
   if (reason.length < 3) return toast('⚠️ Reason must be ≥ 3 chars', 'warning');
