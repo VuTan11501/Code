@@ -7,6 +7,7 @@ const OT_FILE = 'ot-requests.json';
 const PAYSLIP_FILE = 'payslip-history.json';
 const OT_CHECKOUT_WF = 'auto-checkout.yml';
 const OT_CREATOR_WF = 'auto-ot-creator.yml';
+const OT_HISTORY_FETCH_WF = 'ot-history-fetch.yml';
 const OT_CREATION_WINDOW_DAYS = 7;   // forward: today + 7 days
 const OT_BACKWARD_DAYS = 1;          // backward: today - 1 day (yesterday allowed)
 
@@ -257,6 +258,78 @@ function _updateOtMutationButtons() {
       if (id === 'otOptBtn') el.setAttribute('data-tooltip', 'Suggest optimal OT schedule for this month');
       if (id === 'otTplBtn') el.setAttribute('data-tooltip', 'Manage OT templates');
       if (id === 'otSyncBtn') el.setAttribute('data-tooltip', 'Trigger Auto OT Creator now (~60–90s)');
+    }
+  }
+  // Refresh button — relabel to "Pull from DokoKin" in past-month view
+  const refreshBtn = document.getElementById('otRefreshBtn');
+  if (refreshBtn) {
+    if (isPast) {
+      refreshBtn.innerHTML = `${ICON('refresh', 14)} Pull from DokoKin`;
+      refreshBtn.setAttribute('data-tooltip', 'Fetch fresh OT data from DokoKin API for this month');
+    } else {
+      refreshBtn.innerHTML = `${ICON('refresh', 14)} Refresh`;
+      refreshBtn.setAttribute('data-tooltip', 'Refresh from Gist');
+    }
+  }
+}
+
+// Smart refresh: past months pull fresh data from DokoKin via the
+// ot-history-fetch workflow; current/future months just re-read the Gist
+// (which is updated continuously by Auto OT Creator).
+async function refreshOtData() {
+  if (_isViewMonthPast()) {
+    await pullOtFromDokoKin();
+  } else {
+    await loadOtData({ refresh: true });
+  }
+}
+
+async function pullOtFromDokoKin() {
+  if (typeof sessionToken === 'undefined' || !sessionToken) {
+    toast('⚠️ Not authenticated', 'error');
+    return;
+  }
+  const now = jstNow();
+  // How many months back from current month to the view month, +1 to include
+  // current month (the script always re-fetches the current month anyway).
+  const monthsBack = (now.getFullYear() - _otState.viewYear) * 12 +
+                     (now.getMonth() - _otState.viewMonth) + 1;
+  const btn = document.getElementById('otRefreshBtn');
+  const origHtml = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = `${ICON('refresh', 14, 'animate-spin')} Pulling… (~60s)`;
+  }
+  try {
+    const res = await fetch(`${API}/repos/${OWNER}/${REPO}/actions/workflows/${OT_HISTORY_FETCH_WF}/dispatches`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${sessionToken}`,
+        'Accept': 'application/vnd.github+json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        ref: 'main',
+        inputs: {
+          months_back: String(monthsBack),
+          clean_seeds: 'false',
+          fetch_timesheet: 'true',
+        },
+      }),
+    });
+    if (res.status === 204) {
+      toast(`☁️ Pull dispatched (${monthsBack}mo) — refreshing in ~75s`);
+      setTimeout(() => loadOtData({ refresh: true }), 75000);
+    } else {
+      const body = await res.text().catch(() => '');
+      toast(`❌ Pull failed (${res.status})${body ? ': ' + body.slice(0, 80) : ''}`, 'error');
+    }
+  } catch (e) {
+    toast(`❌ ${e.message}`, 'error');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = origHtml;
     }
   }
 }
