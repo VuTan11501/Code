@@ -764,8 +764,6 @@ function quickAddRecurring(dayIdx, time) {
     form.classList.add('form-flash');
     setTimeout(() => form.classList.remove('form-flash'), 1200);
   }
-  const dayName = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dayIdx];
-  toast(`📝 Pre-filled: every ${dayName} at ${time}`);
 }
 
 // ═══════════════════════════════════════════════════
