@@ -43,6 +43,67 @@ function refreshSchedDefaults() {
 }
 
 /**
+ * Compute the next fire timestamp (ms) for a single entry, or null if none.
+ * Mirrors the logic in computeNextFireDelay but per-entry — used for sorting
+ * and for badge labels in the scheduler queue.
+ */
+function computeEntryNextFire(entry, nowJST, nowMs) {
+  if (entry.type === 'once') {
+    if (entry.dispatched) return null;
+    if (entry.enabled === false) return null;
+    if (!entry.run_at) return null;
+    const t = new Date(entry.run_at).getTime();
+    return isNaN(t) ? null : t;
+  }
+  if (entry.type === 'recurring') {
+    if (entry.enabled === false) return null;
+    const r = entry.recurrence || {};
+    const [h, m] = (r.time || '00:00').split(':').map(Number);
+    // Look forward up to 14 days so monthly/weekly patterns resolve cleanly
+    for (let dayOffset = 0; dayOffset < 14; dayOffset++) {
+      const d = new Date(nowJST);
+      d.setDate(d.getDate() + dayOffset);
+      d.setHours(h, m, 0, 0);
+      if (d.getTime() <= nowMs) continue;
+      const dow = d.getDay();
+      let match = false;
+      if (r.pattern === 'daily') match = true;
+      else if (r.pattern === 'weekdays') match = [1,2,3,4,5].includes(dow);
+      else if (r.pattern === 'weekly') match = (r.days || []).includes(dow);
+      else if (r.pattern === 'monthly') match = (r.dates || []).includes(d.getDate());
+      if (!match) continue;
+      // Skip if already ran on that day
+      if (entry.last_run) {
+        const lrJST = new Date(new Date(entry.last_run).toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
+        if (lrJST.toDateString() === d.toDateString()) continue;
+      }
+      // Skip if date is in skip_dates
+      if (Array.isArray(r.skip_dates)) {
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        if (r.skip_dates.includes(`${yyyy}-${mm}-${dd}`)) continue;
+      }
+      return d.getTime();
+    }
+  }
+  return null;
+}
+
+/**
+ * Format an "upcoming" duration the same way dashboard's timeAgo formats past:
+ * "In 45s" / "In 5m" / "In 2h" / "In 3d". Negative values returned as "Now".
+ */
+function formatTimeUntil(targetMs, nowMs) {
+  const diffSec = Math.round((targetMs - nowMs) / 1000);
+  if (diffSec <= 30) return 'Now';
+  if (diffSec < 60) return `In ${diffSec}s`;
+  if (diffSec < 3600) return `In ${Math.round(diffSec / 60)}m`;
+  if (diffSec < 86400) return `In ${Math.round(diffSec / 3600)}h`;
+  return `In ${Math.round(diffSec / 86400)}d`;
+}
+
+/**
  * Compute when the next entry should fire (ms from now).
  * Returns null if no upcoming entries.
  */
@@ -1064,16 +1125,61 @@ function renderScheduledQueue(entries) {
     return;
   }
 
-  // Compute next fire time for each entry
+  // Compute next fire time for each entry (used for sorting + badge)
   const nowJST = jstNow();
-  const todayDow = nowJST.getDay(); // 0=Sun
+  const nowMs = Date.now();
 
-  queue.innerHTML = activeEntries.map(({ e: entry, origIdx: i }) => {
+  // Annotate with sort key. Order policy:
+  //   1. Overdue / pending dispatch (past now but should fire) — most urgent
+  //   2. Upcoming, sorted by closest fire time first
+  //   3. Done today / disabled / no next fire — end of queue
+  const annotated = activeEntries.map(item => {
+    const { e } = item;
+    const enabled = e.enabled !== false;
+    let nextFireMs = null;
+    let bucket = 2; // default = no-fire tail
+    if (enabled) {
+      if (e.type === 'once' && e.run_at) {
+        nextFireMs = new Date(e.run_at).getTime();
+        bucket = isNaN(nextFireMs) ? 2 : (nextFireMs < nowMs ? 0 : 1);
+      } else if (e.type === 'recurring') {
+        // Check if today's slot already fired or passed → push to next occurrence
+        const r = e.recurrence || {};
+        const [h, m] = (r.time || '00:00').split(':').map(Number);
+        const schedToday = new Date(nowJST);
+        schedToday.setHours(h, m, 0, 0);
+        let ranToday = false;
+        if (e.last_run) {
+          const lrJST = new Date(new Date(e.last_run).toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
+          ranToday = lrJST.toDateString() === nowJST.toDateString();
+        }
+        if (!ranToday && nowJST > schedToday) {
+          bucket = 0; // overdue (today's slot passed but not yet run)
+          nextFireMs = schedToday.getTime();
+        } else if (ranToday) {
+          bucket = 2; // done today
+          nextFireMs = computeEntryNextFire(e, nowJST, nowMs);
+        } else {
+          nextFireMs = computeEntryNextFire(e, nowJST, nowMs);
+          bucket = nextFireMs ? 1 : 2;
+        }
+      }
+    }
+    return { ...item, enabled, nextFireMs, bucket };
+  });
+
+  annotated.sort((a, b) => {
+    if (a.bucket !== b.bucket) return a.bucket - b.bucket;
+    const am = a.nextFireMs ?? Infinity;
+    const bm = b.nextFireMs ?? Infinity;
+    return am - bm;
+  });
+
+  queue.innerHTML = annotated.map(({ e: entry, origIdx: i, enabled, nextFireMs, bucket }) => {
     const wf = WORKFLOWS.find(w => w.file === entry.workflow);
     const wfName = wf?.name || entry.workflow.replace('.yml', '');
     const iconName = wf?.iconName || 'settings';
     const isOnce = entry.type === 'once';
-    const enabled = entry.enabled !== false;
     const toggleCls = enabled ? 'sched-toggle active' : 'sched-toggle';
 
     // Build display label: use note as primary label if available
@@ -1082,38 +1188,27 @@ function renderScheduledQueue(entries) {
       ? `${entry.run_at?.slice(0,16).replace('T',' ')} JST`
       : describeRecurrence(entry.recurrence);
 
-    // Compute next fire info
+    // Status badge
     let nextInfo = '';
-    if (!isOnce && enabled) {
-      const r = entry.recurrence || {};
-      const [h, m] = (r.time || '00:00').split(':').map(Number);
-      const schedToday = new Date(nowJST);
-      schedToday.setHours(h, m, 0, 0);
-      const alreadyPassed = nowJST > schedToday;
-
-      // Check if already ran today
-      const lastRun = entry.last_run;
-      let ranToday = false;
-      if (lastRun) {
-        const lrJST = new Date(new Date(lastRun).toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
-        ranToday = lrJST.toDateString() === nowJST.toDateString();
-      }
-
-      if (ranToday) {
-        nextInfo = `<span class="sched-status done">${ICON('check', 11)} Done today</span>`;
-      } else if (alreadyPassed) {
-        nextInfo = `<span class="sched-status overdue">${ICON('hourglass', 11)} Pending</span>`;
-      } else {
-        const diff = Math.round((schedToday - nowJST) / 60000);
-        nextInfo = `<span class="sched-status upcoming">In ${diff}m</span>`;
-      }
+    if (!enabled) {
+      // disabled — no badge (toggle visually indicates state)
     } else if (isOnce) {
-      const runAt = new Date(entry.run_at);
-      if (runAt < nowJST) nextInfo = `<span class="sched-status overdue">${ICON('hourglass', 11)} Pending dispatch</span>`;
-      else {
-        const diff = Math.round((runAt - nowJST) / 60000);
-        const label2 = diff < 60 ? `In ${diff}m` : diff < 1440 ? `In ${Math.round(diff/60)}h` : `In ${Math.round(diff/1440)}d`;
-        nextInfo = `<span class="sched-status upcoming">${label2}</span>`;
+      if (nextFireMs && nextFireMs < nowMs) {
+        nextInfo = `<span class="sched-status overdue">${ICON('hourglass', 11)} Pending dispatch</span>`;
+      } else if (nextFireMs) {
+        nextInfo = `<span class="sched-status upcoming">${formatTimeUntil(nextFireMs, nowMs)}</span>`;
+      }
+    } else {
+      // Recurring
+      if (bucket === 2 && nextFireMs == null) {
+        nextInfo = `<span class="sched-status done">${ICON('check', 11)} Done today</span>`;
+      } else if (bucket === 2) {
+        // ran today, has future slot
+        nextInfo = `<span class="sched-status done">${ICON('check', 11)} Done today</span>`;
+      } else if (bucket === 0) {
+        nextInfo = `<span class="sched-status overdue">${ICON('hourglass', 11)} Pending</span>`;
+      } else if (nextFireMs) {
+        nextInfo = `<span class="sched-status upcoming">${formatTimeUntil(nextFireMs, nowMs)}</span>`;
       }
     }
 
