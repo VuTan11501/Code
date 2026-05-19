@@ -139,7 +139,7 @@ Tham khảo SKILL.md trước khi đụng vào lĩnh vực tương ứng:
 ### Schedule Gist
 - ID: `abc2a47c0a396025a72a6580227ff493`
 - File: `scheduled-runs.json` (dispatcher source of truth — array của entries `once`/`recurring`)
-- File: `ot-requests.json` (OT Planner source of truth — array của `{id, date, start, end, hours, reason, auto_skip_date?, auto_co_id?}`). Authoritative khi tồn tại (kể cả empty array). `gh_ot_creator.py` đọc file này qua GH_PAT, fallback `schedule.json:pending_ot` nếu Gist read fail / file missing.
+- File: `ot-requests.json` (OT Planner source of truth — array của `{id, date, start, end, hours, reason, kintai_created_at?, auto_skip_date?, auto_co_id?}`). Authoritative khi tồn tại (kể cả empty array). `gh_ot_creator.py` đọc file này qua GH_PAT, sau mỗi run write-back `kintai_created_at` (ISO ts JST, idempotent) cho entries đã tạo HOẶC đã tồn tại trong DokoKin. Fallback `schedule.json:pending_ot` nếu Gist read fail / file missing. Window tạo OT: `[today-1d, today+7d]` (DokoKin cho phép 1 day backward).
 - Entry types: `once`, `daily`, `weekly`, `monthly`
 - **Lịch sử**: entries `once` đã chạy → set `dispatched: true` + `last_run`, **không xóa** (giữ cho UI hiển thị history)
 - UI: `renderScheduledQueue` filter `activeEntries`, `renderScheduleTable` show all
