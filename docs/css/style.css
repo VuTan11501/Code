@@ -1989,5 +1989,5 @@ input[type="time"], input[type="date"], input[type="datetime-local"] {
 
 /* PWA mode: tighter pip horizontally to fit smaller cell width */
 @media (display-mode: standalone), (display-mode: fullscreen), (display-mode: minimal-ui) {
-  .schedule-pip { padding-left: 0; padding-right: 0; margin-left: auto; margin-right: auto; }
+  .schedule-pip { padding-left: 0; padding-right: 0; margin-left: auto; margin-right: auto; font-size: 8px; }
 }
