@@ -66,7 +66,7 @@ tailwind.config = {
   },
 }
 </script>
-<link rel="stylesheet" href="css/style.css?v=29">
+<link rel="stylesheet" href="css/style.css?v=30">
 <link rel="preconnect" href="https://api.github.com">
 </head>
 <body class="bg-background text-foreground font-sans text-sm antialiased min-h-dvh overflow-x-hidden">
@@ -403,7 +403,10 @@ tailwind.config = {
         </div>
         <div class="flex items-center justify-between mt-3 text-xs text-muted-foreground">
           <span id="otTableCount">0 entries</span>
-          <button class="btn sm" onclick="loadOtData()" data-tooltip="Refresh"><span data-icon="refresh" data-size="14"></span> Refresh</button>
+          <div class="flex items-center gap-2">
+            <button id="otSyncBtn" class="btn sm" onclick="syncOtWithDokoKin()" data-tooltip="Trigger Auto OT Creator now (~60–90s)"><span data-icon="sparkles" data-size="14"></span> Sync DokoKin</button>
+            <button id="otRefreshBtn" class="btn sm" onclick="loadOtData({refresh:true})" data-tooltip="Refresh from Gist"><span data-icon="refresh" data-size="14"></span> Refresh</button>
+          </div>
         </div>
       </section>
     </div>
@@ -802,7 +805,7 @@ tailwind.config = {
 <script src="js/app.js?v=26"></script>
 <script src="js/dashboard.js?v=26"></script>
 <script src="js/schedule.js?v=26"></script>
-<script src="js/ot-planner.js?v=29"></script>
+<script src="js/ot-planner.js?v=30"></script>
 <script src="js/settings.js?v=26"></script>
 </body>
 </html>

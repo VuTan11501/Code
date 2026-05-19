@@ -504,11 +504,16 @@ def main():
         kintai_token = get_kintai_token(azure_token)
         log("KINTAI token OK ✓")
 
-        # Get existing OT requests for relevant months
+        # Get existing OT requests for relevant months — expand to ALL Gist
+        # pending months (not just actionable) so write-back can backfill past
+        # entries that were created in earlier auto-runs.
         months_to_check = set()
-        for entry in actionable:
-            d = date.fromisoformat(entry["date"])
-            months_to_check.add((d.year, d.month))
+        for entry in pending_ot:
+            try:
+                d = date.fromisoformat(entry["date"])
+                months_to_check.add((d.year, d.month))
+            except Exception:
+                pass
 
         existing_dates = set()
         for y, m in months_to_check:
@@ -551,12 +556,13 @@ def main():
                     f.write(f"token_rotated=true\n")
                     f.write(f"new_refresh_token={new_refresh}\n")
 
-        # Write back kintai_created_at to Gist (best-effort)
+        # Write back kintai_created_at to Gist (best-effort).
+        # existing_dates contains ALL DokoKin OT requests for relevant months
+        # so this also backfills past entries that pre-date this feature.
         if source == "gist":
             try:
                 created_dates_set = {e["date"] for e in created_items}
-                existing_dates_set = {e["date"] for e in existing_items}
-                write_back_kintai_status(created_dates_set, existing_dates_set)
+                write_back_kintai_status(created_dates_set, existing_dates)
             except Exception as e:
                 log(f"⚠️ Write-back exception (non-fatal): {e}")
 

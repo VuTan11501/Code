@@ -4,6 +4,8 @@
 // ═══════════════════════════════════════════════════
 const OT_FILE = 'ot-requests.json';
 const OT_CHECKOUT_WF = 'auto-checkout.yml';
+const OT_CREATOR_WF = 'auto-ot-creator.yml';
+const OT_CREATION_WINDOW_DAYS = 7;
 
 let _otState = {
   initialized: false,
@@ -25,11 +27,19 @@ function initOtPlannerPage() {
   loadOtData();
 }
 
-async function loadOtData() {
+async function loadOtData(opts) {
+  const isManualRefresh = !!(opts && opts.refresh);
   const grid = document.getElementById('otCalendar');
   const tbody = document.getElementById('otTableBody');
-  if (grid) grid.innerHTML = '<div class="empty text-muted-foreground text-sm p-5 text-center">Loading...</div>';
-  if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted-foreground py-8">Loading...</td></tr>';
+  const hasData = Array.isArray(_otState.requests) && _otState.requests.length > 0;
+  // Show skeleton only on initial load (when no data exists yet).
+  // On manual refresh, keep current rows visible to avoid layout jump.
+  if (!hasData) {
+    if (grid) grid.innerHTML = _otCalendarSkeleton();
+    if (tbody) tbody.innerHTML = _otTableSkeleton(6);
+  }
+  const refreshBtn = document.getElementById('otRefreshBtn');
+  if (isManualRefresh && refreshBtn) refreshBtn.classList.add('is-loading');
   try {
     const gist = await apiFetch(`/gists/${GIST_ID}`);
     // OT requests file
@@ -52,9 +62,39 @@ async function loadOtData() {
     renderOtCalendar();
     renderOtList();
   } catch (e) {
-    if (grid) grid.innerHTML = `<div class="empty text-destructive text-sm p-5 text-center">Failed to load: ${e.message}</div>`;
-    if (tbody) tbody.innerHTML = `<tr><td colspan="7" class="text-center text-destructive py-6">Failed: ${e.message}</td></tr>`;
+    if (!hasData) {
+      if (grid) grid.innerHTML = `<div class="empty text-destructive text-sm p-5 text-center">Failed to load: ${e.message}</div>`;
+      if (tbody) tbody.innerHTML = `<tr><td colspan="7" class="text-center text-destructive py-6">Failed: ${e.message}</td></tr>`;
+    } else {
+      toast(`❌ Refresh failed: ${e.message}`, 'error');
+    }
+  } finally {
+    if (refreshBtn) refreshBtn.classList.remove('is-loading');
   }
+}
+
+// ─── Skeleton loaders ───
+function _otCalendarSkeleton() {
+  const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  let html = '<div class="ot-cal-header">';
+  for (const dn of dayNames) html += `<div class="ot-cal-dn">${dn}</div>`;
+  html += '</div><div class="ot-cal-body">';
+  for (let i = 0; i < 35; i++) html += '<div class="ot-cell skeleton" style="opacity:0.55"></div>';
+  html += '</div>';
+  return html;
+}
+
+function _otTableSkeleton(rows) {
+  const widths = ['18px', '70px', '90px', '32px', '55%', '90px', '110px'];
+  let html = '';
+  for (let r = 0; r < rows; r++) {
+    let tds = '';
+    widths.forEach((w) => {
+      tds += `<td class="px-4 py-3"><div class="skeleton" style="height:14px;width:${w};max-width:100%"></div></td>`;
+    });
+    html += `<tr>${tds}</tr>`;
+  }
+  return html;
 }
 
 // ─── Calendar render ───
@@ -79,9 +119,43 @@ function _otCreationWindow() {
   // OT API rule: only [today, today + 7 days] can be created via DokoKin API
   const now = jstNow();
   const today = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
-  const max = new Date(now); max.setDate(max.getDate() + 7);
+  const max = new Date(now); max.setDate(max.getDate() + OT_CREATION_WINDOW_DAYS);
   const maxStr = `${max.getFullYear()}-${String(max.getMonth()+1).padStart(2,'0')}-${String(max.getDate()).padStart(2,'0')}`;
-  return { today, maxStr, maxDays: 7 };
+  return { today, maxStr, maxDays: OT_CREATION_WINDOW_DAYS };
+}
+
+function _addDays(dateStr, n) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const dt = new Date(y, m - 1, d);
+  dt.setDate(dt.getDate() + n);
+  return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
+}
+
+function _daysBetween(fromStr, toStr) {
+  const [y1, m1, d1] = fromStr.split('-').map(Number);
+  const [y2, m2, d2] = toStr.split('-').map(Number);
+  const a = new Date(y1, m1 - 1, d1).getTime();
+  const b = new Date(y2, m2 - 1, d2).getTime();
+  return Math.round((b - a) / 86400000);
+}
+
+function _nextAutoCreateTime() {
+  // Auto OT Creator workflow runs daily at 10:00 JST. Return next occurrence.
+  const now = jstNow();
+  const next = new Date(now);
+  next.setHours(10, 0, 0, 0);
+  if (next <= now) next.setDate(next.getDate() + 1);
+  return next;
+}
+
+function _humanizeUntil(target) {
+  const now = jstNow();
+  const diffMin = Math.max(0, Math.round((target - now) / 60000));
+  if (diffMin < 60) return `${diffMin}m`;
+  const h = Math.round(diffMin / 60);
+  if (h < 24) return `${h}h`;
+  const d = Math.round(h / 24);
+  return `${d}d`;
 }
 
 function _isDateInWindow(dateStr) {
@@ -189,16 +263,22 @@ function _renderOtRow(ot, idx, isPast) {
   const dayName = new Date(ot.date + 'T00:00:00+09:00').toLocaleString('en-US', { weekday: 'short' });
   const fixed = !!ot.auto_co_id;
   const created = !!ot.kintai_created_at;
+  const inWindow = _isDateInWindow(ot.date);
 
-  // Status badge — palette aligned with Schedule tab semantics:
-  //   blue (badge-once)     = pending / awaiting (like an upcoming once-entry)
-  //   green (badge-enabled) = created / active in DokoKin
-  //   purple (badge-recurring) = system-generated artifact (auto-fixed CO)
-  //   yellow (badge-warning) = needs attention (conflict)
-  //   grey (badge-disabled) = past / no longer actionable
+  // Status badge palette aligned with Schedule tab tokens:
+  //   blue (badge-once)        = upcoming / will-fire (Pending in window, Queued out of window)
+  //   green (badge-enabled)    = active in DokoKin (Created)
+  //   purple (badge-recurring) = system-generated artifact (Auto-fixed CO)
+  //   yellow (badge-warning)   = needs attention (Conflict)
+  //   grey (badge-disabled)    = past / inactive
   let statusBadge;
   if (isPast) {
-    statusBadge = `<span class="badge-disabled">${ICON('check', 11)} Past</span>`;
+    if (created) {
+      const ts = String(ot.kintai_created_at).slice(0, 16).replace('T', ' ');
+      statusBadge = `<span class="badge-disabled" data-tooltip="Was created in DokoKin at ${_esc(ts)} JST">${ICON('check', 11)} Past · Created</span>`;
+    } else {
+      statusBadge = `<span class="badge-disabled" data-tooltip="Past date — not actionable">${ICON('check', 11)} Past</span>`;
+    }
   } else if (conf.hasConflict) {
     statusBadge = `<span class="badge-warning" data-tooltip="${_esc(conf.message)}">${ICON('alertTriangle', 11)} Conflict</span>`;
   } else if (created) {
@@ -206,8 +286,18 @@ function _renderOtRow(ot, idx, isPast) {
     statusBadge = `<span class="badge-enabled" data-tooltip="Created in DokoKin at ${_esc(ts)} JST">${ICON('check', 11)} Created</span>`;
   } else if (fixed) {
     statusBadge = `<span class="badge-recurring" data-tooltip="Cross-midnight CO auto-scheduled">${ICON('sparkles', 11)} Auto-fixed</span>`;
+  } else if (inWindow) {
+    // In creation window — will be auto-created at next 10:00 JST run
+    const next = _nextAutoCreateTime();
+    const until = _humanizeUntil(next);
+    const tipTs = `${next.getFullYear()}-${String(next.getMonth()+1).padStart(2,'0')}-${String(next.getDate()).padStart(2,'0')} 10:00 JST`;
+    statusBadge = `<span class="badge-once" data-tooltip="Will auto-create on ${_esc(tipTs)} via Auto OT Creator">${ICON('hourglass', 11)} Pending · auto in ${until}</span>`;
   } else {
-    statusBadge = `<span class="badge-once">${ICON('hourglass', 11)} Pending</span>`;
+    // Outside 7-day window — queued, becomes eligible (date - 7 days)
+    const eligible = _addDays(ot.date, -OT_CREATION_WINDOW_DAYS);
+    const todayStr = _todayJSTStr();
+    const daysUntil = Math.max(1, _daysBetween(todayStr, eligible));
+    statusBadge = `<span class="badge-once" style="opacity:0.75" data-tooltip="Eligible from ${_esc(eligible)} — auto-creates that morning at 10:00 JST">${ICON('clock', 11)} Queued · in ${daysUntil}d</span>`;
   }
 
   const timeCell = `${ot.start} <span class="text-muted-foreground">→</span> ${ot.end}` +
@@ -595,4 +685,44 @@ async function _saveBoth(sched, ots) {
   });
   if (!res.ok) throw new Error(`Gist update failed (${res.status})`);
   return res.json();
+}
+
+// ─── Sync with DokoKin API (manual trigger of Auto OT Creator workflow) ───
+async function syncOtWithDokoKin() {
+  if (typeof sessionToken === 'undefined' || !sessionToken) {
+    toast('⚠️ Not authenticated', 'error');
+    return;
+  }
+  const btn = document.getElementById('otSyncBtn');
+  const origHtml = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = `${ICON('refresh', 14, 'animate-spin')} Syncing…`;
+  }
+  try {
+    const res = await fetch(`${API}/repos/${OWNER}/${REPO}/actions/workflows/${OT_CREATOR_WF}/dispatches`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${sessionToken}`,
+        'Accept': 'application/vnd.github+json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ ref: 'main' }),
+    });
+    if (res.status === 204) {
+      toast('☁️ Sync dispatched — DokoKin status will refresh in ~60–90s');
+      // Auto-refresh after 90s to pick up new kintai_created_at marks
+      setTimeout(() => loadOtData({ refresh: true }), 90000);
+    } else {
+      const body = await res.text().catch(() => '');
+      toast(`❌ Sync failed (${res.status})${body ? ': ' + body.slice(0, 80) : ''}`, 'error');
+    }
+  } catch (e) {
+    toast(`❌ ${e.message}`, 'error');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = origHtml;
+    }
+  }
 }
