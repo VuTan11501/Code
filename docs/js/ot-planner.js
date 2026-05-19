@@ -27,9 +27,9 @@ function initOtPlannerPage() {
 
 async function loadOtData() {
   const grid = document.getElementById('otCalendar');
-  const list = document.getElementById('otList');
+  const tbody = document.getElementById('otTableBody');
   if (grid) grid.innerHTML = '<div class="empty text-muted-foreground text-sm p-5 text-center">Loading...</div>';
-  if (list) list.innerHTML = '<li class="empty text-muted-foreground text-sm p-5 text-center">Loading...</li>';
+  if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted-foreground py-8">Loading...</td></tr>';
   try {
     const gist = await apiFetch(`/gists/${GIST_ID}`);
     // OT requests file
@@ -53,7 +53,7 @@ async function loadOtData() {
     renderOtList();
   } catch (e) {
     if (grid) grid.innerHTML = `<div class="empty text-destructive text-sm p-5 text-center">Failed to load: ${e.message}</div>`;
-    if (list) list.innerHTML = '';
+    if (tbody) tbody.innerHTML = `<tr><td colspan="7" class="text-center text-destructive py-6">Failed: ${e.message}</td></tr>`;
   }
 }
 
@@ -155,61 +155,82 @@ function renderOtCalendar() {
   grid.innerHTML = html;
 }
 
-// ─── List render ───
+// ─── Table render ───
 function renderOtList() {
-  const list = document.getElementById('otList');
-  if (!list) return;
+  const tbody = document.getElementById('otTableBody');
+  const countEl = document.getElementById('otTableCount');
+  if (!tbody) return;
   const todayStr = _todayJSTStr();
+  // Show upcoming first (asc), then recent past (desc, all of them in table)
   const upcoming = _otState.requests
     .filter(o => o.date >= todayStr)
     .sort((a,b) => a.date.localeCompare(b.date) || a.start.localeCompare(b.start));
   const past = _otState.requests
     .filter(o => o.date < todayStr)
-    .sort((a,b) => b.date.localeCompare(a.date)).slice(0, 5);
-  if (!upcoming.length && !past.length) {
-    list.innerHTML = '<li class="empty text-muted-foreground text-sm p-5 text-center">No OT requests. Tap "+ Add OT" or click a date.</li>';
+    .sort((a,b) => b.date.localeCompare(a.date));
+  const all = [...upcoming, ...past];
+
+  if (countEl) {
+    const upN = upcoming.length, pastN = past.length;
+    countEl.textContent = `${all.length} entr${all.length === 1 ? 'y' : 'ies'} (${upN} upcoming, ${pastN} past)`;
+  }
+
+  if (!all.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted-foreground py-8">No OT requests. Tap "+ Add OT" or click a date on the calendar.</td></tr>';
     return;
   }
-  let html = '';
-  if (upcoming.length) {
-    html += `<li class="ot-list-section">Upcoming (${upcoming.length})</li>`;
-    for (const ot of upcoming) html += _renderOtCard(ot, false);
-  }
-  if (past.length) {
-    html += `<li class="ot-list-section">Recent (past)</li>`;
-    for (const ot of past) html += _renderOtCard(ot, true);
-  }
-  list.innerHTML = html;
+
+  tbody.innerHTML = all.map((ot, idx) => _renderOtRow(ot, idx, ot.date < todayStr)).join('');
 }
 
-function _renderOtCard(ot, isPast) {
+function _renderOtRow(ot, idx, isPast) {
   const conf = detectConflict(ot);
   const crossMid = ot.end < ot.start;
   const dayName = new Date(ot.date + 'T00:00:00+09:00').toLocaleString('en-US', { weekday: 'short' });
   const fixed = !!ot.auto_co_id;
-  return `
-    <li class="ot-item ${isPast ? 'ot-item-past' : ''}">
-      <div class="ot-item-main">
-        <div class="ot-item-date">
-          <span class="ot-item-day">${dayName}</span>
-          <span class="ot-item-dnum">${ot.date}</span>
-        </div>
-        <div class="ot-item-times">
-          <span class="font-mono">${ot.start} → ${ot.end}</span>
-          ${crossMid ? `<span class="ot-mid-tag" title="Cross-midnight">${ICON('moon', 11)} +1d</span>` : ''}
-          <span class="ot-hours">${ot.hours}h</span>
-          ${fixed ? '<span class="ot-fixed-tag" title="Auto-fix applied: CO patched">⚡ fixed</span>' : ''}
-        </div>
-        ${ot.reason ? `<div class="ot-item-reason">${_esc(ot.reason)}</div>` : ''}
-        ${conf.hasConflict && !isPast ? `<div class="ot-conflict">${ICON('alertTriangle', 12)} ${_esc(conf.message)}</div>` : ''}
+
+  // Status badge — matches Schedule table style
+  let statusBadge;
+  if (isPast) {
+    statusBadge = `<span class="badge-disabled">${ICON('check', 11)} Past</span>`;
+  } else if (conf.hasConflict) {
+    statusBadge = `<span class="badge-warning" data-tooltip="${_esc(conf.message)}">${ICON('alertTriangle', 11)} Conflict</span>`;
+  } else if (fixed) {
+    statusBadge = `<span class="badge-enabled">${ICON('check', 11)} Auto-fixed</span>`;
+  } else {
+    statusBadge = `<span class="badge-once">${ICON('hourglass', 11)} Pending</span>`;
+  }
+
+  const timeCell = `${ot.start} <span class="text-muted-foreground">→</span> ${ot.end}` +
+    (crossMid ? ` <span class="text-purple" style="color:var(--purple);font-size:10px">+1d</span>` : '');
+
+  const reasonRaw = ot.reason || '—';
+  const reasonCell = reasonRaw.length <= 30
+    ? _esc(reasonRaw)
+    : `<span class="tooltip-trigger" tabindex="0" data-tooltip="${_esc(reasonRaw)}" aria-label="${_esc(reasonRaw)}">${_esc(reasonRaw.slice(0, 30))}…</span>`;
+
+  const fixBtn = (!isPast && conf.canAutoFix && !fixed)
+    ? `<button class="btn sm" style="color:var(--orange);border-color:rgba(249,115,22,0.32)" onclick="autoFixOtConflict('${ot.id}')" data-tooltip="Auto-fix conflict">${ICON('sparkles', 14)}</button>`
+    : '';
+
+  return `<tr${isPast ? ' class="opacity-60"' : ''}>
+    <td data-label="#" class="text-muted-foreground font-mono">${idx + 1}</td>
+    <td data-label="Date">
+      <div class="flex flex-col leading-tight">
+        <span class="font-mono">${ot.date}</span>
+        <span class="text-xs text-muted-foreground">${dayName}</span>
       </div>
-      <div class="ot-item-actions">
-        ${!isPast && conf.canAutoFix && !fixed ? `<button class="btn sm btn-warning" onclick="autoFixOtConflict('${ot.id}')" title="Auto-fix">${ICON('sparkles', 12)} Fix</button>` : ''}
-        <button class="btn sm btn-ghost btn-icon" onclick="openOtForm(null, '${ot.id}')" aria-label="Edit">${ICON('edit', 14)}</button>
-        <button class="btn sm btn-ghost btn-icon" onclick="deleteOtRequest('${ot.id}')" aria-label="Delete">${ICON('trash', 14)}</button>
-      </div>
-    </li>
-  `;
+    </td>
+    <td data-label="Time" class="font-mono text-xs">${timeCell}</td>
+    <td data-label="Hours" class="font-mono font-medium">${ot.hours}h</td>
+    <td data-label="Reason" class="text-muted-foreground">${reasonCell}</td>
+    <td data-label="Status">${statusBadge}</td>
+    <td class="actions-cell"><div class="actions-cell">
+      ${fixBtn}
+      <button class="btn sm" onclick="openOtForm(null, '${ot.id}')" data-tooltip="Edit">${ICON('edit', 14)}</button>
+      <button class="btn danger sm" onclick="deleteOtRequest('${ot.id}')" data-tooltip="Delete">${ICON('trash', 14)}</button>
+    </div></td>
+  </tr>`;
 }
 
 function _esc(s) {

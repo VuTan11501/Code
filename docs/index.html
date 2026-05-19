@@ -66,7 +66,7 @@ tailwind.config = {
   },
 }
 </script>
-<link rel="stylesheet" href="css/style.css?v=27">
+<link rel="stylesheet" href="css/style.css?v=28">
 <link rel="preconnect" href="https://api.github.com">
 </head>
 <body class="bg-background text-foreground font-sans text-sm antialiased min-h-dvh overflow-x-hidden">
@@ -383,10 +383,27 @@ tailwind.config = {
           <span class="flex items-center gap-2"><span data-icon="clipboard" data-size="16"></span> OT Requests</span>
           <button class="btn sm primary" onclick="openOtForm()"><span data-icon="plus" data-size="14"></span> Add OT</button>
         </div>
-        <div class="card bg-card border border-border rounded-lg overflow-hidden">
-          <div class="card-content p-2">
-            <ul id="otList" class="ot-list"></ul>
-          </div>
+        <div class="sched-table-wrap overflow-x-auto rounded-lg border border-border">
+          <table class="sched-table w-full text-sm" id="otTable">
+            <thead>
+              <tr class="bg-muted/50 border-b border-border">
+                <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">#</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Date</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Time</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Hours</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Reason</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
+                <th class="px-4 py-3 text-center text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="otTableBody">
+              <tr><td colspan="7" class="text-center text-muted-foreground py-8">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="flex items-center justify-between mt-3 text-xs text-muted-foreground">
+          <span id="otTableCount">0 entries</span>
+          <button class="btn sm" onclick="loadOtData()" data-tooltip="Refresh"><span data-icon="refresh" data-size="14"></span> Refresh</button>
         </div>
       </section>
     </div>
@@ -785,7 +802,7 @@ tailwind.config = {
 <script src="js/app.js?v=26"></script>
 <script src="js/dashboard.js?v=26"></script>
 <script src="js/schedule.js?v=26"></script>
-<script src="js/ot-planner.js?v=27"></script>
+<script src="js/ot-planner.js?v=28"></script>
 <script src="js/settings.js?v=26"></script>
 </body>
 </html>

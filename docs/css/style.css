@@ -1601,68 +1601,6 @@ input[type="time"], input[type="date"], input[type="datetime-local"] {
   pointer-events: none;
 }
 
-.ot-list { list-style: none; padding: 0; margin: 0; }
-.ot-list-section {
-  font-size: var(--fs-xs);
-  color: var(--muted-foreground);
-  font-weight: 500;
-  padding: 8px 10px 4px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-.ot-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 10px;
-  border-radius: var(--radius-md);
-  transition: background var(--duration-fast) var(--ease-out);
-}
-.ot-item + .ot-item { border-top: 1px solid var(--border); }
-.ot-item:hover { background: var(--muted); }
-.ot-item-past { opacity: 0.55; }
-.ot-item-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
-.ot-item-date { display: flex; flex-direction: column; min-width: 80px; }
-.ot-item-day { font-size: 10px; color: var(--muted-foreground); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; }
-.ot-item-dnum { font-size: var(--fs-sm); font-family: var(--font-mono); color: var(--foreground); font-weight: 500; }
-.ot-item-times { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: var(--fs-sm); }
-.ot-mid-tag {
-  display: inline-flex; align-items: center; gap: 3px;
-  font-size: 10px;
-  color: var(--purple);
-  background: rgba(168, 85, 247, 0.14);
-  padding: 1px 6px; border-radius: var(--radius-full);
-  font-weight: 500;
-}
-.ot-fixed-tag {
-  font-size: 10px;
-  color: var(--green);
-  background: rgba(34, 197, 94, 0.14);
-  padding: 1px 6px; border-radius: var(--radius-full);
-  font-weight: 500;
-}
-.ot-hours {
-  font-family: var(--font-mono); font-weight: 600; color: var(--muted-foreground); font-size: var(--fs-xs);
-}
-.ot-item-reason { font-size: var(--fs-xs); color: var(--muted-foreground); }
-.ot-conflict {
-  display: flex; align-items: flex-start; gap: 6px;
-  font-size: var(--fs-xs); color: var(--orange);
-  background: rgba(249, 115, 22, 0.08);
-  border: 1px solid rgba(249, 115, 22, 0.28);
-  padding: 6px 8px;
-  border-radius: var(--radius-sm);
-  margin-top: 4px;
-  line-height: 1.45;
-}
-.ot-item-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
-.btn-warning {
-  background: rgba(249, 115, 22, 0.14);
-  color: var(--orange);
-  border: 1px solid rgba(249, 115, 22, 0.32);
-}
-.btn-warning:hover { background: rgba(249, 115, 22, 0.22); }
-
 .ot-form-warn {
   display: flex; align-items: flex-start; gap: 6px;
   font-size: var(--fs-xs);
@@ -1687,6 +1625,4 @@ input[type="time"], input[type="date"], input[type="datetime-local"] {
   .ot-cell { padding: 3px 2px 2px; min-height: 44px; }
   .ot-cell-num { font-size: 10px; }
   .ot-badge { font-size: 9px; padding: 0 4px; }
-  .ot-item { padding: 8px; gap: 8px; }
-  .ot-item-date { min-width: 64px; }
 }
