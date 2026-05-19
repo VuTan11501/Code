@@ -141,15 +141,31 @@ def sanity_check_ot_requests(old_arr: list, new_arr: list,
         )
 
     if old_pending > 0:
-        pending_loss_pct = max(0, (old_pending - new_pending)) * 100.0 / old_pending
-        if pending_loss_pct > max_pending_loss_pct:
-            raise SanityCheckFailed(
-                f"🚨 Refusing write — would lose {old_pending - new_pending} of "
-                f"{old_pending} PENDING entries (no kintai_created_at). "
-                f"{pending_loss_pct:.1f}% loss > {max_pending_loss_pct}% threshold. "
-                f"Pending entries represent user-scheduled future OT not yet pushed "
-                f"to DokoKin — losing them silently wipes the user's schedule."
-            )
+        # Only count pending entries as truly lost if they DISAPPEARED from the
+        # new array entirely — NOT when they gained kintai_created_at (that means
+        # DokoKin confirmed them, which is expected after auto-OT-creator runs).
+        old_pending_keys = set()
+        for e in old_arr:
+            if isinstance(e, dict) and not e.get("kintai_created_at"):
+                key = (e.get("date"), e.get("start"), e.get("end"))
+                old_pending_keys.add(key)
+        # Check which old pending entries are no longer present at all
+        new_all_keys = set()
+        for e in new_arr:
+            if isinstance(e, dict):
+                key = (e.get("date"), e.get("start"), e.get("end"))
+                new_all_keys.add(key)
+        truly_lost = old_pending_keys - new_all_keys
+        if truly_lost:
+            loss_pct = len(truly_lost) * 100.0 / old_pending
+            if loss_pct > max_pending_loss_pct:
+                raise SanityCheckFailed(
+                    f"🚨 Refusing write — would lose {len(truly_lost)} of "
+                    f"{old_pending} PENDING entries (no kintai_created_at). "
+                    f"{loss_pct:.1f}% loss > {max_pending_loss_pct}% threshold. "
+                    f"Pending entries represent user-scheduled future OT not yet pushed "
+                    f"to DokoKin — losing them silently wipes the user's schedule."
+                )
 
 
 def safe_patch_gist_file(pat: str, gist_id: str, filename: str,
