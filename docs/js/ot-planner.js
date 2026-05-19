@@ -1488,28 +1488,86 @@ async function deleteOtTemplate(id) {
 function _otOptimizerCandidates(year, monthZeroIdx, existingByDate) {
   const daysInMonth = new Date(year, monthZeroIdx + 1, 0).getDate();
   const todayStr = _todayJSTStr();
-  const out = [];
+  const sun = [], wk = [];
   for (let d = 1; d <= daysInMonth; d++) {
     const dateStr = `${year}-${String(monthZeroIdx + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
     if (dateStr < todayStr) continue;            // can't optimize past
     if (existingByDate[dateStr]) continue;       // skip days with existing OT
     const dow = new Date(year, monthZeroIdx, d).getDay();
-    let start, end, hours;
-    if (dow === 0) { start = '15:30'; end = '03:30'; hours = 12; }
-    else           { start = '22:00'; end = '03:30'; hours = 5.5; }
+    const isSun = dow === 0;
+    const start = isSun ? '15:30' : '22:00';
+    const end = '03:30';
+    const hours = isSun ? 12 : 5.5;
     const ot = { date: dateStr, start, end, hours, reason: 'optimizer' };
     const breakdown = window.OT_SALARY.calcOtBreakdown(ot);
     const conf = detectConflict(ot);
-    out.push({
+    const item = {
       date: dateStr, dow, start, end, hours,
+      kind: isSun ? 'sun' : 'wk',
       gross: breakdown.gross,
       ratio: breakdown.gross / hours,
       hasConflict: conf.hasConflict,
       conflictMsg: conf.message || '',
-    });
+    };
+    if (conf.hasConflict) continue;
+    (isSun ? sun : wk).push(item);
   }
-  out.sort((a, b) => b.ratio - a.ratio);
-  return out;
+  // Earliest dates first within each kind (deterministic selection when ties)
+  const byDate = (a, b) => a.date < b.date ? -1 : 1;
+  sun.sort(byDate); wk.sort(byDate);
+  return { sun, wk };
+}
+
+// Exhaustive knapsack over (k_sun, k_wk) pairs subject to the hour cap.
+// All Sun shifts in a month yield identical gross; same for weekday shifts.
+// Returns {k_sun, k_wk, gross, hours} representing how many of each to pick.
+function _pickOptimalMix(sun, wk, remainingHours, target, maxMode) {
+  const grossSun = sun[0]?.gross || 0;
+  const grossWk  = wk[0]?.gross || 0;
+  const hSun = 12, hWk = 5.5;
+  const maxKsun = Math.min(sun.length, Math.floor(remainingHours / hSun));
+
+  let best = { k_sun: 0, k_wk: 0, gross: 0, hours: 0 };
+  // Helper: pick the better candidate per mode (maxMode: largest gross;
+  // target mode: smallest gross >= target, falling back to largest if no
+  // combination reaches target).
+  const better = (a, b) => {
+    if (maxMode) return b.gross > a.gross ? b : a;
+    if (b.gross >= target && a.gross < target) return b;
+    if (a.gross >= target && b.gross < target) return a;
+    if (a.gross >= target && b.gross >= target) return b.gross < a.gross ? b : a;
+    return b.gross > a.gross ? b : a; // both below target → take larger
+  };
+
+  for (let ks = 0; ks <= maxKsun; ks++) {
+    const hoursAfterSun = ks * hSun;
+    const wkBudget = remainingHours - hoursAfterSun;
+    const maxKwk = Math.min(wk.length, Math.floor(wkBudget / hWk + 1e-9));
+    // For maxMode, we always want the largest wk count.
+    // For targetMode, scan from 0..maxKwk to find smallest reaching target.
+    if (maxMode) {
+      const candidate = {
+        k_sun: ks, k_wk: maxKwk,
+        gross: ks * grossSun + maxKwk * grossWk,
+        hours: hoursAfterSun + maxKwk * hWk,
+      };
+      best = better(best, candidate);
+    } else {
+      // Find smallest kw such that total gross >= target (if any), else use maxKwk
+      let pick = -1;
+      for (let kw = 0; kw <= maxKwk; kw++) {
+        if (ks * grossSun + kw * grossWk >= target) { pick = kw; break; }
+      }
+      if (pick === -1) pick = maxKwk;
+      const candidate = {
+        k_sun: ks, k_wk: pick,
+        gross: ks * grossSun + pick * grossWk,
+        hours: hoursAfterSun + pick * hWk,
+      };
+      best = better(best, candidate);
+    }
+  }
+  return best;
 }
 
 function runOtOptimizer() {
@@ -1539,21 +1597,25 @@ function runOtOptimizer() {
     return;
   }
 
-  const candidates = _otOptimizerCandidates(y, m, existingByDate);
-  const selected = [];
-  let projHours = sal.totalHours;
-  let projGross = sal.gross;
-  for (const c of candidates) {
-    if (projHours + c.hours > S.MAX_HOURS_PER_MONTH) continue;   // continue, not break (per critique)
-    if (!maxMode && projGross >= target) break;
-    if (c.hasConflict) continue;
-    selected.push(c);
-    projHours += c.hours;
-    projGross += c.gross;
-  }
+  const { sun, wk } = _otOptimizerCandidates(y, m, existingByDate);
+  // For target mode, target is OT-GROSS-DELTA needed (UI hint says "Target income")
+  // Existing gross already counted; subtract from target to get delta required.
+  const targetDelta = maxMode ? Infinity : Math.max(0, target - sal.gross);
+  const mix = _pickOptimalMix(sun, wk, remainingHours, targetDelta, maxMode);
+
+  // Materialize selected list: first mix.k_sun Sundays + first mix.k_wk weekdays,
+  // re-sorted by date for display
+  const selected = [...sun.slice(0, mix.k_sun), ...wk.slice(0, mix.k_wk)]
+    .sort((a, b) => a.date < b.date ? -1 : 1);
 
   _otState.optimizerResults = selected;
-  renderOtOptimizerResults(selected, { projHours, projGross, currentGross: sal.gross, currentHours: sal.totalHours, target, maxMode });
+  renderOtOptimizerResults(selected, {
+    projHours: sal.totalHours + mix.hours,
+    projGross: sal.gross + mix.gross,
+    currentGross: sal.gross,
+    currentHours: sal.totalHours,
+    target, maxMode,
+  });
 }
 
 function renderOtOptimizerResults(selected, ctx) {
