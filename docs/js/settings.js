@@ -14,8 +14,15 @@ function initSettingsPage() {
 }
 
 async function renderBiometricStatus() {
+  const card = document.getElementById('biometricCard');
   const host = document.getElementById('biometricStatus');
   if (!host || !window.Biometric) return;
+  // PWA-only: hide entire card outside installed app
+  if (!window.Biometric.isPwa()) {
+    if (card) card.style.display = 'none';
+    return;
+  }
+  if (card) card.style.display = '';
   const enrollBtn = document.getElementById('biometricEnrollBtn');
   const disableBtn = document.getElementById('biometricDisableBtn');
   const wa = window.Biometric.isWebAuthnSupported();

@@ -31,6 +31,19 @@ window.Biometric = (function () {
     return !!(window.PublicKeyCredential && navigator.credentials);
   }
 
+  // Biometric only makes sense in an installed PWA (home-screen app). In a
+  // browser tab the user can already paste credentials anywhere, and on iOS
+  // Safari WebAuthn assertions outside standalone mode have flaky UX.
+  function isPwa() {
+    try {
+      if (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) return true;
+      if (window.matchMedia && window.matchMedia('(display-mode: fullscreen)').matches) return true;
+      if (window.matchMedia && window.matchMedia('(display-mode: minimal-ui)').matches) return true;
+      if (navigator.standalone === true) return true; // iOS Safari
+    } catch {}
+    return false;
+  }
+
   async function isPlatformAuthenticatorAvailable() {
     if (!isWebAuthnSupported()) return false;
     try {
@@ -220,6 +233,7 @@ window.Biometric = (function () {
 
   return {
     isWebAuthnSupported,
+    isPwa,
     isPlatformAuthenticatorAvailable,
     isEnabled,
     enroll,

@@ -863,7 +863,7 @@ function bootstrap() {
 }
 
 async function tryBiometricAutoUnlock() {
-  if (!window.Biometric || !window.Biometric.isEnabled()) {
+  if (!window.Biometric || !window.Biometric.isPwa() || !window.Biometric.isEnabled()) {
     updateBiometricButton();
     return;
   }
@@ -900,7 +900,7 @@ async function unlockWithBiometric() {
 function updateBiometricButton() {
   const btn = document.getElementById('biometricUnlockBtn');
   if (!btn) return;
-  if (window.Biometric && window.Biometric.isEnabled()) {
+  if (window.Biometric && window.Biometric.isPwa() && window.Biometric.isEnabled()) {
     btn.style.display = 'flex';
   } else {
     btn.style.display = 'none';
@@ -909,6 +909,10 @@ function updateBiometricButton() {
 
 async function enrollBiometric() {
   if (!window.Biometric) return;
+  if (!window.Biometric.isPwa()) {
+    toast('⚠️ Install the dashboard as a PWA (Add to Home Screen) to enable biometric unlock', 'warning');
+    return;
+  }
   if (!await window.Biometric.isPlatformAuthenticatorAvailable()) {
     toast('❌ Face ID / Touch ID / Windows Hello not available on this device', 'error');
     return;
