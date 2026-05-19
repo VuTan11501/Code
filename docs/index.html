@@ -66,7 +66,7 @@ tailwind.config = {
   },
 }
 </script>
-<link rel="stylesheet" href="css/style.css?v=32">
+<link rel="stylesheet" href="css/style.css?v=33">
 <link rel="preconnect" href="https://api.github.com">
 </head>
 <body class="bg-background text-foreground font-sans text-sm antialiased min-h-dvh overflow-x-hidden">
@@ -369,7 +369,8 @@ tailwind.config = {
             <button class="btn sm btn-ghost btn-icon" onclick="otNavMonth(1)" aria-label="Next month"><span data-icon="chevronRight" data-size="16"></span></button>
           </div>
         </div>
-        <div id="otStats" class="schedule-stats"></div>
+        <div id="otStats" class="schedule-stats ot-stats"></div>
+        <div id="otBudget" class="ot-budget"></div>
         <div class="card bg-card border border-border rounded-lg overflow-hidden">
           <div class="card-content p-3">
             <div id="otCalendar" class="ot-cal"></div>
@@ -392,13 +393,14 @@ tailwind.config = {
                 <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Date</th>
                 <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Time</th>
                 <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Hours</th>
+                <th class="px-4 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">Income</th>
                 <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Reason</th>
                 <th class="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
                 <th class="px-4 py-3 text-center text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody id="otTableBody">
-              <tr><td colspan="7" class="text-center text-muted-foreground py-8">Loading...</td></tr>
+              <tr><td colspan="8" class="text-center text-muted-foreground py-8">Loading...</td></tr>
             </tbody>
           </table>
         </div>
@@ -806,7 +808,8 @@ tailwind.config = {
 <script src="js/app.js?v=26"></script>
 <script src="js/dashboard.js?v=26"></script>
 <script src="js/schedule.js?v=26"></script>
-<script src="js/ot-planner.js?v=32"></script>
+<script src="js/ot-salary.js?v=33"></script>
+<script src="js/ot-planner.js?v=33"></script>
 <script src="js/settings.js?v=26"></script>
 </body>
 </html>

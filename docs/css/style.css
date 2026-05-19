@@ -699,6 +699,69 @@ select option { background: var(--card); color: var(--foreground); }
 }
 .stat-chip .stat-lbl { font-size: 10px; color: var(--muted-foreground); text-transform: uppercase; letter-spacing: 0.05em; }
 .stat-chip-next .stat-num { color: var(--green); }
+.stat-chip-income .stat-num { color: var(--blue); }
+
+/* ─── OT PLANNER — Phase 2: stats override + budget panel ─── */
+.schedule-stats.ot-stats { grid-template-columns: repeat(5, 1fr); }
+
+.ot-budget {
+  margin-bottom: var(--sp-3);
+}
+.ot-budget-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--sp-3) var(--sp-4);
+  display: flex; flex-direction: column; gap: var(--sp-3);
+}
+.ot-budget-header {
+  display: flex; justify-content: space-between; align-items: center; gap: var(--sp-2);
+  padding-bottom: var(--sp-2);
+  border-bottom: 1px solid var(--border);
+}
+.ot-budget-title {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: var(--fs-sm); font-weight: 600; color: var(--foreground);
+}
+.ot-budget-gross {
+  font-family: var(--font-mono); font-size: var(--fs-md); font-weight: 700;
+  color: var(--green); cursor: help;
+}
+.ot-budget-row { display: flex; flex-direction: column; gap: 4px; }
+.ot-budget-row-label {
+  display: flex; justify-content: space-between; align-items: baseline;
+  font-size: var(--fs-xs); color: var(--muted-foreground);
+}
+.ot-budget-row-val {
+  font-family: var(--font-mono); color: var(--foreground); font-weight: 500;
+}
+.ot-progress {
+  position: relative; height: 6px; background: var(--muted);
+  border-radius: var(--radius-full); overflow: hidden;
+}
+.ot-progress-fill {
+  position: absolute; left: 0; top: 0; height: 100%;
+  background: var(--primary);
+  border-radius: var(--radius-full);
+  transition: width var(--duration-normal) var(--ease-out);
+}
+.ot-progress.is-warning .ot-progress-fill { background: var(--yellow); }
+.ot-progress.is-danger  .ot-progress-fill { background: var(--red); }
+.ot-budget-breakdown {
+  display: flex; flex-wrap: wrap; gap: var(--sp-2) var(--sp-3);
+  font-size: var(--fs-xs); color: var(--muted-foreground);
+  padding-top: var(--sp-2); border-top: 1px dashed var(--border);
+}
+.ot-budget-breakdown span {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-family: var(--font-mono); cursor: help;
+}
+
+@media (max-width: 700px) {
+  .schedule-stats.ot-stats { grid-template-columns: repeat(2, 1fr); }
+  .ot-budget-card { padding: var(--sp-3); }
+  .ot-budget-breakdown { gap: 6px var(--sp-2); }
+}
 
 /* Filter chips */
 .schedule-filter {

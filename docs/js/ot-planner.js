@@ -65,7 +65,7 @@ async function loadOtData(opts) {
   } catch (e) {
     if (!hasData) {
       if (grid) grid.innerHTML = `<div class="empty text-destructive text-sm p-5 text-center">Failed to load: ${e.message}</div>`;
-      if (tbody) tbody.innerHTML = `<tr><td colspan="7" class="text-center text-destructive py-6">Failed: ${e.message}</td></tr>`;
+      if (tbody) tbody.innerHTML = `<tr><td colspan="8" class="text-center text-destructive py-6">Failed: ${e.message}</td></tr>`;
     } else {
       toast(`❌ Refresh failed: ${e.message}`, 'error');
     }
@@ -86,7 +86,7 @@ function _otCalendarSkeleton() {
 }
 
 function _otTableSkeleton(rows) {
-  const widths = ['18px', '70px', '90px', '32px', '55%', '90px', '110px'];
+  const widths = ['18px', '70px', '90px', '32px', '60px', '55%', '90px', '110px'];
   let html = '';
   for (let r = 0; r < rows; r++) {
     let tds = '';
@@ -181,6 +181,7 @@ function renderOtCalendar() {
   const grid = document.getElementById('otCalendar');
   if (!grid) return;
   renderOtStats();
+  renderOtBudget();
   const y = _otState.viewYear, m = _otState.viewMonth;
   const monthLabel = document.getElementById('otMonthLabel');
   const monthName = new Date(y, m, 1).toLocaleString('en-US', { month: 'long', year: 'numeric' });
@@ -257,7 +258,7 @@ function renderOtList() {
   }
 
   if (!all.length) {
-    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted-foreground py-8">No OT requests. Tap "+ Add OT" or click a date on the calendar.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted-foreground py-8">No OT requests. Tap "+ Add OT" or click a date on the calendar.</td></tr>';
     return;
   }
 
@@ -329,6 +330,7 @@ function _renderOtRow(ot, idx, isPast) {
     </td>
     <td data-label="Time" class="font-mono text-xs">${timeCell}</td>
     <td data-label="Hours" class="font-mono font-medium">${ot.hours}h</td>
+    <td data-label="Income" class="font-mono text-right" data-tooltip="${_esc(_otIncomeTooltip(ot))}">${_otIncomeCell(ot)}</td>
     <td data-label="Reason" class="text-muted-foreground">${reasonCell}</td>
     <td data-label="Status">${statusBadge}</td>
     <td class="actions-cell"><div class="actions-cell">
@@ -772,10 +774,20 @@ function renderOtStats() {
 
   const createdRatio = monthTotal > 0 ? `${createdCount}/${monthTotal}` : '0/0';
 
+  // Income chip — uses salary engine for current month-view entries
+  const sal = (window.OT_SALARY && window.OT_SALARY.calcMonthlySummary)
+    ? window.OT_SALARY.calcMonthlySummary(monthEntries)
+    : null;
+  const incomeStr = sal ? window.OT_SALARY.formatYen(sal.gross) : '—';
+  const incomeTip = sal
+    ? `Monthly OT income (gross):\n• Base OT 125%: ${window.OT_SALARY.formatYen(sal.baseOTLine)}\n• Sunday +10%: ${window.OT_SALARY.formatYen(sal.sundayLine)}\n• Night +25%: ${window.OT_SALARY.formatYen(sal.nightLine)}\nPaid IN ADDITION to fixed allowance ¥20,000/mo.`
+    : 'Salary engine unavailable';
+
   host.innerHTML = `
     <div class="stat-chip" data-tooltip="OT entries in this month view"><span class="stat-num">${monthTotal}</span><span class="stat-lbl">entries</span></div>
     <div class="stat-chip" data-tooltip="Total OT hours in this month view"><span class="stat-num">${hoursDisplay}</span><span class="stat-lbl">hours</span></div>
     <div class="stat-chip" data-tooltip="Already created in DokoKin / total this month"><span class="stat-num">${createdRatio}</span><span class="stat-lbl">created</span></div>
+    <div class="stat-chip stat-chip-income" data-tooltip="${_esc(incomeTip)}"><span class="stat-num">${incomeStr}</span><span class="stat-lbl">income</span></div>
     <div class="stat-chip stat-chip-next" data-tooltip="${_esc(nextTooltip)}"><span class="stat-num">${nextStr}</span><span class="stat-lbl">next OT</span></div>
   `;
 }
@@ -792,4 +804,81 @@ function _formatOtCountdown(ms) {
   const d = Math.floor(h / 24);
   const rh = h % 24;
   return rh ? `${d}d ${rh}h` : `${d}d`;
+}
+
+// ═══════════════════════════════════════════════════
+//  Salary integration helpers (Phase 2)
+// ═══════════════════════════════════════════════════
+function _otIncomeCell(ot) {
+  if (!window.OT_SALARY) return '—';
+  const b = window.OT_SALARY.calcOtBreakdown(ot);
+  return window.OT_SALARY.formatYen(b.gross);
+}
+
+function _otIncomeTooltip(ot) {
+  if (!window.OT_SALARY) return '';
+  const b = window.OT_SALARY.calcOtBreakdown(ot);
+  const F = window.OT_SALARY.formatYen;
+  const H = window.OT_SALARY.formatHours;
+  const lines = [`Gross OT for this entry: ${F(b.gross)}`];
+  lines.push(`• Base 125%: ${H(b.totalHours)} → ${F(b.baseOT)}`);
+  if (b.sundayHours > 0) lines.push(`• Sunday +10%: ${H(b.sundayHours)} → ${F(b.sundayPremium)}`);
+  if (b.nightHours > 0) lines.push(`• Night +25%: ${H(b.nightHours)} → ${F(b.nightPremium)}`);
+  if (b.segments && b.segments.length > 1) {
+    lines.push(`(Cross-midnight: ${b.segments.length} day segments)`);
+  }
+  return lines.join('\n');
+}
+
+function renderOtBudget() {
+  const host = document.getElementById('otBudget');
+  if (!host || !window.OT_SALARY) return;
+  const y = _otState.viewYear;
+  const m = _otState.viewMonth;
+  const monthPrefix = `${y}-${String(m + 1).padStart(2, '0')}-`;
+  const entries = (_otState.requests || []).filter(o => o.date && o.date.startsWith(monthPrefix));
+  const sal = window.OT_SALARY.calcMonthlySummary(entries);
+  const S = window.OT_SALARY.SALARY;
+  const F = window.OT_SALARY.formatYen;
+  const H = window.OT_SALARY.formatHours;
+
+  const hoursPct = Math.min(100, sal.hoursPctMonth * 100);
+  const nightPct = Math.min(100, sal.nightPctRemark * 100);
+  const hoursCls = sal.hoursPctMonth >= 0.9 ? 'is-danger' : (sal.hoursPctMonth >= 0.75 ? 'is-warning' : '');
+  const nightCls = sal.nightPctRemark >= 1 ? 'is-danger' : (sal.nightPctRemark >= 0.85 ? 'is-warning' : '');
+
+  const monthName = new Date(y, m, 1).toLocaleString('en-US', { month: 'long', year: 'numeric' });
+
+  host.innerHTML = `
+    <div class="ot-budget-card">
+      <div class="ot-budget-header">
+        <div class="ot-budget-title">${ICON('hourglass', 14)} Budget · ${monthName}</div>
+        <div class="ot-budget-gross" data-tooltip="Gross OT income (base 125% + Sunday +10% + night +25%) — paid IN ADDITION to fixed allowance ¥20,000/mo">${F(sal.gross)}</div>
+      </div>
+      <div class="ot-budget-row">
+        <div class="ot-budget-row-label">
+          <span>Monthly hours</span>
+          <span class="ot-budget-row-val">${H(sal.totalHours)} / ${S.MAX_HOURS_PER_MONTH}h</span>
+        </div>
+        <div class="ot-progress ${hoursCls}" data-tooltip="Legal max ${S.MAX_HOURS_PER_MONTH}h/month per DokoKin">
+          <div class="ot-progress-fill" style="width:${hoursPct}%"></div>
+        </div>
+      </div>
+      <div class="ot-budget-row">
+        <div class="ot-budget-row-label">
+          <span>Night hours (22:00–05:00)</span>
+          <span class="ot-budget-row-val">${H(sal.nightHours)} / ${S.NIGHT_REMARK_THRESHOLD}h</span>
+        </div>
+        <div class="ot-progress ${nightCls}" data-tooltip="≥${S.NIGHT_REMARK_THRESHOLD}h → 'Over 60H OT' remark on payslip">
+          <div class="ot-progress-fill" style="width:${nightPct}%"></div>
+        </div>
+      </div>
+      <div class="ot-budget-breakdown">
+        <span data-tooltip="125% rate on all OT hours — ${F(sal.baseOTLine)}">${ICON('clock', 11)} Base ${F(sal.baseOTLine)}</span>
+        <span data-tooltip="+10% extra on Sunday hours">☀️ Sun ${H(sal.sundayHours)} · ${F(sal.sundayLine)}</span>
+        <span data-tooltip="+25% extra on night-zone hours">🌙 Night ${H(sal.nightHours)} · ${F(sal.nightLine)}</span>
+        <span data-tooltip="Fixed allowance paid monthly regardless of OT done">💴 Fixed allowance ${F(S.FIXED_ALLOWANCE_YEN)}</span>
+      </div>
+    </div>
+  `;
 }
