@@ -890,6 +890,57 @@ function togglePatternUI(prefix = 'sched') {
 }
 
 // ═══════════════════════════════════════════════════
+//  PRE-CHECKOUT OT WARNING (used by dashboard.js Trigger button)
+// ═══════════════════════════════════════════════════
+// Returns { otEndTime, runAtIso, note, hoursLost } if today has a pending
+// once-type checkout scheduled later than NOW (typically the cross-midnight
+// CO for an OT request). Returns null otherwise.
+async function getPendingCheckoutAhead() {
+  if (!sessionToken) return null;
+  try {
+    const gist = await apiFetch(`/gists/${GIST_ID}`);
+    const file = gist.files['scheduled-runs.json'];
+    const entries = file ? JSON.parse(file.content) : [];
+    const now = new Date();
+    // Look ahead up to 18h — covers any same-day or next-morning CO
+    const horizon = new Date(now.getTime() + 18 * 60 * 60 * 1000);
+
+    let best = null;
+    for (const e of entries) {
+      if (e.type !== 'once') continue;
+      if (e.dispatched) continue;
+      if (e.enabled === false) continue;
+      if (e.workflow !== 'auto-checkout.yml') continue;
+      if (!e.run_at) continue;
+      const runAt = new Date(e.run_at);
+      if (isNaN(runAt)) continue;
+      if (runAt <= now || runAt > horizon) continue;
+      if (!best || runAt < new Date(best.run_at)) best = e;
+    }
+    if (!best) return null;
+    const runAt = new Date(best.run_at);
+    const fmt = runAt.toLocaleString('ja-JP', {
+      timeZone: 'Asia/Tokyo',
+      month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit',
+      hour12: false,
+    });
+    const diffMs = runAt.getTime() - now.getTime();
+    const hoursLost = (diffMs / 3_600_000);
+    return {
+      otEndTime: fmt + ' JST',
+      runAtIso: best.run_at,
+      note: best.note || '',
+      hoursLost: hoursLost,
+    };
+  } catch (e) {
+    console.warn('[OT warning] check failed:', e);
+    return null;
+  }
+}
+window.getPendingCheckoutAhead = getPendingCheckoutAhead;
+
+// ═══════════════════════════════════════════════════
 //  SCHEDULED RUNS CRUD (Gist-based storage)
 // ═══════════════════════════════════════════════════
 async function loadScheduledRuns() {

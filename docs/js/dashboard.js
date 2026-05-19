@@ -211,6 +211,35 @@ function renderWorkflowCard(wf, runs) {
 // ═══════════════════════════════════════════════════
 async function triggerWorkflow(file) {
   if (!sessionToken) { toast('⚠️ Not authenticated'); return; }
+
+  // ⚠️ Pre-flight check: warn if checkout would forfeit scheduled OT hours.
+  if (file === 'auto-checkout.yml' && typeof getPendingCheckoutAhead === 'function') {
+    const w = await getPendingCheckoutAhead();
+    if (w) {
+      const nowFmt = new Date().toLocaleString('ja-JP', {
+        timeZone: 'Asia/Tokyo', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', hour12: false,
+      });
+      const hoursLost = w.hoursLost.toFixed(1);
+      const message =
+        `Hôm nay đã có lịch checkout TỰ ĐỘNG tại ${w.otEndTime} ` +
+        `(thường là CO cho OT vắt qua nửa đêm).\n\n` +
+        `Nếu trigger checkout NGAY BÂY GIỜ (${nowFmt} JST), DokoKin sẽ đóng ` +
+        `workday tại thời điểm này — bạn sẽ MẤT ~${hoursLost}h và lịch CO ` +
+        `tự động sau đó có thể chỉ push end-time muộn hơn chứ không reopen được session.\n\n` +
+        (w.note ? `📝 Note: ${w.note}\n\n` : '') +
+        `Vẫn muốn checkout sớm?`;
+      const ok = await uiConfirm({
+        title: '⚠️ Cảnh báo: có lịch CO sau, OT có thể bị mất',
+        message,
+        confirmText: 'Vẫn checkout',
+        cancelText: 'Huỷ',
+        danger: true,
+      });
+      if (!ok) return;
+    }
+  }
+
   try {
     const res = await fetch(`${API}/repos/${OWNER}/${REPO}/actions/workflows/${file}/dispatches`, {
       method: 'POST',
