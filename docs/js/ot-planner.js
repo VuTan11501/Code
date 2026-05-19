@@ -5,7 +5,8 @@
 const OT_FILE = 'ot-requests.json';
 const OT_CHECKOUT_WF = 'auto-checkout.yml';
 const OT_CREATOR_WF = 'auto-ot-creator.yml';
-const OT_CREATION_WINDOW_DAYS = 7;
+const OT_CREATION_WINDOW_DAYS = 7;   // forward: today + 7 days
+const OT_BACKWARD_DAYS = 1;          // backward: today - 1 day (yesterday allowed)
 
 let _otState = {
   initialized: false,
@@ -116,12 +117,15 @@ function otGoToday() {
 }
 
 function _otCreationWindow() {
-  // OT API rule: only [today, today + 7 days] can be created via DokoKin API
+  // DokoKin OT API rule: window = [today - 1 day, today + 7 days].
+  // The overtime request only accepts 1 day backward (yesterday is OK).
   const now = jstNow();
   const today = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+  const min = new Date(now); min.setDate(min.getDate() - OT_BACKWARD_DAYS);
+  const minStr = `${min.getFullYear()}-${String(min.getMonth()+1).padStart(2,'0')}-${String(min.getDate()).padStart(2,'0')}`;
   const max = new Date(now); max.setDate(max.getDate() + OT_CREATION_WINDOW_DAYS);
   const maxStr = `${max.getFullYear()}-${String(max.getMonth()+1).padStart(2,'0')}-${String(max.getDate()).padStart(2,'0')}`;
-  return { today, maxStr, maxDays: OT_CREATION_WINDOW_DAYS };
+  return { today, minStr, maxStr, maxDays: OT_CREATION_WINDOW_DAYS, backwardDays: OT_BACKWARD_DAYS };
 }
 
 function _addDays(dateStr, n) {
@@ -160,14 +164,14 @@ function _humanizeUntil(target) {
 
 function _isDateInWindow(dateStr) {
   const w = _otCreationWindow();
-  return dateStr >= w.today && dateStr <= w.maxStr;
+  return dateStr >= w.minStr && dateStr <= w.maxStr;
 }
 
 function _showOutOfWindowToast(dateStr) {
   const w = _otCreationWindow();
-  const isPast = dateStr < w.today;
+  const isPast = dateStr < w.minStr;
   if (isPast) {
-    toast(`📅 ${dateStr} đã qua — DokoKin chỉ tạo OT cho hôm nay trở đi`, 'warning');
+    toast(`📅 ${dateStr} quá cũ — DokoKin chỉ tạo OT ngược tối đa 1 ngày (từ ${w.minStr} trở đi)`, 'warning');
   } else {
     toast(`📅 ${dateStr} vượt cửa sổ 7 ngày — chỉ có thể tạo OT đến ${w.maxStr}`, 'warning');
   }
@@ -235,19 +239,21 @@ function renderOtList() {
   const tbody = document.getElementById('otTableBody');
   const countEl = document.getElementById('otTableCount');
   if (!tbody) return;
-  const todayStr = _todayJSTStr();
-  // Show upcoming first (asc), then recent past (desc, all of them in table)
+  const w = _otCreationWindow();
+  // Treat dates within the creation window (incl. yesterday) as "actionable".
+  // Only dates strictly older than yesterday are "past" for badge/sort purposes.
+  const minStr = w.minStr;
   const upcoming = _otState.requests
-    .filter(o => o.date >= todayStr)
+    .filter(o => o.date >= minStr)
     .sort((a,b) => a.date.localeCompare(b.date) || a.start.localeCompare(b.start));
   const past = _otState.requests
-    .filter(o => o.date < todayStr)
+    .filter(o => o.date < minStr)
     .sort((a,b) => b.date.localeCompare(a.date));
   const all = [...upcoming, ...past];
 
   if (countEl) {
     const upN = upcoming.length, pastN = past.length;
-    countEl.textContent = `${all.length} entr${all.length === 1 ? 'y' : 'ies'} (${upN} upcoming, ${pastN} past)`;
+    countEl.textContent = `${all.length} entr${all.length === 1 ? 'y' : 'ies'} (${upN} actionable, ${pastN} past)`;
   }
 
   if (!all.length) {
@@ -255,7 +261,7 @@ function renderOtList() {
     return;
   }
 
-  tbody.innerHTML = all.map((ot, idx) => _renderOtRow(ot, idx, ot.date < todayStr)).join('');
+  tbody.innerHTML = all.map((ot, idx) => _renderOtRow(ot, idx, ot.date < minStr)).join('');
 }
 
 function _renderOtRow(ot, idx, isPast) {

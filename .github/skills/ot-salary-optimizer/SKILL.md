@@ -213,7 +213,7 @@ This is why 22:00→03:30 is the ideal non-Sunday night shift.
 5. **Max per month**: 75 hours
 6. **Fixed OT allowance (1.3)**: 20,000 yen/month — already included in contract, covers first ~10h of OT
 7. **Over 60H OT**: Night hours over 60h threshold get noted in Remark (line 0.2)
-8. **API create window**: Only within 7-day future (cannot create past dates)
+8. **API create window**: `[today - 1 day, today + 7 days]` — DokoKin allows exactly 1 day backward ("The overtime request only accept for 1 day backward.") plus 7 days forward. Dates older than yesterday → cannot create via API.
 9. **Request date**: requestDate is the START date of OT (even if shift crosses midnight)
 10. **Token expiry**: DokoKin token expires ~48h; Azure refresh token ~90 days
 11. **Timesheet month**: Salary calculation uses timesheet from PREVIOUS month (AddMonths(-1) in code)
@@ -421,8 +421,8 @@ AmountPaid (8) = NetAfterTax - CompanyReceivable(5) + CompanyPayable(6) - Travel
 
 1. **API field typo**: `checkinLongitute` (not longitude)
 2. **Create payload**: MUST be JSON array `[{...}]`, not single object
-3. **7-day window**: Cannot create requests > 7 days in future
-4. **Past dates**: Cannot create requests for past dates via API
+3. **Creation window**: `[today - 1d, today + 7d]`. DokoKin error message: "The overtime request only accept for 1 day backward." Cannot create > 7 days future, cannot create > 1 day in the past.
+4. **Past dates**: Cannot create requests older than yesterday via API (yesterday IS allowed).
 5. **Token exchange**: Must use **form-encoded** (not JSON), module **KINTAI** (not SMS)
 6. **Token expiry**: DokoKin KINTAI token ~48h, Azure access ~1h, Azure refresh ~90 days
 7. **Saturday rate**: Code says 135% but payslip proves 125% — trust the payslip!

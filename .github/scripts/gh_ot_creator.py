@@ -22,7 +22,8 @@ API_BASE = "https://api.fjpservice.com/api/"
 EMPLOYEE_ID = 8883
 APPROVER = "HuyNQ23"
 ACCOUNT = "tanvc"
-CREATION_WINDOW_DAYS = 7
+CREATION_WINDOW_DAYS = 7   # forward: today + 7 days
+BACKWARD_DAYS = 1          # backward: today - 1 day (yesterday allowed by DokoKin)
 
 GIST_ID = "abc2a47c0a396025a72a6580227ff493"
 OT_GIST_FILE = "ot-requests.json"
@@ -475,16 +476,19 @@ def main():
         log(f"Found {len(pending_ot)} planned OT entries (source: {source})")
 
         # Filter: only process entries within the creation window
+        # Window = [today - 1 day, today + 7 days]. DokoKin OT API explicitly
+        # allows 1 day backward ("The overtime request only accept for 1 day
+        # backward.") + 7 days forward.
         actionable = []
         for entry in pending_ot:
             ot_date = date.fromisoformat(entry["date"])
             days_until = (ot_date - today).days
 
-            if days_until < 0:
+            if days_until < -BACKWARD_DAYS:
                 skipped_past += 1
             elif days_until > CREATION_WINDOW_DAYS:
                 outside_items.append(entry)
-                log(f"  {entry['date']}: {days_until} days away, outside {CREATION_WINDOW_DAYS}-day window")
+                log(f"  {entry['date']}: {days_until} days away, outside window (-{BACKWARD_DAYS}..+{CREATION_WINDOW_DAYS})")
             else:
                 actionable.append(entry)
 
@@ -492,7 +496,7 @@ def main():
             log(f"No OT entries within creation window. (past:{skipped_past}, waiting:{len(outside_items)})")
             return
 
-        log(f"{len(actionable)} entries within {CREATION_WINDOW_DAYS}-day window, checking existing...")
+        log(f"{len(actionable)} entries within window (-{BACKWARD_DAYS}..+{CREATION_WINDOW_DAYS} days), checking existing...")
 
         # Get token
         refresh_token = os.environ.get("AZURE_REFRESH_TOKEN")
