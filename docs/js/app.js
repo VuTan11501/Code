@@ -572,6 +572,36 @@ function onNotifBtnClick() {
   toast(p.enabled ? '🔔 Notifications unmuted' : '🔕 Notifications muted');
 }
 
+// ═══════════════════════════════════════════════════
+//  THEME TOGGLE (dark / light)
+// ═══════════════════════════════════════════════════
+function getTheme() {
+  return localStorage.getItem('wf_dash_theme') || 'dark';
+}
+
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.content = theme === 'dark' ? '#09090b' : '#ffffff';
+  const iconEl = document.getElementById('themeIcon');
+  if (iconEl) {
+    iconEl.setAttribute('data-icon', theme === 'dark' ? 'sun' : 'moon');
+    iconEl.removeAttribute('data-icon-rendered');
+    renderIcons(iconEl.parentElement);
+  }
+}
+
+function toggleTheme() {
+  const next = getTheme() === 'dark' ? 'light' : 'dark';
+  localStorage.setItem('wf_dash_theme', next);
+  applyTheme(next);
+}
+
+// Apply saved theme on load
+(function initTheme() {
+  applyTheme(getTheme());
+})();
+
 // Render the Notifications card body (status pill + prefs switches or enable button)
 function renderNotifSettings() {
   const body = document.getElementById('notifCardBody');

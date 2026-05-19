@@ -98,6 +98,7 @@
   color-scheme: light;
 }
 :root { color-scheme: dark; }
+[data-theme="light"] { color-scheme: light; }
 
 /* ─── DISABLE ZOOM (PWA) ─── */
 html { touch-action: manipulation; }
