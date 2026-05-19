@@ -445,14 +445,14 @@ tailwind.config = {
         <!-- Location Settings -->
         <div class="card settings-card">
           <div class="card-header">
-            <div class="card-title"><span data-icon="map-pin" data-size="16"></span> Location Settings</div>
+            <div class="card-title"><span data-icon="mapPin" data-size="16"></span> Location Settings</div>
             <div class="card-description">Configure GPS coordinates for DokoKin checkin/checkout.</div>
           </div>
           <div class="card-content">
             <div class="location-list" id="locationList" style="display:flex;flex-direction:column;gap:12px;">
               <!-- populated dynamically by locations.js -->
             </div>
-            <button class="btn primary mt-3" onclick="openAddLocationModal()" style="width:100%"><span data-icon="map-pin" data-size="14"></span> Add Location</button>
+            <button class="btn primary mt-3" onclick="openAddLocationModal()" style="width:100%"><span data-icon="mapPin" data-size="14"></span> Add Location</button>
             <p class="text-xs text-muted-foreground mt-3 leading-relaxed opacity-70">
               Locations are stored locally. Lat/Lon is sent directly with the API request when dispatching Auto Checkin/Checkout.<br>
               Default locations (Office, Home) cannot be deleted.
