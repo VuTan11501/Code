@@ -38,14 +38,20 @@ Tự động hóa nghiệp vụ kintai (chấm công) FJP DokoKin + báo cáo OT
 ### Frontend dashboard — `docs/`
 | File | Vai trò |
 |---|---|
-| `docs/index.html` | Layout, 3 tab (Dashboard / Schedule / Settings), modals |
-| `docs/js/app.js` | Auth (vault encryption), router `navigate()`, `apiFetch()` (ETag cache), entry-point `showDashboard()` |
-| `docs/js/dashboard.js` | Adaptive polling engine (1s/15s/60s), `refresh()` workflow runs |
+| `docs/index.html` | Layout, 3 tab (Dashboard / Schedule / Settings), modals, **inline theme bootstrap** trong `<head>` để tránh FOUC |
+| `docs/manifest.json` | PWA manifest (name, icons, standalone display, theme_color) — cần thiết để "Add to Home Screen" + biometric chỉ bật trong PWA mode |
+| `docs/js/app.js` | Auth (vault encryption), router `navigate()`, `apiFetch()` (ETag cache), entry-point `showDashboard()`, bootstrap orchestration (Theme.init → biometric → CloudSync) |
+| `docs/js/dashboard.js` | Adaptive polling engine (1s/15s/60s), `refresh()` workflow runs, CloudSync pull on focus/visibility |
 | `docs/js/schedule.js` | CRUD schedule Gist, precision setTimeout dispatcher, location field |
-| `docs/js/settings.js` | PAT/passphrase, Location Settings (GPS) |
-| `docs/js/ot-planner.js` | OT Planner page — CRUD OT requests trong Gist `ot-requests.json`, conflict detect + auto-fix cross-midnight |
-| `docs/js/locations.js` | Built-in locations (`office`, `home`, NEC Tamagawa …) + user-defined |
-| `docs/js/icons.js`, `no-autofill.js` | Tiện ích |
+| `docs/js/settings.js` | PAT/passphrase, Location Settings, CloudSync status, Biometric status, **Theme switcher** (Auto/Light/Dark) |
+| `docs/js/ot-planner.js` | OT Planner — CRUD OT requests trong Gist `ot-requests.json`, conflict detect + auto-fix cross-midnight, **OT Optimizer rev3** (pure-night greedy đạt full 75h) |
+| `docs/js/ot-salary.js` | OT salary calculator (¥/h breakdown, payslip baseline, insurance grades) |
+| `docs/js/locations.js` | Built-in locations + user-defined |
+| **`docs/js/cloud-sync.js`** | Cross-device settings sync via Gist `user-settings.json` — LWW, debounced push, ETag pull, `applyToUI()` re-render hub |
+| **`docs/js/biometric.js`** | WebAuthn Face ID / Touch ID / Windows Hello unlock — 2 tiers (PRF crypto-bound + gate fallback). PWA-only. |
+| **`docs/js/theme.js`** | Light/Dark/Auto theme controller — applies `data-theme` attribute, listens `prefers-color-scheme`, syncs via CloudSync |
+| `docs/js/icons.js`, `no-autofill.js` | Tiện ích (Lucide icon paths + autofill prevention) |
+| `docs/css/style.css` | Single CSS file. `:root` (dark default) + `[data-theme="light"]` block. `--tint` var (255/0) flips white overlays automatically. |
 
 ### Backend logic — `.github/scripts/`
 | File | Vai trò |

@@ -1324,7 +1324,7 @@ Upload payslip-history.json to Gist for full take-home estimate.`;
           <span>Monthly hours</span>
           <span class="ot-budget-row-val">${H(sal.totalHours)} / ${S.MAX_HOURS_PER_MONTH}h</span>
         </div>
-        <div class="ot-progress ${hoursCls}" data-tooltip="Legal max ${S.MAX_HOURS_PER_MONTH}h/month per DokoKin">
+        <div class="ot-progress ${hoursCls}">
           <div class="ot-progress-fill" style="width:${hoursPct}%"></div>
         </div>
       </div>
@@ -1333,7 +1333,7 @@ Upload payslip-history.json to Gist for full take-home estimate.`;
           <span>Night hours (22:00–05:00)</span>
           <span class="ot-budget-row-val">${H(sal.nightHours)} / ${S.NIGHT_REMARK_THRESHOLD}h</span>
         </div>
-        <div class="ot-progress ${nightCls}" data-tooltip="≥${S.NIGHT_REMARK_THRESHOLD}h → 'Over 60H OT' remark on payslip">
+        <div class="ot-progress ${nightCls}">
           <div class="ot-progress-fill" style="width:${nightPct}%"></div>
         </div>
       </div>
