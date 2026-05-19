@@ -378,7 +378,8 @@ function renderScheduleCalendar(gistEntries) {
         const tip = p.once
           ? `${p.name} · One-time · ${p.dateStr} ${p.time} JST`
           : `${p.name}${p.enabled ? '' : ' (disabled)'}`;
-        html += `<span class="schedule-pip ${p.typeKey}${dimmed}${onceCls}" data-entry="${p.entryIdx}" data-tooltip="${tip}">${p.name.split(' ').slice(-1)[0]}</span>`;
+        const txt = p.name.split(' ').slice(-1)[0];
+        html += `<span class="schedule-pip ${p.typeKey}${dimmed}${onceCls}" data-entry="${p.entryIdx}" data-tooltip="${tip}"><span class="pip-fill"></span><span class="pip-text">${txt}</span></span>`;
       }
       html += '</div>';
     }
@@ -405,13 +406,18 @@ function renderScheduleCalendar(gistEntries) {
       _pressStartX = e.clientX;
       _pressStartY = e.clientY;
       try { pip.setPointerCapture(e.pointerId); } catch {}
+      pip.classList.add('pressing');           // start hold-to-confirm fill animation
       _pressTimer = setTimeout(() => {
         _pressTimer = null;
+        // Fill animation finished → commit action. Leave .pressing on briefly
+        // so the bar stays "full" until the re-render swaps the pip state.
         if (isOnce) {
           openPipActions(entryIdx, pip);     // long-press fallback for once entries
         } else {
           toggleRecurringEnabled(entryIdx, pip);
         }
+        // Defer class removal so the user sees the completed fill flash
+        setTimeout(() => pip.classList.remove('pressing'), 120);
       }, 550);
     });
     pip.addEventListener('pointermove', (e) => {
@@ -421,17 +427,20 @@ function renderScheduleCalendar(gistEntries) {
       if (dx > PRESS_MOVE_THRESHOLD || dy > PRESS_MOVE_THRESHOLD) {
         _pressMoved = true;
         if (_pressTimer) { clearTimeout(_pressTimer); _pressTimer = null; }
+        pip.classList.remove('pressing');
       }
     });
     pip.addEventListener('pointerup', (e) => {
       e.stopPropagation();
       if (_pressTimer) {
         clearTimeout(_pressTimer); _pressTimer = null;
+        pip.classList.remove('pressing');     // user released before fill completed
         if (!_pressMoved) openPipActions(entryIdx, pip);
       }
     });
     pip.addEventListener('pointercancel', () => {
       if (_pressTimer) { clearTimeout(_pressTimer); _pressTimer = null; }
+      pip.classList.remove('pressing');
     });
     // Prevent native iOS callout / context menu from hijacking long-press
     pip.addEventListener('contextmenu', (e) => e.preventDefault());
