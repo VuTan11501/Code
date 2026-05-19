@@ -937,10 +937,10 @@ tailwind.config = {
       <div class="grid grid-cols-[1fr_auto] gap-3 items-end mb-4">
         <div class="field">
           <label class="field-label text-xs text-muted-foreground font-medium block mb-1" for="otOptTarget">Target income (¥)</label>
-          <input type="number" class="input w-full font-mono" id="otOptTarget" placeholder="e.g. 150000" min="0" step="10000">
+          <input type="number" class="input w-full font-mono" id="otOptTarget" placeholder="e.g. 150000" min="0" step="10000" disabled>
         </div>
         <label class="flex items-center gap-2 text-sm pb-2">
-          <input type="checkbox" id="otOptMax" onchange="_toggleOtOptTarget()"> Max budget
+          <input type="checkbox" id="otOptMax" checked onchange="_toggleOtOptTarget()"> Max budget
         </label>
       </div>
       <button class="btn primary w-full mb-3" onclick="runOtOptimizer()"><span data-icon="sparkles" data-size="14"></span> Suggest schedule</button>
