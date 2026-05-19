@@ -239,7 +239,7 @@ html { touch-action: manipulation; }
   display: grid;
   grid-template-columns: 12px minmax(0, 1fr) auto;
   align-items: center; gap: 10px;
-  padding: 10px 12px; border-radius: var(--radius-md);
+  padding: 10px 12px;
   font-size: var(--fs-sm); cursor: pointer;
   transition: background var(--duration-fast);
 }
