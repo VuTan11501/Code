@@ -198,11 +198,11 @@ html { touch-action: manipulation; }
   transition: all var(--duration-fast);
   min-height: 36px; touch-action: manipulation; user-select: none;
 }
-.btn:hover { background: color-mix(in srgb, var(--secondary), rgba(var(--tint),1) 8%); border-color: rgba(var(--tint),0.15); }
+.btn:hover { background: var(--muted); border-color: rgba(var(--tint),0.15); }
 .btn:active { opacity: 0.85; transform: scale(0.97); }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; pointer-events: none; }
 .btn.primary { background: var(--green); border-color: var(--green); color: #fff; font-weight: 600; }
-.btn.primary:hover { background: #16a34a; border-color: #16a34a; }
+.btn.primary:hover { background: color-mix(in srgb, var(--green) 85%, black); border-color: color-mix(in srgb, var(--green) 85%, black); }
 .btn.danger { background: var(--red-subtle); border-color: rgba(239,68,68,0.3); color: var(--red); }
 .btn.danger:hover { background: rgba(239,68,68,0.15); border-color: var(--red); }
 .btn.btn-ghost { background: transparent; border-color: transparent; color: var(--muted-foreground); }
@@ -1724,7 +1724,7 @@ input[type="time"], input[type="date"], input[type="datetime-local"] {
   position: relative;
   border-radius: var(--radius-sm);
   overflow: hidden;
-  background: #050505;
+  background: var(--card);
 }
 .scroll-area-viewport {
   width: 100%;
