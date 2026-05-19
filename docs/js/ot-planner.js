@@ -1894,55 +1894,88 @@ function openPayslipDetail(monthKey, isEstimate) {
   const WR = window.OT_SALARY.DEDUCTIONS.WELFARE_RATE;
   const UR = window.OT_SALARY.DEDUCTIONS.UNEMPLOYMENT_RATE;
 
-  html += section('Contract base', [
-    { label: 'Basic salary A', value: gb.basic_a_paid ?? c.basic_a },
-    { label: 'Basic salary B (Life design + DC)', value: gb.basic_b_paid ?? c.basic_b },
-    { label: 'Fixed allowance', value: gb.fixed_allowance_paid ?? c.fixed_allowance },
-    c.travel_allowance ? { label: 'Travel allowance', value: c.travel_allowance } : { label:'', value:null },
-    { label: `Basic index (work ratio)`, value: (w.basic_index ?? 1).toFixed(2) },
-    { label: 'Standard insurance grade (標準報酬月額)', value: stdIns },
+  // ── Section 1: Work / Attendance ──
+  html += section('Work / Attendance (勤怠)', [
+    { label: 'Standard hours (所定労働)', value: w.standard_hours ? `${w.standard_hours}h` : null },
+    { label: 'Month hours worked (実働)', value: w.month_hours ? `${w.month_hours}h` : null },
+    { label: 'Basic index (出勤率)', value: (w.basic_index ?? 1).toFixed(2) },
+    { label: 'OT hours (残業)', value: w.ot_hours != null ? `${(w.ot_hours).toFixed(2)}h` : null },
+    { label: 'Sunday hours (日曜)', value: w.sunday_hours ? `${(w.sunday_hours).toFixed(2)}h` : null },
+    { label: 'Night hours 22:00–05:00 (深夜)', value: w.night_hours ? `${(w.night_hours).toFixed(2)}h` : null },
+    { label: 'Other OT hours', value: w.other_ot_hours ? `${(w.other_ot_hours).toFixed(2)}h` : null },
+    { label: 'Hourly wage (時給単価)', value: c.hourly_wage ? `¥${c.hourly_wage.toLocaleString()}` : null },
   ], null, null, null);
 
-  html += section('OT income', [
+  // ── Section 2: Contract base + gross breakdown ──
+  const contractLines = [
+    { label: 'Basic salary A (基本給A)', value: gb.basic_a_paid ?? c.basic_a },
+    { label: 'Basic salary B (基本給B / DC)', value: gb.basic_b_paid ?? c.basic_b },
+    { label: 'Fixed allowance (固定残業手当)', value: gb.fixed_allowance_paid ?? c.fixed_allowance },
+  ];
+  if (c.housing_allowance) contractLines.push({ label: 'Housing allowance (住宅手当)', value: c.housing_allowance });
+  if (c.family_allowance) contractLines.push({ label: 'Family allowance (家族手当)', value: c.family_allowance });
+  if (c.other_allowance) contractLines.push({ label: 'Other allowance', value: c.other_allowance });
+  contractLines.push({ label: 'Travel allowance (通勤手当)', value: c.travel_allowance ?? 0 });
+  html += section('Earnings — contract (支給)', contractLines, null, null, null);
+
+  // ── Section 3: OT income ──
+  const otLines = [
     { label: `Base OT 125% — ${(w.ot_hours||0).toFixed(2)}h`, value: gb.ot_allowance },
-    w.sunday_hours ? { label: `Sunday +10% — ${(w.sunday_hours||0).toFixed(2)}h`, value: gb.sunday_ot_allowance } : { label:'', value:null },
-    w.night_hours ? { label: `Night +25% — ${(w.night_hours||0).toFixed(2)}h`, value: gb.night_allowance } : { label:'', value:null },
-  ], 'Gross income', slip.gross, 'is-income');
+  ];
+  if (w.sunday_hours) otLines.push({ label: `Sunday +10% — ${(w.sunday_hours).toFixed(2)}h`, value: gb.sunday_ot_allowance });
+  if (w.night_hours) otLines.push({ label: `Night +25% — ${(w.night_hours).toFixed(2)}h`, value: gb.night_allowance });
+  if (gb.other_ot_allowance) otLines.push({ label: 'Other OT allowance', value: gb.other_ot_allowance });
+  if (gb.other_income) otLines.push({ label: 'Other income', value: gb.other_income });
+  html += section('Earnings — OT (残業手当)', otLines, 'Gross income (総支給額)', slip.gross, 'is-income');
 
-  html += section('Deductions — insurance', [
-    { label: `Health insurance (${(HR*100).toFixed(2)}% × 標準報酬 ${F(stdIns)})`, value: d.health_insurance },
-    { label: `Welfare (pension) insurance (${(WR*100).toFixed(2)}% × 標準報酬 ${F(stdIns)})`, value: d.welfare_insurance },
-    { label: `Unemployment insurance (${(UR*100).toFixed(1)}% × Gross)`, value: d.unemployment_insurance },
-  ], 'Total insurance', d.insurance_total, 'is-deduction');
+  // ── Section 4: Deductions — insurance ──
+  html += section('Deductions — insurance (控除・社保)', [
+    { label: `Health ins. (健康保険 ${(HR*100).toFixed(2)}% × ¥${stdIns.toLocaleString()})`, value: d.health_insurance },
+    { label: `Welfare ins. (厚生年金 ${(WR*100).toFixed(2)}% × ¥${stdIns.toLocaleString()})`, value: d.welfare_insurance },
+    { label: `Unemployment ins. (雇用保険 ${(UR*100).toFixed(1)}% × Gross)`, value: d.unemployment_insurance },
+  ], 'Total insurance (社保合計)', d.insurance_total, 'is-deduction');
 
-  html += section('Deductions — taxes', [
-    { label: `Taxable income (= Gross − Insurance − Travel allowance)`, value: d.taxable_income },
-    { label: 'Income tax (源泉徴収月額表 甲欄)', value: d.income_tax },
-    { label: 'Resident tax (住民税, fixed prev-year basis)', value: d.resident_tax },
-  ], 'Total to government', d.total_payable_to_gov, 'is-deduction');
+  // ── Section 5: Deductions — taxes ──
+  html += section('Deductions — taxes (控除・税)', [
+    { label: 'Taxable income (課税対象額)', value: d.taxable_income },
+    { label: 'Income tax (源泉徴収 甲欄)', value: d.income_tax },
+    { label: 'Resident tax (住民税)', value: d.resident_tax },
+  ], 'Total to government (公租公課)', d.total_payable_to_gov, 'is-deduction');
 
+  // ── Section 6: Subtotal — net after tax ──
   html += `<div class="payslip-section">
     <div class="payslip-row payslip-subtotal">
-      <span class="payslip-label">= Net after tax (Gross − Insurance − Taxes)</span>
+      <span class="payslip-label">= Net after tax (差引支給額)</span>
       <span class="payslip-val">${F(slip.net_after_tax)}</span>
     </div>
   </div>`;
 
-  // Company receivables
+  // ── Section 7: Company receivables ──
   if (cr && (cr.total || (cr.items && cr.items.length))) {
     const items = (cr.items || []).map(it => ({ label: it.label || `Item ${it.sub}`, value: it.value }));
-    html += section('Company receivables (rent, fees…)', items, 'Total receivables', cr.total || 0, 'is-deduction');
+    html += section('Company receivables (立替金控除)', items, 'Total receivables', cr.total || 0, 'is-deduction');
   }
 
+  // ── Section 8: Company payable (if any) ──
+  if (slip.company_payable) {
+    html += `<div class="payslip-section">
+      <div class="payslip-row"><span class="payslip-label">Company payable (会社立替金)</span><span class="payslip-val">${F(slip.company_payable)}</span></div>
+    </div>`;
+  }
+
+  // ── Grand total ──
   const crTotal = (cr && cr.total) ? cr.total : 0;
   html += `<div class="payslip-section payslip-final">
     <div class="payslip-row payslip-grand-total">
-      <span class="payslip-label">${ICON('wallet', 14)} NET</span>
+      <span class="payslip-label">${ICON('wallet', 14)} Take-home (振込額)</span>
       <span class="payslip-val">${F(slip.take_home)}</span>
     </div>
     <div class="payslip-formula">
-      NET = Gross − Insurance − Income tax − Resident tax − Company receivables<br>
+      振込額 = 総支給額 − 社保 − 所得税 − 住民税 − 立替金<br>
       <span class="payslip-formula-nums">${F(slip.gross)} − ${F(d.insurance_total)} − ${F(d.income_tax)} − ${F(d.resident_tax)} − ${F(crTotal)} = <strong>${F(slip.take_home)}</strong></span>
+    </div>
+    <div class="payslip-formula" style="margin-top:4px;opacity:0.7">
+      標準報酬月額: ¥${stdIns.toLocaleString()}
     </div>
   </div>`;
 
