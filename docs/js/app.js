@@ -194,12 +194,7 @@ function showDashboard() {
     window.CloudSync.register('wf_dash_notif_prefs',    'Notification preferences',  'notif_prefs');
     window.CloudSync.register('sched_pip_filter_v1',    'Schedule filter',           'schedule_filter');
     window.CloudSync.pull().then(r => {
-      if (r && r.applied) {
-        // Tell affected modules to re-render with new values
-        if (typeof renderLocationsList === 'function') { try { renderLocationsList(); } catch {} }
-        if (typeof renderOtTab === 'function')         { try { renderOtTab();         } catch {} }
-        if (typeof renderNotifSettings === 'function') { try { renderNotifSettings(); } catch {} }
-      }
+      if (r && r.applied) window.CloudSync.applyToUI();
     });
   }
 }

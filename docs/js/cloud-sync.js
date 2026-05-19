@@ -211,5 +211,23 @@ window.CloudSync = (function () {
     lastPushedAt: () => _lastPushedAt,
     deviceId: _deviceId,
     listRegistered: () => REGISTERED.slice(),
+    // Convenience: re-render UI bits that depend on synced settings.
+    // Call after a successful pull on the active page.
+    applyToUI: function () {
+      const calls = [
+        'renderLocationList',        // locations.js
+        'renderNotifSettings',       // app.js
+        'renderOtBudget',            // ot-planner.js (uses ot_profile)
+        'renderOtStats',             // ot-planner.js
+        'renderOtCalendar',          // ot-planner.js (also calls budget+stats)
+        'renderOtList',              // ot-planner.js
+        'renderScheduleTable',       // schedule.js (pip filter applies here)
+        'renderScheduleCalendar',    // schedule.js
+      ];
+      for (const name of calls) {
+        const fn = window[name];
+        if (typeof fn === 'function') { try { fn(); } catch (e) { console.warn('[CloudSync] re-render', name, e); } }
+      }
+    },
   };
 })();

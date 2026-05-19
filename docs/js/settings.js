@@ -40,9 +40,7 @@ async function cloudSyncPullNow() {
   else if (r.applied) toast(`✅ Synced ${r.applied} settings from ${r.from}`);
   else if (r.empty) toast('☁️ No remote settings yet — push first to seed');
   else toast('✓ Already up to date');
-  if (typeof renderLocationsList === 'function') { try { renderLocationsList(); } catch {} }
-  if (typeof renderOtTab === 'function')         { try { renderOtTab();         } catch {} }
-  if (typeof renderNotifSettings === 'function') { try { renderNotifSettings(); } catch {} }
+  if (typeof window.CloudSync?.applyToUI === 'function') window.CloudSync.applyToUI();
   renderCloudSyncStatus();
 }
 
