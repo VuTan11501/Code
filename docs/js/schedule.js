@@ -1072,7 +1072,7 @@ function renderScheduledQueue(entries) {
         ${nextInfo}
       </div>
       <div class="sched-item-actions">
-        ${!isOnce ? `<div class="${toggleCls}" role="switch" aria-checked="${enabled}" tabindex="0" onclick="toggleScheduleEntry(${i})" data-tooltip="${enabled ? 'Disable' : 'Enable'}"></div>` : ''}
+        <div class="${toggleCls}" role="switch" aria-checked="${enabled}" tabindex="0" onclick="toggleScheduleEntryEnabled(${i})" data-tooltip="${enabled ? 'Disable' : 'Enable'}"></div>
         <button class="btn danger sm" onclick="deleteScheduledRun(${i})" data-tooltip="Delete">${ICON('trash', 14)}</button>
       </div>
     </div>`;
