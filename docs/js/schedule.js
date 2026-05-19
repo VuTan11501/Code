@@ -1266,17 +1266,16 @@ function renderScheduledQueue(entries) {
     const enabled = e.enabled !== false;
     let nextFireMs = null;
     let bucket = 2; // default = no-fire tail
+    let ranToday = false;
     if (enabled) {
       if (e.type === 'once' && e.run_at) {
         nextFireMs = new Date(e.run_at).getTime();
         bucket = isNaN(nextFireMs) ? 2 : (nextFireMs < nowMs ? 0 : 1);
       } else if (e.type === 'recurring') {
-        // Check if today's slot already fired or passed → push to next occurrence
         const r = e.recurrence || {};
         const [h, m] = (r.time || '00:00').split(':').map(Number);
         const schedToday = new Date(nowJST);
         schedToday.setHours(h, m, 0, 0);
-        let ranToday = false;
         if (e.last_run) {
           const lrJST = new Date(new Date(e.last_run).toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
           ranToday = lrJST.toDateString() === nowJST.toDateString();
@@ -1284,16 +1283,15 @@ function renderScheduledQueue(entries) {
         if (!ranToday && nowJST > schedToday) {
           bucket = 0; // overdue (today's slot passed but not yet run)
           nextFireMs = schedToday.getTime();
-        } else if (ranToday) {
-          bucket = 2; // done today
-          nextFireMs = computeEntryNextFire(e, nowJST, nowMs);
         } else {
+          // Either ranToday (next fire = tomorrow+) OR not-ran-but-future (next fire = today).
+          // Both sort as upcoming so daily entries don't get buried under weekly ones.
           nextFireMs = computeEntryNextFire(e, nowJST, nowMs);
           bucket = nextFireMs ? 1 : 2;
         }
       }
     }
-    return { ...item, enabled, nextFireMs, bucket };
+    return { ...item, enabled, nextFireMs, bucket, ranToday };
   });
 
   annotated.sort((a, b) => {
@@ -1303,7 +1301,7 @@ function renderScheduledQueue(entries) {
     return am - bm;
   });
 
-  queue.innerHTML = annotated.map(({ e: entry, origIdx: i, enabled, nextFireMs, bucket }) => {
+  queue.innerHTML = annotated.map(({ e: entry, origIdx: i, enabled, nextFireMs, bucket, ranToday }) => {
     const wf = WORKFLOWS.find(w => w.file === entry.workflow);
     const wfName = wf?.name || entry.workflow.replace('.yml', '');
     const iconName = wf?.iconName || 'settings';
