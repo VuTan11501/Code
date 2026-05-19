@@ -176,6 +176,7 @@ function _showOutOfWindowToast(dateStr) {
 function renderOtCalendar() {
   const grid = document.getElementById('otCalendar');
   if (!grid) return;
+  renderOtStats();
   const y = _otState.viewYear, m = _otState.viewMonth;
   const monthLabel = document.getElementById('otMonthLabel');
   const monthName = new Date(y, m, 1).toLocaleString('en-US', { month: 'long', year: 'numeric' });
@@ -725,4 +726,64 @@ async function syncOtWithDokoKin() {
       btn.innerHTML = origHtml;
     }
   }
+}
+// ─── Stats bar (mirrors Schedule tab's schedule-stats pattern) ───
+function renderOtStats() {
+  const host = document.getElementById('otStats');
+  if (!host) return;
+  const y = _otState.viewYear;
+  const m = _otState.viewMonth;
+  const monthPrefix = `${y}-${String(m + 1).padStart(2, '0')}-`;
+  const todayStr = _todayJSTStr();
+
+  const monthEntries = (_otState.requests || []).filter(o => o.date && o.date.startsWith(monthPrefix));
+  const totalHours = monthEntries.reduce((s, o) => s + (Number(o.hours) || 0), 0);
+  const createdCount = monthEntries.filter(o => !!o.kintai_created_at).length;
+  const monthTotal = monthEntries.length;
+
+  // Next OT: nearest upcoming entry globally (start datetime in JST)
+  const now = jstNow();
+  let nextEntry = null;
+  let nextMs = Infinity;
+  for (const o of (_otState.requests || [])) {
+    if (!o.date || !o.start) continue;
+    if (o.date < todayStr) continue;
+    const [hh, mm] = o.start.split(':').map(Number);
+    const [yy, mo, dd] = o.date.split('-').map(Number);
+    const dt = new Date(yy, mo - 1, dd, hh || 0, mm || 0, 0);
+    const delta = dt - now;
+    if (delta > 0 && delta < nextMs) { nextMs = delta; nextEntry = o; }
+  }
+  const nextStr = nextEntry ? _formatOtCountdown(nextMs) : '—';
+  const nextTooltip = nextEntry
+    ? `Next: ${nextEntry.date} ${nextEntry.start}→${nextEntry.end} (${nextEntry.hours}h)`
+    : 'No upcoming OT';
+
+  // Format hours nicely (e.g. 12h, 7.5h)
+  const hoursDisplay = totalHours === Math.floor(totalHours)
+    ? `${totalHours}h`
+    : `${totalHours.toFixed(1)}h`;
+
+  const createdRatio = monthTotal > 0 ? `${createdCount}/${monthTotal}` : '0/0';
+
+  host.innerHTML = `
+    <div class="stat-chip" data-tooltip="OT entries in this month view"><span class="stat-num">${monthTotal}</span><span class="stat-lbl">entries</span></div>
+    <div class="stat-chip" data-tooltip="Total OT hours in this month view"><span class="stat-num">${hoursDisplay}</span><span class="stat-lbl">hours</span></div>
+    <div class="stat-chip" data-tooltip="Already created in DokoKin / total this month"><span class="stat-num">${createdRatio}</span><span class="stat-lbl">created</span></div>
+    <div class="stat-chip stat-chip-next" data-tooltip="${_esc(nextTooltip)}"><span class="stat-num">${nextStr}</span><span class="stat-lbl">next OT</span></div>
+  `;
+}
+
+function _formatOtCountdown(ms) {
+  if (!ms || ms <= 0) return '—';
+  const totalMin = Math.round(ms / 60000);
+  if (totalMin < 60) return `${totalMin}m`;
+  const h = Math.floor(totalMin / 60);
+  if (h < 24) {
+    const rm = totalMin % 60;
+    return rm ? `${h}h ${rm}m` : `${h}h`;
+  }
+  const d = Math.floor(h / 24);
+  const rh = h % 24;
+  return rh ? `${d}d ${rh}h` : `${d}d`;
 }
