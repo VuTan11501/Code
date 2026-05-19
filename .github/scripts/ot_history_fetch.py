@@ -22,8 +22,57 @@ from gh_ot_creator import (  # type: ignore
     JST, API_BASE, GIST_ID, OT_GIST_FILE,
     log, http_post,
     refresh_azure_token, get_kintai_token,
-    search_ot_requests,
+    api_headers,
 )
+
+
+def search_ot_requests_verbose(token, year, month):
+    """Like gh_ot_creator.search_ot_requests but logs raw response on empty/error
+    so we can diagnose why old months return no data.
+    """
+    last_day = monthrange(year, month)[1]
+    status, data = http_post(
+        API_BASE + "otrequest/search",
+        json_data={
+            "Status": 0,
+            "FromDate": f"{year}-{month:02d}-01",
+            "ToDate": f"{year}-{month:02d}-{last_day}",
+            "IsApproval": False,
+        },
+        headers=api_headers(token),
+    )
+    if status == 200 and isinstance(data, list):
+        return data, status
+    snippet = json.dumps(data)[:200] if not isinstance(data, str) else str(data)[:200]
+    log(f"  ⚠ {year}-{month:02d} search: HTTP {status} type={type(data).__name__} body={snippet}")
+    return [], status
+
+
+def fetch_timesheet_aggregate(token, year, month, account="tanvc"):
+    """Fetch monthly timesheet for cross-validation with payslip 2.4/2.5/2.6.
+    Returns dict with overtimeHours / nightWorkingHours / oTRequestHours, or None.
+    """
+    url = f"{API_BASE}timesheet/{account}/{year}/{month}"
+    req = urllib.request.Request(url, headers=api_headers(token), method="GET")
+    try:
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            data = json.loads(resp.read() or b"{}")
+        if not isinstance(data, dict):
+            return None
+        return {
+            "year": year,
+            "month": month,
+            "standardWorkingHours": data.get("standardWorkingHours"),
+            "overtimeHours": data.get("overtimeHours"),
+            "nightWorkingHours": data.get("nightWorkingHours"),
+            "oTRequestHours": data.get("oTRequestHours"),
+            "sundayWorkingHours": data.get("sundayWorkingHours"),
+            "saturdayWorkingHours": data.get("saturdayWorkingHours"),
+            "holidayWorkingHours": data.get("holidayWorkingHours"),
+        }
+    except Exception as e:
+        log(f"  ⚠ {year}-{month:02d} timesheet: {e}")
+        return None
 
 
 def _hhmm(iso_dt: str) -> str:
@@ -187,10 +236,27 @@ def _merge(existing: list, fetched: list) -> tuple[int, int]:
     return updated, added
 
 
+def _clean_seed_entries(arr: list) -> int:
+    """Remove pre-existing mock/seed entries (ids like 'ot_seed*')."""
+    removed = 0
+    keep = []
+    for e in arr:
+        if isinstance(e, dict) and isinstance(e.get("id"), str) and e["id"].startswith("ot_seed"):
+            removed += 1
+            continue
+        keep.append(e)
+    arr.clear()
+    arr.extend(keep)
+    return removed
+
+
 def main():
     now = datetime.now(JST)
-    months_back = int(os.environ.get("MONTHS_BACK", "12"))
-    log(f"OT History Fetch — {months_back} months back, ending {now:%Y-%m}")
+    months_back = int(os.environ.get("MONTHS_BACK", "24"))
+    clean_seeds = os.environ.get("CLEAN_SEEDS", "true").lower() in ("1", "true", "yes")
+    fetch_ts = os.environ.get("FETCH_TIMESHEET", "true").lower() in ("1", "true", "yes")
+    log(f"OT History Fetch — {months_back} months back, ending {now:%Y-%m} "
+        f"(clean_seeds={clean_seeds}, fetch_timesheet={fetch_ts})")
 
     refresh_token = os.environ.get("AZURE_REFRESH_TOKEN")
     if not refresh_token:
@@ -216,14 +282,34 @@ def main():
     months.reverse()
 
     fetched_all: list[dict] = []
+    timesheets: list[dict] = []
+    first_data_month = None
+    last_data_month = None
     for (yy, mm) in months:
-        recs = search_ot_requests(kt, yy, mm)
+        recs, http = search_ot_requests_verbose(kt, yy, mm)
         normed = [_normalize_dokokin_record(r) for r in recs]
         normed = [n for n in normed if n]
-        log(f"  {yy}-{mm:02d}: {len(recs)} raw → {len(normed)} normalized")
+        marker = "·" if not normed else "✓"
+        log(f"  {marker} {yy}-{mm:02d}: HTTP {http}, {len(recs)} raw → {len(normed)} normalized")
+        if normed:
+            if first_data_month is None:
+                first_data_month = f"{yy}-{mm:02d}"
+            last_data_month = f"{yy}-{mm:02d}"
         fetched_all.extend(normed)
 
-    log(f"Total fetched from DokoKin: {len(fetched_all)}")
+        if fetch_ts:
+            ts = fetch_timesheet_aggregate(kt, yy, mm)
+            if ts and any(v for v in [ts.get("overtimeHours"), ts.get("nightWorkingHours")]):
+                log(f"      timesheet: OT={ts.get('overtimeHours')}h "
+                    f"Night={ts.get('nightWorkingHours')}h "
+                    f"Sun={ts.get('sundayWorkingHours')}h "
+                    f"Sat={ts.get('saturdayWorkingHours')}h "
+                    f"OTreq={ts.get('oTRequestHours')}h")
+                timesheets.append(ts)
+
+    log(f"Total fetched from DokoKin: {len(fetched_all)} OT records, "
+        f"{len(timesheets)} timesheets")
+    log(f"Data range covered: {first_data_month or '—'} → {last_data_month or '—'}")
 
     log("Reading Gist…")
     wrapper, arr = _read_gist_ot_file(pat)
@@ -232,13 +318,26 @@ def main():
         arr = []
         wrapper = None
 
+    seeds_removed = 0
+    if clean_seeds:
+        seeds_removed = _clean_seed_entries(arr)
+        if seeds_removed:
+            log(f"🧹 Removed {seeds_removed} seed/mock entries")
+
     before = len(arr)
     updated, added = _merge(arr, fetched_all)
-    log(f"Merge: existing={before}, updated={updated}, added={added}, new total={len(arr)}")
+    log(f"Merge: existing={before}, updated={updated}, added={added}, "
+        f"seeds_removed={seeds_removed}, new total={len(arr)}")
 
-    if updated == 0 and added == 0:
+    # Save timesheets into wrapper (so dashboard can show payslip-aligned aggregates)
+    if timesheets:
+        if wrapper is None:
+            wrapper = {"requests": arr}
+        wrapper["timesheets"] = timesheets
+        wrapper["timesheets_fetched_at"] = datetime.now(JST).isoformat(timespec="seconds")
+
+    if updated == 0 and added == 0 and seeds_removed == 0 and not timesheets:
         log("No changes to write.")
-        # Still rotate token if needed
         if new_refresh != refresh_token:
             _emit_token_rotation(new_refresh)
         return

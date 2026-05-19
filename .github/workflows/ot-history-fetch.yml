@@ -10,7 +10,15 @@ on:
       months_back:
         description: "How many months back to fetch (incl. current month)"
         required: false
-        default: "12"
+        default: "24"
+      clean_seeds:
+        description: "Remove ot_seed* mock entries from Gist"
+        required: false
+        default: "true"
+      fetch_timesheet:
+        description: "Also fetch monthly timesheet aggregates for payslip cross-check"
+        required: false
+        default: "true"
 
 permissions:
   contents: read
@@ -40,6 +48,8 @@ jobs:
           AZURE_REFRESH_TOKEN: ${{ secrets.AZURE_REFRESH_TOKEN }}
           GH_PAT: ${{ secrets.GH_PAT }}
           MONTHS_BACK: ${{ inputs.months_back }}
+          CLEAN_SEEDS: ${{ inputs.clean_seeds }}
+          FETCH_TIMESHEET: ${{ inputs.fetch_timesheet }}
         run: python .github/scripts/ot_history_fetch.py
 
       - name: Update secret if token rotated
