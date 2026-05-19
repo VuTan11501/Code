@@ -526,6 +526,28 @@ tailwind.config = {
           </div>
         </div>
 
+        <!-- Cross-device Sync -->
+        <div class="card settings-card">
+          <div class="card-header">
+            <div class="card-title"><span data-icon="refresh" data-size="16"></span> Cross-device Sync</div>
+            <div class="card-description">Locations, OT profile, notification prefs &amp; schedule filters are synced across devices via Gist. PAT vault stays local (security).</div>
+          </div>
+          <div class="card-content">
+            <div id="cloudSyncStatus" class="text-xs text-muted-foreground" style="line-height:1.6;margin-bottom:12px">
+              <!-- populated by renderCloudSyncStatus() -->
+              Sync status loading...
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn btn-secondary" onclick="cloudSyncPullNow()" data-tooltip="Fetch latest from cloud (overrides local if remote is newer)"><span data-icon="download" data-size="14"></span> Pull now</button>
+              <button class="btn btn-secondary" onclick="cloudSyncPushNow()" data-tooltip="Upload current local settings to cloud immediately"><span data-icon="upload" data-size="14"></span> Push now</button>
+            </div>
+            <p class="text-xs text-muted-foreground mt-3 leading-relaxed opacity-70">
+              Auto-pull on dashboard unlock + tab focus. Auto-push debounced 3s after any settings change. Conflict policy: <strong>last-write-wins</strong> on timestamp.<br>
+              <strong>Recommended</strong>: convert the underlying Gist (<code>abc2a47c…</code>) to <em>secret</em> via gist.github.com to hide salary data from public listings.
+            </p>
+          </div>
+        </div>
+
         <!-- About -->
         <div class="card settings-card">
           <div class="card-header">
@@ -894,12 +916,13 @@ tailwind.config = {
 <!-- Scripts (order matters) -->
 <script src="js/icons.js?v=40"></script>
 <script src="js/no-autofill.js?v=26"></script>
-<script src="js/locations.js?v=26"></script>
-<script src="js/app.js?v=27"></script>
-<script src="js/dashboard.js?v=26"></script>
-<script src="js/schedule.js?v=26"></script>
+<script src="js/locations.js?v=27"></script>
+<script src="js/cloud-sync.js?v=1"></script>
+<script src="js/app.js?v=28"></script>
+<script src="js/dashboard.js?v=27"></script>
+<script src="js/schedule.js?v=27"></script>
 <script src="js/ot-salary.js?v=37"></script>
-<script src="js/ot-planner.js?v=47"></script>
-<script src="js/settings.js?v=26"></script>
+<script src="js/ot-planner.js?v=48"></script>
+<script src="js/settings.js?v=27"></script>
 </body>
 </html>

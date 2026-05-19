@@ -1344,6 +1344,7 @@ function _otGetProfile() {
 
 function _otSaveProfile(p) {
   try { localStorage.setItem(OT_PROFILE_KEY, JSON.stringify(p)); } catch {}
+  if (window.CloudSync) window.CloudSync.markDirty();
 }
 
 // ─── Templates ───

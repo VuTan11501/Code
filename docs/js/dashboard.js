@@ -73,11 +73,30 @@ document.addEventListener('visibilitychange', () => {
     updateLiveIndicator('active', pollInterval);
     refresh();
     schedulePoll();
+    // Pull settings from cloud — another device may have edited while we were away
+    if (window.CloudSync) {
+      window.CloudSync.pull().then(r => {
+        if (r && r.applied) {
+          if (typeof renderLocationsList === 'function') { try { renderLocationsList(); } catch {} }
+          if (typeof renderOtTab === 'function')         { try { renderOtTab();         } catch {} }
+          if (typeof renderNotifSettings === 'function') { try { renderNotifSettings(); } catch {} }
+        }
+      });
+    }
   }
 });
 
 window.addEventListener('focus', () => {
   if (sessionToken && !isPolling) refresh();
+  if (sessionToken && window.CloudSync) {
+    window.CloudSync.pull().then(r => {
+      if (r && r.applied) {
+        if (typeof renderLocationsList === 'function') { try { renderLocationsList(); } catch {} }
+        if (typeof renderOtTab === 'function')         { try { renderOtTab();         } catch {} }
+        if (typeof renderNotifSettings === 'function') { try { renderNotifSettings(); } catch {} }
+      }
+    });
+  }
 });
 
 // Detect status changes

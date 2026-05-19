@@ -34,6 +34,7 @@ function loadCustomLocations() {
 
 function saveCustomLocations(obj) {
   localStorage.setItem(LOCATIONS_KEY, JSON.stringify(obj));
+  if (window.CloudSync) window.CloudSync.markDirty();
 }
 
 function getAllLocations() {

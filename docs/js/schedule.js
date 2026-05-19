@@ -217,7 +217,7 @@ const PIP_TYPES = [
 function _loadPipFilter() {
   try { return JSON.parse(localStorage.getItem(PIP_FILTER_KEY)) || {}; } catch { return {}; }
 }
-function _savePipFilter(f) { try { localStorage.setItem(PIP_FILTER_KEY, JSON.stringify(f)); } catch {} }
+function _savePipFilter(f) { try { localStorage.setItem(PIP_FILTER_KEY, JSON.stringify(f)); } catch {} if (window.CloudSync) window.CloudSync.markDirty(); }
 function _pipTypeOf(wfFile) {
   const t = PIP_TYPES.find(t => t.match(wfFile || ''));
   return t ? t.key : 'forecast';

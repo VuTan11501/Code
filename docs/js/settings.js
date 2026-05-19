@@ -9,7 +9,56 @@ function initSettingsPage() {
   settingsInitialized = true;
   renderVaultInfo();
   loadTokenStatus();
+  renderCloudSyncStatus();
 }
+
+// ═══════════════════════════════════════════════════
+//  CROSS-DEVICE SYNC PANEL
+// ═══════════════════════════════════════════════════
+function renderCloudSyncStatus() {
+  const host = document.getElementById('cloudSyncStatus');
+  if (!host || !window.CloudSync) return;
+  const reg = window.CloudSync.listRegistered();
+  const lastPull = window.CloudSync.lastSyncedAt();
+  const lastPush = window.CloudSync.lastPushedAt();
+  const dev = window.CloudSync.deviceId();
+  const tsRaw = localStorage.getItem('wf_dash_settings_updated_at') || '';
+  host.innerHTML = `
+    <div><strong>This device:</strong> <code>${dev}</code></div>
+    <div><strong>Synced keys:</strong> ${reg.map(r => r.label).join(' · ')}</div>
+    <div><strong>Last pulled:</strong> ${lastPull ? fmtDateTime(lastPull.toISOString()) : '— (auto on next focus)'}</div>
+    <div><strong>Last pushed:</strong> ${lastPush ? fmtDateTime(lastPush.toISOString()) : '—'}</div>
+    <div><strong>Cloud updated at:</strong> ${tsRaw ? fmtDateTime(tsRaw) : '—'}</div>
+  `;
+}
+
+async function cloudSyncPullNow() {
+  if (!window.CloudSync) return;
+  toast('Pulling settings from cloud…');
+  const r = await window.CloudSync.pull({ force: true });
+  if (r.error) toast('❌ Pull failed: ' + r.error, 'error');
+  else if (r.applied) toast(`✅ Synced ${r.applied} settings from ${r.from}`);
+  else if (r.empty) toast('☁️ No remote settings yet — push first to seed');
+  else toast('✓ Already up to date');
+  if (typeof renderLocationsList === 'function') { try { renderLocationsList(); } catch {} }
+  if (typeof renderOtTab === 'function')         { try { renderOtTab();         } catch {} }
+  if (typeof renderNotifSettings === 'function') { try { renderNotifSettings(); } catch {} }
+  renderCloudSyncStatus();
+}
+
+async function cloudSyncPushNow() {
+  if (!window.CloudSync) return;
+  toast('Pushing settings to cloud…');
+  const r = await window.CloudSync.push();
+  if (r.error) toast('❌ Push failed: ' + r.error, 'error');
+  else if (r.ok) toast('✅ Settings pushed to cloud');
+  else if (r.skipped === 'empty') toast('⚠️ Nothing to push (no settings yet)', 'warning');
+  renderCloudSyncStatus();
+}
+
+// Auto-refresh status panel when settings page is visited
+window.addEventListener('cloudsync:applied', renderCloudSyncStatus);
+window.addEventListener('cloudsync:pushed',  renderCloudSyncStatus);
 
 // ═══════════════════════════════════════════════════
 //  VAULT INFO (current vault details)
