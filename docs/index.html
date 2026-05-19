@@ -90,7 +90,7 @@ tailwind.config = {
       <!-- Unlock form -->
       <form id="unlockForm" onsubmit="event.preventDefault();unlock()" role="tabpanel" aria-labelledby="authTabs">
         <button type="button" id="biometricUnlockBtn" class="btn primary w-full px-4 py-2.5 mb-3" style="display:none;align-items:center;justify-content:center;gap:8px" onclick="unlockWithBiometric()">
-          <span data-icon="fingerprint" data-size="18"></span> Unlock with Face ID / Touch ID
+          <span data-icon="scanFace" data-size="18"></span> Unlock with Face ID / Touch ID
         </button>
         <div class="field flex flex-col gap-2 mb-3">
           <input type="password" class="input" id="passphrase" placeholder="Passphrase" autocomplete="current-password" aria-label="Passphrase">
@@ -529,6 +529,28 @@ tailwind.config = {
           </div>
         </div>
 
+        <!-- Biometric Auth -->
+        <div class="card settings-card">
+          <div class="card-header">
+            <div class="card-title"><span data-icon="scanFace" data-size="16"></span> Biometric Auto-Unlock</div>
+            <div class="card-description">Unlock with Face ID / Touch ID / Windows Hello instead of passphrase. Enrollment is per-device.</div>
+          </div>
+          <div class="card-content">
+            <div id="biometricStatus" class="text-xs text-muted-foreground" style="line-height:1.6;margin-bottom:12px">
+              Status loading...
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn primary" id="biometricEnrollBtn" onclick="enrollBiometric()"><span data-icon="scanFace" data-size="14"></span> Enable on this device</button>
+              <button class="btn btn-destructive" id="biometricDisableBtn" onclick="disableBiometric()" style="display:none"><span data-icon="x" data-size="14"></span> Disable on this device</button>
+            </div>
+            <p class="text-xs text-muted-foreground mt-3 leading-relaxed opacity-70">
+              On app launch, Face ID prompt appears automatically. Tap Cancel to fall back to passphrase.<br>
+              <strong>Tier 1 (PRF, iOS 18+ / Chrome 119+)</strong>: PAT is encrypted with a key derived from the authenticator — even a rooted attacker can't decrypt without your biometric.<br>
+              <strong>Tier 2 (gate, older browsers)</strong>: PAT key stored locally but only released after a successful biometric ceremony.
+            </p>
+          </div>
+        </div>
+
         <!-- Cross-device Sync -->
         <div class="card settings-card">
           <div class="card-header">
@@ -917,15 +939,16 @@ tailwind.config = {
 </div>
 
 <!-- Scripts (order matters) -->
-<script src="js/icons.js?v=40"></script>
+<script src="js/icons.js?v=41"></script>
 <script src="js/no-autofill.js?v=26"></script>
 <script src="js/locations.js?v=27"></script>
+<script src="js/biometric.js?v=1"></script>
 <script src="js/cloud-sync.js?v=3"></script>
 <script src="js/app.js?v=31"></script>
 <script src="js/dashboard.js?v=28"></script>
 <script src="js/schedule.js?v=27"></script>
 <script src="js/ot-salary.js?v=37"></script>
 <script src="js/ot-planner.js?v=48"></script>
-<script src="js/settings.js?v=28"></script>
+<script src="js/settings.js?v=29"></script>
 </body>
 </html>
