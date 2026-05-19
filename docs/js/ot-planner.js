@@ -61,6 +61,10 @@ async function loadOtData(opts) {
   if (!hasData) {
     if (grid) grid.innerHTML = _otCalendarSkeleton();
     if (tbody) tbody.innerHTML = _otTableSkeleton(6);
+    const statsEl = document.getElementById('otStats');
+    if (statsEl && !statsEl.children.length) statsEl.innerHTML = _otStatsSkeleton();
+    const budgetEl = document.getElementById('otBudget');
+    if (budgetEl && !budgetEl.children.length) budgetEl.innerHTML = _otBudgetSkeleton();
   }
   const refreshBtn = document.getElementById('otRefreshBtn');
   if (isManualRefresh && refreshBtn) refreshBtn.classList.add('is-loading');
@@ -142,6 +146,29 @@ function _otTableSkeleton(rows) {
     html += `<tr>${tds}</tr>`;
   }
   return html;
+}
+
+function _otStatsSkeleton() {
+  let chips = '';
+  for (let i = 0; i < 4; i++) {
+    chips += `<div class="skeleton" style="height:28px;width:${80 + i * 20}px;border-radius:var(--radius-full)"></div>`;
+  }
+  return `<div class="flex flex-wrap gap-2">${chips}</div>`;
+}
+
+function _otBudgetSkeleton() {
+  return `<div class="card bg-card border border-border rounded-lg p-4 mb-4">
+    <div class="flex items-center justify-between mb-3">
+      <div class="skeleton" style="height:16px;width:120px"></div>
+      <div class="skeleton" style="height:16px;width:80px"></div>
+    </div>
+    <div class="skeleton" style="height:8px;width:100%;border-radius:var(--radius-full);margin-bottom:12px"></div>
+    <div class="flex gap-4">
+      <div class="skeleton" style="height:32px;width:33%;border-radius:var(--radius-md)"></div>
+      <div class="skeleton" style="height:32px;width:33%;border-radius:var(--radius-md)"></div>
+      <div class="skeleton" style="height:32px;width:33%;border-radius:var(--radius-md)"></div>
+    </div>
+  </div>`;
 }
 
 // ─── Calendar render ───
