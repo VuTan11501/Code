@@ -1986,3 +1986,8 @@ input[type="time"], input[type="date"], input[type="datetime-local"] {
 /* Theme switcher button active state */
 #themeSwitcher .btn { flex: 1; min-width: 90px; justify-content: center; }
 #themeSwitcher .btn.is-active { background: var(--primary); color: var(--primary-foreground); border-color: var(--primary); }
+
+/* PWA mode: tighter pip horizontally to fit smaller cell width */
+@media (display-mode: standalone), (display-mode: fullscreen), (display-mode: minimal-ui) {
+  .schedule-pip { padding-left: 0; padding-right: 0; }
+}
