@@ -5,6 +5,9 @@
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()));
 
+// Fetch handler — required for PWA installability. Network-only (no caching).
+self.addEventListener('fetch', () => {});
+
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const targetUrl = (event.notification.data && event.notification.data.url) || './';
