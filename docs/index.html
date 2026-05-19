@@ -390,6 +390,9 @@ tailwind.config = {
               <div class="flex-1 min-w-0" id="vaultInfoBody">
                 <div class="text-muted-foreground">No vault loaded yet.</div>
               </div>
+              <button id="vaultDeleteBtn" class="vault-delete-btn shrink-0" onclick="deleteVault()" type="button" aria-label="Delete vault" title="Delete vault">
+                <span data-icon="trash" data-size="14"></span>
+              </button>
             </div>
 
             <div class="flex flex-wrap gap-2">
@@ -400,9 +403,6 @@ tailwind.config = {
                 <span data-icon="upload" data-size="14"></span> Import Vault
                 <input type="file" accept=".json" onchange="importVault(event)" class="hidden" aria-label="Import vault file">
               </label>
-              <button class="btn btn-outline sm danger-outline" onclick="deleteVault()" type="button">
-                <span data-icon="trash" data-size="14"></span> Delete Vault
-              </button>
             </div>
           </div>
         </div>

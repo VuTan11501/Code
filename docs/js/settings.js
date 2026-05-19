@@ -46,11 +46,14 @@ async function fetchGithubUser() {
 async function renderVaultInfo() {
   const body = document.getElementById('vaultInfoBody');
   if (!body) return;
+  const delBtn = document.getElementById('vaultDeleteBtn');
   const stored = localStorage.getItem(STORAGE_KEY);
   if (!stored) {
     body.innerHTML = `<div class="text-muted-foreground">No vault loaded yet. Set up a passphrase on the Setup tab.</div>`;
+    if (delBtn) delBtn.style.display = 'none';
     return;
   }
+  if (delBtn) delBtn.style.display = '';
   const meta = getVaultMeta();
   const sizeKb = (new Blob([stored]).size / 1024).toFixed(1);
 

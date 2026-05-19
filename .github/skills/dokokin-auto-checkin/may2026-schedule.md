@@ -14,11 +14,13 @@
 ## 📋 Quy tắc
 
 - **Workday**: CI 09:00 (office) → CO 18:00 (office)
-- **Workday + OT đêm**: CI 09:00 (office) → CO 03:30+1 (home)
+- **Workday + OT đêm**: CI 09:00 (office) → CO 03:30+1 (home) — ⚠️ **PHẢI skip default CO 18:00 trong Gist `skip_dates`**, nếu không workday đóng tại 18:00 và OT bị mất
 - **Weekend OT đêm (Sat)**: CI 22:00 (home) → CO 03:30+1 (home)
 - **Weekend OT full (Sun)**: CI 15:30 (home) → CO 04:30+1 (home)
 - **Break**: ≤6h = 0min | >6h≤8h = 45min | >8h = 60min
 - **+1** = ngày hôm sau
+
+> 🚨 **CO closes workday permanently** — không thể "mở lại" session. Trên các ngày Work+OT có OT vắt qua nửa đêm (05/11, 05/18, 05/19, 05/21), recurring weekday CO 18:00 trong Gist phải có các date đó trong `recurrence.skip_dates`, và thay bằng explicit `once` CO tại 03:30+1 (hoặc 00:00+1 với OT 18:00→00:00).
 
 ## 🗓 Schedule
 
