@@ -1673,6 +1673,7 @@ input[type="time"], input[type="date"], input[type="datetime-local"] {
    every modal/list/table gets the same thin scrollbar treatment without
    needing HTML restructure. Specificity 0 so existing rules win. */
 :where(
+  body,
   .scroll-area-viewport,
   .modal-body, .dialog-body,
   .scheduler-queue,
@@ -1683,6 +1684,7 @@ input[type="time"], input[type="date"], input[type="datetime-local"] {
   scrollbar-color: rgba(var(--tint),0.18) transparent;
 }
 :where(
+  body,
   .scroll-area-viewport,
   .modal-body, .dialog-body,
   .scheduler-queue,
@@ -1690,6 +1692,7 @@ input[type="time"], input[type="date"], input[type="datetime-local"] {
   .overflow-x-auto, .overflow-y-auto, .overflow-auto
 )::-webkit-scrollbar { width: 10px; height: 10px; }
 :where(
+  body,
   .scroll-area-viewport,
   .modal-body, .dialog-body,
   .scheduler-queue,
@@ -1697,6 +1700,7 @@ input[type="time"], input[type="date"], input[type="datetime-local"] {
   .overflow-x-auto, .overflow-y-auto, .overflow-auto
 )::-webkit-scrollbar-track { background: transparent; }
 :where(
+  body,
   .scroll-area-viewport,
   .modal-body, .dialog-body,
   .scheduler-queue,
@@ -1710,6 +1714,7 @@ input[type="time"], input[type="date"], input[type="datetime-local"] {
   transition: background-color var(--duration-fast) var(--ease-out);
 }
 :where(
+  body,
   .scroll-area-viewport,
   .modal-body, .dialog-body,
   .scheduler-queue,
@@ -1717,6 +1722,7 @@ input[type="time"], input[type="date"], input[type="datetime-local"] {
   .overflow-x-auto, .overflow-y-auto, .overflow-auto
 )::-webkit-scrollbar-thumb:hover { background: rgba(var(--tint),0.28); background-clip: padding-box; }
 :where(
+  body,
   .scroll-area-viewport,
   .modal-body, .dialog-body,
   .scheduler-queue,
