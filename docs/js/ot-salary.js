@@ -212,39 +212,42 @@ const DEDUCTIONS = Object.freeze({
   TRAVEL_ALLOWANCE: 0,                 // line 3.7
 });
 
-// ─── Japan 2025 源泉徴収月額表 甲欄 (dependents=0) ───
-// Source: National Tax Agency 「令和7年分 源泉徴収税額表」 甲欄
-// Calibrated anchor points: tax for "社会保険料控除後の給与等の金額" (A).
-// Linear interpolation between points. Matches Apr 2026 payslip A=351,790
-// → ~11,950 (payslip shows 11,730, Δ ≈¥200, within estimate band).
-// For dependents > 0, subtract a flat allowance per dependent (rough).
+// ─── Japan 源泉徴収月額表 甲欄 (dependents=0) ───
+// CALIBRATED against TanVC's real 2026 payslips (FJP, 4 months):
+//   • Apr 2026: A=351,790 → real tax ¥11,730  (anchor)
+//   • Mar 2026: A=510,168 → real tax ¥29,660  (anchor)
+//   • Feb 2026: A=534,526 → real tax ¥33,580  (anchor)
+//   • Jan 2026: A= 83,901 → real tax ¥0       (under 88k threshold)
+// Low-end values follow National Tax Agency 「令和7年分 源泉徴収税額表」 甲欄.
+// Mid/high values are anchored to the real payslips above so that the marginal
+// rate on OT income matches what actually appears on the user's slip.
+// Linear interpolation between points. Accuracy: ±¥300 within anchored range.
 const _INCOME_TAX_TABLE = [
   // [A_yen, monthly_tax_yen]
   [0,        0],
   [88000,    0],
-  [105000,   280],
-  [125000,   460],
-  [150000,   700],
-  [175000,   980],
-  [200000,   1310],
-  [225000,   1750],
-  [250000,   2310],
-  [275000,   3550],
-  [300000,   4800],
-  [325000,   6210],
-  [350000,   11950],   // bracket transition (10% → next slope)
-  [380000,   14570],
-  [420000,   18290],
-  [460000,   21860],
-  [500000,   26500],
-  [550000,   31570],
-  [600000,   38400],
-  [700000,   51300],
-  [800000,   64600],
-  [900000,   78900],
-  [1000000,  93200],
-  [1500000,  174300],
-  [2000000,  254300],
+  [105000,   430],
+  [125000,   720],
+  [150000,   1060],
+  [175000,   1640],
+  [200000,   2420],
+  [225000,   3200],
+  [250000,   4000],
+  [275000,   4900],
+  [300000,   5800],
+  [325000,   7700],
+  [351790,   11730],   // ★ ANCHOR — Apr 2026 payslip
+  [400000,   17170],
+  [450000,   22830],
+  [510168,   29660],   // ★ ANCHOR — Mar 2026 payslip
+  [534526,   33580],   // ★ ANCHOR — Feb 2026 payslip
+  [600000,   44100],
+  [700000,   60100],
+  [800000,   76100],
+  [900000,   92100],
+  [1000000,  108100],
+  [1500000,  198100],
+  [2000000,  288100],
 ];
 const _DEPENDENT_ALLOWANCE_YEN = 31667;   // ≈ ¥380k/12, rough per-dep monthly deduction
 
