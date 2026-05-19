@@ -130,7 +130,7 @@ tailwind.config = {
           <span class="live-interval" id="liveInterval">30s</span>
         </div>
         <span class="text-xs text-muted-foreground" id="lastUpdate" aria-live="polite"></span>
-        <button class="toggle" id="notifBtn" type="button" onclick="requestNotifPermission()" data-tooltip="Notifications" aria-label="Toggle notifications" aria-pressed="false" data-state="off"><span data-icon="bell" data-size="16"></span></button>
+        <button class="toggle" id="notifBtn" type="button" onclick="onNotifBtnClick()" data-tooltip="Notifications" aria-label="Toggle notifications" aria-pressed="false" data-state="off"><span data-icon="bell" data-size="16"></span></button>
         <button class="btn danger sm" onclick="lock()" aria-label="Lock dashboard"><span data-icon="lock" data-size="14"></span> Lock</button>
       </div>
     </header>

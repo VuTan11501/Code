@@ -457,6 +457,7 @@ let notifPermission = (typeof Notification !== 'undefined') ? Notification.permi
 // ─── Notification preferences (persisted) ───
 const NOTIF_PREFS_KEY = 'wf_dash_notif_prefs';
 const DEFAULT_NOTIF_PREFS = {
+  enabled: true,           // master mute switch (browsers don't expose a programmatic revoke)
   onFailure: true,         // 🔴 alert when a run fails
   onSuccess: false,        // 🟢 alert when a run completes successfully
   onStart: false,          // 🟡 alert when a run starts/is queued
@@ -518,21 +519,42 @@ function toggleNotifPref(key) {
   const p = getNotifPrefs();
   p[key] = !p[key];
   saveNotifPrefs(p);
-  renderNotifSettings();
+  if (key === 'enabled') updateNotifBtn(); else renderNotifSettings();
   toast(`${p[key] ? 'Enabled' : 'Disabled'} ${key.replace(/^on/, '').toLowerCase()} notifications`);
 }
 
 function updateNotifBtn() {
   const btn = document.getElementById('notifBtn');
   if (!btn) return;
+  const prefs = getNotifPrefs();
+  const masterOn = prefs.enabled !== false;
   btn.innerHTML = ICON('bell', 18);
-  const on = (notifPermission === 'granted');
-  btn.setAttribute('aria-pressed', on ? 'true' : 'false');
-  btn.setAttribute('data-state', on ? 'on' : 'off');
-  if (notifPermission === 'granted')      { btn.setAttribute('data-tooltip', 'Notifications: ON');     btn.style.opacity = '1';   }
-  else if (notifPermission === 'denied')  { btn.setAttribute('data-tooltip', 'Notifications: Blocked'); btn.style.opacity = '0.4'; }
-  else                                    { btn.setAttribute('data-tooltip', 'Enable notifications');   btn.style.opacity = '0.7'; }
+  const fullyOn = (notifPermission === 'granted') && masterOn;
+  btn.setAttribute('aria-pressed', fullyOn ? 'true' : 'false');
+  btn.setAttribute('data-state', fullyOn ? 'on' : 'off');
+  if (notifPermission === 'granted' && masterOn)       { btn.setAttribute('data-tooltip', 'Notifications: ON (click to mute)');  btn.style.opacity = '1';   }
+  else if (notifPermission === 'granted' && !masterOn) { btn.setAttribute('data-tooltip', 'Notifications: Muted (click to unmute)'); btn.style.opacity = '0.5'; }
+  else if (notifPermission === 'denied')               { btn.setAttribute('data-tooltip', 'Notifications: Blocked by browser'); btn.style.opacity = '0.4'; }
+  else                                                  { btn.setAttribute('data-tooltip', 'Enable notifications');               btn.style.opacity = '0.7'; }
   renderNotifSettings();
+}
+
+function onNotifBtnClick() {
+  if (!('Notification' in window)) { toast('⚠️ Notifications not supported on this device'); return; }
+  if (notifPermission === 'denied') {
+    toast('🔕 Blocked by browser. Open site settings (lock icon) to allow.', 'warning');
+    return;
+  }
+  if (notifPermission !== 'granted') {
+    requestNotifPermission();
+    return;
+  }
+  // Already granted — toggle the local master mute switch
+  const p = getNotifPrefs();
+  p.enabled = !(p.enabled !== false);
+  saveNotifPrefs(p);
+  updateNotifBtn();
+  toast(p.enabled ? '🔔 Notifications unmuted' : '🔕 Notifications muted');
 }
 
 // Render the Notifications card body (status pill + prefs switches or enable button)
@@ -569,6 +591,7 @@ function renderNotifSettings() {
       </div>`;
     inner = `
       <div>
+        ${sw('enabled',   'Enabled',         'Master switch. Turn off to mute all notifications without revoking browser permission.', 'bell', 'var(--primary)')}
         ${sw('onFailure', 'Failure alerts',  'Notify when a workflow run fails.',                              'alert',  'var(--red)')}
         ${sw('onSuccess', 'Success alerts',  'Notify when a workflow run completes successfully.',             'check',  'var(--green)')}
         ${sw('onStart',   'Start alerts',    'Notify when a new workflow run starts (queued or in_progress).', 'play',   'var(--blue, #3b82f6)')}
@@ -623,6 +646,8 @@ async function requestNotifPermission() {
 // Unified notification API. opts: { title, body, tag, url, requireInteraction }
 async function showNotification(opts) {
   if (notifPermission !== 'granted') return;
+  const prefs = getNotifPrefs();
+  if (prefs.enabled === false) return;   // master mute
   const { title, body, tag, url, requireInteraction, soundKind } = opts;
   // Play our own synthesized tone (independent of OS notification sound)
   try { playNotifSound(soundKind || 'test'); } catch {}
