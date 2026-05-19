@@ -243,7 +243,7 @@ html { touch-action: manipulation; }
   font-size: var(--fs-sm); cursor: pointer;
   transition: background var(--duration-fast);
 }
-.run-item:hover { background: rgba(var(--tint),0.04); }
+.run-item:hover { background: rgba(var(--tint),0.04); border-radius: var(--radius-md); }
 .run-item + .run-item { border-top: 1px solid var(--border); }
 .run-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; justify-self: center; }
 .run-dot.success { background: var(--green); }
