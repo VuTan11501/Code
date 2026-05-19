@@ -122,7 +122,7 @@ tailwind.config = {
       <!-- Setup form -->
       <form id="setupForm" style="display:none" onsubmit="event.preventDefault();setup()" role="tabpanel" aria-labelledby="authTabs">
         <div class="field flex flex-col gap-2 mb-3">
-          <input type="password" class="input" id="newToken" placeholder="GitHub PAT (ghp_... or github_pat_...)" autocomplete="off" aria-label="GitHub Personal Access Token">
+          <input type="text" class="input" id="newToken" placeholder="GitHub PAT (ghp_... or github_pat_...)" autocomplete="off" spellcheck="false" aria-label="GitHub Personal Access Token">
         </div>
         <div class="field flex flex-col gap-2 mb-3">
           <input type="password" class="input" id="newPass" placeholder="Create passphrase (6+ chars)" autocomplete="new-password" aria-label="New passphrase">
