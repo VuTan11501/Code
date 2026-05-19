@@ -55,13 +55,11 @@ window.CloudSync = (function () {
     if (typeof opts.toast === 'function') _toast = opts.toast;
   }
 
-  function register(key, label) {
-    if (!key.startsWith(PREFIX)) {
-      console.warn('[CloudSync] key must start with', PREFIX, '→', key);
-    }
+  function register(key, label, shortKey) {
     if (REGISTERED.find(r => r.key === key)) return;
-    const shortKey = key.replace(PREFIX, '');
-    REGISTERED.push({ key, label: label || shortKey, shortKey });
+    // Allow explicit shortKey (recommended); else fall back to stripping known prefixes.
+    const sk = shortKey || key.replace(/^(wf_dash_|workflow_|ot_takehome_|ot_|sched_)/, '');
+    REGISTERED.push({ key, label: label || sk, shortKey: sk });
   }
 
   async function _ghFetch(url, options = {}) {

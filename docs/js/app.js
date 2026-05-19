@@ -189,10 +189,10 @@ function showDashboard() {
   // Cross-device settings sync — pull on unlock (non-blocking)
   if (window.CloudSync) {
     window.CloudSync.init({ getToken: () => sessionToken, toast: (m) => toast(m) });
-    window.CloudSync.register('wf_dash_locations',       'Locations');
-    window.CloudSync.register('wf_dash_ot_profile',      'OT Profile');
-    window.CloudSync.register('wf_dash_notif_prefs',     'Notification preferences');
-    window.CloudSync.register('wf_dash_pip_filter',      'Schedule filter');
+    window.CloudSync.register('workflow_locations_v1',  'Locations',                 'locations');
+    window.CloudSync.register('ot_takehome_profile_v1', 'OT Profile',                'ot_profile');
+    window.CloudSync.register('wf_dash_notif_prefs',    'Notification preferences',  'notif_prefs');
+    window.CloudSync.register('sched_pip_filter_v1',    'Schedule filter',           'schedule_filter');
     window.CloudSync.pull().then(r => {
       if (r && r.applied) {
         // Tell affected modules to re-render with new values
