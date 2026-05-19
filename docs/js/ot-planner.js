@@ -73,7 +73,11 @@ async function loadOtData(opts) {
     // Scheduled entries (for conflict detection)
     const schedFile = gist.files && gist.files['scheduled-runs.json'];
     if (schedFile && schedFile.content) {
-      try { _otState.scheduleEntries = JSON.parse(schedFile.content) || []; }
+      try {
+        const parsed = JSON.parse(schedFile.content) || [];
+        // Defensive: accept both bare array (current) and {entries:[...]} wrapper
+        _otState.scheduleEntries = Array.isArray(parsed) ? parsed : (Array.isArray(parsed.entries) ? parsed.entries : []);
+      }
       catch { _otState.scheduleEntries = []; }
     } else {
       _otState.scheduleEntries = [];
