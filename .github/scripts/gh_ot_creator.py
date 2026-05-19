@@ -24,6 +24,9 @@ APPROVER = "HuyNQ23"
 ACCOUNT = "tanvc"
 CREATION_WINDOW_DAYS = 7
 
+GIST_ID = "abc2a47c0a396025a72a6580227ff493"
+OT_GIST_FILE = "ot-requests.json"
+
 LOG_LINES = []
 
 
@@ -319,6 +322,61 @@ def send_email(subject, body, html=None):
 
 
 # ═══════════════════════════════════════════════════════════
+#  GIST LOADER (OT requests)
+# ═══════════════════════════════════════════════════════════
+
+def load_ot_from_gist():
+    """Load OT requests from Gist file `ot-requests.json`.
+    Returns:
+      - list of OT entries if file exists (even if empty — authoritative)
+      - None if file missing OR Gist read fails (caller falls back to schedule.json)
+    """
+    pat = os.environ.get("GH_PAT")
+    if not pat:
+        log("GH_PAT not set; cannot read Gist OT requests, fallback to schedule.json")
+        return None
+    url = f"https://api.github.com/gists/{GIST_ID}"
+    req = urllib.request.Request(url, headers={
+        "Authorization": f"Bearer {pat}",
+        "Accept": "application/vnd.github+json",
+    })
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            data = json.loads(resp.read())
+    except Exception as e:
+        log(f"⚠️ Gist read failed: {e}. Fallback to schedule.json")
+        return None
+    files = data.get("files") or {}
+    f = files.get(OT_GIST_FILE)
+    if not f:
+        log(f"Gist file {OT_GIST_FILE} not found, fallback to schedule.json")
+        return None
+    content = f.get("content") or "[]"
+    try:
+        arr = json.loads(content)
+    except Exception as e:
+        log(f"⚠️ Gist {OT_GIST_FILE} invalid JSON: {e}. Fallback to schedule.json")
+        return None
+    if not isinstance(arr, list):
+        log(f"⚠️ Gist {OT_GIST_FILE} not an array. Fallback to schedule.json")
+        return None
+    # Normalize to schedule.json shape — only keep fields backend cares about
+    normalized = []
+    for entry in arr:
+        if not isinstance(entry, dict): continue
+        if not entry.get("date") or not entry.get("start") or not entry.get("end"):
+            continue
+        normalized.append({
+            "date":   entry["date"],
+            "start":  entry["start"],
+            "end":    entry["end"],
+            "hours":  entry.get("hours", 0),
+            "reason": entry.get("reason", "task"),
+        })
+    return normalized
+
+
+# ═══════════════════════════════════════════════════════════
 #  MAIN
 # ═══════════════════════════════════════════════════════════
 
@@ -334,17 +392,22 @@ def main():
     errors = []
 
     try:
-        # Load schedule
-        sched_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "schedule.json")
-        with open(sched_path, encoding="utf-8") as f:
-            schedule = json.load(f)
+        # Try to load OT requests from Gist first (authoritative if present)
+        pending_ot = load_ot_from_gist()
+        source = "gist"
+        if pending_ot is None:
+            # Fallback to schedule.json
+            sched_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "schedule.json")
+            with open(sched_path, encoding="utf-8") as f:
+                schedule = json.load(f)
+            pending_ot = schedule.get("pending_ot", [])
+            source = "schedule.json (fallback)"
 
-        pending_ot = schedule.get("pending_ot", [])
         if not pending_ot:
-            log("No pending_ot entries in schedule.json. Nothing to do.")
+            log(f"No OT requests found (source: {source}). Nothing to do.")
             return
 
-        log(f"Found {len(pending_ot)} planned OT entries")
+        log(f"Found {len(pending_ot)} planned OT entries (source: {source})")
 
         # Filter: only process entries within the creation window
         actionable = []

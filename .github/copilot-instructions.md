@@ -43,6 +43,7 @@ Tự động hóa nghiệp vụ kintai (chấm công) FJP DokoKin + báo cáo OT
 | `docs/js/dashboard.js` | Adaptive polling engine (1s/15s/60s), `refresh()` workflow runs |
 | `docs/js/schedule.js` | CRUD schedule Gist, precision setTimeout dispatcher, location field |
 | `docs/js/settings.js` | PAT/passphrase, Location Settings (GPS) |
+| `docs/js/ot-planner.js` | OT Planner page — CRUD OT requests trong Gist `ot-requests.json`, conflict detect + auto-fix cross-midnight |
 | `docs/js/locations.js` | Built-in locations (`office`, `home`, NEC Tamagawa …) + user-defined |
 | `docs/js/icons.js`, `no-autofill.js` | Tiện ích |
 
@@ -137,7 +138,8 @@ Tham khảo SKILL.md trước khi đụng vào lĩnh vực tương ứng:
 
 ### Schedule Gist
 - ID: `abc2a47c0a396025a72a6580227ff493`
-- File: `scheduled-runs.json`
+- File: `scheduled-runs.json` (dispatcher source of truth — array của entries `once`/`recurring`)
+- File: `ot-requests.json` (OT Planner source of truth — array của `{id, date, start, end, hours, reason, auto_skip_date?, auto_co_id?}`). Authoritative khi tồn tại (kể cả empty array). `gh_ot_creator.py` đọc file này qua GH_PAT, fallback `schedule.json:pending_ot` nếu Gist read fail / file missing.
 - Entry types: `once`, `daily`, `weekly`, `monthly`
 - **Lịch sử**: entries `once` đã chạy → set `dispatched: true` + `last_run`, **không xóa** (giữ cho UI hiển thị history)
 - UI: `renderScheduledQueue` filter `activeEntries`, `renderScheduleTable` show all

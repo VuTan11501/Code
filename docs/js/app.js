@@ -221,6 +221,7 @@ function navigate(hash) {
 
   // Initialize page-specific content
   if (page === 'schedule' && typeof initSchedulePage === 'function') initSchedulePage();
+  if (page === 'ot' && typeof initOtPlannerPage === 'function') initOtPlannerPage();
   if (page === 'settings' && typeof initSettingsPage === 'function') initSettingsPage();
   if (page === 'dashboard' && typeof refresh === 'function' && sessionToken) {
     // Ensure dashboard always has fresh data when entering the tab.

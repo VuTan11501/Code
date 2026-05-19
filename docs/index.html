@@ -66,7 +66,7 @@ tailwind.config = {
   },
 }
 </script>
-<link rel="stylesheet" href="css/style.css?v=23">
+<link rel="stylesheet" href="css/style.css?v=24">
 <link rel="preconnect" href="https://api.github.com">
 </head>
 <body class="bg-background text-foreground font-sans text-sm antialiased min-h-dvh overflow-x-hidden">
@@ -148,6 +148,12 @@ tailwind.config = {
           <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
         </span>
         <span class="nav-label">Schedule</span>
+      </a>
+      <a class="tabs-trigger nav-item flex-1 text-center px-3 py-2 rounded-md text-sm font-medium text-muted-foreground cursor-pointer transition-all flex items-center justify-center gap-2 no-underline" data-page="ot" href="#ot" role="tab" aria-selected="false" onclick="navigate('#ot')">
+        <span class="nav-icon" aria-hidden="true">
+          <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        </span>
+        <span class="nav-label">OT</span>
       </a>
       <a class="tabs-trigger nav-item flex-1 text-center px-3 py-2 rounded-md text-sm font-medium text-muted-foreground cursor-pointer transition-all flex items-center justify-center gap-2 no-underline" data-page="settings" href="#settings" role="tab" aria-selected="false" onclick="navigate('#settings')">
         <span class="nav-icon" aria-hidden="true">
@@ -348,6 +354,39 @@ tailwind.config = {
         <div class="flex items-center justify-between mt-3 text-xs text-muted-foreground" id="tableFooter">
           <span id="tableCount">0 entries</span>
           <button class="btn sm" onclick="loadScheduledRuns()" data-tooltip="Refresh"><span data-icon="refresh" data-size="14"></span> Refresh</button>
+        </div>
+      </section>
+    </div>
+
+    <!-- PAGE: OT PLANNER -->
+    <div class="page" id="page-ot" role="tabpanel" aria-label="OT Planner page">
+      <section aria-label="OT Calendar">
+        <div class="section-title text-sm font-medium text-muted-foreground mb-4 flex items-center justify-between gap-2">
+          <span class="flex items-center gap-2"><span data-icon="clock" data-size="16"></span> <span id="otMonthLabel">OT Planner</span></span>
+          <div class="flex items-center gap-1">
+            <button class="btn sm btn-ghost btn-icon" onclick="otNavMonth(-1)" aria-label="Previous month"><span data-icon="chevronLeft" data-size="16"></span></button>
+            <button class="btn sm" onclick="otGoToday()">Today</button>
+            <button class="btn sm btn-ghost btn-icon" onclick="otNavMonth(1)" aria-label="Next month"><span data-icon="chevronRight" data-size="16"></span></button>
+          </div>
+        </div>
+        <div class="card bg-card border border-border rounded-lg overflow-hidden">
+          <div class="card-content p-3">
+            <div id="otCalendar" class="ot-cal"></div>
+          </div>
+        </div>
+      </section>
+
+      <div class="separator h-px w-full bg-border mt-6 mb-4"></div>
+
+      <section aria-label="OT requests list">
+        <div class="section-title text-sm font-medium text-muted-foreground mb-4 flex items-center justify-between gap-2">
+          <span class="flex items-center gap-2"><span data-icon="clipboard" data-size="16"></span> OT Requests</span>
+          <button class="btn sm primary" onclick="openOtForm()"><span data-icon="plus" data-size="14"></span> Add OT</button>
+        </div>
+        <div class="card bg-card border border-border rounded-lg overflow-hidden">
+          <div class="card-content p-2">
+            <ul id="otList" class="ot-list"></ul>
+          </div>
         </div>
       </section>
     </div>
@@ -693,18 +732,60 @@ tailwind.config = {
   </div>
 </div>
 
+<!-- OT Form Modal -->
+<div class="dialog-overlay modal-overlay" id="otFormModal" role="dialog" aria-modal="true" aria-labelledby="otFormTitle">
+  <div class="dialog-content modal" style="max-width:480px">
+    <div class="dialog-header modal-header">
+      <h3 class="dialog-title text-lg font-semibold" id="otFormTitle">New OT Request</h3>
+      <button class="btn btn-ghost btn-icon modal-close" onclick="closeOtForm()" aria-label="Close">&times;</button>
+    </div>
+    <div class="dialog-body modal-body" style="padding:20px">
+      <div class="flex flex-col gap-4">
+        <div class="field">
+          <label class="field-label text-xs text-muted-foreground font-medium block mb-1" for="otFormDate">Date (JST)</label>
+          <input type="date" class="input w-full" id="otFormDate" onchange="_updateOtFormPreview()">
+        </div>
+        <div class="grid grid-cols-[1fr_1fr_64px] gap-3">
+          <div class="field">
+            <label class="field-label text-xs text-muted-foreground font-medium block mb-1" for="otFormStart">Start</label>
+            <input type="time" class="input w-full font-mono" id="otFormStart" value="22:00" onchange="_updateOtFormPreview()">
+          </div>
+          <div class="field">
+            <label class="field-label text-xs text-muted-foreground font-medium block mb-1" for="otFormEnd">End</label>
+            <input type="time" class="input w-full font-mono" id="otFormEnd" value="03:30" onchange="_updateOtFormPreview()">
+          </div>
+          <div class="field">
+            <label class="field-label text-xs text-muted-foreground font-medium block mb-1">Hours</label>
+            <div class="input w-full font-mono text-center flex items-center justify-center" id="otFormHours" style="background:transparent;cursor:default">—</div>
+          </div>
+        </div>
+        <div class="field">
+          <label class="field-label text-xs text-muted-foreground font-medium block mb-1" for="otFormReason">Reason</label>
+          <input type="text" class="input w-full" id="otFormReason" placeholder="e.g. task shishin" maxlength="120">
+        </div>
+        <div id="otFormPreview"></div>
+        <div class="flex gap-3 pt-2">
+          <button class="btn primary flex-1" onclick="submitOtForm()"><span data-icon="save" data-size="14"></span> Save</button>
+          <button class="btn flex-1" onclick="closeOtForm()">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Toast -->
 <div class="toast-container">
   <div class="toast" id="toast" role="alert" aria-live="assertive"></div>
 </div>
 
 <!-- Scripts (order matters) -->
-<script src="js/icons.js?v=23"></script>
-<script src="js/no-autofill.js?v=23"></script>
-<script src="js/locations.js?v=23"></script>
-<script src="js/app.js?v=23"></script>
-<script src="js/dashboard.js?v=23"></script>
-<script src="js/schedule.js?v=23"></script>
-<script src="js/settings.js?v=23"></script>
+<script src="js/icons.js?v=24"></script>
+<script src="js/no-autofill.js?v=24"></script>
+<script src="js/locations.js?v=24"></script>
+<script src="js/app.js?v=24"></script>
+<script src="js/dashboard.js?v=24"></script>
+<script src="js/schedule.js?v=24"></script>
+<script src="js/ot-planner.js?v=24"></script>
+<script src="js/settings.js?v=24"></script>
 </body>
 </html>
