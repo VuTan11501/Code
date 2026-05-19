@@ -366,7 +366,7 @@ function renderScheduleCalendar(gistEntries) {
       const onclick = cellPips.length === 0
         ? `ondblclick="quickAddRecurring(${day}, '${time}')"`
         : '';
-      html += `<div class="${classes.join(' ')}" ${onclick}${cellPips.length === 0 ? ' data-tooltip="Double-tap to add"' : ''}>`;
+      html += `<div class="${classes.join(' ')}" data-day="${day}" data-time="${time}" ${onclick}${cellPips.length === 0 ? ' data-tooltip="Double-tap to add"' : ''}>`;
       for (const p of cellPips) {
         const dimmed = p.enabled ? '' : ' disabled';
         const onceCls = p.once ? ' once' : '';
@@ -420,6 +420,26 @@ function renderScheduleCalendar(gistEntries) {
   });
 
   document.addEventListener('click', _outsidePopoverHandler, { capture: true });
+
+  // Context menu on the schedule grid (replace default browser menu)
+  const wrapper = container.querySelector('.schedule-grid-wrapper');
+  if (wrapper) {
+    wrapper.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const pip  = e.target.closest('.schedule-pip[data-entry]');
+      const slot = e.target.closest('.sc-slot');
+      if (pip) {
+        openPipContextMenu(parseInt(pip.getAttribute('data-entry')), e.clientX, e.clientY);
+      } else if (slot) {
+        const day  = parseInt(slot.getAttribute('data-day'));
+        const time = slot.getAttribute('data-time');
+        openSlotContextMenu(day, time, e.clientX, e.clientY);
+      } else {
+        openGridContextMenu(e.clientX, e.clientY);
+      }
+    });
+  }
 }
 
 function _formatCountdown(ms) {
@@ -430,6 +450,114 @@ function _formatCountdown(ms) {
   if (h < 24) return m ? `${h}h ${m}m` : `${h}h`;
   const d = Math.floor(h / 24), hr = h % 24;
   return hr ? `${d}d ${hr}h` : `${d}d`;
+}
+
+/* ─── Context menu (shadcn-style) ─────────────────────────── */
+let _ctxMenuEl = null;
+function closeContextMenu() {
+  if (_ctxMenuEl) { _ctxMenuEl.remove(); _ctxMenuEl = null; }
+  document.removeEventListener('mousedown', _ctxOutside, true);
+  document.removeEventListener('contextmenu', _ctxOutside, true);
+  document.removeEventListener('keydown', _ctxKeydown, true);
+  window.removeEventListener('scroll', closeContextMenu, true);
+  window.removeEventListener('resize', closeContextMenu);
+}
+function _ctxOutside(e) {
+  if (_ctxMenuEl && !_ctxMenuEl.contains(e.target)) closeContextMenu();
+}
+function _ctxKeydown(e) {
+  if (e.key === 'Escape') closeContextMenu();
+}
+function showContextMenu(x, y, items) {
+  closeContextMenu();
+  const menu = document.createElement('div');
+  menu.className = 'context-menu';
+  menu.setAttribute('role', 'menu');
+  const parts = [];
+  items.forEach((it, idx) => {
+    if (it.type === 'separator') { parts.push('<div class="context-menu-separator"></div>'); return; }
+    if (it.type === 'label')     { parts.push(`<div class="context-menu-label">${it.label}</div>`); return; }
+    const cls = ['context-menu-item'];
+    if (it.danger)   cls.push('danger');
+    if (it.disabled) cls.push('disabled');
+    parts.push(`<div class="${cls.join(' ')}" role="menuitem" tabindex="-1" data-idx="${idx}">
+      ${it.icon ? `<span class="ctx-icon">${ICON(it.icon, 14)}</span>` : '<span class="ctx-icon" style="width:14px"></span>'}
+      <span>${it.label}</span>
+      ${it.shortcut ? `<span class="context-menu-shortcut">${it.shortcut}</span>` : ''}
+    </div>`);
+  });
+  menu.innerHTML = parts.join('');
+  document.body.appendChild(menu);
+
+  // Clamp to viewport
+  const r = menu.getBoundingClientRect();
+  let left = x, top = y;
+  if (left + r.width + 8 > window.innerWidth)  left = Math.max(8, window.innerWidth - r.width - 8);
+  if (top + r.height + 8 > window.innerHeight) top  = Math.max(8, window.innerHeight - r.height - 8);
+  menu.style.left = `${Math.max(8, left)}px`;
+  menu.style.top  = `${Math.max(8, top)}px`;
+
+  menu.querySelectorAll('.context-menu-item:not(.disabled)').forEach(el => {
+    el.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      const it = items[parseInt(el.getAttribute('data-idx'))];
+      closeContextMenu();
+      if (it && it.onClick) it.onClick();
+    });
+  });
+
+  _ctxMenuEl = menu;
+  setTimeout(() => {
+    document.addEventListener('mousedown', _ctxOutside, true);
+    document.addEventListener('contextmenu', _ctxOutside, true);
+    document.addEventListener('keydown', _ctxKeydown, true);
+    window.addEventListener('scroll', closeContextMenu, true);
+    window.addEventListener('resize', closeContextMenu);
+  }, 0);
+}
+
+function openPipContextMenu(entryIdx, x, y) {
+  const entry = _calendarEntries[entryIdx];
+  if (!entry) return;
+  const wf = WORKFLOWS.find(w => w.file === entry.workflow);
+  const name = wf ? wf.name : entry.workflow;
+  const isOnce  = entry.type === 'once';
+  const enabled = entry.enabled !== false;
+  const dispatched = isOnce && entry.dispatched;
+
+  const items = [
+    { type: 'label', label: `${name}${isOnce ? ' · ONCE' : ''}` },
+    { icon: 'play',  label: 'Run now',   onClick: () => runScheduledNow(entryIdx) },
+    { icon: 'edit',  label: 'Edit',      onClick: () => openEditSchedModal(entryIdx) },
+    { icon: 'copy',  label: 'Duplicate', onClick: () => duplicateScheduledRun(entryIdx) },
+  ];
+  if (!dispatched) {
+    items.push({
+      icon: enabled ? 'pause' : 'play',
+      label: enabled ? 'Disable' : 'Enable',
+      onClick: () => toggleScheduleEntryEnabled(entryIdx),
+    });
+  }
+  items.push({ type: 'separator' });
+  items.push({ icon: 'trash', label: 'Delete', danger: true, onClick: () => deleteScheduledRun(entryIdx) });
+  showContextMenu(x, y, items);
+}
+
+function openSlotContextMenu(day, time, x, y) {
+  if (isNaN(day) || !time) return;
+  const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  showContextMenu(x, y, [
+    { type: 'label', label: `${dayNames[day] || ''} · ${time}` },
+    { icon: 'plus',    label: 'Add recurring here', onClick: () => quickAddRecurring(day, time) },
+    { type: 'separator' },
+    { icon: 'refresh', label: 'Refresh grid',       onClick: () => loadScheduledRuns() },
+  ]);
+}
+
+function openGridContextMenu(x, y) {
+  showContextMenu(x, y, [
+    { icon: 'refresh', label: 'Refresh grid', onClick: () => loadScheduledRuns() },
+  ]);
 }
 
 function _outsidePopoverHandler(e) {

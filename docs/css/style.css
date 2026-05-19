@@ -479,6 +479,52 @@ select option { background: var(--card); color: var(--foreground); }
 
 /* ─── SCHEDULE GRID (JS-generated) ─── */
 .schedule-grid-wrapper { padding: 0 0 4px; }
+
+/* ─── Context menu (shadcn-style) ─── */
+.context-menu {
+  position: fixed;
+  z-index: 100;
+  min-width: 200px;
+  padding: 4px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  color: var(--foreground);
+  font-size: var(--fs-sm);
+  animation: fade-in var(--duration-fast) var(--ease-out);
+  user-select: none;
+}
+.context-menu-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  color: var(--foreground);
+  transition: background var(--duration-fast) var(--ease-out),
+              color var(--duration-fast) var(--ease-out);
+  outline: none;
+}
+.context-menu-item > .ctx-icon { color: var(--muted-foreground); flex-shrink: 0; display: inline-flex; }
+.context-menu-item:hover,
+.context-menu-item:focus { background: var(--muted); }
+.context-menu-item:hover > .ctx-icon { color: var(--foreground); }
+.context-menu-item.danger { color: var(--red); }
+.context-menu-item.danger > .ctx-icon { color: var(--red); }
+.context-menu-item.danger:hover { background: rgba(239,68,68,0.1); color: var(--red); }
+.context-menu-item.disabled { opacity: 0.4; pointer-events: none; }
+.context-menu-shortcut {
+  margin-left: auto; padding-left: 16px;
+  font-size: var(--fs-xs); color: var(--muted-foreground);
+  font-family: var(--font-mono); letter-spacing: 0.02em;
+}
+.context-menu-separator { height: 1px; background: var(--border); margin: 4px -4px; }
+.context-menu-label {
+  padding: 6px 8px 2px;
+  font-size: 10px; font-weight: 600;
+  color: var(--muted-foreground);
+  text-transform: uppercase; letter-spacing: 0.06em;
+}
 .schedule-grid {
   display: grid; grid-template-columns: 48px repeat(7, 1fr); gap: 1px;
   background: var(--border); border-radius: var(--radius-md); overflow: hidden;

@@ -42,6 +42,7 @@ const ICON_PATHS = {
   play:       '<polygon points="6 3 20 12 6 21 6 3"/>',
   pause:      '<rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/>',
   copy:       '<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
+  plus:       '<path d="M5 12h14"/><path d="M12 5v14"/>',
 };
 
 function ICON(name, size = 16, extraClass = '') {
