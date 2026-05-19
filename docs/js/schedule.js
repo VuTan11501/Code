@@ -428,10 +428,9 @@ function renderScheduleCalendar(gistEntries) {
       e.preventDefault();
       e.stopPropagation();
       const pip  = e.target.closest('.schedule-pip[data-entry]');
+      if (pip) return;   // pip already opens its own popover via pointerup
       const slot = e.target.closest('.sc-slot');
-      if (pip) {
-        openPipContextMenu(parseInt(pip.getAttribute('data-entry')), e.clientX, e.clientY);
-      } else if (slot) {
+      if (slot) {
         const day  = parseInt(slot.getAttribute('data-day'));
         const time = slot.getAttribute('data-time');
         openSlotContextMenu(day, time, e.clientX, e.clientY);
