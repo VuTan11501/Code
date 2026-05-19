@@ -1329,6 +1329,7 @@ input[type="time"], input[type="date"], input[type="datetime-local"] {
   .nav-item.active, .tabs-trigger.active {
     box-shadow: none;
     background: none;
+    border: none;
     color: var(--foreground) !important;
   }
   .nav-item.active .nav-icon, .tabs-trigger.active .nav-icon {
