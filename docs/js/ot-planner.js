@@ -141,9 +141,9 @@ function renderOtCalendar() {
     if (hasConflict) classes.push('has-conflict');
     const click = inWindow
       ? `openOtForm('${dateStr}')`
-      : `_showOutOfWindowToast('${dateStr}')`;
-    const label = `${dateStr}${ots.length ? `, ${ots.length} OT` : ''}${!inWindow ? ' (không thể tạo)' : ''}`;
-    html += `<div class="${classes.join(' ')}" onclick="${click}" role="button" tabindex="0" aria-label="${label}" aria-disabled="${!inWindow}">`;
+      : (ots.length ? `openOtForm(null, '${ots[0].id}')` : `_showOutOfWindowToast('${dateStr}')`);
+    const label = `${dateStr}${ots.length ? `, ${ots.length} OT` : ''}${!inWindow && !ots.length ? ' (không thể tạo)' : ''}`;
+    html += `<div class="${classes.join(' ')}" onclick="${click}" role="button" tabindex="0" aria-label="${label}" aria-disabled="${!inWindow && !ots.length}">`;
     html += `<div class="ot-cell-num">${d}</div>`;
     if (ots.length) {
       html += `<div class="ot-badge" title="${totalH}h total">${totalH}h</div>`;
