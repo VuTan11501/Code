@@ -298,8 +298,9 @@ async function pullOtFromDokoKin() {
   const origHtml = btn ? btn.innerHTML : '';
   if (btn) {
     btn.disabled = true;
-    btn.innerHTML = `${ICON('refresh', 14, 'animate-spin')} Pulling… (~60s)`;
+    btn.innerHTML = `${ICON('refresh', 14, 'animate-spin')} Pulling…`;
   }
+  _showOtPullOverlay(`Pulling ${monthsBack} month${monthsBack > 1 ? 's' : ''} from DokoKin…`);
   try {
     const res = await fetch(`${API}/repos/${OWNER}/${REPO}/actions/workflows/${OT_HISTORY_FETCH_WF}/dispatches`, {
       method: 'POST',
@@ -317,21 +318,78 @@ async function pullOtFromDokoKin() {
         },
       }),
     });
-    if (res.status === 204) {
-      toast(`☁️ Pull dispatched (${monthsBack}mo) — refreshing in ~75s`);
-      setTimeout(() => loadOtData({ refresh: true }), 75000);
-    } else {
+    if (res.status !== 204) {
       const body = await res.text().catch(() => '');
-      toast(`❌ Pull failed (${res.status})${body ? ': ' + body.slice(0, 80) : ''}`, 'error');
+      throw new Error(`HTTP ${res.status}${body ? ': ' + body.slice(0, 80) : ''}`);
     }
+    toast(`☁️ Pull dispatched (${monthsBack}mo) — waiting for workflow…`);
+    // Poll the workflow run until it completes, then reload Gist.
+    await _waitForOtHistoryFetchRun();
+    await loadOtData({ refresh: true });
+    toast('✅ Synced from DokoKin', 'success');
   } catch (e) {
-    toast(`❌ ${e.message}`, 'error');
+    toast(`❌ Pull failed: ${e.message}`, 'error');
   } finally {
+    _hideOtPullOverlay();
     if (btn) {
       btn.disabled = false;
       btn.innerHTML = origHtml;
     }
   }
+}
+
+// Poll the latest OT History Fetch run until it leaves "in_progress"/"queued".
+// Returns when the run completes (success or failure). Times out at 3 min.
+async function _waitForOtHistoryFetchRun() {
+  const overlay = document.getElementById('otPullOverlay');
+  const start = Date.now();
+  const TIMEOUT_MS = 3 * 60 * 1000;
+  // Brief delay so the dispatch propagates into a visible run
+  await new Promise(r => setTimeout(r, 4000));
+  while (Date.now() - start < TIMEOUT_MS) {
+    try {
+      const data = await apiFetch(`/repos/${OWNER}/${REPO}/actions/workflows/${OT_HISTORY_FETCH_WF}/runs?per_page=1&event=workflow_dispatch`);
+      const run = data && data.workflow_runs && data.workflow_runs[0];
+      if (run) {
+        const elapsed = Math.floor((Date.now() - start) / 1000);
+        if (overlay) {
+          const sub = overlay.querySelector('.spinner-overlay-sub');
+          if (sub) sub.textContent = `Run #${run.run_number} · ${run.status} · ${elapsed}s`;
+        }
+        if (run.status === 'completed') return run;
+      }
+    } catch { /* ignore transient errors */ }
+    await new Promise(r => setTimeout(r, 5000));
+  }
+  throw new Error('Timed out waiting for OT History Fetch run');
+}
+
+function _showOtPullOverlay(label) {
+  let overlay = document.getElementById('otPullOverlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'otPullOverlay';
+    overlay.className = 'spinner-overlay';
+    overlay.innerHTML = `
+      <div class="spinner-overlay-content">
+        <div class="spinner-ring" role="status" aria-label="Loading"></div>
+        <div class="spinner-overlay-label"></div>
+        <div class="spinner-overlay-sub text-xs text-muted-foreground"></div>
+      </div>`;
+    // Mount inside the OT page so it overlays only that area
+    const otPage = document.getElementById('page-ot') || document.body;
+    otPage.appendChild(overlay);
+  }
+  const lbl = overlay.querySelector('.spinner-overlay-label');
+  if (lbl) lbl.textContent = label || 'Loading…';
+  const sub = overlay.querySelector('.spinner-overlay-sub');
+  if (sub) sub.textContent = 'Dispatching workflow…';
+  overlay.classList.add('open');
+}
+
+function _hideOtPullOverlay() {
+  const overlay = document.getElementById('otPullOverlay');
+  if (overlay) overlay.classList.remove('open');
 }
 
 function renderOtCalendar() {

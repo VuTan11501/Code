@@ -841,6 +841,32 @@ select option { background: var(--card); color: var(--foreground); }
 }
 .btn.is-readonly:hover, .btn[disabled]:hover { background: inherit; }
 
+/* shadcn-style spinner overlay (used while pulling fresh data from DokoKin) */
+.spinner-overlay {
+  display: none;
+  position: fixed; inset: 0; z-index: 90;
+  background: rgba(9, 9, 11, 0.65); backdrop-filter: blur(2px);
+  align-items: center; justify-content: center;
+  animation: fade-in var(--duration-fast) var(--ease-out);
+}
+.spinner-overlay.open { display: flex; }
+.spinner-overlay-content {
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+  padding: 24px 32px;
+  background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  min-width: 240px;
+}
+.spinner-overlay-label { font-size: var(--fs-sm); font-weight: 500; color: var(--foreground); }
+.spinner-overlay-sub { font-family: var(--font-mono); font-size: 11px; }
+.spinner-ring {
+  width: 36px; height: 36px; border-radius: 50%;
+  border: 3px solid var(--border);
+  border-top-color: var(--primary);
+  animation: spinner-rotate 0.8s linear infinite;
+}
+@keyframes spinner-rotate { to { transform: rotate(360deg); } }
+
 /* Phase 3 — Template manager */
 .ot-template-list { display: flex; flex-direction: column; gap: var(--sp-2); }
 .ot-template-row {

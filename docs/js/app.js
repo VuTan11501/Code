@@ -10,6 +10,7 @@ const WORKFLOWS = [
   { id: 278639767, name: 'Auto Checkout', icon: '📤', iconName: 'logOut', file: 'auto-checkout.yml' },
   { id: 277802136, name: 'Auto Request OT', icon: '⏰', iconName: 'hourglass', file: 'auto-ot-creator.yml' },
   { id: 278223037, name: 'JPY Forecast', icon: '💹', iconName: 'barChart', file: 'jpy-forecast.yml' },
+  { id: 279267238, name: 'OT History Fetch', icon: '📊', iconName: 'refresh', file: 'ot-history-fetch.yml' },
 ];
 const AUTO_LOCK_MS = 15 * 60 * 1000;
 
