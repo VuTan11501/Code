@@ -513,6 +513,40 @@ select option { background: var(--card); color: var(--foreground); }
 .schedule-pip.ot { background: var(--purple-subtle); color: var(--purple); }
 .schedule-pip.forecast { background: var(--blue-subtle); color: var(--blue); }
 .schedule-pip.disabled { opacity: 0.35; text-decoration: line-through; }
+.schedule-pip.once {
+  outline: 1px dashed currentColor;
+  outline-offset: -2px;
+  position: relative;
+}
+.schedule-pip.once::after {
+  content: '1×';
+  font-size: 6px;
+  font-weight: 700;
+  margin-left: 3px;
+  opacity: 0.75;
+  letter-spacing: 0;
+}
+.legend-pip-sample {
+  display: inline-block; width: 14px; height: 10px; border-radius: var(--radius-sm);
+  background: var(--muted); vertical-align: middle;
+}
+.legend-pip-sample.once {
+  outline: 1px dashed var(--muted-foreground);
+  outline-offset: -2px;
+  background: transparent;
+}
+.badge-once {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 1px 5px;
+  border-radius: var(--radius-sm);
+  background: var(--purple-subtle);
+  color: var(--purple);
+  margin-left: 6px;
+  vertical-align: middle;
+}
 
 .schedule-legend {
   display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center;

@@ -173,7 +173,7 @@ function renderScheduleCalendar(gistEntries) {
   const filter = _loadPipFilter();
   const isHidden = (k) => filter[k] === true;     // hidden when explicitly true
 
-  // Build pip records: { entryIdx, dayIdx, time, name, wfFile, enabled, typeKey }
+  // Build pip records: { entryIdx, dayIdx, time, name, wfFile, enabled, typeKey, once, dateStr }
   const pips = [];
   const typeCounts = { checkin: 0, checkout: 0, ot: 0, forecast: 0 };
   for (let i = 0; i < _calendarEntries.length; i++) {
@@ -190,12 +190,50 @@ function renderScheduleCalendar(gistEntries) {
     else continue;
     if (!days.length) continue;
     const time = r.time || '00:00';
+    const skipSet = new Set(r.skip_dates || []);
     for (const d of days) {
-      pips.push({ entryIdx: i, dayIdx: d, time, name, wfFile: entry.workflow, enabled: entry.enabled !== false, typeKey });
+      pips.push({ entryIdx: i, dayIdx: d, time, name, wfFile: entry.workflow, enabled: entry.enabled !== false, typeKey, once: false, skipSet });
       if (entry.enabled !== false) typeCounts[typeKey] = (typeCounts[typeKey] || 0) + 1;
     }
   }
-  const visiblePips = pips.filter(p => !isHidden(p.typeKey));
+
+  // Also include pending one-time entries within the next 7 days
+  const _nowJ = jstNow();
+  const todayJstMid = new Date(_nowJ.getFullYear(), _nowJ.getMonth(), _nowJ.getDate());
+  const weekEndJst = new Date(todayJstMid); weekEndJst.setDate(weekEndJst.getDate() + 7);
+  const _jstFmt = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false, weekday: 'short',
+  });
+  const _dowMap = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+  for (let i = 0; i < _calendarEntries.length; i++) {
+    const entry = _calendarEntries[i];
+    if (entry.type !== 'once' || entry.dispatched) continue;
+    if (!entry.run_at) continue;
+    const dt = new Date(entry.run_at);
+    if (isNaN(dt.getTime())) continue;
+    // Compute JST representation
+    const parts = Object.fromEntries(_jstFmt.formatToParts(dt).map(p => [p.type, p.value]));
+    const jstMid = new Date(`${parts.year}-${parts.month}-${parts.day}T00:00:00+09:00`);
+    if (jstMid < todayJstMid || jstMid >= weekEndJst) continue;
+    const dayIdx = _dowMap[parts.weekday] ?? jstMid.getDay();
+    const time = `${parts.hour}:${parts.minute}`;
+    const wf = WORKFLOWS.find(w => w.file === entry.workflow);
+    const name = wf ? wf.name : entry.workflow;
+    const typeKey = _pipTypeOf(entry.workflow);
+    const dateStr = `${parts.year}-${parts.month}-${parts.day}`;
+    pips.push({ entryIdx: i, dayIdx, time, name, wfFile: entry.workflow, enabled: true, typeKey, once: true, dateStr });
+    typeCounts[typeKey] = (typeCounts[typeKey] || 0) + 1;
+  }
+
+  const todayDateStr = formatDate(_nowJ.getFullYear(), _nowJ.getMonth(), _nowJ.getDate());
+  const visiblePips = pips.filter(p => {
+    if (isHidden(p.typeKey)) return false;
+    // For recurring with skip_dates: hide pip if today's date column matches a skip date
+    // (skip_dates is per-actual-date; we only suppress on the today column to avoid mislabeling other weeks)
+    if (!p.once && p.skipSet && p.dayIdx === _nowJ.getDay() && p.skipSet.has(todayDateStr)) return false;
+    return true;
+  });
 
   // Stats
   const activeEntries = _calendarEntries.filter(e => e.enabled !== false && (e.type === 'recurring' || (e.type === 'once' && !e.dispatched))).length;
@@ -266,7 +304,11 @@ function renderScheduleCalendar(gistEntries) {
       html += `<div class="${classes.join(' ')}" ${onclick}${cellPips.length === 0 ? ' data-tooltip="Double-tap to add"' : ''}>`;
       for (const p of cellPips) {
         const dimmed = p.enabled ? '' : ' disabled';
-        html += `<span class="schedule-pip ${p.typeKey}${dimmed}" data-entry="${p.entryIdx}" data-tooltip="${p.name}${p.enabled ? '' : ' (disabled)'}">${p.name.split(' ').slice(-1)[0]}</span>`;
+        const onceCls = p.once ? ' once' : '';
+        const tip = p.once
+          ? `${p.name} · One-time · ${p.dateStr} ${p.time} JST`
+          : `${p.name}${p.enabled ? '' : ' (disabled)'}`;
+        html += `<span class="schedule-pip ${p.typeKey}${dimmed}${onceCls}" data-entry="${p.entryIdx}" data-tooltip="${tip}">${p.name.split(' ').slice(-1)[0]}</span>`;
       }
       html += '</div>';
     }
@@ -275,6 +317,7 @@ function renderScheduleCalendar(gistEntries) {
   html += '<div class="schedule-legend">';
   html += '<span class="legend-item"><span class="legend-dot today-col"></span>Today</span>';
   html += '<span class="legend-item"><span class="legend-dot next-time"></span>Next slot</span>';
+  html += '<span class="legend-item"><span class="legend-pip-sample once"></span>One-time</span>';
   html += '<span class="legend-divider" aria-hidden="true"></span>';
   html += '<span class="legend-hint"><kbd class="legend-kbd">Double-tap empty</kbd> add</span>';
   html += '<span class="legend-hint"><kbd class="legend-kbd">Tap pip</kbd> actions</span>';
@@ -285,12 +328,17 @@ function renderScheduleCalendar(gistEntries) {
   // Wire up pip interactions
   container.querySelectorAll('.schedule-pip[data-entry]').forEach(pip => {
     const entryIdx = parseInt(pip.getAttribute('data-entry'));
+    const isOnce = pip.classList.contains('once');
     pip.addEventListener('pointerdown', (e) => {
       e.stopPropagation();
       _pressMoved = false;
       _pressTimer = setTimeout(() => {
         _pressTimer = null;
-        toggleRecurringEnabled(entryIdx, pip);
+        if (isOnce) {
+          openPipActions(entryIdx, pip);     // long-press fallback for once entries
+        } else {
+          toggleRecurringEnabled(entryIdx, pip);
+        }
       }, 550);
     });
     pip.addEventListener('pointermove', () => { _pressMoved = true; });
@@ -337,8 +385,8 @@ function openPipActions(entryIdx, pipEl) {
   if (!entry) return;
   const wf = WORKFLOWS.find(w => w.file === entry.workflow);
   const name = wf ? wf.name : entry.workflow;
+  const isOnce = entry.type === 'once';
   const enabled = entry.enabled !== false;
-  const time = entry.recurrence?.time || '';
 
   // Per-entry next-fire countdown
   let nextFireStr = '';
@@ -347,19 +395,36 @@ function openPipActions(entryIdx, pipEl) {
     if (d && d > 0) nextFireStr = ` · next in ${_formatCountdown(d)}`;
   }
 
+  let subtitle;
+  if (isOnce) {
+    const dt = new Date(entry.run_at);
+    const jstStr = dt.toLocaleString('en-CA', {
+      timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', hour12: false,
+    });
+    subtitle = `One-time · ${jstStr} JST${nextFireStr}`;
+  } else {
+    const time = entry.recurrence?.time || '';
+    subtitle = `${time} · ${describeRecurrence(entry.recurrence || {})}${nextFireStr}`;
+  }
+
+  const toggleBtn = isOnce
+    ? ''
+    : `<button class="btn sm" onclick="toggleRecurringEnabled(${entryIdx})">${ICON(enabled ? 'pause' : 'play', 14)} ${enabled ? 'Disable' : 'Enable'}</button>`;
+
   const pop = document.createElement('div');
   pop.id = 'pipActionsPopover';
   pop.className = 'pip-popover';
   pop.innerHTML = `
     <div class="pip-popover-header">
-      <div class="pip-popover-title">${wf?.icon || '⚙️'} ${name}</div>
-      <div class="pip-popover-sub text-muted">${time} · ${describeRecurrence(entry.recurrence || {})}${nextFireStr}</div>
+      <div class="pip-popover-title">${wf?.icon || '⚙️'} ${name}${isOnce ? ' <span class="badge-once">ONCE</span>' : ''}</div>
+      <div class="pip-popover-sub text-muted">${subtitle}</div>
     </div>
     <div class="pip-popover-actions">
       <button class="btn sm" onclick="runScheduledNow(${entryIdx})">${ICON('play', 14)} Run now</button>
       <button class="btn sm" onclick="openEditSchedModal(${entryIdx}); closePipPopover();">${ICON('edit', 14)} Edit</button>
       <button class="btn sm" onclick="duplicateScheduledRun(${entryIdx})">${ICON('copy', 14)} Duplicate</button>
-      <button class="btn sm" onclick="toggleRecurringEnabled(${entryIdx})">${ICON(enabled ? 'pause' : 'play', 14)} ${enabled ? 'Disable' : 'Enable'}</button>
+      ${toggleBtn}
       <button class="btn danger sm pip-action-wide" onclick="deleteScheduledRun(${entryIdx}); closePipPopover();">${ICON('trash', 14)} Delete</button>
     </div>
   `;
