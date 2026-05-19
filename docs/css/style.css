@@ -317,6 +317,8 @@ html { touch-action: manipulation; }
   padding: 20px; animation: fadeIn var(--duration-fast);
 }
 .modal-overlay.open, .dialog-overlay.open { display: flex; }
+/* Confirm dialog always sits above other modals (it's a sub-confirmation) */
+#uiConfirmDialog { z-index: 1000; }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
 .modal, .dialog-content {

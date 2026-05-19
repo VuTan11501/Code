@@ -1238,6 +1238,7 @@ function renderOtOptimizerResults(selected, ctx) {
         <tbody>${rows}</tbody>
       </table>
     </div>
+    <button class="btn primary w-full mt-3" onclick="applyOtOptimizer()"><span data-icon="save" data-size="14"></span> Apply Selected</button>
   `;
   if (typeof renderIcons === 'function') renderIcons(host);
 }
