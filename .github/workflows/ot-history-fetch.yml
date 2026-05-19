@@ -1,0 +1,55 @@
+name: OT History Fetch
+
+# Pulls historical OT requests from DokoKin for the last N months and merges
+# them into ot-requests.json (Gist). Useful for backfilling the dashboard
+# with OT records created outside this automation.
+
+on:
+  workflow_dispatch:
+    inputs:
+      months_back:
+        description: "How many months back to fetch (incl. current month)"
+        required: false
+        default: "12"
+
+permissions:
+  contents: read
+
+env:
+  TZ: Asia/Tokyo
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            .github/scripts
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Run OT history fetch
+        id: fetch
+        env:
+          AZURE_REFRESH_TOKEN: ${{ secrets.AZURE_REFRESH_TOKEN }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+          MONTHS_BACK: ${{ inputs.months_back }}
+        run: python .github/scripts/ot_history_fetch.py
+
+      - name: Update secret if token rotated
+        if: always() && steps.fetch.outputs.token_rotated == 'true'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+          NEW_REFRESH_TOKEN: ${{ steps.fetch.outputs.new_refresh_token }}
+        run: |
+          if [ -n "$NEW_REFRESH_TOKEN" ] && [ -n "$GH_TOKEN" ]; then
+            gh secret set AZURE_REFRESH_TOKEN --body "$NEW_REFRESH_TOKEN" --repo "$GITHUB_REPOSITORY"
+            echo "✅ Secret updated with rotated token"
+          fi

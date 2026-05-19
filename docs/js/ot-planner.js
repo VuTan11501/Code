@@ -125,6 +125,7 @@ function otNavMonth(delta) {
   _otState.viewYear = y;
   _otState.viewMonth = m;
   renderOtCalendar();
+  renderOtList();
 }
 
 function otGoToday() {
@@ -132,6 +133,7 @@ function otGoToday() {
   _otState.viewYear = now.getFullYear();
   _otState.viewMonth = now.getMonth();
   renderOtCalendar();
+  renderOtList();
 }
 
 function _otCreationWindow() {
@@ -259,24 +261,30 @@ function renderOtList() {
   const countEl = document.getElementById('otTableCount');
   if (!tbody) return;
   const w = _otCreationWindow();
-  // Treat dates within the creation window (incl. yesterday) as "actionable".
-  // Only dates strictly older than yesterday are "past" for badge/sort purposes.
   const minStr = w.minStr;
-  const upcoming = _otState.requests
+
+  // Filter to the currently viewed month
+  const y = _otState.viewYear, m = _otState.viewMonth;
+  const monthPrefix = `${y}-${String(m + 1).padStart(2, '0')}-`;
+  const monthName = new Date(y, m, 1).toLocaleString('en-US', { month: 'long', year: 'numeric' });
+  const inMonth = (_otState.requests || []).filter(o => o.date && o.date.startsWith(monthPrefix));
+
+  // Within the month: actionable (date >= yesterday) first, then past
+  const upcoming = inMonth
     .filter(o => o.date >= minStr)
     .sort((a,b) => a.date.localeCompare(b.date) || a.start.localeCompare(b.start));
-  const past = _otState.requests
+  const past = inMonth
     .filter(o => o.date < minStr)
     .sort((a,b) => b.date.localeCompare(a.date));
   const all = [...upcoming, ...past];
 
   if (countEl) {
-    const upN = upcoming.length, pastN = past.length;
-    countEl.textContent = `${all.length} entr${all.length === 1 ? 'y' : 'ies'} (${upN} actionable, ${pastN} past)`;
+    const created = inMonth.filter(o => !!o.kintai_created_at).length;
+    countEl.textContent = `${all.length} entr${all.length === 1 ? 'y' : 'ies'} in ${monthName} (${created} created)`;
   }
 
   if (!all.length) {
-    tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted-foreground py-8">No OT requests. Tap "+ Add OT" or click a date on the calendar.</td></tr>';
+    tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted-foreground py-8">No OT requests in ${monthName}. Tap "+ Add OT" or click a date on the calendar.</td></tr>`;
     return;
   }
 
