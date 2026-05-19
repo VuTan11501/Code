@@ -125,6 +125,8 @@ html { touch-action: manipulation; }
 .section-title [data-icon], .card-title [data-icon] {
   color: var(--primary);
 }
+/* But buttons inside titles keep their own text color */
+.section-title .btn [data-icon] { color: inherit; }
 /* Icon-only buttons keep a square shape */
 .btn .icon, .btn [data-icon] .icon { flex-shrink: 0; }
 
