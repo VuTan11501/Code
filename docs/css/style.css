@@ -1752,6 +1752,75 @@ input[type="time"], input[type="date"], input[type="datetime-local"] {
   border-radius: var(--radius-sm);
 }
 
+/* OT Form income preview + suggest */
+.ot-form-income {
+  display: flex; flex-direction: column; gap: 8px;
+  font-size: var(--fs-xs);
+  color: var(--foreground);
+  background: rgba(34, 197, 94, 0.06);
+  border: 1px solid rgba(34, 197, 94, 0.25);
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+}
+.ot-form-income.is-empty {
+  background: var(--muted);
+  border-color: var(--border);
+  color: var(--muted-foreground);
+  font-style: italic;
+}
+.ot-form-income-header {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+}
+.ot-form-income-gross {
+  font-family: var(--font-mono);
+  font-size: var(--fs-md);
+  font-weight: 600;
+  color: var(--green);
+}
+.ot-form-income-net {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--muted-foreground);
+}
+.ot-form-income-rows {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 2px 10px;
+  font-size: 11px;
+  color: var(--muted-foreground);
+  font-family: var(--font-mono);
+}
+.ot-form-income-rows .lbl { color: var(--muted-foreground); }
+.ot-form-income-rows .hrs { text-align: right; }
+.ot-form-income-rows .yen { text-align: right; color: var(--foreground); }
+.ot-form-income-suggest {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  margin-top: 4px; padding-top: 8px;
+  border-top: 1px dashed rgba(34, 197, 94, 0.25);
+}
+.ot-form-income-suggest-info {
+  font-size: 11px; color: var(--muted-foreground); line-height: 1.4;
+}
+.ot-form-income-suggest .btn-suggest {
+  font-size: 11px; padding: 4px 10px;
+  background: rgba(168, 85, 247, 0.12);
+  border: 1px solid rgba(168, 85, 247, 0.32);
+  color: var(--purple);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  white-space: nowrap;
+  font-weight: 500;
+}
+.ot-form-income-suggest .btn-suggest:hover {
+  background: rgba(168, 85, 247, 0.22);
+}
+.ot-form-income-suggest .btn-suggest:disabled {
+  opacity: 0.4; cursor: not-allowed;
+}
+.ot-form-income-uplift {
+  color: var(--green); font-weight: 600;
+}
+
 @media (max-width: 480px) {
   .ot-cell { padding: 3px 2px 2px; min-height: 44px; }
   .ot-cell-num { font-size: 10px; }

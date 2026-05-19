@@ -540,6 +540,94 @@ function _updateOtFormPreview() {
       preview.innerHTML = '';
     }
   }
+  _renderOtFormIncome(date, start, end, hours);
+}
+
+// ─── Income preview + suggest-best-slot ───────────────────────────
+function _renderOtFormIncome(date, start, end, hours) {
+  const el = document.getElementById('otFormIncome');
+  if (!el) return;
+  const S = window.OT_SALARY;
+  if (!S || !date || !start || !end || !hours || hours <= 0) {
+    el.className = 'ot-form-income is-empty';
+    el.innerHTML = `${ICON('calculator', 13)} <span>Pick date + start/end to estimate OT income</span>`;
+    return;
+  }
+  let br;
+  try {
+    br = S.calcOtBreakdown({ date, start, end, hours });
+  } catch (e) {
+    el.className = 'ot-form-income is-empty';
+    el.innerHTML = `<span style="color:var(--red)">Income calc failed: ${_esc(e.message)}</span>`;
+    return;
+  }
+  // Find best alternative slot at the same duration
+  const best = _findBestOtSlot(date, hours);
+  const uplift = best && best.gross > br.gross ? best.gross - br.gross : 0;
+  const upliftPct = br.gross > 0 ? (uplift / br.gross * 100) : 0;
+  const yen = S.formatYen;
+  const sameAsCurrent = best && best.start === start && best.end === end;
+
+  el.className = 'ot-form-income';
+  el.innerHTML = `
+    <div class="ot-form-income-header">
+      <span>${ICON('coins', 14)} <strong>Estimated income</strong></span>
+      <span class="ot-form-income-gross">${yen(br.gross)}</span>
+    </div>
+    <div class="ot-form-income-rows">
+      <span class="lbl">Base OT (125%)</span><span class="hrs">${br.totalHours.toFixed(2)}h</span><span class="yen">${yen(Math.floor(br.baseOT))}</span>
+      ${br.nightHours > 0 ? `<span class="lbl">+ Night (22-05)</span><span class="hrs">${br.nightHours.toFixed(2)}h</span><span class="yen">+${yen(Math.floor(br.nightPremium))}</span>` : ''}
+      ${br.sundayHours > 0 ? `<span class="lbl">+ Sunday all-day</span><span class="hrs">${br.sundayHours.toFixed(2)}h</span><span class="yen">+${yen(Math.floor(br.sundayPremium))}</span>` : ''}
+    </div>
+    <div class="ot-form-income-suggest">
+      <div class="ot-form-income-suggest-info">
+        ${sameAsCurrent
+          ? `✅ Already the highest-paying ${hours}h slot for this date`
+          : best
+            ? `Best ${hours}h slot: <strong>${best.start}→${best.end}</strong> → ${yen(best.gross)} <span class="ot-form-income-uplift">(+${yen(uplift)}, +${upliftPct.toFixed(1)}%)</span>`
+            : `No alternative slot found`}
+      </div>
+      <button type="button" class="btn-suggest" onclick="applyOtBestSlot()" ${(!best || sameAsCurrent) ? 'disabled' : ''}>💡 Apply</button>
+    </div>
+  `;
+}
+
+// Brute-force search: try every 15-min start, same duration as current,
+// pick the start that yields max gross income. Cheap enough (~96 candidates).
+function _findBestOtSlot(date, hours) {
+  const S = window.OT_SALARY;
+  if (!S || !date || !hours || hours <= 0) return null;
+  const durationMin = Math.round(hours * 60);
+  if (durationMin <= 0 || durationMin > 24 * 60) return null;
+  let best = null;
+  for (let m = 0; m < 24 * 60; m += 15) {
+    const sh = Math.floor(m / 60), sm = m % 60;
+    const start = `${String(sh).padStart(2, '0')}:${String(sm).padStart(2, '0')}`;
+    const endMin = (m + durationMin) % (24 * 60);
+    const eh = Math.floor(endMin / 60), em = endMin % 60;
+    const end = `${String(eh).padStart(2, '0')}:${String(em).padStart(2, '0')}`;
+    if (start === end) continue;
+    let br;
+    try { br = S.calcOtBreakdown({ date, start, end, hours }); }
+    catch { continue; }
+    if (!best || br.gross > best.gross) {
+      best = { start, end, gross: br.gross };
+    }
+  }
+  return best;
+}
+
+function applyOtBestSlot() {
+  const date = document.getElementById('otFormDate').value;
+  const start = document.getElementById('otFormStart').value;
+  const end = document.getElementById('otFormEnd').value;
+  const hours = _computeHours(start, end);
+  const best = _findBestOtSlot(date, hours);
+  if (!best) return toast('⚠️ No alternative slot found', 'warning');
+  document.getElementById('otFormStart').value = best.start;
+  document.getElementById('otFormEnd').value = best.end;
+  _updateOtFormPreview();
+  toast(`💡 Applied best slot: ${best.start}→${best.end}`, 'success');
 }
 
 async function submitOtForm() {
