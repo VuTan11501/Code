@@ -134,7 +134,7 @@ html { touch-action: manipulation; }
   transition: border-color var(--duration-normal), transform var(--duration-fast);
   display: flex; flex-direction: column;
 }
-@media (hover: hover) { .card:hover { border-color: rgba(var(--tint),0.16); transform: translateY(-1px); } }
+@media (hover: hover) { .card:hover:not(.auth-card) { border-color: rgba(var(--tint),0.16); transform: translateY(-1px); } }
 .card.updating { opacity: 0.6; }
 .card-header {
   display: flex; flex-direction: column; gap: 4px;
