@@ -1,6 +1,7 @@
 // ═══════════════════════════════════════════════════
 //  OT PLANNER — Manage OT requests + conflict auto-fix
 //  Storage: Gist file `ot-requests.json` (same Gist as scheduled-runs.json)
+//  Phase 3: schema is {requests: [...], templates: [...]} (legacy array still read).
 // ═══════════════════════════════════════════════════
 const OT_FILE = 'ot-requests.json';
 const OT_CHECKOUT_WF = 'auto-checkout.yml';
@@ -8,13 +9,22 @@ const OT_CREATOR_WF = 'auto-ot-creator.yml';
 const OT_CREATION_WINDOW_DAYS = 7;   // forward: today + 7 days
 const OT_BACKWARD_DAYS = 1;          // backward: today - 1 day (yesterday allowed)
 
+// Built-in templates — merged at render time, not persisted in Gist.
+const BUILTIN_TEMPLATES = Object.freeze([
+  { id: 'builtin-night',      builtin: true, name: '🌙 Night shift',     start: '22:00', end: '03:30', reason: 'task shishin',         preferredDays: [1,2,3,4,5,6] },
+  { id: 'builtin-sunday-12h', builtin: true, name: '☀️ Sunday Full 12h', start: '15:30', end: '03:30', reason: 'Sunday OT — full day', preferredDays: [0] },
+  { id: 'builtin-weekend-evening', builtin: true, name: '🌆 Weekend evening', start: '18:00', end: '23:30', reason: 'Weekend OT', preferredDays: [0,6] },
+]);
+
 let _otState = {
   initialized: false,
   requests: [],          // array of OT entries
+  templates: [],         // user-defined templates (Gist-persisted)
   scheduleEntries: [],   // cached scheduled-runs.json (for conflict checks)
   viewYear: null,
   viewMonth: null,       // 0-indexed
   editId: null,
+  optimizerResults: [],  // last optimizer suggestions (in-memory)
 };
 
 // ─── Init ───
@@ -43,15 +53,23 @@ async function loadOtData(opts) {
   if (isManualRefresh && refreshBtn) refreshBtn.classList.add('is-loading');
   try {
     const gist = await apiFetch(`/gists/${GIST_ID}`);
-    // OT requests file
+    // OT requests file — Phase 3 wrapper {requests, templates} OR legacy array.
     const otFile = gist.files && gist.files[OT_FILE];
+    let raw = null;
     if (otFile && otFile.content) {
-      try { _otState.requests = JSON.parse(otFile.content) || []; }
-      catch { _otState.requests = []; }
+      try { raw = JSON.parse(otFile.content); }
+      catch { raw = null; }
+    }
+    if (Array.isArray(raw)) {
+      _otState.requests = raw;
+      _otState.templates = [];
+    } else if (raw && typeof raw === 'object') {
+      _otState.requests = Array.isArray(raw.requests) ? raw.requests : [];
+      _otState.templates = Array.isArray(raw.templates) ? raw.templates : [];
     } else {
       _otState.requests = [];
+      _otState.templates = [];
     }
-    if (!Array.isArray(_otState.requests)) _otState.requests = [];
     // Scheduled entries (for conflict detection)
     const schedFile = gist.files && gist.files['scheduled-runs.json'];
     if (schedFile && schedFile.content) {
@@ -457,6 +475,7 @@ function openOtForm(dateStr, existingId) {
     document.getElementById('otFormReason').value = '';
   }
   _updateOtFormPreview();
+  refreshOtFormTemplateDropdown();
   modal.classList.add('open');
 }
 
@@ -664,10 +683,23 @@ function _otId() {
 }
 
 async function _saveOtRequests(arr) {
+  // Phase 3: write wrapper {requests, templates}, preserving current templates.
+  return _saveOtStore(arr, _otState.templates);
+}
+
+async function _saveOtTemplates(tpls) {
+  return _saveOtStore(_otState.requests, tpls);
+}
+
+async function _saveOtStore(requests, templates) {
+  const payload = {
+    requests: Array.isArray(requests) ? requests : [],
+    templates: Array.isArray(templates) ? templates : [],
+  };
   const res = await fetch(`${API}/gists/${GIST_ID}`, {
     method: 'PATCH',
     headers: { 'Authorization': `Bearer ${sessionToken}`, 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json' },
-    body: JSON.stringify({ files: { [OT_FILE]: { content: JSON.stringify(arr, null, 2) } } }),
+    body: JSON.stringify({ files: { [OT_FILE]: { content: JSON.stringify(payload, null, 2) } } }),
   });
   if (!res.ok) throw new Error(`Gist update failed (${res.status})`);
   return res.json();
@@ -684,12 +716,16 @@ async function _saveScheduledRuns(arr) {
 }
 
 async function _saveBoth(sched, ots) {
+  const otPayload = {
+    requests: Array.isArray(ots) ? ots : [],
+    templates: _otState.templates || [],
+  };
   const res = await fetch(`${API}/gists/${GIST_ID}`, {
     method: 'PATCH',
     headers: { 'Authorization': `Bearer ${sessionToken}`, 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json' },
     body: JSON.stringify({ files: {
       'scheduled-runs.json': { content: JSON.stringify(sched, null, 2) },
-      [OT_FILE]: { content: JSON.stringify(ots, null, 2) },
+      [OT_FILE]: { content: JSON.stringify(otPayload, null, 2) },
     } }),
   });
   if (!res.ok) throw new Error(`Gist update failed (${res.status})`);
@@ -849,6 +885,19 @@ function renderOtBudget() {
 
   const monthName = new Date(y, m, 1).toLocaleString('en-US', { month: 'long', year: 'numeric' });
 
+  // Phase 3: take-home delta (estimate)
+  const profile = _otGetProfile();
+  const delta = window.OT_SALARY.calcTakeHomeDelta(sal.gross, profile);
+  const keepPct = delta.effectiveKeepRate > 0 ? (delta.effectiveKeepRate * 100).toFixed(1) : '—';
+  const takeHomeStr = F(delta.takeHomeDelta);
+  const takeHomeTip = `Estimated net OT take-home (delta vs zero OT):
+• Gross OT: ${F(delta.grossDelta)}
+• − Unemployment ins (0.5%): ${F(delta.insuranceDelta)}
+• − Income tax (源泉徴収月額表 estimate): ${F(delta.taxDelta)}
+• = Net OT: ${F(delta.takeHomeDelta)} (keep ${keepPct}%)
+Resident tax & health/pension don't change with this month's OT.
+★ Estimate ±¥500. Final payslip authoritative.`;
+
   host.innerHTML = `
     <div class="ot-budget-card">
       <div class="ot-budget-header">
@@ -873,6 +922,10 @@ function renderOtBudget() {
           <div class="ot-progress-fill" style="width:${nightPct}%"></div>
         </div>
       </div>
+      <div class="ot-budget-takehome" data-tooltip="${_esc(takeHomeTip)}">
+        <span class="ot-takehome-label">${ICON('wallet', 12)} Net OT take-home <span class="ot-takehome-est">est.</span></span>
+        <span class="ot-takehome-val">${takeHomeStr} <span class="ot-takehome-pct">(${keepPct}%)</span></span>
+      </div>
       <div class="ot-budget-breakdown">
         <span data-tooltip="125% rate on all OT hours — ${F(sal.baseOTLine)}">${ICON('clock', 11)} Base ${F(sal.baseOTLine)}</span>
         <span data-tooltip="+10% extra on Sunday hours">☀️ Sun ${H(sal.sundayHours)} · ${F(sal.sundayLine)}</span>
@@ -881,4 +934,365 @@ function renderOtBudget() {
       </div>
     </div>
   `;
+}
+
+// ═══════════════════════════════════════════════════
+//  Phase 3 — Profile (take-home calc inputs), Templates, Optimizer
+// ═══════════════════════════════════════════════════
+
+const OT_PROFILE_KEY = 'ot_takehome_profile_v1';
+
+function _otGetProfile() {
+  try {
+    const raw = localStorage.getItem(OT_PROFILE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  // Defaults match Apr 2026 payslip for TanVC
+  return {
+    contractGross: 270000,
+    standardInsurance: 280000,
+    residentTax: 4300,
+    travelAllowance: 0,
+    dependents: 0,
+  };
+}
+
+function _otSaveProfile(p) {
+  try { localStorage.setItem(OT_PROFILE_KEY, JSON.stringify(p)); } catch {}
+}
+
+// ─── Templates ───
+function _allTemplates() {
+  const user = (_otState.templates || []).map(t => ({ ...t, builtin: false }));
+  return [...BUILTIN_TEMPLATES, ...user];
+}
+
+function _otTemplateOptions(currentDate) {
+  const dow = currentDate ? new Date(currentDate + 'T00:00:00').getDay() : null;
+  const all = _allTemplates();
+  const opts = ['<option value="">— Select a template (optional) —</option>'];
+  for (const t of all) {
+    const recommended = (dow != null && t.preferredDays && t.preferredDays.includes(dow)) ? ' ★' : '';
+    const safeId = _esc(t.id);
+    opts.push(`<option value="${safeId}">${_esc(t.name)} (${t.start}→${t.end})${recommended}</option>`);
+  }
+  return opts.join('');
+}
+
+function refreshOtFormTemplateDropdown() {
+  const sel = document.getElementById('otFormTemplate');
+  if (!sel) return;
+  const dateEl = document.getElementById('otFormDate');
+  sel.innerHTML = _otTemplateOptions(dateEl ? dateEl.value : null);
+}
+
+function applyOtTemplate() {
+  const sel = document.getElementById('otFormTemplate');
+  if (!sel || !sel.value) return;
+  const tpl = _allTemplates().find(t => t.id === sel.value);
+  if (!tpl) return;
+  document.getElementById('otFormStart').value = tpl.start;
+  document.getElementById('otFormEnd').value = tpl.end;
+  const reasonEl = document.getElementById('otFormReason');
+  if (!reasonEl.value || reasonEl.value === reasonEl.dataset.lastTemplateReason) {
+    reasonEl.value = tpl.reason || '';
+  }
+  reasonEl.dataset.lastTemplateReason = tpl.reason || '';
+  _updateOtFormPreview();
+}
+
+function openOtTemplateManager() {
+  const modal = document.getElementById('otTemplateModal');
+  if (!modal) return;
+  renderOtTemplateList();
+  modal.classList.add('open');
+}
+
+function closeOtTemplateManager() {
+  const m = document.getElementById('otTemplateModal');
+  if (m) m.classList.remove('open');
+}
+
+function renderOtTemplateList() {
+  const host = document.getElementById('otTemplateList');
+  if (!host) return;
+  const all = _allTemplates();
+  const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  let html = '';
+  for (const t of all) {
+    const daysStr = (t.preferredDays && t.preferredDays.length)
+      ? t.preferredDays.map(d => dayNames[d]).join(', ')
+      : '—';
+    const badge = t.builtin
+      ? '<span class="status-badge status-info" data-tooltip="Built-in (read-only)">built-in</span>'
+      : '<span class="status-badge status-success">custom</span>';
+    const actions = t.builtin ? '' : `
+      <button class="btn sm btn-ghost btn-icon" onclick="deleteOtTemplate('${_esc(t.id)}')" data-tooltip="Delete"><span data-icon="trash" data-size="13"></span></button>
+    `;
+    html += `
+      <div class="ot-template-row">
+        <div class="ot-template-info">
+          <div class="ot-template-name">${_esc(t.name)} ${badge}</div>
+          <div class="ot-template-meta">${t.start}→${t.end} · ${daysStr} · "${_esc(t.reason || '')}"</div>
+        </div>
+        <div class="ot-template-actions">${actions}</div>
+      </div>
+    `;
+  }
+  host.innerHTML = html || '<div class="empty text-muted-foreground text-sm p-3 text-center">No templates yet</div>';
+  // Re-render icons in injected HTML
+  if (typeof renderIcons === 'function') renderIcons(host);
+}
+
+async function addOtTemplate() {
+  const name = document.getElementById('otTplName').value.trim();
+  const start = document.getElementById('otTplStart').value;
+  const end = document.getElementById('otTplEnd').value;
+  const reason = document.getElementById('otTplReason').value.trim();
+  const dayCbs = document.querySelectorAll('input[name="otTplDay"]:checked');
+  const preferredDays = Array.from(dayCbs).map(c => Number(c.value));
+  if (!name) return toast('⚠️ Name required', 'warning');
+  if (!/^\d{2}:\d{2}$/.test(start) || !/^\d{2}:\d{2}$/.test(end)) return toast('⚠️ Invalid time', 'warning');
+  if (start === end) return toast('⚠️ Start and end must differ', 'warning');
+  const tpl = {
+    id: 'tpl_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    name, start, end, reason, preferredDays,
+    created_at: new Date().toISOString(),
+  };
+  try {
+    const next = [...(_otState.templates || []), tpl];
+    await _saveOtTemplates(next);
+    _otState.templates = next;
+    document.getElementById('otTplName').value = '';
+    document.getElementById('otTplReason').value = '';
+    document.querySelectorAll('input[name="otTplDay"]').forEach(c => c.checked = false);
+    renderOtTemplateList();
+    refreshOtFormTemplateDropdown();
+    toast('✓ Template added', 'success');
+  } catch (e) {
+    toast(`⚠️ ${e.message}`, 'error');
+  }
+}
+
+async function deleteOtTemplate(id) {
+  const tpl = (_otState.templates || []).find(t => t.id === id);
+  if (!tpl) return;
+  const ok = await uiConfirm({
+    title: 'Delete template?',
+    message: `"${tpl.name}" will be removed.`,
+    okText: 'Delete',
+    danger: true,
+  });
+  if (!ok) return;
+  try {
+    const next = (_otState.templates || []).filter(t => t.id !== id);
+    await _saveOtTemplates(next);
+    _otState.templates = next;
+    renderOtTemplateList();
+    refreshOtFormTemplateDropdown();
+    toast('✓ Deleted', 'success');
+  } catch (e) {
+    toast(`⚠️ ${e.message}`, 'error');
+  }
+}
+
+// ─── Optimizer ───
+// Two fixed shift patterns dominate by ¥/h (per SKILL.md):
+//  - Sunday → 15:30→03:30 (12h, ~5.5h night + ~9.5h Sunday-day)
+//  - Other days → 22:00→03:30 (5.5h, all night, NO break per Labor Standards Act)
+function _otOptimizerCandidates(year, monthZeroIdx, existingByDate) {
+  const daysInMonth = new Date(year, monthZeroIdx + 1, 0).getDate();
+  const todayStr = _todayJSTStr();
+  const out = [];
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr = `${year}-${String(monthZeroIdx + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    if (dateStr < todayStr) continue;            // can't optimize past
+    if (existingByDate[dateStr]) continue;       // skip days with existing OT
+    const dow = new Date(year, monthZeroIdx, d).getDay();
+    let start, end, hours;
+    if (dow === 0) { start = '15:30'; end = '03:30'; hours = 12; }
+    else           { start = '22:00'; end = '03:30'; hours = 5.5; }
+    const ot = { date: dateStr, start, end, hours, reason: 'optimizer' };
+    const breakdown = window.OT_SALARY.calcOtBreakdown(ot);
+    const conf = detectConflict(ot);
+    out.push({
+      date: dateStr, dow, start, end, hours,
+      gross: breakdown.gross,
+      ratio: breakdown.gross / hours,
+      hasConflict: conf.hasConflict,
+      conflictMsg: conf.message || '',
+    });
+  }
+  out.sort((a, b) => b.ratio - a.ratio);
+  return out;
+}
+
+function runOtOptimizer() {
+  const targetEl = document.getElementById('otOptTarget');
+  const maxMode = document.getElementById('otOptMax').checked;
+  const target = maxMode ? Infinity : Math.max(0, Number(targetEl.value) || 0);
+
+  const y = _otState.viewYear;
+  const m = _otState.viewMonth;
+  const monthPrefix = `${y}-${String(m + 1).padStart(2, '0')}-`;
+  const existing = (_otState.requests || []).filter(o => o.date && o.date.startsWith(monthPrefix));
+  const existingByDate = {};
+  existing.forEach(o => { existingByDate[o.date] = true; });
+
+  const sal = window.OT_SALARY.calcMonthlySummary(existing);
+  const S = window.OT_SALARY.SALARY;
+  const remainingHours = S.MAX_HOURS_PER_MONTH - sal.totalHours;
+
+  if (remainingHours <= 0) {
+    document.getElementById('otOptResults').innerHTML =
+      `<div class="empty text-warning text-sm p-3 text-center">${ICON('alertTriangle', 14)} Monthly budget already full: ${sal.totalHours}/${S.MAX_HOURS_PER_MONTH}h. Nothing to optimize.</div>`;
+    return;
+  }
+  if (!maxMode && target <= sal.gross) {
+    document.getElementById('otOptResults').innerHTML =
+      `<div class="empty text-success text-sm p-3 text-center">${ICON('check', 14)} Target ${window.OT_SALARY.formatYen(target)} already met (current ${window.OT_SALARY.formatYen(sal.gross)}).</div>`;
+    return;
+  }
+
+  const candidates = _otOptimizerCandidates(y, m, existingByDate);
+  const selected = [];
+  let projHours = sal.totalHours;
+  let projGross = sal.gross;
+  for (const c of candidates) {
+    if (projHours + c.hours > S.MAX_HOURS_PER_MONTH) continue;   // continue, not break (per critique)
+    if (!maxMode && projGross >= target) break;
+    if (c.hasConflict) continue;
+    selected.push(c);
+    projHours += c.hours;
+    projGross += c.gross;
+  }
+
+  _otState.optimizerResults = selected;
+  renderOtOptimizerResults(selected, { projHours, projGross, currentGross: sal.gross, currentHours: sal.totalHours, target, maxMode });
+}
+
+function renderOtOptimizerResults(selected, ctx) {
+  const host = document.getElementById('otOptResults');
+  if (!host) return;
+  const F = window.OT_SALARY.formatYen;
+  const H = window.OT_SALARY.formatHours;
+  const win = _otCreationWindow();
+
+  if (!selected.length) {
+    host.innerHTML = `<div class="empty text-muted-foreground text-sm p-3 text-center">No eligible days found (all booked/conflicted, or target not reachable within 75h cap).</div>`;
+    return;
+  }
+
+  const profile = _otGetProfile();
+  const deltaTotal = window.OT_SALARY.calcTakeHomeDelta(ctx.projGross - ctx.currentGross, profile, ctx.currentGross);
+
+  let rows = '';
+  for (let i = 0; i < selected.length; i++) {
+    const c = selected[i];
+    const isQueued = c.date > win.maxStr;
+    const isInWindow = !isQueued && c.date >= win.today;
+    const statusBadge = isQueued
+      ? `<span class="status-badge status-pending" data-tooltip="Beyond DokoKin +7d window — saved to Gist, auto-created when in range">queued</span>`
+      : `<span class="status-badge status-info" data-tooltip="Within DokoKin window — Auto OT Creator picks up at next 10:00 JST run">eligible</span>`;
+    const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    rows += `
+      <tr>
+        <td class="px-3 py-2"><input type="checkbox" class="ot-opt-cb" data-idx="${i}" checked></td>
+        <td class="px-3 py-2 font-mono text-xs">${c.date} <span class="text-muted-foreground">${dayNames[c.dow]}</span></td>
+        <td class="px-3 py-2 font-mono text-xs">${c.start}→${c.end}</td>
+        <td class="px-3 py-2 text-right">${H(c.hours)}</td>
+        <td class="px-3 py-2 text-right font-mono">${F(c.gross)}</td>
+        <td class="px-3 py-2">${statusBadge}</td>
+      </tr>
+    `;
+  }
+  host.innerHTML = `
+    <div class="ot-opt-summary">
+      <div class="ot-opt-summary-row">
+        <span>Current</span>
+        <span><strong>${H(ctx.currentHours)}</strong> · ${F(ctx.currentGross)}</span>
+      </div>
+      <div class="ot-opt-summary-row is-projected">
+        <span>+ Suggested (${selected.length} days)</span>
+        <span><strong>${H(ctx.projHours - ctx.currentHours)}</strong> · +${F(ctx.projGross - ctx.currentGross)}</span>
+      </div>
+      <div class="ot-opt-summary-row is-total">
+        <span>Projected total</span>
+        <span><strong>${H(ctx.projHours)}</strong> · ${F(ctx.projGross)}</span>
+      </div>
+      <div class="ot-opt-summary-row is-takehome" data-tooltip="Net take-home delta (estimate, ±¥500)">
+        <span>${ICON('wallet', 12)} Est. net take-home delta</span>
+        <span><strong>${F(deltaTotal.takeHomeDelta)}</strong> <span class="text-muted-foreground">(keep ${(deltaTotal.effectiveKeepRate * 100).toFixed(1)}%)</span></span>
+      </div>
+    </div>
+    <div class="sched-table-wrap overflow-x-auto rounded-lg border border-border mt-3">
+      <table class="sched-table w-full text-sm">
+        <thead><tr class="bg-muted/50 border-b border-border">
+          <th class="px-3 py-2 text-left"><input type="checkbox" id="otOptCbAll" checked onchange="document.querySelectorAll('.ot-opt-cb').forEach(c=>c.checked=this.checked)"></th>
+          <th class="px-3 py-2 text-left text-xs font-medium text-muted-foreground uppercase">Date</th>
+          <th class="px-3 py-2 text-left text-xs font-medium text-muted-foreground uppercase">Time</th>
+          <th class="px-3 py-2 text-right text-xs font-medium text-muted-foreground uppercase">Hours</th>
+          <th class="px-3 py-2 text-right text-xs font-medium text-muted-foreground uppercase">Income</th>
+          <th class="px-3 py-2 text-left text-xs font-medium text-muted-foreground uppercase">Status</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  `;
+  if (typeof renderIcons === 'function') renderIcons(host);
+}
+
+async function applyOtOptimizer() {
+  const checked = Array.from(document.querySelectorAll('.ot-opt-cb:checked'))
+    .map(c => Number(c.dataset.idx))
+    .filter(i => !isNaN(i));
+  if (!checked.length) return toast('⚠️ Select at least 1 row', 'warning');
+  const toAdd = checked.map(i => _otState.optimizerResults[i]).filter(Boolean);
+  const ok = await uiConfirm({
+    title: `Apply ${toAdd.length} OT request${toAdd.length > 1 ? 's' : ''}?`,
+    message: `These will be saved to Gist. Entries within DokoKin's +7d window are picked up by the next Auto OT Creator run (10:00 JST daily); later dates are queued until they enter the window.`,
+    okText: 'Apply',
+  });
+  if (!ok) return;
+  try {
+    await loadOtData();
+    const existing = [..._otState.requests];
+    for (const c of toAdd) {
+      // Double-check no duplicate (race-safe after re-fetch)
+      if (existing.some(o => o.date === c.date)) continue;
+      existing.push({
+        id: _otId(),
+        date: c.date, start: c.start, end: c.end, hours: c.hours,
+        reason: c.start === '15:30' ? 'Sunday OT — full day' : 'task shishin',
+        created_at: new Date().toISOString(),
+        created_by: 'optimizer',
+      });
+    }
+    await _saveOtRequests(existing);
+    closeOtOptimizer();
+    toast(`✓ Applied ${toAdd.length} OT entries`, 'success');
+    await loadOtData();
+  } catch (e) {
+    toast(`⚠️ ${e.message}`, 'error');
+  }
+}
+
+function openOtOptimizer() {
+  const modal = document.getElementById('otOptModal');
+  if (!modal) return;
+  document.getElementById('otOptResults').innerHTML =
+    `<div class="empty text-muted-foreground text-sm p-3 text-center">Set a target income and click "Suggest schedule".</div>`;
+  modal.classList.add('open');
+}
+
+function closeOtOptimizer() {
+  const m = document.getElementById('otOptModal');
+  if (m) m.classList.remove('open');
+  _otState.optimizerResults = [];
+}
+
+function _toggleOtOptTarget() {
+  const max = document.getElementById('otOptMax').checked;
+  const inp = document.getElementById('otOptTarget');
+  if (inp) inp.disabled = max;
 }

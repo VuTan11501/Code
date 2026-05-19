@@ -66,7 +66,7 @@ tailwind.config = {
   },
 }
 </script>
-<link rel="stylesheet" href="css/style.css?v=35">
+<link rel="stylesheet" href="css/style.css?v=36">
 <link rel="preconnect" href="https://api.github.com">
 </head>
 <body class="bg-background text-foreground font-sans text-sm antialiased min-h-dvh overflow-x-hidden">
@@ -383,7 +383,11 @@ tailwind.config = {
       <section aria-label="OT requests list">
         <div class="section-title text-sm font-medium text-muted-foreground mb-4 flex items-center justify-between gap-2">
           <span class="flex items-center gap-2"><span data-icon="clipboard" data-size="16"></span> OT Requests</span>
-          <button class="btn sm primary" onclick="openOtForm()"><span data-icon="plus" data-size="14"></span> Add OT</button>
+          <div class="flex items-center gap-2">
+            <button class="btn sm" onclick="openOtOptimizer()" data-tooltip="Suggest optimal OT schedule for this month"><span data-icon="target" data-size="14"></span> Optimize</button>
+            <button class="btn sm" onclick="openOtTemplateManager()" data-tooltip="Manage OT templates"><span data-icon="list" data-size="14"></span> Templates</button>
+            <button class="btn sm primary" onclick="openOtForm()"><span data-icon="plus" data-size="14"></span> Add OT</button>
+          </div>
         </div>
         <div class="sched-table-wrap overflow-x-auto rounded-lg border border-border">
           <table class="sched-table w-full text-sm" id="otTable">
@@ -765,8 +769,15 @@ tailwind.config = {
     <div class="dialog-body modal-body" style="padding:20px">
       <div class="flex flex-col gap-4">
         <div class="field">
+          <label class="field-label text-xs text-muted-foreground font-medium block mb-1" for="otFormTemplate">Template (optional)</label>
+          <div class="flex gap-2">
+            <select class="select w-full" id="otFormTemplate" onchange="applyOtTemplate()"></select>
+            <button class="btn btn-ghost" type="button" onclick="openOtTemplateManager()" data-tooltip="Manage templates"><span data-icon="settings" data-size="14"></span></button>
+          </div>
+        </div>
+        <div class="field">
           <label class="field-label text-xs text-muted-foreground font-medium block mb-1" for="otFormDate">Date (JST)</label>
-          <input type="date" class="input w-full" id="otFormDate" onchange="_updateOtFormPreview()">
+          <input type="date" class="input w-full" id="otFormDate" onchange="_updateOtFormPreview(); refreshOtFormTemplateDropdown();">
         </div>
         <div class="grid grid-cols-[1fr_1fr_64px] gap-3">
           <div class="field">
@@ -796,20 +807,83 @@ tailwind.config = {
   </div>
 </div>
 
+<!-- OT Template Manager Modal -->
+<div class="dialog-overlay modal-overlay" id="otTemplateModal" role="dialog" aria-modal="true" aria-labelledby="otTplTitle">
+  <div class="dialog-content modal" style="max-width:560px">
+    <div class="dialog-header modal-header">
+      <h3 class="dialog-title text-lg font-semibold" id="otTplTitle">OT Templates</h3>
+      <button class="btn btn-ghost btn-icon modal-close" onclick="closeOtTemplateManager()" aria-label="Close">&times;</button>
+    </div>
+    <div class="dialog-body modal-body" style="padding:20px">
+      <div id="otTemplateList" class="ot-template-list mb-4"></div>
+      <div class="ot-tpl-add-form border-t border-border pt-4">
+        <div class="text-xs text-muted-foreground font-medium mb-2">Add custom template</div>
+        <div class="flex flex-col gap-3">
+          <input type="text" class="input w-full" id="otTplName" placeholder="Template name (e.g. Friday late)" maxlength="60">
+          <div class="grid grid-cols-2 gap-3">
+            <input type="time" class="input w-full font-mono" id="otTplStart" value="22:00">
+            <input type="time" class="input w-full font-mono" id="otTplEnd" value="03:30">
+          </div>
+          <input type="text" class="input w-full" id="otTplReason" placeholder="Default reason" maxlength="120">
+          <div class="text-xs text-muted-foreground">Preferred days (hint only):</div>
+          <div class="flex flex-wrap gap-2">
+            <label class="ot-tpl-day"><input type="checkbox" name="otTplDay" value="0"> Sun</label>
+            <label class="ot-tpl-day"><input type="checkbox" name="otTplDay" value="1"> Mon</label>
+            <label class="ot-tpl-day"><input type="checkbox" name="otTplDay" value="2"> Tue</label>
+            <label class="ot-tpl-day"><input type="checkbox" name="otTplDay" value="3"> Wed</label>
+            <label class="ot-tpl-day"><input type="checkbox" name="otTplDay" value="4"> Thu</label>
+            <label class="ot-tpl-day"><input type="checkbox" name="otTplDay" value="5"> Fri</label>
+            <label class="ot-tpl-day"><input type="checkbox" name="otTplDay" value="6"> Sat</label>
+          </div>
+          <button class="btn primary" onclick="addOtTemplate()"><span data-icon="plus" data-size="14"></span> Add template</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- OT Optimizer Modal -->
+<div class="dialog-overlay modal-overlay" id="otOptModal" role="dialog" aria-modal="true" aria-labelledby="otOptTitle">
+  <div class="dialog-content modal" style="max-width:720px">
+    <div class="dialog-header modal-header">
+      <h3 class="dialog-title text-lg font-semibold" id="otOptTitle"><span data-icon="target" data-size="18"></span> OT Optimizer</h3>
+      <button class="btn btn-ghost btn-icon modal-close" onclick="closeOtOptimizer()" aria-label="Close">&times;</button>
+    </div>
+    <div class="dialog-body modal-body" style="padding:20px">
+      <div class="text-xs text-muted-foreground mb-3">Suggests optimal OT schedule for the current month view, respecting 75h/month + 12h/day caps. Sunday 12h shifts and weeknight 22:00→03:30 shifts are prioritized by ¥/h.</div>
+      <div class="grid grid-cols-[1fr_auto] gap-3 items-end mb-4">
+        <div class="field">
+          <label class="field-label text-xs text-muted-foreground font-medium block mb-1" for="otOptTarget">Target income (¥)</label>
+          <input type="number" class="input w-full font-mono" id="otOptTarget" placeholder="e.g. 150000" min="0" step="10000">
+        </div>
+        <label class="flex items-center gap-2 text-sm pb-2">
+          <input type="checkbox" id="otOptMax" onchange="_toggleOtOptTarget()"> Max budget
+        </label>
+      </div>
+      <button class="btn primary w-full mb-3" onclick="runOtOptimizer()"><span data-icon="sparkles" data-size="14"></span> Suggest schedule</button>
+      <div id="otOptResults"></div>
+      <div class="flex gap-3 pt-4 border-t border-border mt-4">
+        <button class="btn primary flex-1" onclick="applyOtOptimizer()"><span data-icon="save" data-size="14"></span> Apply Selected</button>
+        <button class="btn flex-1" onclick="closeOtOptimizer()">Cancel</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Toast -->
 <div class="toast-container">
   <div class="toast" id="toast" role="alert" aria-live="assertive"></div>
 </div>
 
 <!-- Scripts (order matters) -->
-<script src="js/icons.js?v=26"></script>
+<script src="js/icons.js?v=36"></script>
 <script src="js/no-autofill.js?v=26"></script>
 <script src="js/locations.js?v=26"></script>
 <script src="js/app.js?v=26"></script>
 <script src="js/dashboard.js?v=26"></script>
 <script src="js/schedule.js?v=26"></script>
-<script src="js/ot-salary.js?v=35"></script>
-<script src="js/ot-planner.js?v=35"></script>
+<script src="js/ot-salary.js?v=36"></script>
+<script src="js/ot-planner.js?v=36"></script>
 <script src="js/settings.js?v=26"></script>
 </body>
 </html>

@@ -354,12 +354,20 @@ def load_ot_from_gist():
         return None
     content = f.get("content") or "[]"
     try:
-        arr = json.loads(content)
+        data = json.loads(content)
     except Exception as e:
         log(f"⚠️ Gist {OT_GIST_FILE} invalid JSON: {e}. Fallback to schedule.json")
         return None
+    # Phase 3: accept both legacy array shape AND new {requests, templates} wrapper.
+    if isinstance(data, dict) and "requests" in data:
+        arr = data.get("requests") or []
+    elif isinstance(data, list):
+        arr = data
+    else:
+        log(f"⚠️ Gist {OT_GIST_FILE} unexpected shape ({type(data).__name__}). Fallback to schedule.json")
+        return None
     if not isinstance(arr, list):
-        log(f"⚠️ Gist {OT_GIST_FILE} not an array. Fallback to schedule.json")
+        log(f"⚠️ Gist {OT_GIST_FILE} requests not an array. Fallback to schedule.json")
         return None
     # Normalize to schedule.json shape — only keep fields backend cares about
     normalized = []
@@ -408,9 +416,19 @@ def write_back_kintai_status(created_dates, existing_dates):
         log(f"Gist file {OT_GIST_FILE} not found, skip write-back")
         return 0
     try:
-        arr = json.loads(f.get("content") or "[]")
+        raw = json.loads(f.get("content") or "[]")
     except Exception as e:
         log(f"⚠️ Gist {OT_GIST_FILE} invalid JSON: {e}")
+        return 0
+    # Phase 3: accept both legacy array AND new {requests, templates} wrapper.
+    # Preserve wrapper shape on write-back so templates aren't lost.
+    if isinstance(raw, dict) and "requests" in raw:
+        wrapper = raw
+        arr = raw.get("requests") or []
+    elif isinstance(raw, list):
+        wrapper = None
+        arr = raw
+    else:
         return 0
     if not isinstance(arr, list):
         return 0
@@ -425,8 +443,13 @@ def write_back_kintai_status(created_dates, existing_dates):
     if updated == 0:
         log("Gist write-back: nothing to mark (all entries already tagged)")
         return 0
+    if wrapper is not None:
+        wrapper["requests"] = arr
+        new_content = json.dumps(wrapper, indent=2, ensure_ascii=False)
+    else:
+        new_content = json.dumps(arr, indent=2, ensure_ascii=False)
     patch_body = json.dumps({
-        "files": {OT_GIST_FILE: {"content": json.dumps(arr, indent=2, ensure_ascii=False)}}
+        "files": {OT_GIST_FILE: {"content": new_content}}
     }).encode()
     patch_req = urllib.request.Request(url, data=patch_body, method="PATCH", headers={
         "Authorization": f"Bearer {pat}",

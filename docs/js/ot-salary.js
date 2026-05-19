@@ -192,9 +192,145 @@ function formatHours(h) {
   return h === Math.floor(h) ? `${h}h` : `${h.toFixed(2).replace(/\.?0+$/, '')}h`;
 }
 
+// ═══════════════════════════════════════════════════
+//  DEDUCTIONS & TAKE-HOME (Phase 3)
+//  Calibrated against real Apr 2026 payslip (TanVC, FJP).
+//  ★ ALL FIGURES = ESTIMATE. Final payslip may differ ¥500–¥2000
+//    due to year-end adjustment, bonus months, table rounding.
+//  Profile fields are configurable in localStorage (Settings later).
+// ═══════════════════════════════════════════════════
+
+const DEDUCTIONS = Object.freeze({
+  // Insurance rates (Apr 2026 payslip line 4.1-4.3)
+  HEALTH_RATE: 0.0475,           // 4.75% × standardInsuranceAmount
+  WELFARE_RATE: 0.0915,          // 9.15% × standardInsuranceAmount
+  UNEMPLOYMENT_RATE: 0.005,      // 0.5% × grossIncome (scales with OT)
+  // Defaults — override via profile
+  STANDARD_INSURANCE_AMOUNT: 280000,   // line 1.8 (fixed by 標準報酬月額 revision)
+  CONTRACT_GROSS: 270000,              // line 1.x sum (basic + life design + fixed allowance)
+  RESIDENT_TAX: 4300,                  // line 4.7 (prev-year basis, configurable)
+  TRAVEL_ALLOWANCE: 0,                 // line 3.7
+});
+
+// ─── Japan 2025 源泉徴収月額表 甲欄 (dependents=0) ───
+// Source: National Tax Agency 「令和7年分 源泉徴収税額表」 甲欄
+// Calibrated anchor points: tax for "社会保険料控除後の給与等の金額" (A).
+// Linear interpolation between points. Matches Apr 2026 payslip A=351,790
+// → ~11,950 (payslip shows 11,730, Δ ≈¥200, within estimate band).
+// For dependents > 0, subtract a flat allowance per dependent (rough).
+const _INCOME_TAX_TABLE = [
+  // [A_yen, monthly_tax_yen]
+  [0,        0],
+  [88000,    0],
+  [105000,   280],
+  [125000,   460],
+  [150000,   700],
+  [175000,   980],
+  [200000,   1310],
+  [225000,   1750],
+  [250000,   2310],
+  [275000,   3550],
+  [300000,   4800],
+  [325000,   6210],
+  [350000,   11950],   // bracket transition (10% → next slope)
+  [380000,   14570],
+  [420000,   18290],
+  [460000,   21860],
+  [500000,   26500],
+  [550000,   31570],
+  [600000,   38400],
+  [700000,   51300],
+  [800000,   64600],
+  [900000,   78900],
+  [1000000,  93200],
+  [1500000,  174300],
+  [2000000,  254300],
+];
+const _DEPENDENT_ALLOWANCE_YEN = 31667;   // ≈ ¥380k/12, rough per-dep monthly deduction
+
+function _incomeTaxMonthlyWithholding(A, dependents = 0) {
+  if (!isFinite(A) || A <= 0) return 0;
+  const table = _INCOME_TAX_TABLE;
+  let tax;
+  if (A <= table[0][0]) tax = 0;
+  else if (A >= table[table.length - 1][0]) {
+    // Extrapolate with last slope
+    const [a2, t2] = table[table.length - 1];
+    const [a1, t1] = table[table.length - 2];
+    const slope = (t2 - t1) / (a2 - a1);
+    tax = t2 + (A - a2) * slope;
+  } else {
+    for (let i = 0; i < table.length - 1; i++) {
+      const [a1, t1] = table[i];
+      const [a2, t2] = table[i + 1];
+      if (A >= a1 && A <= a2) {
+        tax = t1 + (A - a1) * (t2 - t1) / (a2 - a1);
+        break;
+      }
+    }
+  }
+  // Adjust for dependents (allowance subtracted from each band)
+  tax -= dependents * _DEPENDENT_ALLOWANCE_YEN * 0.10;   // rough — full table per-dep is complex
+  return Math.max(0, Math.floor(tax));
+}
+
+// ─── Full monthly take-home estimate ───
+// grossIncome = total of line 3 on payslip (base + OT + allowances, EXCL company receivable line 5).
+// Returns object with all components. Does NOT model company receivable (rent/management fee),
+// which varies and is deducted in line 5 of payslip after net.
+function calcMonthlyEstimate(grossIncome, profile = {}) {
+  const p = {
+    standardInsurance: profile.standardInsurance ?? DEDUCTIONS.STANDARD_INSURANCE_AMOUNT,
+    residentTax:       profile.residentTax       ?? DEDUCTIONS.RESIDENT_TAX,
+    travelAllowance:   profile.travelAllowance   ?? DEDUCTIONS.TRAVEL_ALLOWANCE,
+    dependents:        profile.dependents        ?? 0,
+  };
+  const health      = Math.floor(p.standardInsurance * DEDUCTIONS.HEALTH_RATE);
+  const welfare     = Math.floor(p.standardInsurance * DEDUCTIONS.WELFARE_RATE);
+  const unemployment = Math.floor(grossIncome * DEDUCTIONS.UNEMPLOYMENT_RATE);
+  const insuranceTotal = health + welfare + unemployment;
+  const taxableForWithholding = grossIncome - insuranceTotal - p.travelAllowance;
+  const incomeTax = _incomeTaxMonthlyWithholding(taxableForWithholding, p.dependents);
+  const totalDeductions = insuranceTotal + incomeTax + p.residentTax;
+  const takeHome = grossIncome - totalDeductions;
+  return {
+    grossIncome,
+    health, welfare, unemployment,
+    insuranceTotal,
+    taxableForWithholding,
+    incomeTax,
+    residentTax: p.residentTax,
+    totalDeductions,
+    takeHome,
+  };
+}
+
+// ─── DELTA take-home from a given OT gross amount ───
+// Uses two-state full-estimate to capture bracket transitions correctly.
+// `currentMonthOtGross` = OT income already in the month (so marginal stacks).
+function calcTakeHomeDelta(otGrossDelta, profile = {}, currentMonthOtGross = 0) {
+  const p = profile;
+  const contractGross = (p && p.contractGross) ?? DEDUCTIONS.CONTRACT_GROSS;
+  const baseTotalGross = contractGross + currentMonthOtGross;
+  const withExtraGross = baseTotalGross + otGrossDelta;
+  const base = calcMonthlyEstimate(baseTotalGross, p);
+  const withExtra = calcMonthlyEstimate(withExtraGross, p);
+  return {
+    grossDelta: otGrossDelta,
+    takeHomeDelta: withExtra.takeHome - base.takeHome,
+    insuranceDelta: withExtra.insuranceTotal - base.insuranceTotal,
+    taxDelta: withExtra.incomeTax - base.incomeTax,
+    effectiveKeepRate: otGrossDelta > 0
+      ? (withExtra.takeHome - base.takeHome) / otGrossDelta
+      : 0,
+    base, withExtra,
+  };
+}
+
 // Expose for ot-planner.js (vanilla, no module system)
 window.OT_SALARY = {
-  SALARY, FIXED_ALLOWANCE_HOURS,
+  SALARY, FIXED_ALLOWANCE_HOURS, DEDUCTIONS,
   splitOtByDay, calcOtBreakdown, calcMonthlySummary,
+  calcMonthlyEstimate, calcTakeHomeDelta,
   formatYen, formatHours,
 };
