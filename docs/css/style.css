@@ -2310,7 +2310,7 @@ body.ai-page-active .ai-dot-grid {
   gap: 10px;
 }
 .ai-msg-user .ai-msg-inner {
-  display: flex; align-items: flex-start; gap: 10px;
+  display: flex; flex-direction: column; align-items: flex-end; gap: 4px;
   max-width: 85%;
 }
 .ai-bubble-user {
