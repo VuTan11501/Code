@@ -2995,6 +2995,33 @@ body.ai-conv-sheet-open { overflow: hidden; }
   color: var(--foreground);
   letter-spacing: -0.01em;
 }
+.ai-conv-search-wrap {
+  position: relative;
+  padding: 10px 12px 6px;
+  flex-shrink: 0;
+}
+.ai-conv-search-icon {
+  position: absolute;
+  left: 22px;
+  top: 50%;
+  transform: translateY(-30%);
+  color: var(--muted-foreground);
+  pointer-events: none;
+  display: inline-flex;
+}
+.ai-conv-search {
+  width: 100%;
+  padding: 7px 10px 7px 32px;
+  background: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--foreground);
+  font-size: var(--fs-sm);
+  outline: none;
+  transition: border-color 150ms, box-shadow 150ms;
+}
+.ai-conv-search:focus { border-color: var(--primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent); }
+.ai-conv-search::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; }
 .ai-conv-list {
   list-style: none;
   margin: 0; padding: 8px;
