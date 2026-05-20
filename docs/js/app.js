@@ -60,10 +60,13 @@ function clearSession() {
   sessionStorage.removeItem(SESSION_KEY);
   if (typeof cachedGithubUser !== 'undefined') cachedGithubUser = null;
   // Clear AI conversation on logout/auto-lock — never persist chat across auth boundary
-  if (window.AIAgent && typeof window.AIAgent.clearConv === 'function') {
+  if (window.AIAgent && typeof window.AIAgent.clearAllConvs === 'function') {
+    try { window.AIAgent.clearAllConvs(); } catch {}
+  } else if (window.AIAgent && typeof window.AIAgent.clearConv === 'function') {
     try { window.AIAgent.clearConv(); } catch {}
   }
   try { sessionStorage.removeItem('ai_conv_v1'); } catch {}
+  try { localStorage.removeItem('ai_current_conv_v1'); } catch {}
 }
 
 async function deriveKey(passphrase, salt) {

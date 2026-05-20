@@ -18,6 +18,10 @@ window.AIAgent = (function () {
   const SS_CONV_KEY = 'ai_conv_v1';
   const SS_MODEL_KEY = 'ai_model_v1';
   const LS_RATE_KEY = 'ai_rate_v1';
+  const LS_CURRENT_CONV_KEY = 'ai_current_conv_v1';
+  const IDB_NAME = 'ai_coach';
+  const IDB_VERSION = 1;
+  const IDB_STORE = 'conversations';
 
   let mounted = false;
   let messages = [];           // conversation (excluding system)
@@ -25,6 +29,324 @@ window.AIAgent = (function () {
   let currentAbort = null;     // AbortController for in-flight request
   let isStreaming = false;
   let convVersion = 0;         // bumped on clearConv — running loops bail out if version changes
+  let currentConvId = null;    // active conversation id (IDB key)
+  let convStoreReady = false;  // true after IDB init + migration
+  let _saveDebounce = null;
+
+  // ─── Conversation store (IndexedDB; sessionStorage write-through) ──
+  function _openDB() {
+    return new Promise((resolve, reject) => {
+      if (!window.indexedDB) return reject(new Error('IndexedDB unavailable'));
+      const req = indexedDB.open(IDB_NAME, IDB_VERSION);
+      req.onupgradeneeded = (e) => {
+        const db = e.target.result;
+        if (!db.objectStoreNames.contains(IDB_STORE)) {
+          const os = db.createObjectStore(IDB_STORE, { keyPath: 'id' });
+          os.createIndex('updated_at', 'updated_at');
+        }
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+  async function _idbTx(mode, fn) {
+    const db = await _openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(IDB_STORE, mode);
+      const os = tx.objectStore(IDB_STORE);
+      let result;
+      try { result = fn(os); } catch (e) { reject(e); return; }
+      tx.oncomplete = () => resolve(result);
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error);
+    });
+  }
+  function _newConvId() { return 'c-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+  function _deriveTitle(msgs) {
+    const firstUser = (msgs || []).find(m => m.role === 'user' && m.content);
+    if (!firstUser) return 'New chat';
+    const t = String(firstUser.content).replace(/\s+/g, ' ').trim().slice(0, 48);
+    return t || 'New chat';
+  }
+  async function _listConvs() {
+    try {
+      const arr = await _idbTx('readonly', (os) => {
+        return new Promise((res, rej) => {
+          const out = [];
+          const cur = os.openCursor();
+          cur.onsuccess = (e) => {
+            const c = e.target.result;
+            if (c) { out.push(c.value); c.continue(); } else res(out);
+          };
+          cur.onerror = () => rej(cur.error);
+        });
+      });
+      const resolved = await arr;
+      return resolved.sort((a, b) => (b.updated_at || 0) - (a.updated_at || 0));
+    } catch { return []; }
+  }
+  async function _getConv(id) {
+    try {
+      return await _idbTx('readonly', (os) => new Promise((res, rej) => {
+        const r = os.get(id);
+        r.onsuccess = () => res(r.result || null);
+        r.onerror = () => rej(r.error);
+      })).then(p => p);
+    } catch { return null; }
+  }
+  async function _putConv(rec) {
+    try {
+      await _idbTx('readwrite', (os) => new Promise((res, rej) => {
+        const r = os.put(rec);
+        r.onsuccess = () => res();
+        r.onerror = () => rej(r.error);
+      })).then(p => p);
+      return true;
+    } catch { return false; }
+  }
+  async function _deleteConv(id) {
+    try {
+      await _idbTx('readwrite', (os) => new Promise((res, rej) => {
+        const r = os.delete(id);
+        r.onsuccess = () => res();
+        r.onerror = () => rej(r.error);
+      })).then(p => p);
+      return true;
+    } catch { return false; }
+  }
+  async function _initConvStore() {
+    try {
+      // Health check: probe that we can actually write/read/delete in IDB.
+      const probeId = '__probe__' + Date.now();
+      await _idbTx('readwrite', (os) => new Promise((res, rej) => {
+        const r = os.put({ id: probeId, _probe: true });
+        r.onsuccess = () => res(); r.onerror = () => rej(r.error);
+      })).then(p => p);
+      await _idbTx('readwrite', (os) => new Promise((res, rej) => {
+        const r = os.delete(probeId);
+        r.onsuccess = () => res(); r.onerror = () => rej(r.error);
+      })).then(p => p);
+
+      const list = await _listConvs();
+      let storedId = null;
+      try { storedId = localStorage.getItem(LS_CURRENT_CONV_KEY); } catch {}
+
+      // Snapshot the in-memory messages BEFORE awaiting any further work.
+      // If the user has typed and sent a message between mount() and now,
+      // we must NOT clobber that — instead persist it to the chosen conv.
+      const inMemorySnapshot = messages.slice();
+      const startupTouched = inMemorySnapshot.length > 0;
+
+      let chosenId = null;
+      let chosenMsgs = null;
+      if (!list.length) {
+        // First-run migration: take whatever is in memory (incl. sessionStorage
+        // contents loaded by loadConv() earlier) into a new conv.
+        chosenId = _newConvId();
+        chosenMsgs = inMemorySnapshot;
+      } else if (storedId && list.some(c => c.id === storedId)) {
+        chosenId = storedId;
+        const rec = await _getConv(storedId);
+        chosenMsgs = (rec && rec.messages) || [];
+      } else {
+        chosenId = list[0].id;
+        chosenMsgs = list[0].messages || [];
+      }
+
+      currentConvId = chosenId;
+
+      // Reconcile: if the user has touched the in-memory conversation while
+      // IDB was loading, keep their work and write it into the chosen record.
+      // Otherwise, adopt the IDB-stored messages.
+      if (startupTouched && messages !== inMemorySnapshot) {
+        // Shouldn't happen (no reassignment paths) but defensive.
+      }
+      const inMemoryNow = messages;
+      const inMemoryGrew = inMemoryNow.length > inMemorySnapshot.length;
+      if (startupTouched || inMemoryGrew) {
+        // Keep in-memory messages — they are the freshest source.
+        await _putConv({
+          id: chosenId,
+          title: _deriveTitle(messages),
+          messages: messages.slice(),
+          created_at: Date.now(),
+          updated_at: Date.now(),
+        });
+      } else {
+        // Adopt IDB state into memory.
+        messages = chosenMsgs;
+        try { sessionStorage.setItem(SS_CONV_KEY, JSON.stringify(messages)); } catch {}
+      }
+      try { localStorage.setItem(LS_CURRENT_CONV_KEY, currentConvId); } catch {}
+      convStoreReady = true;
+      if (mounted) { try { renderAll(); _renderConvList(); } catch {} }
+    } catch (e) {
+      // IDB unavailable / blocked / write-failed → keep single-conv mode.
+      convStoreReady = false;
+      // Hide multi-conv UI controls so the user can't trigger broken actions.
+      try {
+        const btn = document.getElementById('aiConvBtn');
+        if (btn) btn.hidden = true;
+      } catch {}
+    }
+  }
+  function _persistCurrentConv() {
+    if (!convStoreReady || !currentConvId) return;
+    // Capture id + snapshot AT SCHEDULE TIME so a later switchConv() doesn't
+    // cause us to write fresh messages to a stale conv record.
+    const targetId = currentConvId;
+    const snapshot = messages.slice();
+    clearTimeout(_saveDebounce);
+    _saveDebounce = setTimeout(async () => {
+      try {
+        const existing = await _getConv(targetId);
+        const title = (existing && existing.title && existing.title !== 'New chat')
+          ? existing.title
+          : _deriveTitle(snapshot);
+        await _putConv({
+          id: targetId,
+          title,
+          messages: snapshot,
+          created_at: (existing && existing.created_at) || Date.now(),
+          updated_at: Date.now(),
+        });
+        // Refresh open conv-list if the title or last-snippet changed.
+        const sheet = document.getElementById('aiConvSheet');
+        if (sheet && !sheet.hidden) _renderConvList();
+      } catch {}
+    }, 250);
+  }
+  function _flushPendingSave() {
+    if (_saveDebounce) { clearTimeout(_saveDebounce); _saveDebounce = null; }
+  }
+  async function clearAllConvs() {
+    _flushPendingSave();
+    if (currentAbort) { try { currentAbort.abort(); } catch {} }
+    convVersion++;
+    isStreaming = false;
+    currentAbort = null;
+    messages = [];
+    currentConvId = null;
+    try { localStorage.removeItem(LS_CURRENT_CONV_KEY); } catch {}
+    try { sessionStorage.removeItem(SS_CONV_KEY); } catch {}
+    try {
+      await _idbTx('readwrite', (os) => new Promise((res, rej) => {
+        const r = os.clear();
+        r.onsuccess = () => res(); r.onerror = () => rej(r.error);
+      })).then(p => p);
+    } catch {}
+    if (mounted) { try { renderAll(); _renderConvList(); } catch {} }
+  }
+  async function switchConv(id) {
+    if (!id || id === currentConvId) { _hideConvSheet(); return; }
+    _flushPendingSave();
+    if (currentAbort) { try { currentAbort.abort(); } catch {} }
+    convVersion++;
+    isStreaming = false;
+    currentAbort = null;
+    const rec = await _getConv(id);
+    if (!rec) return;
+    currentConvId = id;
+    messages = rec.messages || [];
+    try { localStorage.setItem(LS_CURRENT_CONV_KEY, id); } catch {}
+    try { sessionStorage.setItem(SS_CONV_KEY, JSON.stringify(messages)); } catch {}
+    setComposerMeta('');
+    setSendingState(false);
+    renderAll();
+    _hideConvSheet();
+  }
+  async function createConv() {
+    _flushPendingSave();
+    if (currentAbort) { try { currentAbort.abort(); } catch {} }
+    convVersion++;
+    isStreaming = false;
+    currentAbort = null;
+    const id = _newConvId();
+    await _putConv({ id, title: 'New chat', messages: [], created_at: Date.now(), updated_at: Date.now() });
+    currentConvId = id;
+    messages = [];
+    try { localStorage.setItem(LS_CURRENT_CONV_KEY, id); } catch {}
+    try { sessionStorage.setItem(SS_CONV_KEY, '[]'); } catch {}
+    setComposerMeta('');
+    setSendingState(false);
+    renderAll();
+    _renderConvList();
+    _hideConvSheet();
+  }
+  async function deleteConvById(id) {
+    await _deleteConv(id);
+    if (id === currentConvId) {
+      const list = await _listConvs();
+      if (list.length) {
+        await switchConv(list[0].id);
+      } else {
+        await createConv();
+      }
+    } else {
+      _renderConvList();
+    }
+  }
+  async function renameConv(id, newTitle) {
+    const rec = await _getConv(id);
+    if (!rec) return;
+    rec.title = (newTitle || '').trim() || rec.title;
+    rec.updated_at = Date.now();
+    await _putConv(rec);
+    _renderConvList();
+  }
+
+  // ─── Conv sheet UI ─────────────────────────────────
+  function _relTime(ts) {
+    if (!ts) return '';
+    const diff = Date.now() - ts;
+    const min = 60_000, hr = 60 * min, day = 24 * hr;
+    if (diff < min) return 'just now';
+    if (diff < hr)  return Math.floor(diff / min) + 'm ago';
+    if (diff < day) return Math.floor(diff / hr) + 'h ago';
+    if (diff < 30 * day) return Math.floor(diff / day) + 'd ago';
+    try { return new Date(ts).toLocaleDateString('ja-JP', { timeZone: 'Asia/Tokyo', month: 'short', day: 'numeric' }); } catch { return ''; }
+  }
+  function _convSnippet(msgs) {
+    const lastUser = [...(msgs || [])].reverse().find(m => m.role === 'user' && m.content);
+    if (!lastUser) return 'No messages yet';
+    return String(lastUser.content).replace(/\s+/g, ' ').trim().slice(0, 80);
+  }
+  async function _renderConvList() {
+    const ul = document.getElementById('aiConvList');
+    if (!ul) return;
+    const list = await _listConvs();
+    if (!list.length) {
+      ul.innerHTML = '<li class="ai-conv-empty">No conversations yet.</li>';
+      return;
+    }
+    ul.innerHTML = list.map(c => {
+      const isActive = c.id === currentConvId;
+      return `<li class="ai-conv-item${isActive ? ' is-active' : ''}" role="option" aria-selected="${isActive}" data-conv-id="${esc(c.id)}">
+        <button class="ai-conv-item-main" type="button" data-conv-switch="${esc(c.id)}">
+          <span class="ai-conv-item-title">${esc(c.title || 'New chat')}</span>
+          <span class="ai-conv-item-snip">${esc(_convSnippet(c.messages))}</span>
+        </button>
+        <span class="ai-conv-item-time">${esc(_relTime(c.updated_at))}</span>
+        <button class="ai-conv-item-act" type="button" data-conv-rename="${esc(c.id)}" title="Rename" aria-label="Rename">${ICON('pen', 13)}</button>
+        <button class="ai-conv-item-act" type="button" data-conv-del="${esc(c.id)}" title="Delete" aria-label="Delete">${ICON('trash', 13)}</button>
+      </li>`;
+    }).join('');
+    if (typeof renderIcons === 'function') renderIcons(ul);
+  }
+  function _showConvSheet() {
+    const s = document.getElementById('aiConvSheet');
+    if (!s) return;
+    s.hidden = false;
+    requestAnimationFrame(() => s.classList.add('show'));
+    _renderConvList();
+  }
+  function _hideConvSheet() {
+    const s = document.getElementById('aiConvSheet');
+    if (!s) return;
+    s.classList.remove('show');
+    setTimeout(() => { s.hidden = true; }, 200);
+  }
+
 
   // ─── System prompt (TODAY_JST injected each request) ─
   function systemPrompt() {
@@ -66,6 +388,7 @@ Hôm nay (JST): ${today}.`;
       }
       sessionStorage.setItem(SS_CONV_KEY, JSON.stringify(messages));
     } catch { /* quota — ignore */ }
+    _persistCurrentConv();
   }
   function loadModel() {
     try { model = sessionStorage.getItem(SS_MODEL_KEY) || DEFAULT_MODEL; } catch { model = DEFAULT_MODEL; }
@@ -1228,12 +1551,17 @@ Hôm nay (JST): ${today}.`;
     }
     loadModel();
     loadConv();
+    // Async: open IDB, migrate, switch to last conv if different.
+    _initConvStore();
 
     const form = $('#aiComposer');
     const input = $('#aiComposerInput');
     const send = $('#aiComposerSend');
     const modelSelect = $('#aiModelSelect');
     const clearBtn = $('#aiClearBtn');
+    const convBtn = $('#aiConvBtn');
+    const convSheet = $('#aiConvSheet');
+    const convNewBtn = $('#aiConvNewBtn');
     if (!form || !input) return;
 
     modelSelect.value = model;
@@ -1248,6 +1576,39 @@ Hôm nay (JST): ${today}.`;
       // clearConv() handles abort + version bump internally.
       clearConv();
     });
+
+    // Conversations sheet wiring
+    if (convBtn) convBtn.addEventListener('click', () => _showConvSheet());
+    if (convNewBtn) convNewBtn.addEventListener('click', () => createConv());
+    if (convSheet) {
+      convSheet.addEventListener('click', (e) => {
+        const t = e.target;
+        if (!t || !t.closest) return;
+        if (t.closest('[data-conv-close]')) { _hideConvSheet(); return; }
+        const switchEl = t.closest('[data-conv-switch]');
+        if (switchEl) { switchConv(switchEl.getAttribute('data-conv-switch')); return; }
+        const renameEl = t.closest('[data-conv-rename]');
+        if (renameEl) {
+          const id = renameEl.getAttribute('data-conv-rename');
+          _getConv(id).then(rec => {
+            if (!rec) return;
+            const next = prompt('Rename conversation', rec.title || 'New chat');
+            if (next != null) renameConv(id, next);
+          });
+          return;
+        }
+        const delEl = t.closest('[data-conv-del]');
+        if (delEl) {
+          const id = delEl.getAttribute('data-conv-del');
+          if (confirm('Delete this conversation? This cannot be undone.')) deleteConvById(id);
+          return;
+        }
+      });
+      // Esc to close
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !convSheet.hidden) { _hideConvSheet(); }
+      });
+    }
 
     // Auto-grow textarea
     const autogrow = () => {
@@ -1398,9 +1759,6 @@ Hôm nay (JST): ${today}.`;
   function clearConv() {
     if (currentAbort) { try { currentAbort.abort(); } catch {} }
     convVersion++;                  // invalidate any in-flight loop
-    // Force-release stale streaming state — the in-flight run's finally{}
-    // will see myVersion !== convVersion and skip its own release, so we
-    // own the reset here so the next sendMessage() isn't blocked.
     isStreaming = false;
     currentAbort = null;
     messages = [];
@@ -1408,10 +1766,11 @@ Hôm nay (JST): ${today}.`;
     setComposerMeta('');
     setSendingState(false);
     renderAll();
+    _renderConvList();
   }
 
   // Clear conv on logout — hook into app.js if a logout event exists.
   window.addEventListener('beforeunload', () => { /* sessionStorage clears with tab close anyway */ });
 
-  return { mount, sendMessage, clearConv, get messages() { return messages.slice(); } };
+  return { mount, sendMessage, clearConv, clearAllConvs, switchConv, createConv, deleteConv: deleteConvById, renameConv, get messages() { return messages.slice(); }, get currentConvId() { return currentConvId; } };
 })();
