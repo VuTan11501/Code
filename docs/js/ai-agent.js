@@ -1542,7 +1542,7 @@ Hôm nay (JST): ${today}.`;
       // Typing indicator inside .ai-msg-inner (replaces empty content until first delta arrives)
       if (node) {
         const inner = node.querySelector('.ai-msg-inner');
-        if (inner) inner.innerHTML = `<div class="ai-thinking" aria-label="Thinking"><i></i><i></i><i></i></div>`;
+        if (inner) inner.innerHTML = `<div class="ai-thinking" role="status" aria-label="Đang suy nghĩ"><span class="ai-thinking-spinner" aria-hidden="true"></span><span class="ai-thinking-label">Đang suy nghĩ</span></div>`;
       }
       scrollToBottomIfPinned(scroll, true);
 
@@ -1604,7 +1604,7 @@ Hôm nay (JST): ${today}.`;
               if (typer && bodyEl) typer.reseed(bodyEl, streamedContent);
             } else {
               // No content yet — show pills + thinking dots
-              inner.innerHTML = pillsHtml + `<div class="ai-thinking"><i></i><i></i><i></i></div>`;
+              inner.innerHTML = pillsHtml + `<div class="ai-thinking" role="status" aria-label="Đang suy nghĩ"><span class="ai-thinking-spinner" aria-hidden="true"></span><span class="ai-thinking-label">Đang suy nghĩ</span></div>`;
             }
             scrollToBottomIfPinned(scroll, false);
           }

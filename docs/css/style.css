@@ -2693,22 +2693,58 @@ body.ai-page-active .ai-dot-grid {
   .prose-chat-streaming > *:last-child::after { animation: none; opacity: 0.7; }
 }
 
-/* Thinking dots (shown before first token arrives) */
+/* Thinking indicator (shown before first token arrives).
+   shadcn-style spinner: a conic-gradient ring with circular mask,
+   rotating; paired with a shimmering label so the user sees both
+   motion (the spinner) and progress (the gradient sweep across the
+   text). Uses CSS-only — no extra DOM, no SVG, no JS rAF. */
 .ai-thinking {
-  display: inline-flex; align-items: center; gap: 6px;
+  display: inline-flex; align-items: center; gap: 10px;
   padding: 4px 0;
+  font-size: var(--fs-sm);
+  color: var(--muted-foreground);
+  line-height: 1;
 }
-.ai-thinking i {
-  width: 6px; height: 6px; border-radius: 50%;
-  background: color-mix(in srgb, var(--muted-foreground) 60%, transparent);
-  display: inline-block;
-  animation: aiDotPulse 1.2s infinite ease-in-out;
+.ai-thinking-spinner {
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  /* Conic gradient from primary back to transparent gives the arc-fade
+     look of shadcn/radix Spinner. The radial-gradient mask carves out
+     the inner circle so we get a 2px-thick ring. */
+  background: conic-gradient(from 0deg, transparent 0%, var(--primary) 100%);
+  -webkit-mask: radial-gradient(circle, transparent 4px, black 5px);
+          mask: radial-gradient(circle, transparent 4px, black 5px);
+  animation: aiSpinnerRotate 0.9s linear infinite;
+  flex-shrink: 0;
 }
-.ai-thinking i:nth-child(2) { animation-delay: 0.15s; }
-.ai-thinking i:nth-child(3) { animation-delay: 0.3s; }
-@keyframes aiDotPulse {
-  0%, 80%, 100% { transform: scale(0.7); opacity: 0.4; }
-  40%           { transform: scale(1);   opacity: 1; }
+.ai-thinking-label {
+  background: linear-gradient(
+    90deg,
+    var(--muted-foreground) 0%,
+    var(--muted-foreground) 30%,
+    var(--foreground) 50%,
+    var(--muted-foreground) 70%,
+    var(--muted-foreground) 100%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+          background-clip: text;
+  -webkit-text-fill-color: transparent;
+          color: transparent;
+  animation: aiShimmer 2.2s ease-in-out infinite;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+@keyframes aiSpinnerRotate {
+  to { transform: rotate(360deg); }
+}
+@keyframes aiShimmer {
+  0%   { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ai-thinking-spinner { animation-duration: 2s; }
+  .ai-thinking-label   { animation: none; -webkit-text-fill-color: var(--muted-foreground); color: var(--muted-foreground); background: none; }
 }
 
 /*  Message hover actions (copy button)  */
