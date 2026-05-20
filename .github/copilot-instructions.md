@@ -1318,3 +1318,56 @@ Quota reset mỗi 60s. Kiểm tra trước khi append message + stream.
 ### Env requirements
 AZURE_REFRESH_TOKEN, GH_PAT, SMTP_USER, SMTP_PASS, NOTIFY_EMAIL, LINE_NOTIFY_TOKEN, AI_API_BASE
 
+---
+
+## 18. AI Natural-Language Schedule Editor (P3)
+
+**Files**: `ai-validators.js`, `ai-audit.js`, `ai-proposals.js`, `ai-tools.js` (mutation tools), `ai-agent.js` (system prompt + modal trigger).
+
+### Architecture: PROPOSE-then-APPLY
+
+AI **never** writes Gist directly. Every mutation follows:
+1. User asks in natural language (e.g. "tao OT thu 5 22:00-03:30")
+2. AI calls `propose_*` tool → returns proposal object (validated, diffed)
+3. Proposal stored in `window.AIProposals._pending` Map
+4. After AI stream completes, confirmation modal auto-opens showing all pending proposals
+5. User reviews diff, checks/unchecks items, clicks Apply
+6. `AIProposals.applyProposals()` executes atomic Gist PATCH with ETag retry
+7. Audit entry logged to localStorage ring buffer (max 100)
+
+### Tools (6 mutation tools)
+
+| Tool | Target file | Description |
+|---|---|---|
+| `propose_create_schedule_once` | scheduled-runs.json | Create one-time schedule entry |
+| `propose_create_schedule_recurring` | scheduled-runs.json | Create recurring schedule |
+| `propose_create_ot_request` | ot-requests.json | Create OT + auto-detect Rule 2 conflict |
+| `propose_update_schedule` | scheduled-runs.json | Update existing entry by ID |
+| `propose_delete_schedule` | scheduled-runs.json | Delete (REFUSES if dispatched=true) |
+| `propose_add_skip_date` | scheduled-runs.json | Add skip_date to recurring entry |
+
+### Safety guarantees
+
+- **Atomic PATCH**: grouped by target file, ETag retry on 412
+- **Audit ring buffer**: localStorage `ai_audit_v1`, max 100, supports rollback of last apply
+- **Rate limit**: max 5 `propose_*` calls per user message (enforced in tool exec)
+- **Hard refuse**: cannot delete dispatched entries (enforced in tool, not just prompt)
+- **Validation**: all proposals run through `AIValidators` before presentation
+- **Cross-midnight auto-detect**: OT proposals automatically include `add_skip_date` sub-action for conflicting recurring CO entries (Rule 2)
+
+### How to add a new propose_* tool
+
+1. Add exec function in `ai-tools.js` (read Gist, validate, return proposal object)
+2. Register in TOOLS array with OpenAI function-calling schema
+3. Add corresponding validation in `ai-validators.js` if needed
+4. Add `_applyDiff` case in `ai-proposals.js` for the new `kind`
+5. Update system prompt in `ai-agent.js` if new rules apply
+6. Bump `ai-tools.js` version in `index.html`
+
+### Quy tac khi sua
+
+1. ⛔ AI NEVER calls `apiFetch` PATCH directly — all mutations go through `AIProposals.applyProposals()`
+2. ⛔ Do not remove `_checkRateLimit()` guard from propose tools
+3. ⚠️ Adding new target file → update `_applyToFile` Gist content wrapper logic
+4. ⚠️ Modal a11y: keep `role=dialog`, `aria-modal`, ESC close, focus management
+5. ✅ Test with both create + delete + cross-midnight OT (the full Rule 2 flow)

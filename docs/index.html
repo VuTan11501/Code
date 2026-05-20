@@ -465,6 +465,9 @@ tailwind.config = {
             </select>
           </div>
           <div class="ai-actions">
+            <button class="ai-icon-btn" id="aiUndoBtn" type="button" title="Undo last apply" aria-label="Undo last apply" hidden>
+              <span data-icon="undo" data-size="15"></span>
+            </button>
             <button class="ai-icon-btn" id="aiConvBtn" type="button" title="Conversations" aria-label="Conversations" aria-haspopup="dialog">
               <span data-icon="panelLeft" data-size="16"></span>
             </button>
@@ -1113,8 +1116,30 @@ tailwind.config = {
 <script src="js/schedule.js?v=27"></script>
 <script src="js/ot-salary.js?v=37"></script>
 <script src="js/ot-planner.js?v=52"></script>
-<script src="js/ai-tools.js?v=1"></script>
-<script src="js/ai-agent.js?v=17"></script>
+<script src="js/ai-validators.js?v=1"></script>
+<script src="js/ai-audit.js?v=1"></script>
+<script src="js/ai-proposals.js?v=1"></script>
+<script src="js/ai-tools.js?v=2"></script>
+<script src="js/ai-agent.js?v=18"></script>
 <script src="js/settings.js?v=31"></script>
+<!-- AI Proposal confirmation modal (Phase 3) -->
+<div id="aiProposalModal" class="proposal-modal" role="dialog" aria-modal="true" aria-labelledby="aiProposalTitle" hidden aria-hidden="true">
+  <div class="proposal-modal-backdrop" onclick="AIProposals.closeModal()"></div>
+  <div class="proposal-modal-card">
+    <header class="proposal-modal-header">
+      <h3 id="aiProposalTitle">Review Proposed Changes</h3>
+      <button type="button" class="ai-icon-btn" onclick="AIProposals.closeModal()" aria-label="Close">
+        <span data-icon="x" data-size="16"></span>
+      </button>
+    </header>
+    <div class="proposal-modal-body"></div>
+    <footer class="proposal-modal-actions">
+      <button type="button" class="btn btn-secondary" onclick="AIProposals.closeModal()">Cancel</button>
+      <button type="button" class="btn btn-primary" data-proposal-apply onclick="AIProposals.applyFromModal()">
+        Apply Selected (<span class="proposal-apply-count">0</span>)
+      </button>
+    </footer>
+  </div>
+</div>
 </body>
 </html>
