@@ -2111,7 +2111,7 @@ input[type="time"], input[type="date"], input[type="datetime-local"] {
   pointer-events: none;
   z-index: 0;
 }
-.ai-empty > * { position: relative; z-index: 1; }
+.ai-empty > *:not(.ai-hero-glow) { position: relative; z-index: 1; }
 .ai-hero-logo {
   display: inline-flex; align-items: center; justify-content: center;
   width: 64px; height: 64px;
