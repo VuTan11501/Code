@@ -3040,44 +3040,20 @@ body.ai-page-active .ai-dot-grid {
 .ai-tool-raw-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
 
 
-/*  AI Conversations sidebar (shadcn sidebar pattern, vanilla)  */
-.ai-conv-sheet {
-  position: fixed; inset: 0;
+/*  AI Conversations modal (uses .modal-overlay pattern for reliability)  */
+.ai-conv-modal {
   z-index: 10000;
-  pointer-events: none;
 }
-/* Defeat .ai-wrap > *:not(.ai-dot-grid) { z-index: 1 } specificity trap */
-.ai-wrap > .ai-conv-sheet { z-index: 10000; }
-.ai-conv-sheet[hidden] { display: none; }
-.ai-conv-sheet.show { pointer-events: auto; }
-.ai-conv-sheet-backdrop {
-  position: absolute; inset: 0;
-  background: rgba(0,0,0,0.5);
-  opacity: 0;
-  transition: opacity 200ms ease;
-  pointer-events: auto;
-  backdrop-filter: blur(2px);
-  -webkit-backdrop-filter: blur(2px);
+.ai-wrap > .ai-conv-modal { z-index: 10000; }
+.ai-conv-modal-content {
+  max-width: 560px;
+  width: 100%;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
 }
-.ai-conv-sheet.show .ai-conv-sheet-backdrop { opacity: 1; }
-.ai-conv-sheet-panel {
-  position: absolute;
-  top: 0; left: 0; bottom: 0;
-  width: min(320px, 88vw);
-  max-width: 100vw;
-  background: var(--card);
-  border-right: 1px solid var(--border);
-  box-shadow: var(--shadow-lg);
-  display: flex; flex-direction: column;
-  transform: translateX(-100%);
-  opacity: 0;
-  transition: transform 260ms var(--ease-out), opacity 200ms ease;
-  pointer-events: auto;
-  padding-top: env(safe-area-inset-top, 0px);
-  padding-bottom: env(safe-area-inset-bottom, 0px);
-}
-.ai-conv-sheet.show .ai-conv-sheet-panel { transform: translateX(0); opacity: 1; }
-body.ai-conv-sheet-open { overflow: hidden; }
 
 .ai-conv-sheet-head {
   display: flex; align-items: center; gap: 8px;
