@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Remote Terminal Setup Guide — Team Share</title>
+    <style>
+        :root {
+            --bg: #0a0a0a;
+            --card: #111111;
+            --border: rgba(255,255,255,0.08);
+            --fg: #fafafa;
+            --muted: #a1a1aa;
+            --primary: #3b82f6;
+            --green: #22c55e;
+            --yellow: #eab308;
+            --red: #ef4444;
+            --orange: #f97316;
+            --code-bg: #1a1a2e;
+            --radius: 0.625rem;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg);
+            color: var(--fg);
+            line-height: 1.7;
+            padding: 2rem 1rem;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        h1 {
+            font-size: 1.75rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(135deg, var(--primary), #a855f7);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .subtitle {
+            color: var(--muted);
+            margin-bottom: 2rem;
+            font-size: 0.9rem;
+        }
+        h2 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-top: 2.5rem;
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid var(--border);
+        }
+        h3 {
+            font-size: 1rem;
+            font-weight: 600;
+            margin-top: 1.5rem;
+            margin-bottom: 0.5rem;
+            color: var(--primary);
+        }
+        p { margin-bottom: 1rem; color: #d4d4d8; }
+        .card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 1.25rem;
+            margin-bottom: 1.5rem;
+        }
+        .step-number {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 28px;
+            height: 28px;
+            background: var(--primary);
+            color: white;
+            border-radius: 50%;
+            font-size: 0.8rem;
+            font-weight: 700;
+            margin-right: 0.5rem;
+        }
+        .step-title {
+            font-weight: 600;
+            font-size: 1rem;
+        }
+        pre {
+            background: var(--code-bg);
+            border: 1px solid rgba(59,130,246,0.2);
+            border-radius: 0.5rem;
+            padding: 1rem;
+            overflow-x: auto;
+            margin: 0.75rem 0 1rem;
+            font-size: 0.85rem;
+            line-height: 1.6;
+        }
+        code {
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.85rem;
+        }
+        :not(pre) > code {
+            background: rgba(59,130,246,0.1);
+            padding: 0.15rem 0.4rem;
+            border-radius: 0.25rem;
+            color: #93c5fd;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0;
+            font-size: 0.85rem;
+        }
+        th, td {
+            padding: 0.6rem 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+        th {
+            color: var(--muted);
+            font-weight: 500;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .badge {
+            display: inline-block;
+            padding: 0.15rem 0.5rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+        .badge-green { background: rgba(34,197,94,0.15); color: var(--green); }
+        .badge-yellow { background: rgba(234,179,8,0.15); color: var(--yellow); }
+        .badge-red { background: rgba(239,68,68,0.15); color: var(--red); }
+        .badge-blue { background: rgba(59,130,246,0.15); color: var(--primary); }
+        .warning {
+            background: rgba(234,179,8,0.08);
+            border: 1px solid rgba(234,179,8,0.3);
+            border-radius: var(--radius);
+            padding: 1rem;
+            margin: 1rem 0;
+        }
+        .warning::before { content: "⚠️ "; }
+        .info {
+            background: rgba(59,130,246,0.08);
+            border: 1px solid rgba(59,130,246,0.3);
+            border-radius: var(--radius);
+            padding: 1rem;
+            margin: 1rem 0;
+        }
+        .info::before { content: "💡 "; }
+        .success {
+            background: rgba(34,197,94,0.08);
+            border: 1px solid rgba(34,197,94,0.3);
+            border-radius: var(--radius);
+            padding: 1rem;
+            margin: 1rem 0;
+        }
+        .success::before { content: "✅ "; }
+        .toc {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 1.25rem;
+            margin-bottom: 2rem;
+        }
+        .toc h3 { margin-top: 0; }
+        .toc ol { padding-left: 1.5rem; }
+        .toc li { margin-bottom: 0.3rem; color: #93c5fd; font-size: 0.9rem; }
+        .toc a { color: #93c5fd; text-decoration: none; }
+        .toc a:hover { text-decoration: underline; }
+        .diagram {
+            background: var(--code-bg);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 1.25rem;
+            font-family: monospace;
+            font-size: 0.8rem;
+            line-height: 1.5;
+            overflow-x: auto;
+            white-space: pre;
+            margin: 1rem 0;
+        }
+        footer {
+            margin-top: 3rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid var(--border);
+            color: var(--muted);
+            font-size: 0.8rem;
+            text-align: center;
+        }
+        @media (max-width: 600px) {
+            body { padding: 1rem 0.75rem; }
+            pre { font-size: 0.75rem; padding: 0.75rem; }
+        }
+    </style>
+</head>
+<body>
+
+<h1>🖥️ Remote Terminal Setup Guide</h1>
+<p class="subtitle">Truy cập terminal máy team từ xa qua SSH + Tailscale — thay thế chức năng Remote bị disable</p>
+<div class="info">
+    Hướng dẫn này áp dụng cho <strong>bất kỳ ai</strong> muốn setup remote access vào máy Windows của mình. Thay <code>&lt;TAILSCALE_IP&gt;</code> bằng IP Tailscale của máy bạn (xem bằng lệnh <code>tailscale ip -4</code>), và <code>&lt;USERNAME&gt;</code> bằng tên user Windows.
+</div>
+
+<div class="toc">
+    <h3>📋 Mục lục</h3>
+    <ol>
+        <li><a href="#overview">Tổng quan kiến trúc</a></li>
+        <li><a href="#server">Setup trên máy Server (host)</a></li>
+        <li><a href="#client-phone">Kết nối từ iPhone/Android</a></li>
+        <li><a href="#client-pc">Kết nối từ PC/Mac khác</a></li>
+        <li><a href="#copilot">Chạy Copilot CLI từ xa</a></li>
+        <li><a href="#wol">Wake-on-LAN (bật máy từ xa)</a></li>
+        <li><a href="#troubleshooting">Troubleshooting</a></li>
+    </ol>
+</div>
+
+<!-- ═══════════════════════════════════════════════════ -->
+<h2 id="overview">1. Tổng quan kiến trúc</h2>
+
+<div class="diagram">┌──────────────────┐         ┌─────────────────────────┐
+│  📱 Phone        │         │  💻 PC/Mac khác         │
+│  (Termius app)   │         │  (Terminal / VS Code)   │
+└────────┬─────────┘         └────────────┬────────────┘
+         │ SSH (port 22)                   │ SSH (port 22)
+         │                                 │
+    ┌────┴─────────────────────────────────┴────┐
+    │         🌐 Tailscale Mesh VPN             │
+    │    (WireGuard encrypted, zero-config)     │
+    └────────────────────┬──────────────────────┘
+                         │
+              ┌──────────┴──────────┐
+              │  🖥️ Host Machine    │
+              │  IP: &lt;TAILSCALE_IP&gt;│
+              │  OpenSSH Server     │
+              │  PowerShell 7       │
+              │  Copilot CLI        │
+              └─────────────────────┘</div>
+
+<div class="card" style="border-color: rgba(59,130,246,0.4);">
+    <h3 style="margin-top:0;">📌 Cách lấy thông tin máy bạn</h3>
+    <pre><code># Lấy IP Tailscale của máy
+tailscale ip -4
+
+# Lấy username Windows
+whoami
+
+# Lấy MAC address (cho WoL)
+Get-NetAdapter | Where-Object Status -eq "Up" | Select-Object Name, MacAddress</code></pre>
+</div>
+
+<div class="info">
+    Tailscale tạo VPN nội bộ giữa tất cả thiết bị — không cần mở port public, không cần IP tĩnh, hoạt động qua NAT/firewall.
+</div>
+
+<!-- ═══════════════════════════════════════════════════ -->
+<h2 id="server">2. Setup trên máy Server (host)</h2>
+
+<p>Chỉ cần làm <strong>1 lần</strong> trên máy muốn truy cập từ xa.</p>
+
+<div class="card">
+    <p><span class="step-number">1</span><span class="step-title">Cài Tailscale</span></p>
+    <p>Download & install: <a href="https://tailscale.com/download/windows" style="color:#93c5fd">tailscale.com/download/windows</a></p>
+    <p>Đăng nhập bằng tài khoản Google/GitHub/Microsoft → thiết bị sẽ xuất hiện trong Tailscale admin.</p>
+</div>
+
+<div class="card">
+    <p><span class="step-number">2</span><span class="step-title">Cài OpenSSH Server</span></p>
+    <p>Mở <strong>PowerShell (Run as Administrator)</strong>:</p>
+    <pre><code># Thử cách 1: Windows built-in
+Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0
+
+# Nếu lỗi "Class not registered", dùng cách 2:
+$url = "https://github.com/PowerShell/Win32-OpenSSH/releases/latest/download/OpenSSH-Win64.zip"
+Invoke-WebRequest -Uri $url -OutFile "$env:TEMP\OpenSSH.zip"
+Expand-Archive "$env:TEMP\OpenSSH.zip" -DestinationPath "C:\Program Files\" -Force
+&amp; "C:\Program Files\OpenSSH-Win64\install-sshd.ps1"</code></pre>
+</div>
+
+<div class="card">
+    <p><span class="step-number">3</span><span class="step-title">Start & cấu hình SSH</span></p>
+    <pre><code># Start service + auto-start khi boot
+Start-Service sshd
+Set-Service -Name sshd -StartupType Automatic
+
+# Mở firewall
+New-NetFirewallRule -Name "OpenSSH-Server" -DisplayName "OpenSSH Server" `
+    -Enabled True -Direction Inbound -Protocol TCP -Action Allow -LocalPort 22</code></pre>
+</div>
+
+<div class="card">
+    <p><span class="step-number">4</span><span class="step-title">Đổi default shell sang PowerShell 7</span></p>
+    <pre><code># Nếu pwsh cài qua Microsoft Store (WindowsApps) → không work cho SSH
+# Cài lại qua winget để có path ổn định:
+winget install Microsoft.PowerShell --source winget --accept-package-agreements
+
+# Set default shell (chọn 1 trong 2):
+# Option A: PowerShell 7 (nếu cài qua MSI/winget)
+Set-ItemProperty -Path "HKLM:\SOFTWARE\OpenSSH" -Name DefaultShell `
+    -Value "C:\Program Files\PowerShell\7\pwsh.exe"
+
+# Option B: PowerShell 5.1 (luôn hoạt động, gõ 'pwsh' sau khi vào)
+Set-ItemProperty -Path "HKLM:\SOFTWARE\OpenSSH" -Name DefaultShell `
+    -Value "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
+
+# Restart SSH
+Restart-Service sshd</code></pre>
+
+    <div class="warning">
+        PowerShell 7 cài qua <strong>Microsoft Store</strong> nằm trong <code>WindowsApps</code> — SYSTEM account không truy cập được → SSH sẽ disconnect ngay. Phải cài qua <strong>winget/MSI</strong>.
+    </div>
+</div>
+
+<div class="card">
+    <p><span class="step-number">5</span><span class="step-title">Verify</span></p>
+    <pre><code># Test SSH vào chính mình
+ssh &lt;USERNAME&gt;@&lt;TAILSCALE_IP&gt;
+
+# Ví dụ: ssh Admin@100.64.x.x
+# Nếu thành công → thấy PowerShell prompt
+# Gõ 'exit' để thoát</code></pre>
+</div>
+
+<!-- ═══════════════════════════════════════════════════ -->
+<h2 id="client-phone">3. Kết nối từ iPhone / Android</h2>
+
+<div class="card">
+    <h3>Bước 1: Cài Tailscale trên phone</h3>
+    <table>
+        <tr><th>Platform</th><th>Link</th></tr>
+        <tr><td>iOS</td><td><a href="https://apps.apple.com/app/tailscale/id1470499037" style="color:#93c5fd">App Store — Tailscale</a></td></tr>
+        <tr><td>Android</td><td><a href="https://play.google.com/store/apps/details?id=com.tailscale.ipn" style="color:#93c5fd">Play Store — Tailscale</a></td></tr>
+    </table>
+    <p>Đăng nhập cùng tài khoản đã dùng trên máy host.</p>
+</div>
+
+<div class="card">
+    <h3>Bước 2: Cài SSH Client</h3>
+    <table>
+        <tr><th>App</th><th>Platform</th><th>Link</th></tr>
+        <tr><td><strong>Termius</strong> (recommended)</td><td>iOS / Android</td><td><a href="https://apps.apple.com/app/termius-terminal-ssh-client/id549039908" style="color:#93c5fd">App Store</a></td></tr>
+        <tr><td>Blink Shell</td><td>iOS</td><td>App Store (paid)</td></tr>
+        <tr><td>JuiceSSH</td><td>Android</td><td>Play Store (free)</td></tr>
+    </table>
+</div>
+
+<div class="card">
+    <h3>Bước 3: Tạo connection</h3>
+    <table>
+        <tr><th>Field</th><th>Value</th></tr>
+        <tr><td>Hostname</td><td><code>&lt;TAILSCALE_IP&gt;</code> (lấy từ <code>tailscale ip -4</code> trên máy host)</td></tr>
+        <tr><td>Port</td><td><code>22</code></td></tr>
+        <tr><td>Username</td><td><code>&lt;USERNAME&gt;</code> (user Windows của máy host)</td></tr>
+        <tr><td>Password</td><td>Mật khẩu đăng nhập Windows của máy host</td></tr>
+    </table>
+    <p>Tap <strong>Connect</strong> → sẽ thấy PowerShell prompt.</p>
+</div>
+
+<!-- ═══════════════════════════════════════════════════ -->
+<h2 id="client-pc">4. Kết nối từ PC / Mac khác</h2>
+
+<div class="card">
+    <h3>Option A: Terminal SSH (đơn giản nhất)</h3>
+    <ol>
+        <li>Cài <a href="https://tailscale.com/download" style="color:#93c5fd">Tailscale</a> + đăng nhập cùng account</li>
+        <li>Mở Terminal / PowerShell:</li>
+    </ol>
+    <pre><code>ssh &lt;USERNAME&gt;@&lt;TAILSCALE_IP&gt;</code></pre>
+    <ol>
+        <li>Cài extension <strong>"Remote - SSH"</strong> trong VS Code</li>
+        <li><code>Ctrl+Shift+P</code> → "Remote-SSH: Connect to Host"</li>
+        <li>Nhập: <code>&lt;USERNAME&gt;@&lt;TAILSCALE_IP&gt;</code></li>
+        <li>Chọn platform: <strong>Windows</strong></li>
+    </ol>
+    <p>→ Full VS Code experience trên code của máy host, bao gồm terminal, file explorer, extensions.</p>
+</div>
+
+<div class="card">
+    <h3>Option C: Windows Remote Desktop (full GUI)</h3>
+    <p>Nếu cần toàn bộ desktop (GUI apps, browser, etc.):</p>
+    <pre><code>mstsc /v:&lt;TAILSCALE_IP&gt;</code></pre>
+    <p>Hoặc dùng app <strong>Microsoft Remote Desktop</strong> trên Mac/iOS.</p>
+</div>
+
+<!-- ═══════════════════════════════════════════════════ -->
+<h2 id="copilot">5. Chạy Copilot CLI từ xa</h2>
+
+<div class="card">
+    <p>Sau khi SSH vào máy host:</p>
+    <pre><code># Chuyển sang PowerShell 7 (nếu default là PS 5.1)
+pwsh
+
+# Navigate đến project
+cd C:\Users\Admin\Desktop\Code
+
+# Khởi động Copilot CLI
+copilot</code></pre>
+
+    <div class="success">
+        Bạn có thể tương tác với Copilot CLI y hệt như đang ngồi trước máy — đọc code, edit file, chạy command, v.v.
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════ -->
+<h2 id="wol">6. Wake-on-LAN (bật máy từ xa khi Sleep)</h2>
+
+<div class="card">
+    <h3>Yêu cầu</h3>
+    <ul>
+        <li>Máy host đang ở trạng thái <strong>Sleep</strong> (không phải Shutdown)</li>
+        <li>BIOS: Enable "Wake on LAN" / "Power On By PCI-E"</li>
+        <li>NIC: Enable "Wake on Magic Packet" (đã verify ✅ cho Intel Wi-Fi 6E AX211)</li>
+    </ul>
+</div>
+
+<div class="card">
+    <h3>Thông tin WoL của máy host</h3>
+    <table>
+        <tr><th>Field</th><th>Cách lấy</th></tr>
+        <tr><td>MAC Address</td><td><code>Get-NetAdapter | Where Status -eq "Up" | Select MacAddress</code></td></tr>
+        <tr><td>Broadcast IP</td><td>IP LAN của máy host (ví dụ <code>192.168.1.255</code>) hoặc Tailscale IP</td></tr>
+        <tr><td>Port</td><td><code>9</code> (mặc định)</td></tr>
+    </table>
+</div>
+
+<div class="card">
+    <h3>Cách gửi WoL packet</h3>
+    <p><strong>Từ phone</strong>: dùng app WoL (search "Wake on LAN" trên App Store/Play Store), nhập MAC address trên.</p>
+    <p><strong>Từ PC khác (cùng LAN)</strong>:</p>
+    <pre><code># PowerShell (cài module)
+Install-Module -Name WakeOnLan -Force
+Send-WakeOnLan -MacAddress "&lt;MAC_ADDRESS&gt;"
+
+# Hoặc Python
+pip install wakeonlan
+python -c "from wakeonlan import send_magic_packet; send_magic_packet('AA:BB:CC:DD:EE:FF')"</code></pre>
+</div>
+
+<div class="warning">
+    WoL qua WiFi chỉ hoạt động khi <strong>cùng mạng LAN</strong> (cùng WiFi/subnet). Nếu muốn bật từ xa qua internet, cần thiết bị trung gian luôn bật (Raspberry Pi, NAS) hoặc Smart Plug + BIOS "Restore on Power Loss".
+</div>
+
+<table>
+    <tr><th>Trạng thái máy</th><th>WoL WiFi</th><th>Ghi chú</th></tr>
+    <tr><td>Sleep</td><td><span class="badge badge-green">✅ OK</span></td><td>Recommended — dùng Sleep thay Shutdown</td></tr>
+    <tr><td>Hibernate</td><td><span class="badge badge-yellow">⚠️ Tuỳ</span></td><td>Phụ thuộc driver</td></tr>
+    <tr><td>Shutdown</td><td><span class="badge badge-red">❌ No</span></td><td>WiFi NIC mất nguồn hoàn toàn</td></tr>
+</table>
+
+<!-- ═══════════════════════════════════════════════════ -->
+<h2 id="troubleshooting">7. Troubleshooting</h2>
+
+<div class="card">
+    <h3>❌ "Connection refused"</h3>
+    <ul>
+        <li>Kiểm tra sshd đang chạy: <code>Get-Service sshd</code></li>
+        <li>Kiểm tra firewall: <code>Get-NetFirewallRule -Name "OpenSSH*"</code></li>
+        <li>Kiểm tra Tailscale connected: <code>tailscale status</code></li>
+    </ul>
+</div>
+
+<div class="card">
+    <h3>❌ "Connection closed" ngay sau login</h3>
+    <ul>
+        <li>DefaultShell path không accessible → đổi về PowerShell 5.1:</li>
+    </ul>
+    <pre><code>Set-ItemProperty -Path "HKLM:\SOFTWARE\OpenSSH" -Name DefaultShell `
+    -Value "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
+Restart-Service sshd</code></pre>
+</div>
+
+<div class="card">
+    <h3>❌ "Permission denied"</h3>
+    <ul>
+        <li>Kiểm tra username đúng (gõ <code>whoami</code> trên máy host để xác nhận)</li>
+        <li>Đảm bảo <code>PasswordAuthentication yes</code> trong <code>C:\ProgramData\ssh\sshd_config</code></li>
+        <li>Restart: <code>Restart-Service sshd</code></li>
+    </ul>
+</div>
+
+<div class="card">
+    <h3>❌ "Host unreachable" / timeout</h3>
+    <ul>
+        <li>Tailscale chưa kết nối → mở app Tailscale, kiểm tra status</li>
+        <li>Máy host đang tắt/sleep → gửi WoL hoặc bật thủ công</li>
+        <li>Verify bằng: <code>tailscale ping &lt;TAILSCALE_IP&gt;</code></li>
+    </ul>
+</div>
+
+<div class="card">
+    <h3>❌ Không có autocomplete / plugin sau SSH</h3>
+    <ul>
+        <li>SSH mặc định vào <code>cmd.exe</code> hoặc PS 5.1 → gõ <code>pwsh</code> để chuyển PowerShell 7</li>
+        <li>Hoặc fix DefaultShell (xem Bước 4 ở trên)</li>
+    </ul>
+</div>
+
+<div class="card">
+    <h3>❌ "Class not registered" khi cài OpenSSH</h3>
+    <ul>
+        <li>Windows Update service bị lỗi</li>
+        <li>Dùng cách thay thế: download ZIP từ GitHub (xem Bước 2)</li>
+    </ul>
+</div>
+
+<!-- ═══════════════════════════════════════════════════ -->
+
+<footer>
+    <p>Generated: 2026-05-20 • Version 1.0</p>
+    <p>Stack: Tailscale (VPN) + OpenSSH (server) + PowerShell 7 (shell) + Copilot CLI (AI agent)</p>
+    <p>Mỗi người cần: cài Tailscale → cài SSH → lấy IP bằng <code>tailscale ip -4</code> → share IP cho team</p>
+</footer>
+
+</body>
+</html>
