@@ -1452,6 +1452,26 @@ input[type="time"], input[type="date"], input[type="datetime-local"] {
   .btn.sm { min-height: 38px; }
 }
 
+/* Ultra-narrow viewports (iPhone SE 1st gen 320px, embedded WebViews):
+   bump active nav pill flex + shrink padding so labels like "Dashboard"
+   don't visually clip. */
+@media (max-width: 360px) {
+  .nav-bar, .tabs-list {
+    padding-left: 4px; padding-right: 4px;
+    gap: 2px;
+  }
+  .nav-item, .tabs-trigger {
+    padding: 0 6px;
+    min-width: 44px; /* preserve WCAG touch target on inactive */
+  }
+  .nav-item.active, .tabs-trigger.active {
+    flex: 3 1 0;
+  }
+  .nav-item .nav-label, .tabs-trigger .nav-label {
+    font-size: 12px;
+  }
+}
+
 /* â”€â”€â”€ SCHEDULE DATA TABLE â”€â”€â”€ */
 .sched-table {
   border-collapse: collapse;
