@@ -246,8 +246,7 @@ Dashboard là một **PWA dark-mode-only** (`<html class="dark">`), mobile-first
 |---|---|---|
 | CSS framework | **Tailwind CSS v3** (CDN: `cdn.tailwindcss.com`) | Cấu hình inline trong `<script>tailwind.config = …</script>` (xem `index.html` line ~17) |
 | Design system | **shadcn/ui tokens** (color + radius + spacing scale) | Không dùng React components — port sang vanilla HTML/CSS |
-| Font sans | **Inter** (400/500/600/700) — Google Fonts | `--font-sans` |
-| Font mono | **JetBrains Mono** (400/500/600/700) | `--font-mono` — dùng cho time, JSON, ID |
+| Font (toàn bộ project) | **JetBrains Mono** (400/500/600/700) — Google Fonts | Stack: `"JetBrains Mono", "SF Mono", "Fira Code", ui-monospace, monospace`. Cả `--font-sans` và `--font-mono` đều trỏ vào stack này → đồng nhất một font, không pha sans/mono. |
 | Icons | **Lucide-style SVG** inline (`docs/js/icons.js`) | Không phải lib ngoài — `ICON_PATHS` map + helper `ICON(name, size, extraClass)`. Thêm icon mới: thêm path vào `ICON_PATHS`. |
 | Animations | Tailwind keyframes + custom CSS | `shimmer`, `fade-in`, `modal-in`, `page-in`, `sheet-up` |
 | Static HTML | Tailwind utility classes trực tiếp | Style trong `<class="...">` |
@@ -304,6 +303,11 @@ Dashboard là một **PWA dark-mode-only** (`<html class="dark">`), mobile-first
    - **Cách 2** (dynamic content): thêm attribute `data-scroll-area` vào element
    - **Cách 3** (full component): wrap với `<div class="scroll-area">` + `<div class="scroll-area-viewport">` (chỉ dùng cho log viewer / large content area)
    - ⛔ KHÔNG viết per-element `::-webkit-scrollbar` rules — duplicate với global treatment, chỉ làm noise; nếu cần customize size thì thêm CSS var override.
+10. **Mono-only typography** — toàn bộ project chỉ dùng MỘT font stack duy nhất: `"JetBrains Mono", "SF Mono", "Fira Code", ui-monospace, monospace`. Cả `--font-sans` và `--font-mono` đều resolve về stack này.
+   - ⛔ KHÔNG thêm Inter / system-ui / sans-serif vào CSS hay Tailwind config nữa
+   - ⛔ KHÔNG hardcode `font-family: 'Inter'` hay `sans-serif` ở bất kỳ đâu (kể cả inline style trong JS-generated HTML)
+   - ✅ Khi cần family override hãy dùng `var(--font-mono)` hoặc `inherit` — nhất quán + dễ refactor sau
+   - Lý do: dự án mang tính "dev tool / dashboard" → mono cho cảm giác kỹ thuật, dữ liệu (số, code, JSON, ID, timestamp) hiển thị aligned đẹp hơn, không cần phân biệt 2 family.
 
 ### PWA assets
 - `theme-color` = `#09090b` (match background)

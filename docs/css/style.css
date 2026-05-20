@@ -44,7 +44,13 @@
   --radius-xl: 0.875rem;
   --radius-full: 9999px;
   --cell-size: 2.25rem;
-  --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, sans-serif;
+  /* Project uses a single mono-only type system for visual consistency.
+     --font-sans is intentionally aliased to the same mono stack so that
+     existing var(--font-sans) callsites and any third-party CSS that
+     looks at `font-family` on body all resolve to the same family.
+     If you ever need a true sans family back, introduce a new
+     --font-sans-real var instead of re-pointing this one. */
+  --font-sans: "JetBrains Mono", "SF Mono", "Fira Code", ui-monospace, monospace;
   --font-mono: "JetBrains Mono", "SF Mono", "Fira Code", ui-monospace, monospace;
   --fs-xs: 0.75rem;
   --fs-sm: 0.8125rem;

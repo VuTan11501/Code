@@ -15,7 +15,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script>
 /* Theme init — runs before Tailwind/CSS so first paint matches user pref */
 (function () {
@@ -54,7 +54,7 @@ tailwind.config = {
         warning: { DEFAULT: 'var(--yellow)', foreground: '#1c1917' },
       },
       fontFamily: {
-        sans: ['Inter', 'ui-sans-serif', 'system-ui', '-apple-system', 'sans-serif'],
+        sans: ['"JetBrains Mono"', '"SF Mono"', '"Fira Code"', 'ui-monospace', 'monospace'],
         mono: ['"JetBrains Mono"', '"SF Mono"', '"Fira Code"', 'ui-monospace', 'monospace'],
       },
       borderRadius: {
@@ -86,7 +86,7 @@ tailwind.config = {
   },
 }
 </script>
-<link rel="stylesheet" href="css/style.css?v=99">
+<link rel="stylesheet" href="css/style.css?v=100">
 <link rel="preconnect" href="https://api.github.com">
 </head>
 <body class="bg-background text-foreground font-sans text-sm antialiased min-h-dvh overflow-x-hidden">
