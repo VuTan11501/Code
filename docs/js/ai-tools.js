@@ -367,6 +367,20 @@
 
   function _registerProposal(proposal) {
     if (window.AIProposals) window.AIProposals.register(proposal);
+    // Persist full proposal payload in a side store so chat-history "Re-apply"
+    // can recover it after reload (the tool's return value below is intentionally
+    // tiny to keep AI token use low). Cap ~200 entries FIFO.
+    try {
+      const key = 'ai_proposal_payloads_v1';
+      const raw = sessionStorage.getItem(key);
+      const map = raw ? JSON.parse(raw) : {};
+      map[proposal.proposal_id] = proposal;
+      const ids = Object.keys(map);
+      if (ids.length > 200) {
+        ids.slice(0, ids.length - 200).forEach(k => delete map[k]);
+      }
+      sessionStorage.setItem(key, JSON.stringify(map));
+    } catch { /* quota — ignore */ }
     return {
       proposal_id: proposal.proposal_id,
       summary: _proposalSummary(proposal),

@@ -754,8 +754,18 @@ Hôm nay (JST): ${today}.`;
   // Scan an assistant message's tool_results for proposal payloads.
   // Returns parsed proposal objects (with diff/kind/target_file intact) so the
   // user can re-apply a past suggestion without having to re-prompt the AI.
+  // Tool results only contain a tiny summary (proposal_id + summary text); the
+  // full payload (diff, kind, target_file, errors) is looked up from a
+  // sessionStorage side-store populated by ai-tools._registerProposal.
+  function _loadProposalPayloads() {
+    try {
+      const raw = sessionStorage.getItem('ai_proposal_payloads_v1');
+      return raw ? JSON.parse(raw) : {};
+    } catch { return {}; }
+  }
   function extractProposalsFromMessage(m) {
     if (!m || !m._tool_results) return [];
+    const store = _loadProposalPayloads();
     const out = [];
     const seen = new Set();
     for (const id of Object.keys(m._tool_results)) {
@@ -764,17 +774,20 @@ Hôm nay (JST): ${today}.`;
       let r;
       try { r = typeof raw === 'string' ? JSON.parse(raw) : raw; } catch { continue; }
       if (!r || typeof r !== 'object') continue;
-      // Tools either return a single proposal or wrap it in { proposal: {...} }.
-      const candidates = [];
-      if (r.proposal_id && r.kind) candidates.push(r);
-      if (r.proposal && r.proposal.proposal_id) candidates.push(r.proposal);
-      for (const p of candidates) {
-        if (p && p.proposal_id && !seen.has(p.proposal_id)) {
-          seen.add(p.proposal_id);
-          // Skip proposals that failed validation — they can't be re-applied as-is.
-          if (Array.isArray(p.errors) && p.errors.length) continue;
-          out.push(p);
-        }
+      // Collect every proposal_id mentioned in this tool result (summary or full
+      // object); for each, prefer the side-store payload, fall back to inline.
+      const candidateIds = [];
+      if (r.proposal_id) candidateIds.push(r.proposal_id);
+      if (r.proposal && r.proposal.proposal_id) candidateIds.push(r.proposal.proposal_id);
+      for (const pid of candidateIds) {
+        if (seen.has(pid)) continue;
+        seen.add(pid);
+        const p = store[pid]
+          || (r.proposal_id === pid && r.kind ? r : null)
+          || (r.proposal && r.proposal.proposal_id === pid ? r.proposal : null);
+        if (!p || !p.kind || !p.diff) continue;
+        if (Array.isArray(p.errors) && p.errors.length) continue;
+        out.push(p);
       }
     }
     return out;
