@@ -86,7 +86,7 @@ tailwind.config = {
   },
 }
 </script>
-<link rel="stylesheet" href="css/style.css?v=85">
+<link rel="stylesheet" href="css/style.css?v=86">
 <link rel="preconnect" href="https://api.github.com">
 </head>
 <body class="bg-background text-foreground font-sans text-sm antialiased min-h-dvh overflow-x-hidden">
@@ -462,9 +462,14 @@ tailwind.config = {
         <div class="ai-dot-grid" aria-hidden="true"></div>
 
         <header class="ai-topbar">
-          <div class="ai-brand">
-            <span class="ai-brand-logo" aria-hidden="true"><span data-icon="sparkles" data-size="14"></span></span>
-            <span class="ai-brand-text">AI Coach</span>
+          <div class="ai-topbar-left">
+            <button class="ai-hamburger-btn" id="aiConvBtn" type="button" aria-label="Mở menu" title="Lịch sử & menu" aria-haspopup="dialog">
+              <span data-icon="menu" data-size="16" aria-hidden="true"></span>
+            </button>
+            <div class="ai-brand">
+              <span class="ai-brand-logo" aria-hidden="true"><span data-icon="sparkles" data-size="14"></span></span>
+              <span class="ai-brand-text">AI Coach</span>
+            </div>
           </div>
           <div class="ai-topbar-center">
             <div class="ai-model-picker" id="aiModelPicker">
@@ -493,20 +498,18 @@ tailwind.config = {
             </div>
           </div>
           <div class="ai-actions">
-            <button class="ai-icon-btn" id="aiNewChatBtn" type="button" title="New chat" aria-label="New chat">
-              <span data-icon="plus" data-size="16"></span>
-            </button>
             <button class="ai-icon-btn" id="aiUndoBtn" type="button" title="Undo last apply" aria-label="Undo last apply" hidden>
               <span data-icon="undo" data-size="15"></span>
             </button>
             <button class="ai-icon-btn" id="aiHistoryBtn" type="button" title="Apply history" aria-label="Apply history" hidden>
               <span data-icon="history" data-size="15"></span>
             </button>
-            <button class="ai-icon-btn" id="aiConvBtn" type="button" title="Conversations" aria-label="Conversations" aria-haspopup="dialog">
-              <span data-icon="panelLeft" data-size="16"></span>
-            </button>
             <button class="ai-icon-btn" id="aiClearBtn" type="button" title="Xoá hội thoại" aria-label="Clear conversation">
               <span data-icon="trash" data-size="15"></span>
+            </button>
+            <button class="ai-newchat-pill" id="aiNewChatBtn" type="button" title="Bắt đầu cuộc trò chuyện mới" aria-label="New chat">
+              <span data-icon="plus" data-size="14" aria-hidden="true"></span>
+              <span class="ai-newchat-pill-text">New chat</span>
             </button>
           </div>
         </header>
