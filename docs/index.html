@@ -86,7 +86,7 @@ tailwind.config = {
   },
 }
 </script>
-<link rel="stylesheet" href="css/style.css?v=86">
+<link rel="stylesheet" href="css/style.css?v=87">
 <link rel="preconnect" href="https://api.github.com">
 </head>
 <body class="bg-background text-foreground font-sans text-sm antialiased min-h-dvh overflow-x-hidden">
@@ -501,9 +501,6 @@ tailwind.config = {
             <button class="ai-icon-btn" id="aiUndoBtn" type="button" title="Undo last apply" aria-label="Undo last apply" hidden>
               <span data-icon="undo" data-size="15"></span>
             </button>
-            <button class="ai-icon-btn" id="aiHistoryBtn" type="button" title="Apply history" aria-label="Apply history" hidden>
-              <span data-icon="history" data-size="15"></span>
-            </button>
             <button class="ai-icon-btn" id="aiClearBtn" type="button" title="Xoá hội thoại" aria-label="Clear conversation">
               <span data-icon="trash" data-size="15"></span>
             </button>
@@ -513,22 +510,6 @@ tailwind.config = {
             </button>
           </div>
         </header>
-
-        <!-- AI Apply History modal (rollback any past apply) -->
-        <div class="modal" id="aiHistoryModal" role="dialog" aria-modal="true" aria-label="Apply history" hidden>
-          <div class="modal-backdrop" data-history-close></div>
-          <div class="modal-content" style="max-width:560px;max-height:80vh;display:flex;flex-direction:column">
-            <div class="card-header" style="display:flex;align-items:center;gap:8px">
-              <div class="card-title" style="flex:1"><span data-icon="history" data-size="16"></span> Apply history</div>
-              <button class="ai-icon-btn" type="button" data-history-close title="Close" aria-label="Close">
-                <span data-icon="x" data-size="15"></span>
-              </button>
-            </div>
-            <div class="card-content" style="overflow:auto;flex:1">
-              <ul class="ai-history-list" id="aiHistoryList" style="list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:8px"></ul>
-            </div>
-          </div>
-        </div>
 
         <!-- Conversations modal (uses standard modal-overlay pattern) -->
         <div class="modal-overlay ai-conv-modal" id="aiConvSheet" role="dialog" aria-modal="true" aria-label="Hội thoại">
@@ -792,14 +773,13 @@ tailwind.config = {
             <div class="ai-audit-sync-row">
               <div class="ai-audit-sync-label">
                 <div class="ai-audit-sync-title">Sync to Gist <code>ai-audit.json</code></div>
-                <div class="ai-audit-sync-help">Upload every new entry. Cross-device history appears in the apply-history modal.</div>
+                <div class="ai-audit-sync-help">Upload every new entry to your Gist for cross-device backup.</div>
               </div>
               <button type="button" class="switch" id="aiAuditSyncToggle" role="switch" aria-checked="false" aria-label="Toggle audit log sync" onclick="toggleAiAuditSync(!this.classList.contains('active'))">
                 <span class="switch-thumb"></span>
               </button>
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap">
-              <button class="btn btn-secondary" onclick="openAiHistory()" data-tooltip="Open the apply history modal"><span data-icon="history" data-size="14"></span> View history</button>
               <button class="btn btn-destructive" onclick="clearAiAudit()" data-tooltip="Wipe local audit log"><span data-icon="trash" data-size="14"></span> Clear log</button>
             </div>
           </div>
@@ -1212,9 +1192,9 @@ tailwind.config = {
 <script src="js/ai-audit.js?v=2"></script>
 <script src="js/ai-proposals.js?v=2"></script>
 <script src="js/ai-tools.js?v=2"></script>
-<script src="js/ai-agent.js?v=26"></script>
+<script src="js/ai-agent.js?v=27"></script>
 <script src="js/insights.js?v=1"></script>
-<script src="js/settings.js?v=33"></script>
+<script src="js/settings.js?v=34"></script>
 <!-- AI Proposal confirmation modal (Phase 3) -->
 <div id="aiProposalModal" class="proposal-modal" role="dialog" aria-modal="true" aria-labelledby="aiProposalTitle" hidden aria-hidden="true">
   <div class="proposal-modal-backdrop" onclick="AIProposals.closeModal()"></div>

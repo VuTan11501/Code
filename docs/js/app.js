@@ -1046,9 +1046,12 @@ async function enrollBiometric() {
   }
 }
 
-function disableBiometric() {
+async function disableBiometric() {
   if (!window.Biometric) return;
-  if (!confirm('Disable biometric auto-unlock on this device? You\'ll need to enter passphrase on next launch.')) return;
+  const ok = await (typeof uiConfirm === 'function'
+    ? uiConfirm({ title: 'Tắt biometric unlock?', message: 'Lần mở app tiếp theo bạn sẽ phải nhập passphrase.', confirmText: 'Tắt', cancelText: 'Hủy', danger: true })
+    : Promise.resolve(window.confirm('Disable biometric auto-unlock on this device?')));
+  if (!ok) return;
   window.Biometric.disable();
   toast('Biometric disabled on this device');
   if (typeof renderBiometricStatus === 'function') renderBiometricStatus();

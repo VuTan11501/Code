@@ -49,9 +49,18 @@ function toggleAiAuditSync(enabled) {
   if (typeof toast === 'function') toast(enabled ? 'Audit sync enabled' : 'Audit sync disabled');
 }
 
-function clearAiAudit() {
+async function clearAiAudit() {
   if (!window.AIAudit) return;
-  if (!confirm('Clear ALL local audit entries? This cannot be undone (cloud copy if any stays).')) return;
+  const ok = await (typeof uiConfirm === 'function'
+    ? uiConfirm({
+        title: 'Xoá audit log?',
+        message: 'Xoá toàn bộ audit entries dưới máy này. Bản sao trên cloud (nếu có) vẫn được giữ. Hành động này không hoàn tác được.',
+        confirmText: 'Xoá hết',
+        cancelText: 'Hủy',
+        danger: true,
+      })
+    : Promise.resolve(window.confirm('Clear ALL local audit entries?')));
+  if (!ok) return;
   window.AIAudit.clearAll();
   renderAiAuditStatus();
   if (typeof toast === 'function') toast('Audit log cleared');
