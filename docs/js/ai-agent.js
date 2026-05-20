@@ -1897,15 +1897,12 @@ Hôm nay (JST): ${today}.`;
     function _openModelMenu() {
       if (!modelMenu || !modelTrigger) return;
       modelMenu.hidden = false;
-      void modelMenu.offsetWidth;
-      requestAnimationFrame(() => modelMenu.classList.add('show'));
       modelTrigger.setAttribute('aria-expanded', 'true');
     }
     function _closeModelMenu() {
       if (!modelMenu || !modelTrigger) return;
-      modelMenu.classList.remove('show');
+      modelMenu.hidden = true;
       modelTrigger.setAttribute('aria-expanded', 'false');
-      setTimeout(() => { if (!modelMenu.classList.contains('show')) modelMenu.hidden = true; }, 160);
     }
     if (modelTrigger && modelMenu) {
       _syncModelPickerUI();
