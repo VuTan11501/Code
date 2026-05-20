@@ -294,10 +294,15 @@ Hôm nay (JST): ${today}.`;
     } catch (e) {
       if (myVersion === convVersion) handleError(e);
     } finally {
-      isStreaming = false;
-      setSendingState(false);
-      currentAbort = null;
-      if (myVersion === convVersion) saveConv();
+      // Only release isStreaming/UI state if THIS run is still current.
+      // If clearConv() bumped convVersion mid-flight, a fresher run may have
+      // started or be about to start — don't clobber its state.
+      if (myVersion === convVersion) {
+        isStreaming = false;
+        setSendingState(false);
+        currentAbort = null;
+        saveConv();
+      }
     }
   }
 
@@ -335,6 +340,7 @@ Hôm nay (JST): ${today}.`;
       const { finishReason } = await streamRequest(body, {
         signal: currentAbort.signal,
         onDelta: (chunk) => {
+          if (isStale()) return;
           streamedContent += chunk;
           assistantMsg.content = streamedContent;
           if (!bodyEl) {
@@ -351,6 +357,7 @@ Hôm nay (JST): ${today}.`;
           }
         },
         onToolCallDelta: (deltas) => {
+          if (isStale()) return;
           accumulateToolCalls(toolAccum, deltas);
           assistantMsg.tool_calls = toolAccum;
           if (node) {
@@ -363,6 +370,7 @@ Hôm nay (JST): ${today}.`;
           }
         },
       });
+      if (isStale()) return;
 
       // If finished with tool_calls → execute and loop
       if (finishReason === 'tool_calls' && toolAccum.length > 0 && !isLastHop) {
@@ -527,9 +535,15 @@ Hôm nay (JST): ${today}.`;
   function clearConv() {
     if (currentAbort) { try { currentAbort.abort(); } catch {} }
     convVersion++;                  // invalidate any in-flight loop
+    // Force-release stale streaming state — the in-flight run's finally{}
+    // will see myVersion !== convVersion and skip its own release, so we
+    // own the reset here so the next sendMessage() isn't blocked.
+    isStreaming = false;
+    currentAbort = null;
     messages = [];
     saveConv();
     setComposerMeta('');
+    setSendingState(false);
     renderAll();
   }
 
