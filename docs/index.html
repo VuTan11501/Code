@@ -86,7 +86,7 @@ tailwind.config = {
   },
 }
 </script>
-<link rel="stylesheet" href="css/style.css?v=79">
+<link rel="stylesheet" href="css/style.css?v=80">
 <link rel="preconnect" href="https://api.github.com">
 </head>
 <body class="bg-background text-foreground font-sans text-sm antialiased min-h-dvh overflow-x-hidden">
@@ -467,10 +467,36 @@ tailwind.config = {
             <span class="ai-brand-text">AI Coach</span>
           </div>
           <div class="ai-topbar-center">
-            <select class="ai-model-pill" id="aiModelSelect" aria-label="AI model" title="Chọn model">
-              <option value="gpt-4o-mini" selected>gpt-4o-mini</option>
-              <option value="gpt-4o">gpt-4o</option>
-            </select>
+            <div class="ai-model-picker" id="aiModelPicker">
+              <button class="ai-model-trigger" id="aiModelTrigger" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="Chọn model AI">
+                <span class="ai-model-trigger-emoji" aria-hidden="true">⚡</span>
+                <span class="ai-model-trigger-label" id="aiModelTriggerLabel">gpt-4o-mini</span>
+                <span class="ai-model-trigger-chev" data-icon="chevronDown" data-size="12" aria-hidden="true"></span>
+              </button>
+              <div class="ai-model-menu" id="aiModelMenu" role="menu" aria-label="Models" hidden>
+                <div class="ai-model-menu-label">Model</div>
+                <button class="ai-model-menu-item" type="button" role="menuitemradio" data-model="gpt-4o-mini">
+                  <span class="ai-model-menu-emoji" aria-hidden="true">⚡</span>
+                  <span class="ai-model-menu-main">
+                    <span class="ai-model-menu-name">gpt-4o-mini</span>
+                    <span class="ai-model-menu-desc">Nhanh · rẻ · mặc định</span>
+                  </span>
+                  <span class="ai-model-menu-check" data-icon="check" data-size="13" aria-hidden="true"></span>
+                </button>
+                <button class="ai-model-menu-item" type="button" role="menuitemradio" data-model="gpt-4o">
+                  <span class="ai-model-menu-emoji" aria-hidden="true">🧠</span>
+                  <span class="ai-model-menu-main">
+                    <span class="ai-model-menu-name">gpt-4o</span>
+                    <span class="ai-model-menu-desc">Thông minh hơn · chậm hơn</span>
+                  </span>
+                  <span class="ai-model-menu-check" data-icon="check" data-size="13" aria-hidden="true"></span>
+                </button>
+              </div>
+              <select id="aiModelSelect" class="sr-only" aria-hidden="true" tabindex="-1">
+                <option value="gpt-4o-mini" selected>gpt-4o-mini</option>
+                <option value="gpt-4o">gpt-4o</option>
+              </select>
+            </div>
           </div>
           <div class="ai-actions">
             <button class="ai-icon-btn" id="aiNewChatBtn" type="button" title="New chat" aria-label="New chat">
@@ -512,19 +538,29 @@ tailwind.config = {
           <div class="ai-conv-sheet-backdrop" data-conv-close></div>
           <div class="ai-conv-sheet-panel">
             <div class="ai-conv-sheet-head">
-              <span class="ai-conv-sheet-title">Conversations</span>
-              <button class="ai-icon-btn" type="button" id="aiConvNewBtn" title="New chat" aria-label="New chat">
-                <span data-icon="plus" data-size="15"></span>
-              </button>
+              <span class="ai-conv-brand-logo" aria-hidden="true"><span data-icon="sparkles" data-size="13"></span></span>
+              <span class="ai-conv-sheet-title">Hội thoại</span>
               <button class="ai-icon-btn" type="button" data-conv-close title="Close" aria-label="Close">
                 <span data-icon="x" data-size="15"></span>
               </button>
             </div>
+            <div class="ai-conv-newchat-wrap">
+              <button class="ai-conv-newchat-btn" id="aiConvNewBtn" type="button">
+                <span data-icon="plus" data-size="14" aria-hidden="true"></span>
+                <span>Cuộc trò chuyện mới</span>
+              </button>
+            </div>
             <div class="ai-conv-search-wrap">
               <span class="ai-conv-search-icon" data-icon="search" data-size="14" aria-hidden="true"></span>
-              <input type="search" class="ai-conv-search" id="aiConvSearch" placeholder="Tìm trong hội thoại…" autocomplete="off" />
+              <input type="search" class="ai-conv-search" id="aiConvSearch" placeholder="Tìm tiêu đề hoặc nội dung…" autocomplete="off" />
             </div>
             <ul class="ai-conv-list" id="aiConvList" role="listbox" aria-label="Conversation list"></ul>
+            <div class="ai-conv-sheet-foot" id="aiConvFoot" hidden>
+              <button class="ai-conv-clear-all" id="aiConvClearAllBtn" type="button">
+                <span data-icon="trash" data-size="13" aria-hidden="true"></span>
+                <span>Xóa toàn bộ lịch sử</span>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -1178,7 +1214,7 @@ tailwind.config = {
 <script src="js/ai-audit.js?v=2"></script>
 <script src="js/ai-proposals.js?v=2"></script>
 <script src="js/ai-tools.js?v=2"></script>
-<script src="js/ai-agent.js?v=22"></script>
+<script src="js/ai-agent.js?v=23"></script>
 <script src="js/insights.js?v=1"></script>
 <script src="js/settings.js?v=32"></script>
 <!-- AI Proposal confirmation modal (Phase 3) -->
