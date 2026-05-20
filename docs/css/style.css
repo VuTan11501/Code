@@ -2101,6 +2101,14 @@ body.ai-page-active .ai-dot-grid {
   display: flex;
   flex-direction: column;
   flex: 1 1 auto;
+  /* Belt-and-suspenders: flex:1 should fill, but some mobile browsers
+     (iOS Safari, older Android Chrome) miscompute flex grow inside a
+     position:fixed parent that uses top+bottom anchors with height:auto.
+     Explicit height:100% forces the wrap to inherit the parent's
+     computed height, while min-height:0 keeps the inner scroll area
+     shrinkable so the chat list can scroll instead of pushing the
+     composer off-screen. */
+  height: 100%;
   min-height: 0;
 }
 .ai-dot-grid {
