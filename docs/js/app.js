@@ -59,6 +59,11 @@ function clearSession() {
   sessionToken = null;
   sessionStorage.removeItem(SESSION_KEY);
   if (typeof cachedGithubUser !== 'undefined') cachedGithubUser = null;
+  // Clear AI conversation on logout/auto-lock — never persist chat across auth boundary
+  if (window.AIAgent && typeof window.AIAgent.clearConv === 'function') {
+    try { window.AIAgent.clearConv(); } catch {}
+  }
+  try { sessionStorage.removeItem('ai_conv_v1'); } catch {}
 }
 
 async function deriveKey(passphrase, salt) {
@@ -247,6 +252,7 @@ function navigate(hash) {
   // Initialize page-specific content
   if (page === 'schedule' && typeof initSchedulePage === 'function') initSchedulePage();
   if (page === 'ot' && typeof initOtPlannerPage === 'function') initOtPlannerPage();
+  if (page === 'ai' && window.AIAgent && typeof window.AIAgent.mount === 'function') window.AIAgent.mount();
   if (page === 'settings' && typeof initSettingsPage === 'function') initSettingsPage();
   if (page === 'dashboard' && typeof refresh === 'function' && sessionToken) {
     // Ensure dashboard always has fresh data when entering the tab.

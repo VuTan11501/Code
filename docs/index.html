@@ -86,7 +86,7 @@ tailwind.config = {
   },
 }
 </script>
-<link rel="stylesheet" href="css/style.css?v=53">
+<link rel="stylesheet" href="css/style.css?v=54">
 <link rel="preconnect" href="https://api.github.com">
 </head>
 <body class="bg-background text-foreground font-sans text-sm antialiased min-h-dvh overflow-x-hidden">
@@ -178,6 +178,12 @@ tailwind.config = {
           <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
         </span>
         <span class="nav-label">OT Planner</span>
+      </a>
+      <a class="tabs-trigger nav-item flex-1 text-center px-3 py-2 rounded-md text-sm font-medium text-muted-foreground cursor-pointer transition-all flex items-center justify-center gap-2 no-underline" data-page="ai" href="#ai" role="tab" aria-selected="false" onclick="navigate('#ai')">
+        <span class="nav-icon" aria-hidden="true">
+          <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/></svg>
+        </span>
+        <span class="nav-label">AI</span>
       </a>
       <a class="tabs-trigger nav-item flex-1 text-center px-3 py-2 rounded-md text-sm font-medium text-muted-foreground cursor-pointer transition-all flex items-center justify-center gap-2 no-underline" data-page="settings" href="#settings" role="tab" aria-selected="false" onclick="navigate('#settings')">
         <span class="nav-icon" aria-hidden="true">
@@ -440,6 +446,52 @@ tailwind.config = {
           </div>
         </div>
       </section>
+    </div>
+
+    <!-- PAGE: AI COACH -->
+    <div class="page" id="page-ai" role="tabpanel" aria-label="AI Coach page">
+      <div class="ai-page-wrap">
+        <div class="ai-header card flex items-center justify-between gap-3 p-3 px-4 mb-3">
+          <div class="flex items-center gap-2 min-w-0">
+            <span class="ai-header-icon" aria-hidden="true" data-icon="sparkles" data-size="18"></span>
+            <div class="min-w-0">
+              <div class="text-sm font-semibold truncate">AI Coach</div>
+              <div class="text-xs text-muted-foreground truncate" id="aiHeaderSub">Read-only · OT / lương / lịch</div>
+            </div>
+          </div>
+          <div class="flex items-center gap-1">
+            <select class="select select-trigger ai-model-select" id="aiModelSelect" aria-label="AI model" title="Chọn model">
+              <option value="gpt-4o-mini" selected>gpt-4o-mini (nhanh)</option>
+              <option value="gpt-4o">gpt-4o (mạnh hơn)</option>
+            </select>
+            <button class="btn-ghost btn-icon" id="aiClearBtn" type="button" title="Xoá hội thoại" aria-label="Clear conversation">
+              <span data-icon="trash" data-size="16"></span>
+            </button>
+          </div>
+        </div>
+
+        <div class="ai-chat-scroll" id="aiChatScroll" role="log" aria-live="polite" aria-atomic="false">
+          <div class="ai-empty" id="aiEmpty">
+            <div class="ai-empty-icon"><span data-icon="bot" data-size="40"></span></div>
+            <div class="ai-empty-title">Hỏi tôi về OT, lương, hoặc lịch chấm công</div>
+            <div class="ai-empty-sub">Phase 1 read-only — tôi đọc Gist + workflow để trả lời, không sửa data.</div>
+            <div class="ai-suggestions" id="aiSuggestions">
+              <button type="button" class="filter-chip ai-suggest-chip" data-prompt="Tháng này còn bao nhiêu OT có thể làm?">Tháng này còn OT?</button>
+              <button type="button" class="filter-chip ai-suggest-chip" data-prompt="Tóm tắt OT tháng này: tổng giờ, gross JPY, cap còn lại.">Tóm tắt OT tháng này</button>
+              <button type="button" class="filter-chip ai-suggest-chip" data-prompt="Lịch checkin/checkout 7 ngày tới có gì?">Lịch 7 ngày tới</button>
+              <button type="button" class="filter-chip ai-suggest-chip" data-prompt="Workflow nào fail gần đây nhất?">Workflow fail gần đây?</button>
+            </div>
+          </div>
+        </div>
+
+        <form class="ai-composer card" id="aiComposer" autocomplete="off">
+          <textarea class="ai-composer-input" id="aiComposerInput" rows="1" placeholder="Hỏi gì đó… (Enter để gửi, Shift+Enter xuống dòng)" aria-label="Message" data-1p-ignore="true"></textarea>
+          <button class="btn btn-primary ai-composer-send" id="aiComposerSend" type="submit" aria-label="Send" disabled>
+            <span data-icon="send" data-size="16"></span>
+          </button>
+        </form>
+        <div class="ai-composer-meta" id="aiComposerMeta" aria-live="polite"></div>
+      </div>
     </div>
 
     <!-- PAGE: SETTINGS -->
@@ -980,17 +1032,19 @@ tailwind.config = {
 </div>
 
 <!-- Scripts (order matters) -->
-<script src="js/icons.js?v=42"></script>
+<script src="js/icons.js?v=43"></script>
 <script src="js/no-autofill.js?v=26"></script>
 <script src="js/theme.js?v=1"></script>
 <script src="js/locations.js?v=27"></script>
 <script src="js/biometric.js?v=2"></script>
 <script src="js/cloud-sync.js?v=4"></script>
-<script src="js/app.js?v=35"></script>
+<script src="js/app.js?v=36"></script>
 <script src="js/dashboard.js?v=28"></script>
 <script src="js/schedule.js?v=27"></script>
 <script src="js/ot-salary.js?v=37"></script>
 <script src="js/ot-planner.js?v=52"></script>
+<script src="js/ai-tools.js?v=1"></script>
+<script src="js/ai-agent.js?v=4"></script>
 <script src="js/settings.js?v=31"></script>
 </body>
 </html>
