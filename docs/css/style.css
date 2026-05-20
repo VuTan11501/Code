@@ -1994,18 +1994,20 @@ input[type="time"], input[type="date"], input[type="datetime-local"] {
 
 /* 
    AI COACH  Chat UI (Phase 1 P1)
+   Uses natural body scroll (no nested overflow container) — composer
+   is sticky to viewport bottom (above the mobile bottom-nav).
    - */
-.ai-page-wrap { display: flex; flex-direction: column; min-height: calc(100vh - var(--mobile-nav-height, 72px) - 140px); }
+.ai-page-wrap { display: block; }
 .ai-header-icon { color: var(--primary); display: inline-flex; }
-.ai-model-select { font-size: var(--fs-xs); padding: 4px 8px; height: 32px; min-width: 0; max-width: 180px; }
+.ai-model-select { font-size: var(--fs-xs); padding: 4px 8px; height: 32px; min-width: 0; max-width: 160px; }
 
 .ai-chat-scroll {
-  flex: 1 1 auto;
   display: flex; flex-direction: column; gap: var(--sp-3);
-  padding: var(--sp-3) var(--sp-1) var(--sp-2);
-  overflow-y: auto;
-  scroll-behavior: smooth;
-  min-height: 240px;
+  padding: var(--sp-2) 0 var(--sp-3);
+  /* No internal scroll — page scrolls naturally. The empty state has its
+     own min-height so the chat container itself doesn't need to reserve
+     vertical space (which would leave a dead gap once messages arrive). */
+  min-height: 0;
 }
 
 .ai-empty {
@@ -2013,6 +2015,7 @@ input[type="time"], input[type="date"], input[type="datetime-local"] {
   text-align: center; padding: var(--sp-6) var(--sp-3);
   color: var(--muted-foreground);
   gap: var(--sp-3);
+  min-height: 40vh;
 }
 .ai-empty-icon { color: var(--primary); opacity: 0.85; }
 .ai-empty-title { font-size: var(--fs-md); font-weight: 600; color: var(--foreground); }
@@ -2107,6 +2110,25 @@ input[type="time"], input[type="date"], input[type="datetime-local"] {
   30%           { transform: translateY(-3px); opacity: 1; }
 }
 
+/* Blinking cursor during streaming — ChatGPT-style "▋" caret appended
+   to the in-progress bubble. Disappears when streaming completes and
+   the bubble is re-rendered without the cursor sentinel. */
+.ai-cursor {
+  display: inline-block;
+  width: 7px;
+  height: 1.05em;
+  background: var(--primary);
+  vertical-align: -2px;
+  margin-left: 2px;
+  border-radius: 1px;
+  animation: aiCursorBlink 1s steps(2) infinite;
+}
+@keyframes aiCursorBlink { 50% { opacity: 0; } }
+.ai-streaming { position: relative; }
+@media (prefers-reduced-motion: reduce) {
+  .ai-cursor { animation: none; opacity: 0.7; }
+}
+
 /* Tool call pill */
 .ai-tool-pill {
   align-self: flex-start;
@@ -2147,18 +2169,24 @@ input[type="time"], input[type="date"], input[type="datetime-local"] {
   color: var(--foreground);
 }
 
-/* Composer */
+/* Composer — sticky to viewport bottom; offset above mobile bottom-nav */
 .ai-composer {
   display: flex; gap: var(--sp-2);
   align-items: flex-end;
   padding: var(--sp-2);
   margin-top: var(--sp-2);
   position: sticky;
-  bottom: calc(var(--mobile-nav-height, 72px) + 8px);
+  bottom: 12px;
   z-index: 5;
+  background: var(--card);
+  backdrop-filter: saturate(180%) blur(14px);
+  -webkit-backdrop-filter: saturate(180%) blur(14px);
+  box-shadow: var(--shadow-md);
 }
 .ai-composer-input {
   flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
   resize: none;
   background: transparent;
   border: none;
@@ -2189,3 +2217,24 @@ input[type="time"], input[type="date"], input[type="datetime-local"] {
 }
 .ai-composer-meta.err { color: var(--red); }
 .ai-composer-meta.warn { color: var(--yellow); }
+
+/* Mobile (≤600px) — bottom-nav is fixed at viewport bottom, so push the
+   composer above it so the input is never hidden under the tab bar. */
+@media (max-width: 600px) {
+  .ai-composer {
+    bottom: calc(var(--mobile-nav-height, 72px) + 8px + env(safe-area-inset-bottom));
+    /* Edge-to-edge style on small screens — feels native */
+    margin-left: calc(var(--sp-1) * -1);
+    margin-right: calc(var(--sp-1) * -1);
+  }
+  .ai-header {
+    position: sticky;
+    top: calc(8px + env(safe-area-inset-top));
+    z-index: 6;
+    backdrop-filter: saturate(180%) blur(14px);
+    -webkit-backdrop-filter: saturate(180%) blur(14px);
+  }
+  .ai-model-select { max-width: 130px; }
+  .ai-bubble { max-width: 92%; }
+  .ai-tool-pill { max-width: 92%; }
+}
