@@ -299,6 +299,11 @@ Dashboard là một **PWA dark-mode-only** (`<html class="dark">`), mobile-first
 6. **Mobile-first**: test với DevTools mobile emulator. Có `--mobile-nav-height 72px` cho bottom nav. Viewport `user-scalable=no` để PWA giống native.
 7. **Không thêm dark-mode toggle** — app cố tình dark-only (đỡ phức tạp + match brand)
 8. **Không import UI lib nặng** (React/Vue/Svelte/Material) — giữ zero-build, dependency tối thiểu
+9. **Scrollable element luôn dùng shadcn ScrollArea look** ([reference](https://ui.shadcn.com/docs/components/radix/scroll-area)) — KHÔNG để default scrollbar của browser. Khi thêm container có `overflow:auto/scroll/y/x`:
+   - **Cách 1** (preferred): thêm class vào `:where()` selector list ở `style.css` block đánh dấu `shadcn/ui ScrollArea` (~line 1700)
+   - **Cách 2** (dynamic content): thêm attribute `data-scroll-area` vào element
+   - **Cách 3** (full component): wrap với `<div class="scroll-area">` + `<div class="scroll-area-viewport">` (chỉ dùng cho log viewer / large content area)
+   - ⛔ KHÔNG viết per-element `::-webkit-scrollbar` rules — duplicate với global treatment, chỉ làm noise; nếu cần customize size thì thêm CSS var override.
 
 ### PWA assets
 - `theme-color` = `#09090b` (match background)
