@@ -2051,8 +2051,13 @@ body.ai-page-active #page-ai.active {
 @media (max-width: 600px) {
   body.ai-page-active #page-ai.active {
     top: 0;
-    height: calc(100vh - var(--mobile-nav-height) - env(safe-area-inset-bottom));
-    height: calc(100dvh - var(--mobile-nav-height) - env(safe-area-inset-bottom));
+    /* Anchor to both top and bottom (above the fixed nav) so the page
+       always fills viewport-minus-nav, even when Android Chrome misreports
+       100dvh after the soft keyboard + autofill bar dismisses (a known
+       Chrome quirk that previously left an autofill-bar-sized gap below
+       the composer). Bottom anchor wins over any stale dvh value. */
+    bottom: calc(var(--mobile-nav-height) + env(safe-area-inset-bottom));
+    height: auto;
   }
   /* Hide leaky page chrome behind the AI overlay on mobile so the
      translucent topbar doesn't pick up the "Workflow Dashboard" header
