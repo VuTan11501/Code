@@ -142,33 +142,127 @@ Hôm nay (JST): ${today}.`;
   // ─── DOM helpers ────────────────────────────────────
   function $(sel) { return document.querySelector(sel); }
   function scrollToBottomIfPinned(_scrollEl, force) {
-    // Chat now lives in natural document flow, so scroll the window, not
-    // an inner overflow container. Respect the user if they have scrolled
-    // up to read older content (don't snap unless `force` is true).
-    // Always use 'auto' (instant) — 'smooth' during high-frequency streaming
-    // queues fighting animations and causes jank on mobile.
-    const doc = document.documentElement;
-    const distFromBottom = doc.scrollHeight - window.scrollY - window.innerHeight;
+    // Chat lives inside an internal scroll container (#aiChatScroll) so the
+    // composer/topbar stay pinned to the viewport. Respect the user if they
+    // have scrolled up to read older content (don't snap unless `force`).
+    const el = document.getElementById('aiChatScroll');
+    if (!el) return;
+    const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
     if (force || distFromBottom < 160) {
-      window.scrollTo({ top: doc.scrollHeight, behavior: 'auto' });
+      el.scrollTop = el.scrollHeight;
     }
   }
 
-  // rAF-throttled stream renderer — batch multiple deltas into a single
-  // paint. Without this, a 1000-char response with ~200 SSE chunks would
-  // re-parse the full markdown + reflow 200 times, causing visible lag.
-  // Streaming caret "▍" is rendered via CSS ::after on .prose-chat-streaming
-  // (no JS DOM patching per token).
-  let streamRenderPending = false;
-  function scheduleStreamRender(bodyEl, getContent) {
-    if (streamRenderPending) return;
-    streamRenderPending = true;
-    requestAnimationFrame(() => {
-      streamRenderPending = false;
-      if (!bodyEl || !bodyEl.isConnected) return;
-      bodyEl.innerHTML = renderMarkdown(getContent());
-      scrollToBottomIfPinned(null, false);
-    });
+  // Typewriter buffer: decouples SSE chunk arrival from render rate so the
+  // user always sees a smooth char-by-char animation (~180 chars/sec, close
+  // to ChatGPT) even when the model batches 5-10 tokens per SSE chunk.
+  //
+  // Strategy:
+  //   - SSE onDelta APPENDS to typeBuffer (no render here)
+  //   - A single rAF pump drains the buffer into displayedContent at a rate
+  //     proportional to backlog size (1-3 chars/frame normally, accelerated
+  //     "catch-up" when buffer > 120 chars so long replies don't lag minutes)
+  //   - When buffer empties AND stream is done, resolves drainPromise so the
+  //     caller can finalize (strip streaming class, add Copy button, etc.)
+  //   - Tied to messageVersion so abort/clear/new-msg bails out cleanly.
+  //
+  // Markdown re-parse happens at most once per rAF (16ms / 60fps) regardless
+  // of how many chars we advanced — keeps it cheap.
+  function createTypewriter(bodyEl, getVersion) {
+    let typeBuffer = '';
+    let displayed = '';
+    let active = false;
+    let streamDone = false;
+    let drainResolver = null;
+    const startVersion = getVersion();
+
+    function isStale() {
+      return getVersion() !== startVersion || !bodyEl || !bodyEl.isConnected;
+    }
+
+    function ensurePump() {
+      if (active) return;
+      active = true;
+      const step = () => {
+        if (isStale()) {
+          active = false;
+          if (drainResolver) { drainResolver(); drainResolver = null; }
+          return;
+        }
+        if (typeBuffer.length === 0) {
+          active = false;
+          if (streamDone && drainResolver) { drainResolver(); drainResolver = null; }
+          return;
+        }
+        // Adaptive chunk size — catch up when backlog is big, slow down for smoothness when nearly empty
+        const remaining = typeBuffer.length;
+        let take;
+        if (remaining > 800)      take = Math.ceil(remaining / 30); // huge backlog → flush fast
+        else if (remaining > 200) take = 5;
+        else if (remaining > 80)  take = 3;
+        else if (remaining > 25)  take = 2;
+        else                       take = 1;
+        const chunk = typeBuffer.slice(0, take);
+        typeBuffer = typeBuffer.slice(take);
+        displayed += chunk;
+        // Re-check just before DOM write: clearConv() can run synchronously
+        // between the isStale() at frame start and this point, removing the
+        // message nodes. Without this guard we'd write innerHTML into a
+        // disconnected subtree (harmless but wasted work).
+        if (isStale()) {
+          active = false;
+          if (drainResolver) { drainResolver(); drainResolver = null; }
+          return;
+        }
+        bodyEl.innerHTML = renderMarkdown(displayed);
+        scrollToBottomIfPinned(null, false);
+        requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    }
+
+    return {
+      push(text) {
+        typeBuffer += text;
+        ensurePump();
+      },
+      // Replace buffer + displayed (used when DOM swaps reset bodyEl,
+      // e.g. after onToolCallDelta refreshes the parent innerHTML).
+      reseed(newBodyEl, fullContent) {
+        bodyEl = newBodyEl;
+        // fullContent already equals (displayed + typeBuffer + 0) — push()
+        // appends each delta to BOTH streamedContent and typeBuffer, so the
+        // un-displayed remainder is exactly fullContent.slice(displayed.length).
+        // Adding the old typeBuffer back here would duplicate that text.
+        if (fullContent.startsWith(displayed)) {
+          typeBuffer = fullContent.slice(displayed.length);
+        } else {
+          // Defensive: restart from scratch if content drifted
+          displayed = '';
+          typeBuffer = fullContent;
+        }
+        if (bodyEl) bodyEl.innerHTML = renderMarkdown(displayed);
+        ensurePump();
+      },
+      finishStream() {
+        streamDone = true;
+        if (!active && typeBuffer.length === 0 && drainResolver) {
+          drainResolver(); drainResolver = null;
+        }
+      },
+      waitForDrain() {
+        if (!active && typeBuffer.length === 0) return Promise.resolve();
+        return new Promise(resolve => { drainResolver = resolve; });
+      },
+      flushNow() {
+        // Synchronously dump remaining buffer (used on abort if we still want to keep what arrived)
+        if (typeBuffer.length === 0) return;
+        displayed += typeBuffer;
+        typeBuffer = '';
+        if (bodyEl && bodyEl.isConnected) bodyEl.innerHTML = renderMarkdown(displayed);
+      },
+      getDisplayed() { return displayed; },
+    };
   }
 
   function renderEmpty() {
@@ -404,6 +498,7 @@ Hôm nay (JST): ${today}.`;
       };
 
       let bodyEl = null;
+      let typer = null;
       const { finishReason } = await streamRequest(body, {
         signal: currentAbort.signal,
         onDelta: (chunk) => {
@@ -419,12 +514,13 @@ Hôm nay (JST): ${today}.`;
                   ? `<div class="ai-tool-pills">${renderToolPillsHtml(assistantMsg)}</div>` : '';
                 inner.innerHTML = pillsHtml + `<div class="prose-chat prose-chat-streaming" data-stream="1"></div>`;
                 bodyEl = inner.querySelector('[data-stream="1"]');
+                typer = createTypewriter(bodyEl, () => convVersion);
               }
             }
           }
-          if (bodyEl) {
-            // rAF-throttled — coalesces bursts of small SSE chunks into one paint.
-            scheduleStreamRender(bodyEl, () => streamedContent);
+          if (typer) {
+            // Push chunk into typewriter buffer; rAF pump drains char-by-char (~180 cps).
+            typer.push(chunk);
           }
         },
         onToolCallDelta: (deltas) => {
@@ -440,11 +536,8 @@ Hôm nay (JST): ${today}.`;
               const existingBody = bodyEl.outerHTML;
               inner.innerHTML = pillsHtml + existingBody;
               bodyEl = inner.querySelector('[data-stream="1"]');
-              // Re-render content into the new bodyEl reference immediately —
-              // any pending rAF render was scheduled against the now-disconnected
-              // old node and would be dropped by isConnected guard, leaving the
-              // new bodyEl with stale serialized HTML.
-              if (bodyEl) bodyEl.innerHTML = renderMarkdown(streamedContent);
+              // The new bodyEl reference needs typewriter rebinding so future pumps target it.
+              if (typer && bodyEl) typer.reseed(bodyEl, streamedContent);
             } else {
               // No content yet — show pills + thinking dots
               inner.innerHTML = pillsHtml + `<div class="ai-thinking"><i></i><i></i><i></i></div>`;
@@ -453,6 +546,11 @@ Hôm nay (JST): ${today}.`;
           }
         },
       });
+      // SSE finished — let typewriter know so it can resolve drain promise once buffer empties.
+      if (typer) {
+        typer.finishStream();
+        await typer.waitForDrain();
+      }
       if (isStale()) return;
 
       // If finished with tool_calls → execute and loop
@@ -526,6 +624,14 @@ Hôm nay (JST): ${today}.`;
   function handleError(e) {
     console.error('[AI]', e);
     const scroll = $('#aiChatScroll');
+    // If a stream was in flight, strip the live caret from any in-progress
+    // bubble so we don't leave a phantom "still typing" marker behind.
+    if (scroll) {
+      scroll.querySelectorAll('.prose-chat-streaming').forEach(el => {
+        el.classList.remove('prose-chat-streaming');
+        el.removeAttribute('data-stream');
+      });
+    }
     // Replace last assistant placeholder if it's still empty
     const last = messages[messages.length - 1];
     if (last && last.role === 'assistant' && !last.content && !(last.tool_calls && last.tool_calls.length)) {
@@ -674,6 +780,22 @@ Hôm nay (JST): ${today}.`;
 
     renderAll();
     if (typeof renderIcons === 'function') renderIcons(document.getElementById('page-ai'));
+
+    // Autofocus the composer on non-touch (desktop) so the user can start
+    // typing immediately. Skip on touch devices — popping the keyboard
+    // unprompted is intrusive.
+    try {
+      const isTouch = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+      if (!isTouch && input && typeof input.focus === 'function') {
+        // Delay one frame so layout settles before focus (prevents scroll jump)
+        requestAnimationFrame(() => { try { input.focus({ preventScroll: true }); } catch { input.focus(); } });
+      }
+    } catch {}
+
+    // Land on the latest message on first mount (no _tabScroll memory yet).
+    const sc = document.getElementById('aiChatScroll');
+    if (sc) sc.scrollTop = sc.scrollHeight;
+
     mounted = true;
   }
 
