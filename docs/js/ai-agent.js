@@ -400,6 +400,7 @@ Hôm nay (JST): ${today}.`;
       }
 
       // Final answer — finalize render
+      if (isStale()) return;
       if (node) {
         const pillsHtml = (assistantMsg.tool_calls || []).map(tc => toolPillHtml(tc.function.name, tc.function.arguments, assistantMsg._tool_results?.[tc.id])).join('');
         const bubble = streamedContent
