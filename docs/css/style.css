@@ -2622,6 +2622,22 @@ body.ai-page-active .ai-dot-grid {
 }
 .ai-composer-meta.err  { color: var(--red); }
 .ai-composer-meta.warn { color: var(--yellow); }
+.ai-composer-meta { display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap; }
+.ai-meta-retry {
+  display: inline-flex; align-items: center; gap: 4px;
+  height: 22px; padding: 0 8px;
+  font-size: 11px; font-weight: 500;
+  background: var(--secondary); color: var(--foreground);
+  border: 1px solid var(--border); border-radius: var(--radius-md);
+  cursor: pointer; transition: background var(--duration-fast) var(--ease-out);
+}
+.ai-meta-retry:hover { background: var(--muted); }
+.ai-meta-retry svg { width: 12px; height: 12px; }
+
+/* Retry button only visible on the latest assistant bubble — regenerating
+   from an older message would silently drop subsequent turns. */
+.ai-msg-ai .ai-action-btn[data-retry] { display: none; }
+.ai-msg-ai.is-last .ai-action-btn[data-retry] { display: inline-flex; }
 .ai-monolite {
   font-family: var(--font-mono);
   color: color-mix(in srgb, var(--foreground) 70%, transparent);
