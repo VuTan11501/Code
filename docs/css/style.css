@@ -2671,6 +2671,70 @@ body.ai-page-active .ai-dot-grid {
    from an older message would silently drop subsequent turns. */
 .ai-msg-ai .ai-action-btn[data-retry] { display: none; }
 .ai-msg-ai.is-last .ai-action-btn[data-retry] { display: inline-flex; }
+
+/* Edit button only on the latest user bubble — same rationale. */
+.ai-msg-user-actions {
+  display: flex; align-items: center; justify-content: flex-end;
+  gap: 4px; margin-top: 4px;
+  opacity: 0; transition: opacity 200ms;
+}
+.ai-msg-user:hover .ai-msg-user-actions,
+.ai-msg-user-actions:focus-within { opacity: 1; }
+.ai-msg-user .ai-msg-user-actions { display: none; }
+.ai-msg-user.is-last-user .ai-msg-user-actions { display: flex; }
+/* Mobile: always show edit on last user bubble (no hover) */
+@media (hover: none) {
+  .ai-msg-user.is-last-user .ai-msg-user-actions { opacity: 1; }
+}
+
+/* Slash command autocomplete menu (composer overlay) */
+.ai-slash-menu {
+  display: none;
+  position: absolute;
+  left: 12px; right: 12px; bottom: calc(100% + 6px);
+  background: var(--popover, var(--card));
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  padding: 4px;
+  z-index: 30;
+  max-height: 240px; overflow-y: auto;
+  animation: slashMenuIn 160ms var(--ease-out);
+}
+.ai-slash-menu.show { display: block; }
+@keyframes slashMenuIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.ai-slash-item {
+  display: flex; align-items: center; justify-content: space-between;
+  width: 100%; gap: 12px;
+  padding: 8px 10px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-md);
+  color: var(--foreground);
+  text-align: left;
+  cursor: pointer;
+  transition: background 120ms;
+}
+.ai-slash-item:hover, .ai-slash-item.selected {
+  background: color-mix(in srgb, var(--primary) 14%, transparent);
+}
+.ai-slash-cmd {
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--primary);
+}
+.ai-slash-desc {
+  font-size: var(--fs-xs);
+  color: var(--muted-foreground);
+  text-align: right;
+}
+/* Composer wrap is the positioning context */
+.ai-composer-wrap { position: relative; }
+
 .ai-monolite {
   font-family: var(--font-mono);
   color: color-mix(in srgb, var(--foreground) 70%, transparent);

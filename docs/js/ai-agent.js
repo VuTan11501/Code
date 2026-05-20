@@ -301,9 +301,13 @@ Hôm nay (JST): ${today}.`;
     if (m.role === 'user') {
       const el = document.createElement('div');
       el.className = 'ai-msg ai-msg-user';
+      const enc = btoa(unescape(encodeURIComponent(String(m.content || ''))));
       el.innerHTML = `
         <div class="ai-msg-inner">
           <div class="ai-bubble-user">${esc(m.content)}</div>
+          <div class="ai-msg-actions ai-msg-user-actions">
+            <button type="button" class="ai-action-btn" data-edit-user="${enc}" title="Sửa & gửi lại" aria-label="Edit">${ICON('edit', 13)}<span>Edit</span></button>
+          </div>
         </div>
         <div class="ai-avatar ai-avatar-user">${ICON('user', 14)}</div>`;
       scroll.appendChild(el);
@@ -347,12 +351,16 @@ Hôm nay (JST): ${today}.`;
   // Mark only the latest assistant bubble with `.is-last` so the Retry button
   // is only visible there (CSS hides it on older messages). Regenerating from
   // an older message would silently drop everything after it — confusing UX.
+  // Same gating applies to the Edit button on the last user message.
   function markLastAssistant() {
     const scroll = $('#aiChatScroll');
     if (!scroll) return;
     scroll.querySelectorAll('.ai-msg-ai.is-last').forEach(el => el.classList.remove('is-last'));
-    const all = scroll.querySelectorAll('.ai-msg-ai');
-    if (all.length) all[all.length - 1].classList.add('is-last');
+    scroll.querySelectorAll('.ai-msg-user.is-last-user').forEach(el => el.classList.remove('is-last-user'));
+    const ais = scroll.querySelectorAll('.ai-msg-ai');
+    if (ais.length) ais[ais.length - 1].classList.add('is-last');
+    const users = scroll.querySelectorAll('.ai-msg-user');
+    if (users.length) users[users.length - 1].classList.add('is-last-user');
   }
 
   function toolPillHtml(name, argsJson, resultJson) {
@@ -467,6 +475,7 @@ Hôm nay (JST): ${today}.`;
     messages.push({ role: 'user', content: text });
     renderMessage(messages[messages.length - 1]);
     renderEmpty();
+    markLastAssistant();
     const scroll = $('#aiChatScroll');
     scrollToBottomIfPinned(scroll, true);
     saveConv();
@@ -517,6 +526,194 @@ Hôm nay (JST): ${today}.`;
         markLastAssistant();
       }
     }
+  }
+
+  // ─── Edit last user message ─────────────────────────
+  // Click Edit on the most recent user bubble → drop that message + everything
+  // after it, refill the composer with the original text. User can tweak and
+  // resubmit. Mirrors ChatGPT mobile UX (vs inline-edit-in-bubble which is
+  // more complex and easier to corrupt with an in-flight stream).
+  function editLastUserMessage(text) {
+    if (isStreaming) return;
+    let lastUserIdx = -1;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === 'user') { lastUserIdx = i; break; }
+    }
+    if (lastUserIdx === -1) return;
+    messages = messages.slice(0, lastUserIdx);
+    saveConv();
+    renderAll();
+    const input = $('#aiComposerInput');
+    if (input) {
+      input.value = text;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.focus();
+      try { input.setSelectionRange(text.length, text.length); } catch {}
+    }
+  }
+
+  // ─── Slash commands ─────────────────────────────────
+  const SLASH_CMDS = [
+    { cmd: '/clear',  desc: 'Xóa toàn bộ conversation' },
+    { cmd: '/model',  desc: 'Đổi model — VD: /model gpt-4o' },
+    { cmd: '/export', desc: 'Tải conversation về markdown' },
+    { cmd: '/help',   desc: 'Hiện danh sách commands' },
+  ];
+
+  function maybeShowSlashMenu(value) {
+    const menu = $('#aiSlashMenu');
+    if (!menu) return;
+    const v = String(value || '');
+    if (!v.startsWith('/') || v.includes('\n')) {
+      menu.classList.remove('show');
+      menu.innerHTML = '';
+      return;
+    }
+    const head = v.split(/\s/)[0].toLowerCase();
+    // Once the user has typed past a recognized command + whitespace
+    // (e.g. "/model gpt-4o"), they're typing args — hide the menu so Enter
+    // submits the command instead of re-selecting it and wiping the args.
+    if (/\s/.test(v) && SLASH_CMDS.some(c => c.cmd === head)) {
+      menu.classList.remove('show');
+      menu.innerHTML = '';
+      return;
+    }
+    const matches = SLASH_CMDS.filter(c => c.cmd.startsWith(head));
+    if (!matches.length) {
+      menu.classList.remove('show');
+      menu.innerHTML = '';
+      return;
+    }
+    menu.innerHTML = matches.map((c, i) =>
+      `<button type="button" class="ai-slash-item${i === 0 ? ' selected' : ''}" data-cmd="${c.cmd}" role="option">
+        <span class="ai-slash-cmd">${c.cmd}</span>
+        <span class="ai-slash-desc">${esc(c.desc)}</span>
+      </button>`
+    ).join('');
+    menu.classList.add('show');
+  }
+
+  function hideSlashMenu() {
+    const menu = $('#aiSlashMenu');
+    if (menu) { menu.classList.remove('show'); menu.innerHTML = ''; }
+  }
+
+  function slashMenuNavigate(delta) {
+    const menu = $('#aiSlashMenu');
+    if (!menu || !menu.classList.contains('show')) return false;
+    const items = [...menu.querySelectorAll('.ai-slash-item')];
+    if (!items.length) return false;
+    const cur = items.findIndex(b => b.classList.contains('selected'));
+    const next = (cur + delta + items.length) % items.length;
+    items.forEach(b => b.classList.remove('selected'));
+    items[next].classList.add('selected');
+    return true;
+  }
+
+  function slashMenuConfirm() {
+    const menu = $('#aiSlashMenu');
+    if (!menu || !menu.classList.contains('show')) return false;
+    const sel = menu.querySelector('.ai-slash-item.selected') || menu.querySelector('.ai-slash-item');
+    if (!sel) return false;
+    const cmd = sel.getAttribute('data-cmd');
+    const input = $('#aiComposerInput');
+    if (input) {
+      input.value = cmd + (cmd === '/model' ? ' ' : '');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.focus();
+      try { input.setSelectionRange(input.value.length, input.value.length); } catch {}
+    }
+    // Single-token commands → execute immediately (better UX than 2-step).
+    if (cmd !== '/model') {
+      tryExecuteSlash(cmd);
+      if (input) { input.value = ''; input.dispatchEvent(new Event('input', { bubbles: true })); }
+    }
+    hideSlashMenu();
+    return true;
+  }
+
+  function tryExecuteSlash(text) {
+    const trimmed = String(text || '').trim();
+    if (!trimmed.startsWith('/')) return false;
+    const parts = trimmed.split(/\s+/);
+    const cmd = parts[0].toLowerCase();
+    const args = parts.slice(1);
+    switch (cmd) {
+      case '/clear':
+        clearConv();
+        return true;
+      case '/model': {
+        const select = $('#aiModelSelect');
+        if (!args.length) {
+          const opts = select ? [...select.options].map(o => o.value).join(', ') : '';
+          setComposerMeta(`Model: ${model}. Cách dùng: /model <${opts}>`, 'warn');
+          return true;
+        }
+        const target = args.join(' ');
+        const optExists = select && [...select.options].some(o => o.value === target);
+        if (!optExists) {
+          const opts = select ? [...select.options].map(o => o.value).join(', ') : '';
+          setComposerMeta(`Model không hợp lệ. Chọn: ${opts}`, 'err');
+          return true;
+        }
+        if (select) select.value = target;
+        saveModel(target);
+        const d = document.getElementById('aiModelDisplay');
+        if (d) d.textContent = target;
+        setComposerMeta(`✓ Đã đổi model sang ${target}`);
+        return true;
+      }
+      case '/export':
+        exportConversation();
+        return true;
+      case '/help':
+        setComposerMeta(`Commands: ${SLASH_CMDS.map(c => c.cmd).join(' · ')}`, 'warn');
+        return true;
+      default:
+        setComposerMeta(`Unknown command: ${cmd} — thử /help`, 'err');
+        return true;
+    }
+  }
+
+  function exportConversation() {
+    if (!messages.length) {
+      setComposerMeta('Conversation rỗng — không có gì để export.', 'warn');
+      return;
+    }
+    const lines = [
+      '# AI Coach Conversation',
+      '',
+      `_Exported: ${new Date().toISOString()}_`,
+      `_Model: ${model}_`,
+      '',
+    ];
+    for (const m of messages) {
+      if (m.role === 'user') {
+        lines.push('## You', '', String(m.content || ''), '');
+      } else if (m.role === 'assistant' && (m.content || '').trim()) {
+        lines.push('## Assistant', '', String(m.content || ''), '');
+      }
+    }
+    const md = lines.join('\n');
+    const filename = `ai-conv-${new Date().toISOString().slice(0, 10)}.md`;
+    const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
+    const file = new File([blob], filename, { type: 'text/markdown' });
+    // Prefer Web Share API on mobile (especially iOS PWA), fall back to download link.
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      navigator.share({ files: [file], title: 'AI Coach Conversation' })
+        .then(() => setComposerMeta('✓ Đã share conversation'))
+        .catch(() => { /* user cancelled — silent */ });
+      return;
+    }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    setComposerMeta('✓ Đã tải conversation về');
   }
 
   async function runToolLoop() {
@@ -791,8 +988,23 @@ Hôm nay (JST): ${today}.`;
         send.disabled = !input.value.trim();
       }
     };
-    input.addEventListener('input', autogrow);
+    input.addEventListener('input', () => { autogrow(); maybeShowSlashMenu(input.value); });
+    input.addEventListener('blur', () => {
+      // Delay so click on slash item fires first.
+      setTimeout(hideSlashMenu, 150);
+    });
     input.addEventListener('keydown', (e) => {
+      const menu = $('#aiSlashMenu');
+      const menuOpen = menu && menu.classList.contains('show');
+      if (menuOpen) {
+        if (e.key === 'ArrowDown')   { e.preventDefault(); slashMenuNavigate(1);  return; }
+        if (e.key === 'ArrowUp')     { e.preventDefault(); slashMenuNavigate(-1); return; }
+        if (e.key === 'Escape')      { e.preventDefault(); hideSlashMenu();       return; }
+        if (e.key === 'Tab')         { e.preventDefault(); slashMenuConfirm();    return; }
+        if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+          e.preventDefault(); slashMenuConfirm(); return;
+        }
+      }
       if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
         e.preventDefault();
         form.requestSubmit();
@@ -808,10 +1020,33 @@ Hôm nay (JST): ${today}.`;
       }
       const text = input.value.trim();
       if (!text) return;
+      // Slash command: execute locally, never sent to model.
+      if (text.startsWith('/')) {
+        input.value = '';
+        autogrow();
+        hideSlashMenu();
+        tryExecuteSlash(text);
+        return;
+      }
       input.value = '';
       autogrow();
+      hideSlashMenu();
       sendMessage(text);
     });
+
+    // Slash menu click delegation
+    const slashMenu = $('#aiSlashMenu');
+    if (slashMenu) {
+      slashMenu.addEventListener('mousedown', (e) => {
+        // mousedown (not click) so input doesn't blur-hide the menu first
+        const item = e.target && e.target.closest && e.target.closest('.ai-slash-item');
+        if (!item) return;
+        e.preventDefault();
+        slashMenu.querySelectorAll('.ai-slash-item').forEach(b => b.classList.remove('selected'));
+        item.classList.add('selected');
+        slashMenuConfirm();
+      });
+    }
 
     // Suggested prompts (tans-agent card style)
     document.querySelectorAll('.ai-suggest-card, .ai-suggest-chip').forEach(card => {
@@ -824,7 +1059,7 @@ Hôm nay (JST): ${today}.`;
       });
     });
 
-    // Copy-button delegation (per assistant message)
+    // Click delegation: Retry (assistant) / Edit (user) / Copy
     const scrollContainer = $('#aiChatScroll');
     if (scrollContainer) {
       scrollContainer.addEventListener('click', (e) => {
@@ -834,6 +1069,15 @@ Hôm nay (JST): ${today}.`;
         if (retryBtn) {
           if (isStreaming) return;
           retryLastResponse();
+          return;
+        }
+        const editBtn = t.closest('.ai-action-btn[data-edit-user]');
+        if (editBtn) {
+          if (isStreaming) return;
+          try {
+            const text = decodeURIComponent(escape(atob(editBtn.getAttribute('data-edit-user'))));
+            editLastUserMessage(text);
+          } catch {}
           return;
         }
         const btn = t.closest('.ai-action-btn[data-copy-b64]');
