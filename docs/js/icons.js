@@ -75,6 +75,7 @@ const ICON_PATHS = {
   arrowUp:    '<path d="m5 12 7-7 7 7"/><path d="M12 19V5"/>',
   square:     '<rect width="14" height="14" x="5" y="5" rx="2" ry="2"/>',
   user:       '<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+  undo:       '<path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/>',
 };
 
 function ICON(name, size = 16, extraClass = '') {
