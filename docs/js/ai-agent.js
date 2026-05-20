@@ -288,10 +288,10 @@ Hôm nay (JST): ${today}.`;
   function renderAll() {
     const scroll = $('#aiChatScroll');
     if (!scroll) return;
-    // Wipe everything except the empty state placeholder
     [...scroll.querySelectorAll('.ai-msg, .ai-tool-pill')].forEach(n => n.remove());
     for (const m of messages) renderMessage(m);
     renderEmpty();
+    markLastAssistant();
     scrollToBottomIfPinned(scroll, true);
   }
 
@@ -338,7 +338,21 @@ Hôm nay (JST): ${today}.`;
   function renderCopyActions(text) {
     // base64 encode to dodge HTML attribute quote/escape issues; decoded on click.
     const enc = btoa(unescape(encodeURIComponent(String(text || ''))));
-    return `<div class="ai-msg-actions"><button type="button" class="ai-action-btn" data-copy-b64="${enc}" title="Copy" aria-label="Copy">${ICON('copy', 13)}<span>Copy</span></button></div>`;
+    return `<div class="ai-msg-actions">
+      <button type="button" class="ai-action-btn" data-copy-b64="${enc}" title="Copy" aria-label="Copy">${ICON('copy', 13)}<span>Copy</span></button>
+      <button type="button" class="ai-action-btn" data-retry="1" title="Tạo lại câu trả lời" aria-label="Retry">${ICON('refresh', 13)}<span>Retry</span></button>
+    </div>`;
+  }
+
+  // Mark only the latest assistant bubble with `.is-last` so the Retry button
+  // is only visible there (CSS hides it on older messages). Regenerating from
+  // an older message would silently drop everything after it — confusing UX.
+  function markLastAssistant() {
+    const scroll = $('#aiChatScroll');
+    if (!scroll) return;
+    scroll.querySelectorAll('.ai-msg-ai.is-last').forEach(el => el.classList.remove('is-last'));
+    const all = scroll.querySelectorAll('.ai-msg-ai');
+    if (all.length) all[all.length - 1].classList.add('is-last');
   }
 
   function toolPillHtml(name, argsJson, resultJson) {
@@ -449,11 +463,6 @@ Hôm nay (JST): ${today}.`;
     text = String(text || '').trim();
     if (!text) return;
 
-    isStreaming = true;
-    setSendingState(true);
-    setComposerMeta('');
-    const myVersion = convVersion;
-
     // Append user message
     messages.push({ role: 'user', content: text });
     renderMessage(messages[messages.length - 1]);
@@ -462,19 +471,50 @@ Hôm nay (JST): ${today}.`;
     scrollToBottomIfPinned(scroll, true);
     saveConv();
 
+    await _runStreamForCurrentMessages();
+  }
+
+  // Regenerate the last assistant response. Pops everything after the last
+  // user message (the trailing assistant + any tool messages it produced)
+  // and re-runs the tool loop with the same prompt. Mirrors ChatGPT/Claude
+  // "Regenerate" behavior. No-op if there's no preceding user message or a
+  // stream is currently in flight.
+  async function retryLastResponse() {
+    if (isStreaming) return;
+    let lastUserIdx = -1;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === 'user') { lastUserIdx = i; break; }
+    }
+    if (lastUserIdx === -1) return;
+    const rate = rateConsume();
+    if (!rate.ok) {
+      setComposerMeta(`⏳ Hết quota cục bộ — thử lại sau ${Math.ceil(rate.waitMs / 1000)}s`, 'warn');
+      return;
+    }
+    // Drop trailing assistant + tool messages so the loop starts fresh.
+    messages = messages.slice(0, lastUserIdx + 1);
+    saveConv();
+    renderAll();
+    await _runStreamForCurrentMessages();
+  }
+
+  async function _runStreamForCurrentMessages() {
+    if (isStreaming) return;
+    isStreaming = true;
+    setSendingState(true);
+    setComposerMeta('');
+    const myVersion = convVersion;
     try {
       await runToolLoop();
     } catch (e) {
       if (myVersion === convVersion) handleError(e);
     } finally {
-      // Only release isStreaming/UI state if THIS run is still current.
-      // If clearConv() bumped convVersion mid-flight, a fresher run may have
-      // started or be about to start — don't clobber its state.
       if (myVersion === convVersion) {
         isStreaming = false;
         setSendingState(false);
         currentAbort = null;
         saveConv();
+        markLastAssistant();
       }
     }
   }
@@ -661,7 +701,22 @@ Hôm nay (JST): ${today}.`;
     else if (e.message && e.message.includes('Failed to fetch')) userMsg = 'Mất kết nối mạng.';
     else if (e.message) userMsg = e.message;
     setComposerMeta(`❌ ${userMsg}`, 'err');
-    if (typeof toast === 'function') toast(userMsg, 'error');
+    // If there's still a user message to retry from, surface an inline Retry
+    // button next to the error so the user doesn't have to re-type.
+    const hasUserToRetry = messages.some(m => m.role === 'user');
+    const meta = $('#aiComposerMeta');
+    if (meta && hasUserToRetry && e.name !== 'AbortError') {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'ai-meta-retry';
+      btn.innerHTML = `${ICON('refresh', 12)}<span>Retry</span>`;
+      btn.addEventListener('click', () => {
+        setComposerMeta('');
+        retryLastResponse();
+      });
+      meta.appendChild(btn);
+    }
+    if (typeof toast === 'function' && e.name !== 'AbortError') toast(userMsg, 'error');
   }
 
   // ─── Composer state ─────────────────────────────────
@@ -773,7 +828,15 @@ Hôm nay (JST): ${today}.`;
     const scrollContainer = $('#aiChatScroll');
     if (scrollContainer) {
       scrollContainer.addEventListener('click', (e) => {
-        const btn = e.target && e.target.closest && e.target.closest('.ai-action-btn[data-copy-b64]');
+        const t = e.target;
+        if (!t || !t.closest) return;
+        const retryBtn = t.closest('.ai-action-btn[data-retry]');
+        if (retryBtn) {
+          if (isStreaming) return;
+          retryLastResponse();
+          return;
+        }
+        const btn = t.closest('.ai-action-btn[data-copy-b64]');
         if (!btn) return;
         try {
           const text = decodeURIComponent(escape(atob(btn.getAttribute('data-copy-b64'))));
