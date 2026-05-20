@@ -1896,13 +1896,24 @@ Hôm nay (JST): ${today}.`;
     }
     function _openModelMenu() {
       if (!modelMenu || !modelTrigger) return;
+      modelMenu.classList.remove('closing');
       modelMenu.hidden = false;
       modelTrigger.setAttribute('aria-expanded', 'true');
     }
     function _closeModelMenu() {
       if (!modelMenu || !modelTrigger) return;
-      modelMenu.hidden = true;
+      if (modelMenu.hidden) return;
       modelTrigger.setAttribute('aria-expanded', 'false');
+      modelMenu.classList.add('closing');
+      const done = () => {
+        modelMenu.removeEventListener('animationend', done);
+        if (modelMenu.classList.contains('closing')) {
+          modelMenu.hidden = true;
+          modelMenu.classList.remove('closing');
+        }
+      };
+      modelMenu.addEventListener('animationend', done);
+      setTimeout(done, 200);
     }
     if (modelTrigger && modelMenu) {
       _syncModelPickerUI();

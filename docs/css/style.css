@@ -2188,14 +2188,19 @@ body.ai-page-active .ai-dot-grid {
 .ai-model-trigger[aria-expanded="true"] .ai-model-trigger-chev { transform: rotate(180deg); }
 
 @keyframes aiModelMenuIn {
-  from { opacity: 0; transform: translateX(-50%) translateY(-2px) scale(0.96); }
-  to   { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+  from { opacity: 0; transform: translateX(-50%) scale(0.95); }
+  to   { opacity: 1; transform: translateX(-50%) scale(1); }
+}
+@keyframes aiModelMenuOut {
+  from { opacity: 1; transform: translateX(-50%) scale(1); }
+  to   { opacity: 0; transform: translateX(-50%) scale(0.95); }
 }
 .ai-model-menu {
   position: absolute;
   top: calc(100% + 4px);
   left: 50%;
   transform: translateX(-50%);
+  transform-origin: top center;
   width: 224px;
   background: var(--card);
   border: 1px solid var(--border);
@@ -2207,6 +2212,10 @@ body.ai-page-active .ai-dot-grid {
   animation: aiModelMenuIn 150ms var(--ease-out);
 }
 .ai-model-menu[hidden] { display: none; }
+.ai-model-menu.closing {
+  animation: aiModelMenuOut 120ms var(--ease-out) forwards;
+  pointer-events: none;
+}
 .ai-model-menu-label {
   padding: 6px 8px;
   font-size: var(--fs-xs);
