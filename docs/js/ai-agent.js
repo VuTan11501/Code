@@ -24,6 +24,7 @@ window.AIAgent = (function () {
   let model = DEFAULT_MODEL;
   let currentAbort = null;     // AbortController for in-flight request
   let isStreaming = false;
+  let convVersion = 0;         // bumped on clearConv — running loops bail out if version changes
 
   // ─── System prompt (TODAY_JST injected each request) ─
   function systemPrompt() {
@@ -278,6 +279,7 @@ Hôm nay (JST): ${today}.`;
     isStreaming = true;
     setSendingState(true);
     setComposerMeta('');
+    const myVersion = convVersion;
 
     // Append user message
     messages.push({ role: 'user', content: text });
@@ -290,18 +292,21 @@ Hôm nay (JST): ${today}.`;
     try {
       await runToolLoop();
     } catch (e) {
-      handleError(e);
+      if (myVersion === convVersion) handleError(e);
     } finally {
       isStreaming = false;
       setSendingState(false);
       currentAbort = null;
-      saveConv();
+      if (myVersion === convVersion) saveConv();
     }
   }
 
   async function runToolLoop() {
     const scroll = $('#aiChatScroll');
+    const myVersion = convVersion;
+    const isStale = () => myVersion !== convVersion;
     for (let hop = 0; hop < MAX_TOOL_HOPS; hop++) {
+      if (isStale()) return;
       // Prepare assistant placeholder
       const assistantMsg = { role: 'assistant', content: '', tool_calls: null, _tool_results: {} };
       messages.push(assistantMsg);
@@ -361,12 +366,15 @@ Hôm nay (JST): ${today}.`;
 
       // If finished with tool_calls → execute and loop
       if (finishReason === 'tool_calls' && toolAccum.length > 0 && !isLastHop) {
+        if (isStale()) return;
         assistantMsg.tool_calls = toolAccum;
         // Execute each tool sequentially
         for (const tc of toolAccum) {
+          if (isStale()) return;
           let args = {};
           try { args = JSON.parse(tc.function.arguments || '{}'); } catch {}
           const result = await window.AITools.executeTool(tc.function.name, args);
+          if (isStale()) return;
           const resultStr = JSON.stringify(result);
           assistantMsg._tool_results[tc.id] = resultStr;
           // Append tool message into conversation
@@ -474,7 +482,7 @@ Hôm nay (JST): ${today}.`;
     modelSelect.addEventListener('change', () => saveModel(modelSelect.value));
 
     clearBtn.addEventListener('click', () => {
-      if (isStreaming && currentAbort) currentAbort.abort();
+      // clearConv() handles abort + version bump internally.
       clearConv();
     });
 
@@ -517,6 +525,8 @@ Hôm nay (JST): ${today}.`;
   }
 
   function clearConv() {
+    if (currentAbort) { try { currentAbort.abort(); } catch {} }
+    convVersion++;                  // invalidate any in-flight loop
     messages = [];
     saveConv();
     setComposerMeta('');
