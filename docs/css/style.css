@@ -2059,7 +2059,7 @@ body.ai-page-active #page-ai.active {
        --kb-inset (set in app.js from visualViewport) lifts the page above
        the soft keyboard since `interactive-widget=resizes-visual` no
        longer reflows the layout for us. */
-    bottom: calc(var(--mobile-nav-height) + env(safe-area-inset-bottom) + var(--kb-inset, 0px));
+    bottom: calc(var(--nav-actual-height, calc(var(--mobile-nav-height) + env(safe-area-inset-bottom))) + var(--kb-inset, 0px));
     height: auto;
   }
   /* Hide leaky page chrome behind the AI overlay on mobile so the
@@ -2087,7 +2087,7 @@ body.ai-page-active .ai-dot-grid {
 @media (max-width: 600px) {
   body.ai-page-active .ai-dot-grid {
     top: 0;
-    bottom: calc(var(--mobile-nav-height) + env(safe-area-inset-bottom) + var(--kb-inset, 0px));
+    bottom: calc(var(--nav-actual-height, calc(var(--mobile-nav-height) + env(safe-area-inset-bottom))) + var(--kb-inset, 0px));
   }
 }
 @keyframes aiPageFadeIn { from { opacity: 0; } to { opacity: 1; } }

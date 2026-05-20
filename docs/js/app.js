@@ -241,25 +241,44 @@ function updateAiTopOffset() {
   const nav = document.querySelector('.nav-bar');
   if (!nav) {
     document.documentElement.style.setProperty('--ai-top-offset', '0px');
+    document.documentElement.style.setProperty('--nav-actual-height', '0px');
     return;
   }
   let offset = 0;
+  let navHeight = 0;
   try {
     const cs = window.getComputedStyle(nav);
     const isFixed = cs.position === 'fixed';
+    const rect = nav.getBoundingClientRect();
+    navHeight = Math.max(0, Math.round(rect.height));
     if (!isFixed) {
-      const rect = nav.getBoundingClientRect();
       // rect.bottom is the y of the nav's bottom in the viewport. Clamp
       // to non-negative in case the nav is scrolled offscreen for any reason.
       offset = Math.max(0, Math.round(rect.bottom));
     }
   } catch {}
   document.documentElement.style.setProperty('--ai-top-offset', offset + 'px');
+  // Expose the actual measured nav height so mobile bottom anchors can
+  // subtract the real value instead of the hardcoded --mobile-nav-height
+  // (which doesn't account for safe-area, font-size, or future layout
+  // changes). Already includes the nav's own safe-area padding via
+  // getBoundingClientRect().
+  document.documentElement.style.setProperty('--nav-actual-height', navHeight + 'px');
 }
 // Re-measure on resize (orientation change, devtools open, etc.)
 window.addEventListener('resize', () => {
-  if (document.body.classList.contains('ai-page-active')) updateAiTopOffset();
+  // Always re-measure: --nav-actual-height is consumed by the AI page
+  // bottom anchor on mobile and needs to stay accurate even before the
+  // user navigates to the AI tab for the first time.
+  updateAiTopOffset();
 });
+// Initial measurement once the nav is in the DOM so mobile bottom
+// anchors have a real value from the very first layout pass.
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', updateAiTopOffset);
+} else {
+  updateAiTopOffset();
+}
 
 // Track visualViewport so AI composer + page can adjust when the soft
 // keyboard opens. Pairs with `interactive-widget=resizes-visual` viewport
