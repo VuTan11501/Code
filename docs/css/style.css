@@ -1344,12 +1344,13 @@ input[type="time"], input[type="date"], input[type="datetime-local"] {
   .nav-item .nav-label, .tabs-trigger .nav-label {
     display: none;
   }
-  /* Active state — no background, no border. Icon zooms 1.5× and turns primary. */
+  /* Active state — no background, no border. Icon zooms 1.2× and turns primary. */
   .nav-item.active, .tabs-trigger.active {
     background: transparent;
     color: var(--primary) !important;
     flex: 1 1 0;
     box-shadow: none;
+    border-color: transparent;
   }
   .nav-item.active .nav-icon, .tabs-trigger.active .nav-icon {
     color: var(--primary);
