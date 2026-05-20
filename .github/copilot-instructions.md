@@ -1271,3 +1271,50 @@ Quota reset mỗi 60s. Kiểm tra trước khi append message + stream.
 - Modules wrapped: `apiFetch()` (GH API), `GIST_ID` + Gist files, `window.OT_SALARY`, `WORKFLOWS` list
 - System prompt: JST-aware, DokoKin context injected per-request (TODAY_JST, kintai rules, rate multipliers)
 - PR/commits: phase 1 shipped May 23 2026 (`feat/ai-coach-p1` branch)
+
+---
+
+## 17. AI Anomaly Detective (Phase 2)
+
+**Trigger**: cron `0 22 * * *` UTC = **07:00 JST daily** + manual `workflow_dispatch`.
+
+### What it scans (last 7 days by default)
+- DokoKin dakoku records (GET /api/dakoku/me/{date})
+- Gist scheduled-runs.json (schedule entries)
+- Gist ot-requests.json (OT requests)
+- Azure token expiry estimate
+
+### Anomaly classes detected
+
+| # | Class | Severity | Signal |
+|---|---|---|---|
+| A1 | Cross-midnight OT unprotected | Critical | OT cross-midnight + date NOT in skip_dates of recurring CO |
+| A2 | Missing checkout | High | startWorkingTime set, endWorkingTime null, date < today |
+| A3 | CO before OT end (Rule 2 violation) | Critical | endWorkingTime < OT end time on same workday |
+| A5 | Undispatched once entry | Medium | type=once, dispatched=false, run_at < now-1h |
+| A7 | Azure token expiring soon | Medium | Token expiry < 14 days |
+
+### File locations
+| File | Role |
+|---|---|
+| .github/scripts/ai_client.py | Shared OpenAI-compatible HTTP client (stdlib, retries) |
+| .github/scripts/anomaly_rules.py | Pure detection functions + inline assert tests |
+| .github/scripts/ai_anomaly_check.py | Main orchestrator (load, detect, summarize, notify) |
+| .github/workflows/ai-anomaly-check.yml | Workflow (cron + dispatch) |
+
+### How to add a new rule
+1. Add detect_aX_name() in anomaly_rules.py (pure, no I/O)
+2. Return list of {class, severity, date, summary, context}
+3. Call from run_all()
+4. Add inline asserts
+5. Add loader in ai_anomaly_check.py if new data needed
+
+### CLI flags
+- --dry-run: no notifications
+- --days N: custom lookback
+- --always-email: email even on all-clear
+- --fixture path.json: use local test data
+
+### Env requirements
+AZURE_REFRESH_TOKEN, GH_PAT, SMTP_USER, SMTP_PASS, NOTIFY_EMAIL, LINE_NOTIFY_TOKEN, AI_API_BASE
+
