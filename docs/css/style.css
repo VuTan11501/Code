@@ -2008,15 +2008,15 @@ input[type="time"], input[type="date"], input[type="datetime-local"] {
 
 /* When AI page is active, body scroll is locked so the chat area uses
    its own internal scroll container (composer + topbar stay pinned).
-   We size the page with 100dvh (dynamic viewport) instead of `inset:0`
-   so iOS keyboard correctly shrinks the chat area and the composer stays
-   visible above the on-screen keyboard. */
+   The page starts BELOW the top nav on desktop (--ai-top-offset is set
+   by JS from the nav's bottom edge) and above the bottom nav on mobile. */
 body.ai-page-active { overflow: hidden; overscroll-behavior: none; }
 body.ai-page-active #page-ai.active {
   position: fixed;
-  top: 0; left: 0; right: 0;
-  height: 100vh;            /* fallback for browsers without dvh */
-  height: 100dvh;
+  top: var(--ai-top-offset, 0px);
+  left: 0; right: 0;
+  height: calc(100vh - var(--ai-top-offset, 0px));
+  height: calc(100dvh - var(--ai-top-offset, 0px));
   display: flex;
   flex-direction: column;
   padding: 0;
@@ -2024,16 +2024,25 @@ body.ai-page-active #page-ai.active {
 }
 @media (max-width: 600px) {
   body.ai-page-active #page-ai.active {
+    top: 0;
     height: calc(100vh - var(--mobile-nav-height));
     height: calc(100dvh - var(--mobile-nav-height));
   }
 }
 /* Full-viewport dot-grid background while AI tab is active — escapes the
    max-w:768px constraint of .ai-wrap by positioning relative to the viewport
-   (no transform/filter ancestor creates a containing block here). */
+   (no transform/filter ancestor creates a containing block here). On
+   desktop we start it below the top nav so it doesn't bleed onto it. */
 body.ai-page-active .ai-dot-grid {
   position: fixed;
-  inset: 0;
+  top: var(--ai-top-offset, 0px);
+  left: 0; right: 0; bottom: 0;
+}
+@media (max-width: 600px) {
+  body.ai-page-active .ai-dot-grid {
+    top: 0;
+    bottom: var(--mobile-nav-height);
+  }
 }
 @keyframes aiPageFadeIn { from { opacity: 0; } to { opacity: 1; } }
 

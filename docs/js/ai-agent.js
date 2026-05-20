@@ -141,15 +141,29 @@ Hôm nay (JST): ${today}.`;
 
   // ─── DOM helpers ────────────────────────────────────
   function $(sel) { return document.querySelector(sel); }
+  // Sticky-bottom state: when the user scrolls up to read older content
+  // we stop auto-scrolling to bottom on new tokens. We re-attach to bottom
+  // when the user manually scrolls back near it. Tracked at scroll-event
+  // time (not at write-time) so streaming chunks never fight user scroll.
+  let stickToBottom = true;
+  function attachScrollObserver() {
+    const el = document.getElementById('aiChatScroll');
+    if (!el || el._pinObserverAttached) return;
+    el._pinObserverAttached = true;
+    el.addEventListener('scroll', () => {
+      const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
+      // Threshold ~1 line: any meaningful scroll up detaches; landing back
+      // within a line re-attaches. Programmatic scrollTo-bottom hits dist=0
+      // so the observer just confirms stickToBottom stays true.
+      stickToBottom = dist < 24;
+    }, { passive: true });
+  }
   function scrollToBottomIfPinned(_scrollEl, force) {
-    // Chat lives inside an internal scroll container (#aiChatScroll) so the
-    // composer/topbar stay pinned to the viewport. Respect the user if they
-    // have scrolled up to read older content (don't snap unless `force`).
     const el = document.getElementById('aiChatScroll');
     if (!el) return;
-    const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-    if (force || distFromBottom < 160) {
+    if (force || stickToBottom) {
       el.scrollTop = el.scrollHeight;
+      stickToBottom = true;
     }
   }
 
@@ -780,6 +794,7 @@ Hôm nay (JST): ${today}.`;
 
     renderAll();
     if (typeof renderIcons === 'function') renderIcons(document.getElementById('page-ai'));
+    attachScrollObserver();
 
     // Autofocus the composer on non-touch (desktop) so the user can start
     // typing immediately. Skip on touch devices — popping the keyboard
