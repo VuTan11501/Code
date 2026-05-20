@@ -22,13 +22,16 @@ function renderAiAuditStatus() {
   const entries = window.AIAudit.getAll ? window.AIAudit.getAll() : [];
   const last = window.AIAudit.getLast ? window.AIAudit.getLast() : null;
   const synced = window.AIAudit.isSyncEnabled();
-  if (toggle) toggle.checked = !!synced;
+  if (toggle) {
+    toggle.classList.toggle('active', !!synced);
+    toggle.setAttribute('aria-checked', String(!!synced));
+  }
   const lastFmt = last && last.applied_at
     ? new Date(last.applied_at).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })
     : '—';
   host.innerHTML = `
     <div><strong>Entries</strong>: ${entries.length} / 100</div>
-    <div><strong>Last apply</strong>: ${last ? `<code>${_esc(last.kind)}</code> on <code>${_esc(last.target_file || '')}</code> at ${_esc(lastFmt)}` : '—'}</div>
+    <div><strong>Last apply</strong>: ${last ? `<code>${escapeHtml(last.kind)}</code> on <code>${escapeHtml(last.target_file || '')}</code> at ${escapeHtml(lastFmt)}` : '—'}</div>
     <div><strong>Sync</strong>: ${synced ? '✅ Enabled — new applies pushed to Gist' : '⚪ Local-only'}</div>
   `;
 }
