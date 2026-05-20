@@ -311,15 +311,29 @@ window.AIAgent = (function () {
     if (!lastUser) return 'No messages yet';
     return String(lastUser.content).replace(/\s+/g, ' ').trim().slice(0, 80);
   }
+  let _convFilter = '';
   async function _renderConvList() {
     const ul = document.getElementById('aiConvList');
     if (!ul) return;
     const list = await _listConvs();
+    const q = _convFilter.trim().toLowerCase();
+    const filtered = q ? list.filter(c => {
+      if ((c.title || '').toLowerCase().includes(q)) return true;
+      const msgs = c.messages || [];
+      for (const m of msgs) {
+        if (m && typeof m.content === 'string' && m.content.toLowerCase().includes(q)) return true;
+      }
+      return false;
+    }) : list;
     if (!list.length) {
-      ul.innerHTML = '<li class="ai-conv-empty">No conversations yet.</li>';
+      ul.innerHTML = '<li class="ai-conv-empty">Chưa có hội thoại nào.<br><small style="opacity:.7">Hỏi AI một câu để bắt đầu.</small></li>';
       return;
     }
-    ul.innerHTML = list.map(c => {
+    if (!filtered.length) {
+      ul.innerHTML = `<li class="ai-conv-empty">Không tìm thấy hội thoại khớp "${esc(_convFilter)}".</li>`;
+      return;
+    }
+    ul.innerHTML = filtered.map(c => {
       const isActive = c.id === currentConvId;
       return `<li class="ai-conv-item${isActive ? ' is-active' : ''}" role="option" aria-selected="${isActive}" data-conv-id="${esc(c.id)}">
         <button class="ai-conv-item-main" type="button" data-conv-switch="${esc(c.id)}">
@@ -1738,6 +1752,13 @@ Hôm nay (JST): ${today}.`;
     // Conversations sheet wiring
     if (convBtn) convBtn.addEventListener('click', () => _showConvSheet());
     try { if (convNewBtn) convNewBtn.addEventListener('click', () => createConv()); } catch (_) {}
+    const convSearch = document.getElementById('aiConvSearch');
+    if (convSearch) {
+      convSearch.addEventListener('input', () => {
+        _convFilter = convSearch.value || '';
+        _renderConvList();
+      });
+    }
     if (convSheet) {
       convSheet.addEventListener('click', (e) => {
         const t = e.target;

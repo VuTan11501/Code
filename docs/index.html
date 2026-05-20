@@ -86,7 +86,7 @@ tailwind.config = {
   },
 }
 </script>
-<link rel="stylesheet" href="css/style.css?v=77">
+<link rel="stylesheet" href="css/style.css?v=78">
 <link rel="preconnect" href="https://api.github.com">
 </head>
 <body class="bg-background text-foreground font-sans text-sm antialiased min-h-dvh overflow-x-hidden">
@@ -516,6 +516,10 @@ tailwind.config = {
               <button class="ai-icon-btn" type="button" data-conv-close title="Close" aria-label="Close">
                 <span data-icon="x" data-size="15"></span>
               </button>
+            </div>
+            <div class="ai-conv-search-wrap">
+              <span class="ai-conv-search-icon" data-icon="search" data-size="14" aria-hidden="true"></span>
+              <input type="search" class="ai-conv-search" id="aiConvSearch" placeholder="Tìm trong hội thoại…" autocomplete="off" />
             </div>
             <ul class="ai-conv-list" id="aiConvList" role="listbox" aria-label="Conversation list"></ul>
           </div>
@@ -1171,7 +1175,7 @@ tailwind.config = {
 <script src="js/ai-audit.js?v=2"></script>
 <script src="js/ai-proposals.js?v=2"></script>
 <script src="js/ai-tools.js?v=2"></script>
-<script src="js/ai-agent.js?v=20"></script>
+<script src="js/ai-agent.js?v=21"></script>
 <script src="js/insights.js?v=1"></script>
 <script src="js/settings.js?v=32"></script>
 <!-- AI Proposal confirmation modal (Phase 3) -->
