@@ -1,0 +1,64 @@
+name: AI Monthly Insight
+
+on:
+  schedule:
+    - cron: '0 0 1 * *'  # 00:00 UTC 1st of month = 09:00 JST
+  workflow_dispatch:
+    inputs:
+      month:
+        description: "Override month (YYYY-MM)"
+        required: false
+      dry_run:
+        type: boolean
+        default: false
+
+concurrency:
+  group: ai-monthly-insight
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      TZ: Asia/Tokyo
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts/
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Run monthly insight
+        id: insight
+        env:
+          AZURE_REFRESH_TOKEN: ${{ secrets.AZURE_REFRESH_TOKEN }}
+          AZURE_APP_ID: f5be0f68-7285-4365-b979-10af0f3f4106
+          AZURE_TENANT_ID: f01e930a-b52e-42b1-b70f-a8882b5d043b
+          GH_PAT: ${{ secrets.GH_PAT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          NOTIFY_EMAIL: ${{ secrets.NOTIFY_EMAIL }}
+          AI_API_BASE: https://models.inference.ai.azure.com
+        run: |
+          FLAGS=""
+          if [ -n "${{ inputs.month }}" ]; then
+            FLAGS="$FLAGS --month ${{ inputs.month }}"
+          fi
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            FLAGS="$FLAGS --dry-run"
+          fi
+          python .github/scripts/ai_monthly_insight.py $FLAGS
+
+      - name: Update refresh token if rotated
+        if: steps.insight.outputs.token_rotated == 'true'
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          echo "${{ steps.insight.outputs.new_refresh_token }}" | gh secret set AZURE_REFRESH_TOKEN
