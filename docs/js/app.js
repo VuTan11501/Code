@@ -268,53 +268,47 @@ window.addEventListener('resize', () => {
 // composer. We compensate by pushing the composer up by the keyboard
 // height via a CSS var (--kb-inset) consumed in style.css.
 //
-// IMPORTANT: bind --kb-inset to focus state, NOT just visualViewport
-// resize events. Reasons:
-//   1. visualViewport.resize doesn't always fire when keyboard dismisses
-//      (especially when autofill bar lingers afterwards) — leaving a
-//      stale non-zero inset that floats the composer up.
-//   2. visualViewport.offsetTop becomes non-zero when the browser
-//      auto-scrolls the page to bring the focused input into view,
-//      which would break the simple (innerHeight - vv.height) math.
-// So: --kb-inset is ALWAYS 0 unless a text input is currently focused
-// inside the AI page, and is force-reset to 0 on every focusout.
+// Robust strategy: every time visualViewport reports anything (resize,
+// scroll, animation frame), re-check document.activeElement. If the
+// composer textarea is not currently focused, --kb-inset is forced to
+// 0 regardless of vv.height. This handles cases where the keyboard
+// dismisses without firing blur (Android back-gesture, autofill bar
+// lingering) and prevents the page-bottom anchor from shrinking the
+// AI page after the keyboard is gone.
 (function trackKeyboardInset() {
   const root = document.documentElement;
   root.style.setProperty('--kb-inset', '0px');
   const vv = window.visualViewport;
   if (!vv) return;
 
-  let active = null;
-  const isComposerInput = (el) =>
-    el && (el.id === 'aiComposerInput' || (el.closest && el.closest('#page-ai')));
-
-  const apply = () => {
-    if (!active) {
-      root.style.setProperty('--kb-inset', '0px');
-      return;
+  const update = () => {
+    const ae = document.activeElement;
+    const isComposer =
+      ae && (ae.id === 'aiComposerInput' ||
+             (ae.tagName === 'TEXTAREA' || ae.tagName === 'INPUT') &&
+             ae.closest && ae.closest('#page-ai'));
+    let inset = 0;
+    if (isComposer) {
+      inset = Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop));
     }
-    const inset = Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop));
     root.style.setProperty('--kb-inset', inset + 'px');
   };
 
-  document.addEventListener('focusin', (e) => {
-    const t = e.target;
-    if (!t) return;
-    const tag = t.tagName;
-    if ((tag === 'TEXTAREA' || tag === 'INPUT') && isComposerInput(t)) {
-      active = t;
-      apply();
-    }
-  });
+  vv.addEventListener('resize', update);
+  vv.addEventListener('scroll', update);
+  // focusin/out re-check too, with a delayed pass to catch late layout settles
+  document.addEventListener('focusin', update);
   document.addEventListener('focusout', () => {
-    active = null;
-    // Force reset immediately, then again after layout settles in case
-    // the browser fires a late visualViewport resize.
-    root.style.setProperty('--kb-inset', '0px');
-    setTimeout(() => root.style.setProperty('--kb-inset', '0px'), 150);
+    update();
+    setTimeout(update, 80);
+    setTimeout(update, 250);
   });
-  vv.addEventListener('resize', apply);
-  vv.addEventListener('scroll', apply);
+  // Defensive: poll once a second while AI page is active to catch any
+  // edge case the events miss (keyboard dismissed without blur, etc).
+  setInterval(() => {
+    if (document.body.classList.contains('ai-page-active')) update();
+  }, 1000);
+  update();
 })();
 
 function navigate(hash) {
