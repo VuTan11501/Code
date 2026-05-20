@@ -369,9 +369,11 @@ Hôm nay (JST): ${today}.`;
     let icon = '<span class="ai-spin" aria-hidden="true"></span>';
     let isErr = false;
     let resultPretty = '';
+    let resultObj = null;
     if (resultJson != null) {
       try {
         const r = typeof resultJson === 'string' ? JSON.parse(resultJson) : resultJson;
+        resultObj = r;
         resultPretty = JSON.stringify(r, null, 2);
         if (r && typeof r === 'object' && r.error) {
           status = 'error'; icon = ICON('alertTriangle', 12); isErr = true;
@@ -382,6 +384,25 @@ Hôm nay (JST): ${today}.`;
         resultPretty = String(resultJson);
         status = 'done'; icon = ICON('check', 12);
       }
+    }
+    const preview = (!isErr && resultObj) ? renderRichToolPreview(name, resultObj) : '';
+    if (preview) {
+      // Rich-preview variant: head + always-visible preview + nested <details> for raw JSON.
+      return `<div class="ai-tool-pill has-preview">
+        <div class="ai-tool-head">
+          <span class="ai-tool-status ${status}">${icon}</span>
+          <span class="ai-tool-name">${esc(name || '')}</span>
+        </div>
+        <div class="ai-tool-preview">${preview}</div>
+        <details class="ai-tool-raw">
+          <summary><span class="ai-tool-raw-label">Raw output</span><span class="ai-tool-chev">${ICON('chevronRight', 12)}</span></summary>
+          <div class="ai-tool-body">
+            <div class="ai-tool-label">Input</div>
+            <pre class="ai-tool-json">${esc(argsPretty)}</pre>
+            ${resultPretty ? `<div class="ai-tool-label">Output</div><pre class="ai-tool-json${isErr ? ' err' : ''}">${esc(resultPretty)}</pre>` : ''}
+          </div>
+        </details>
+      </div>`;
     }
     return `<details class="ai-tool-pill">
       <summary>
@@ -396,6 +417,234 @@ Hôm nay (JST): ${today}.`;
       </div>
     </details>`;
   }
+
+  // ─── Rich tool result previews ──────────────────────
+  // Returns HTML preview shown above the raw JSON. Empty string = no preview
+  // (falls back to JSON-only pill). All values are HTML-escaped before inject.
+  function renderRichToolPreview(name, r) {
+    try {
+      if (!r || typeof r !== 'object') return '';
+      switch (name) {
+        case 'get_today_status':       return previewTodayStatus(r);
+        case 'summarize_month_ot':     return previewMonthSummary(r);
+        case 'list_ot_requests':       return previewOtList(r);
+        case 'list_schedule':          return previewSchedule(r);
+        case 'get_workflow_runs':      return previewWorkflowRuns(r);
+        case 'calc_ot_breakdown':      return previewOtBreakdown(r);
+        default: return '';
+      }
+    } catch { return ''; }
+  }
+
+  function _statusDot(conclusion, status) {
+    const c = (conclusion || status || '').toLowerCase();
+    if (c === 'success')  return '<span class="ai-rt-dot ok" title="success"></span>';
+    if (c === 'failure' || c === 'cancelled' || c === 'timed_out') return '<span class="ai-rt-dot err" title="' + esc(c) + '"></span>';
+    if (c === 'in_progress' || c === 'queued') return '<span class="ai-rt-dot run" title="' + esc(c) + '"></span>';
+    return '<span class="ai-rt-dot" title="' + esc(c || 'unknown') + '"></span>';
+  }
+  function _yen(n) {
+    if (typeof n !== 'number' || !isFinite(n)) return '¥—';
+    return '¥' + Math.round(n).toLocaleString('en-US');
+  }
+  function _hhmm(iso) {
+    if (!iso) return '—';
+    try {
+      const d = new Date(iso);
+      return d.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
+    } catch { return esc(String(iso).slice(0, 16)); }
+  }
+
+  function previewTodayStatus(r) {
+    const card = (label, slot) => {
+      if (!slot) return `<div class="ai-rt-card off"><div class="ai-rt-card-h">${label}</div><div class="ai-rt-card-v">—</div><div class="ai-rt-card-s">No record</div></div>`;
+      const ok = slot.conclusion === 'success';
+      const cls = ok ? 'ok' : (slot.conclusion === 'failure' ? 'err' : 'run');
+      return `<div class="ai-rt-card ${cls}"><div class="ai-rt-card-h">${label}</div><div class="ai-rt-card-v">${_hhmm(slot.started_at)}</div><div class="ai-rt-card-s">${esc(slot.conclusion || slot.status || '')}</div></div>`;
+    };
+    return `<div class="ai-rt-grid ai-rt-grid-2">${card('Checkin', r.checkin)}${card('Checkout', r.checkout)}</div>`;
+  }
+
+  function previewMonthSummary(r) {
+    const totH = r.total_hours != null ? r.total_hours : '—';
+    const cap = r.cap_remaining_hours != null ? r.cap_remaining_hours : '—';
+    const pct = (typeof r.total_hours === 'number') ? Math.min(100, Math.round(r.total_hours / 75 * 100)) : 0;
+    const hb = r.hours_breakdown || {};
+    return `<div class="ai-rt-month">
+      <div class="ai-rt-stats">
+        <div class="ai-rt-stat"><div class="ai-rt-stat-l">Month</div><div class="ai-rt-stat-v">${esc(r.month || '—')}</div></div>
+        <div class="ai-rt-stat"><div class="ai-rt-stat-l">Hours</div><div class="ai-rt-stat-v">${esc(String(totH))}h<span class="ai-rt-stat-sub"> / 75h</span></div></div>
+        <div class="ai-rt-stat"><div class="ai-rt-stat-l">Remaining</div><div class="ai-rt-stat-v">${esc(String(cap))}h</div></div>
+        <div class="ai-rt-stat"><div class="ai-rt-stat-l">Gross</div><div class="ai-rt-stat-v">${_yen(r.gross_yen)}</div></div>
+      </div>
+      <div class="ai-rt-bar" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><div class="ai-rt-bar-fill" style="width:${pct}%"></div></div>
+      <div class="ai-rt-chips">
+        <span class="ai-rt-chip">Sun ${esc(String(hb.sunday ?? 0))}h</span>
+        <span class="ai-rt-chip">Wk ${esc(String(hb.weekday ?? 0))}h</span>
+        <span class="ai-rt-chip">Night ${esc(String(hb.night ?? 0))}h</span>
+      </div>
+    </div>`;
+  }
+
+  function previewOtList(r) {
+    const items = Array.isArray(r.requests) ? r.requests : [];
+    if (!items.length) return `<div class="ai-rt-empty">No OT requests for ${esc(r.month || 'this month')}.</div>`;
+    const rows = items.slice(0, 8).map(it => `
+      <li class="ai-rt-row">
+        <span class="ai-rt-row-d">${esc(it.date || '')}</span>
+        <span class="ai-rt-row-t">${esc(it.start || '')}–${esc(it.end || '')}</span>
+        <span class="ai-rt-row-h">${esc(String(it.hours ?? ''))}h</span>
+      </li>`).join('');
+    const more = items.length > 8 ? `<li class="ai-rt-more">+${items.length - 8} more…</li>` : '';
+    return `<div class="ai-rt-month">
+      <div class="ai-rt-stats">
+        <div class="ai-rt-stat"><div class="ai-rt-stat-l">Month</div><div class="ai-rt-stat-v">${esc(r.month || '—')}</div></div>
+        <div class="ai-rt-stat"><div class="ai-rt-stat-l">Total</div><div class="ai-rt-stat-v">${esc(String(r.total_hours ?? '—'))}h</div></div>
+        <div class="ai-rt-stat"><div class="ai-rt-stat-l">Remaining</div><div class="ai-rt-stat-v">${esc(String(r.cap_remaining_hours ?? '—'))}h</div></div>
+      </div>
+      <ul class="ai-rt-list">${rows}${more}</ul>
+    </div>`;
+  }
+
+  function previewSchedule(r) {
+    const items = Array.isArray(r.entries) ? r.entries : [];
+    if (!items.length) return `<div class="ai-rt-empty">No schedule entries.</div>`;
+    const rows = items.slice(0, 8).map(it => {
+      const when = it.type === 'recurring'
+        ? `${esc(it.time || '')} · ${it.days ? esc(it.days.join(',')) : (it.dates ? esc(it.dates.join(',')) : 'daily')}`
+        : esc((it.run_at || '').replace('T', ' ').slice(0, 16));
+      return `<li class="ai-rt-row">
+        <span class="ai-rt-badge ${it.type === 'recurring' ? 'rec' : 'once'}">${esc(it.type || '')}</span>
+        <span class="ai-rt-row-d">${esc(it.workflow || '')}</span>
+        <span class="ai-rt-row-t">${when}</span>
+      </li>`;
+    }).join('');
+    const more = items.length > 8 ? `<li class="ai-rt-more">+${items.length - 8} more…</li>` : '';
+    return `<ul class="ai-rt-list">${rows}${more}</ul>`;
+  }
+
+  function previewWorkflowRuns(r) {
+    const items = Array.isArray(r.runs) ? r.runs : [];
+    if (!items.length) return `<div class="ai-rt-empty">No runs found.</div>`;
+    const rows = items.slice(0, 8).map(it => `
+      <li class="ai-rt-row">
+        ${_statusDot(it.conclusion, it.status)}
+        <span class="ai-rt-row-d">${esc(it.workflow || it.workflow_file || '')}</span>
+        <span class="ai-rt-row-t">${_hhmm(it.created_at)}</span>
+        ${it.html_url ? `<a class="ai-rt-link" href="${esc(it.html_url)}" target="_blank" rel="noopener" aria-label="Open run">↗</a>` : ''}
+      </li>`).join('');
+    const more = items.length > 8 ? `<li class="ai-rt-more">+${items.length - 8} more…</li>` : '';
+    return `<ul class="ai-rt-list">${rows}${more}</ul>`;
+  }
+
+  function previewOtBreakdown(r) {
+    if (!r.totals) return '';
+    const t = r.totals;
+    return `<div class="ai-rt-stats">
+      <div class="ai-rt-stat"><div class="ai-rt-stat-l">Shifts</div><div class="ai-rt-stat-v">${esc(String((r.per_shift || []).length))}</div></div>
+      <div class="ai-rt-stat"><div class="ai-rt-stat-l">Hours</div><div class="ai-rt-stat-v">${esc(String(t.hours ?? '—'))}h</div></div>
+      <div class="ai-rt-stat"><div class="ai-rt-stat-l">Gross</div><div class="ai-rt-stat-v">${_yen(t.gross)}</div></div>
+    </div>`;
+  }
+
+  // ─── Voice input (Web Speech API) ───────────────────
+  let _stopVoice = null;
+  function initVoiceInput(input, autogrow) {
+    const btn = document.getElementById('aiMicBtn');
+    if (!btn) return;
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) return; // unsupported → keep hidden
+    btn.hidden = false;
+    let recog = null;
+    let listening = false;
+    let baseText = '';        // text already committed before this recording session
+    let interimActive = '';   // last interim chunk currently appended to input
+
+    const setListening = (on) => {
+      listening = on;
+      btn.classList.toggle('is-recording', on);
+      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+      btn.setAttribute('aria-label', on ? 'Stop voice input' : 'Voice input');
+      const iconName = on ? 'micOff' : 'mic';
+      btn.innerHTML = `<span class="ai-mic-icon" data-icon="${iconName}" data-size="16"></span>`;
+      if (typeof renderIcons === 'function') renderIcons(btn);
+    };
+
+    const start = () => {
+      try {
+        recog = new SR();
+        recog.lang = 'vi-VN';
+        recog.continuous = true;
+        recog.interimResults = true;
+        baseText = input.value;
+        if (baseText && !/\s$/.test(baseText)) baseText += ' ';
+        interimActive = '';
+        recog.onresult = (ev) => {
+          let interim = '';
+          let finalChunk = '';
+          for (let i = ev.resultIndex; i < ev.results.length; i++) {
+            const txt = ev.results[i][0].transcript;
+            if (ev.results[i].isFinal) finalChunk += txt;
+            else interim += txt;
+          }
+          if (finalChunk) {
+            baseText += finalChunk;
+            if (!/\s$/.test(baseText)) baseText += ' ';
+          }
+          interimActive = interim;
+          input.value = baseText + interim;
+          try { autogrow(); } catch {}
+        };
+        recog.onerror = (e) => {
+          if (e && (e.error === 'not-allowed' || e.error === 'service-not-allowed')) {
+            try { window.toast && window.toast('Mic permission denied', 'error'); } catch {}
+          }
+          setListening(false);
+        };
+        recog.onend = () => { setListening(false); };
+        recog.start();
+        setListening(true);
+      } catch (e) {
+        setListening(false);
+      }
+    };
+    const stop = () => {
+      try { recog && recog.stop(); } catch {}
+      try { recog && recog.abort && recog.abort(); } catch {}
+      recog = null;
+      setListening(false);
+    };
+    _stopVoice = stop;
+
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      if (listening) stop(); else start();
+    });
+
+    // Stop if the user manually types/edits while recording — prevents stale
+    // baseText snapshot from clobbering their typing on next interim result.
+    input.addEventListener('beforeinput', (e) => {
+      if (!listening) return;
+      // Programmatic input.value = ... does NOT fire beforeinput, so any event
+      // here is a real user keypress/paste → snap voice off.
+      if (e && e.inputType) stop();
+    });
+
+    // Stop voice when leaving AI tab (in-app navigation) — observe page
+    // active class. Cleaner than coupling to navigate().
+    const pageEl = document.getElementById('page-ai');
+    if (pageEl) {
+      const mo = new MutationObserver(() => {
+        if (listening && !pageEl.classList.contains('active')) stop();
+      });
+      mo.observe(pageEl, { attributes: true, attributeFilter: ['class'] });
+    }
+
+    // Stop on tab hide / page navigate away
+    document.addEventListener('visibilitychange', () => { if (document.hidden && listening) stop(); });
+    window.addEventListener('pagehide', () => { if (listening) stop(); });
+  }
+
 
   // ─── Streaming SSE parser ───────────────────────────
   async function streamRequest(body, { onDelta, onToolCallDelta, signal }) {
@@ -1023,6 +1272,8 @@ Hôm nay (JST): ${today}.`;
 
     form.addEventListener('submit', (e) => {
       e.preventDefault();
+      // Stop voice recording before submit so no late interim event resurrects text.
+      try { if (_stopVoice) _stopVoice(); } catch {}
       // If button is in STOP state, abort current stream instead of submitting.
       if (send.classList.contains('is-stop')) {
         try { if (currentAbort) currentAbort.abort(); } catch {}
@@ -1104,6 +1355,9 @@ Hôm nay (JST): ${today}.`;
         } catch {}
       });
     }
+
+    // ─── Voice input (Web Speech API) ───────────────────
+    initVoiceInput(input, autogrow);
 
     // Render initial send-button icon
     setSendingState(false);
