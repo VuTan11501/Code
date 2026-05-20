@@ -2922,6 +2922,7 @@ body.ai-page-active .ai-dot-grid {
   pointer-events: none;
 }
 .ai-conv-sheet[hidden] { display: none; }
+.ai-conv-sheet.show { pointer-events: auto; }
 .ai-conv-sheet-backdrop {
   position: absolute; inset: 0;
   background: rgba(0,0,0,0.5);
