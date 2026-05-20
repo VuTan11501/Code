@@ -2055,8 +2055,11 @@ body.ai-page-active #page-ai.active {
        always fills viewport-minus-nav, even when Android Chrome misreports
        100dvh after the soft keyboard + autofill bar dismisses (a known
        Chrome quirk that previously left an autofill-bar-sized gap below
-       the composer). Bottom anchor wins over any stale dvh value. */
-    bottom: calc(var(--mobile-nav-height) + env(safe-area-inset-bottom));
+       the composer). Bottom anchor wins over any stale dvh value.
+       --kb-inset (set in app.js from visualViewport) lifts the page above
+       the soft keyboard since `interactive-widget=resizes-visual` no
+       longer reflows the layout for us. */
+    bottom: calc(var(--mobile-nav-height) + env(safe-area-inset-bottom) + var(--kb-inset, 0px));
     height: auto;
   }
   /* Hide leaky page chrome behind the AI overlay on mobile so the
@@ -2084,7 +2087,7 @@ body.ai-page-active .ai-dot-grid {
 @media (max-width: 600px) {
   body.ai-page-active .ai-dot-grid {
     top: 0;
-    bottom: calc(var(--mobile-nav-height) + env(safe-area-inset-bottom));
+    bottom: calc(var(--mobile-nav-height) + env(safe-area-inset-bottom) + var(--kb-inset, 0px));
   }
 }
 @keyframes aiPageFadeIn { from { opacity: 0; } to { opacity: 1; } }

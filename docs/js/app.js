@@ -261,6 +261,29 @@ window.addEventListener('resize', () => {
   if (document.body.classList.contains('ai-page-active')) updateAiTopOffset();
 });
 
+// Track visualViewport so AI composer + page can adjust when the soft
+// keyboard opens. Pairs with `interactive-widget=resizes-visual` viewport
+// meta which keeps the layout viewport stable (fixes the Android Chrome
+// autofill-bar gap bug) at the cost of the keyboard now overlaying the
+// composer. We compensate by pushing the composer up by the keyboard
+// height via a CSS var (--kb-inset) consumed in style.css.
+(function trackKeyboardInset() {
+  const vv = window.visualViewport;
+  if (!vv) {
+    document.documentElement.style.setProperty('--kb-inset', '0px');
+    return;
+  }
+  const update = () => {
+    // Keyboard inset = portion of layout viewport hidden by keyboard at the bottom.
+    // = layoutHeight - (visualHeight + visualOffsetTop)
+    const inset = Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop));
+    document.documentElement.style.setProperty('--kb-inset', inset + 'px');
+  };
+  vv.addEventListener('resize', update);
+  vv.addEventListener('scroll', update);
+  update();
+})();
+
 function navigate(hash) {
   const page = hash.replace('#', '') || 'dashboard';
 
