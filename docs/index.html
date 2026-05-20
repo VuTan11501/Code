@@ -86,7 +86,7 @@ tailwind.config = {
   },
 }
 </script>
-<link rel="stylesheet" href="css/style.css?v=88">
+<link rel="stylesheet" href="css/style.css?v=89">
 <link rel="preconnect" href="https://api.github.com">
 </head>
 <body class="bg-background text-foreground font-sans text-sm antialiased min-h-dvh overflow-x-hidden">
@@ -780,6 +780,7 @@ tailwind.config = {
               </button>
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn btn-secondary" onclick="openAiAuditModal()" data-tooltip="Browse applied AI changes with per-entry rollback"><span data-icon="history" data-size="14"></span> View history</button>
               <button class="btn btn-destructive" onclick="clearAiAudit()" data-tooltip="Wipe local audit log"><span data-icon="trash" data-size="14"></span> Clear log</button>
             </div>
           </div>
@@ -1040,6 +1041,20 @@ tailwind.config = {
   </div>
 </div>
 
+<!-- AI Audit History Modal -->
+<div class="modal-overlay" id="aiAuditModal" role="dialog" aria-modal="true" aria-labelledby="aiAuditModalTitle">
+  <div class="modal" style="max-width:720px;">
+    <div class="modal-header" style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+      <div>
+        <h3 id="aiAuditModalTitle" class="text-base font-semibold m-0"><span data-icon="history" data-size="16"></span> AI Audit History</h3>
+        <div id="aiAuditModalSub" class="text-xs text-muted-foreground mt-1">Loading...</div>
+      </div>
+      <button type="button" class="btn-icon btn-ghost" id="aiAuditModalClose" aria-label="Close" data-audit-close><span data-icon="x" data-size="16"></span></button>
+    </div>
+    <div class="modal-body" id="aiAuditModalBody" style="overflow-y:auto;max-height:60vh;padding:8px 20px 20px"></div>
+  </div>
+</div>
+
 <!-- OT Form Modal -->
 <div class="dialog-overlay modal-overlay" id="otFormModal" role="dialog" aria-modal="true" aria-labelledby="otFormTitle">
   <div class="dialog-content modal" style="max-width:480px">
@@ -1194,7 +1209,7 @@ tailwind.config = {
 <script src="js/ai-tools.js?v=2"></script>
 <script src="js/ai-agent.js?v=27"></script>
 <script src="js/insights.js?v=1"></script>
-<script src="js/settings.js?v=34"></script>
+<script src="js/settings.js?v=35"></script>
 <!-- AI Proposal confirmation modal (Phase 3) -->
 <div id="aiProposalModal" class="proposal-modal" role="dialog" aria-modal="true" aria-labelledby="aiProposalTitle" hidden aria-hidden="true">
   <div class="proposal-modal-backdrop" onclick="AIProposals.closeModal()"></div>

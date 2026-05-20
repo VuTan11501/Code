@@ -3496,3 +3496,22 @@ body.ai-page-active .ai-dot-grid {
 [data-theme="light"] .diff-remove { background: rgba(239,68,68,0.06); }
 [data-theme="light"] .proposal-modal-backdrop { background: rgba(0,0,0,0.3); }
 
+
+/*  AI Audit History modal ─ */
+.audit-empty { text-align:center; padding:40px 16px; color: var(--muted-foreground); }
+.audit-empty p { margin: 8px 0 0; font-size: var(--fs-sm); }
+.audit-entry { padding:12px; border:1px solid var(--border); border-radius: var(--radius-md); margin-bottom:8px; background: var(--card); transition: border-color 150ms ease; }
+.audit-entry:hover { border-color: color-mix(in srgb, var(--border) 50%, var(--muted-foreground)); }
+.audit-entry-head { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px; }
+.audit-entry-meta { display:flex; align-items:center; gap:8px; }
+.audit-entry-time { font-size: var(--fs-xs); color: var(--muted-foreground); font-family: var(--font-mono); }
+.audit-entry-target { font-size: var(--fs-xs); color: var(--foreground); margin-bottom: 2px; }
+.audit-entry-target code { font-size: var(--fs-xs); padding: 1px 6px; border-radius: var(--radius-sm); background: var(--muted); border: 1px solid var(--border); }
+.audit-entry-id { margin-top: 2px; }
+.audit-entry-id code { font-size: 10px; padding: 0 4px; border-radius: 3px; background: var(--muted); }
+.audit-kind-badge { display:inline-flex; align-items:center; padding:2px 8px; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; border-radius: var(--radius-full); border: 1px solid transparent; }
+.audit-kind-success { background: var(--green-subtle); color: var(--green); border-color: color-mix(in srgb, var(--green) 30%, transparent); }
+.audit-kind-warning { background: var(--yellow-subtle); color: var(--yellow); border-color: color-mix(in srgb, var(--yellow) 30%, transparent); }
+.audit-kind-danger { background: var(--red-subtle); color: var(--red); border-color: color-mix(in srgb, var(--red) 30%, transparent); }
+.audit-kind-info { background: var(--primary-subtle, rgba(59,130,246,0.1)); color: var(--primary); border-color: color-mix(in srgb, var(--primary) 30%, transparent); }
+.audit-kind-muted { background: var(--muted); color: var(--muted-foreground); border-color: var(--border); }
