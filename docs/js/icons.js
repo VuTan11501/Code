@@ -65,6 +65,9 @@ const ICON_PATHS = {
   wand:       '<path d="M15 4V2"/><path d="M15 16v-2"/><path d="M8 9h2"/><path d="M20 9h2"/><path d="M17.8 11.8 19 13"/><path d="M15 9h.01"/><path d="M17.8 6.2 19 5"/><path d="m3 21 9-9"/><path d="M12.2 6.2 11 5"/>',
   chevronDown:'<path d="m6 9 6 6 6-6"/>',
   moreVertical:'<circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/>',
+  arrowUp:    '<path d="m5 12 7-7 7 7"/><path d="M12 19V5"/>',
+  square:     '<rect width="14" height="14" x="5" y="5" rx="2" ry="2"/>',
+  user:       '<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
 };
 
 function ICON(name, size = 16, extraClass = '') {
