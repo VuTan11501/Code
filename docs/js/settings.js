@@ -63,8 +63,118 @@ async function clearAiAudit() {
   if (!ok) return;
   window.AIAudit.clearAll();
   renderAiAuditStatus();
+  renderAiAuditModalBody();
   if (typeof toast === 'function') toast('Audit log cleared');
 }
+
+// ────────────────────────────────────────────────────────
+// AI Audit History modal
+// ────────────────────────────────────────────────────────
+function _fmtAuditTime(iso) {
+  if (!iso) return '—';
+  try {
+    const d = new Date(iso);
+    const diff = (Date.now() - d.getTime()) / 1000;
+    if (diff < 60) return `${Math.floor(diff)}s ago`;
+    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+    return d.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', hour12: false });
+  } catch { return iso; }
+}
+
+function _auditKindBadge(kind) {
+  const map = {
+    create_schedule_once: { label: 'Create once', tone: 'success' },
+    create_schedule_recurring: { label: 'Create recurring', tone: 'success' },
+    create_ot_request: { label: 'Create OT', tone: 'success' },
+    update_schedule: { label: 'Update', tone: 'warning' },
+    delete_schedule: { label: 'Delete', tone: 'danger' },
+    add_skip_date: { label: 'Skip date', tone: 'info' },
+  };
+  const m = map[kind] || { label: kind || 'unknown', tone: 'muted' };
+  return `<span class="audit-kind-badge audit-kind-${m.tone}">${escapeHtml(m.label)}</span>`;
+}
+
+function renderAiAuditModalBody() {
+  const body = document.getElementById('aiAuditModalBody');
+  const sub = document.getElementById('aiAuditModalSub');
+  if (!body || !window.AIAudit) return;
+  const entries = (window.AIAudit.getAll() || []).slice().reverse(); // newest first
+  if (sub) sub.textContent = `${entries.length} entries · stored locally (max 100)`;
+  if (!entries.length) {
+    body.innerHTML = `<div class="audit-empty"><span data-icon="history" data-size="24"></span><p>Chưa có apply nào được ghi.</p><p class="text-xs text-muted-foreground">Mỗi lần AI apply 1 proposal sẽ tự lưu vào đây.</p></div>`;
+    if (typeof renderIcons === 'function') renderIcons(body);
+    return;
+  }
+  const hasRollback = !!(window.AIProposals && window.AIProposals.rollbackEntry);
+  body.innerHTML = entries.map((e) => {
+    const canUndo = hasRollback && !!e.before_snapshot;
+    const targetLine = e.target_file ? `<code>${escapeHtml(e.target_file)}</code>` : '<span class="text-muted-foreground">—</span>';
+    return `
+      <div class="audit-entry">
+        <div class="audit-entry-head">
+          <div class="audit-entry-meta">
+            ${_auditKindBadge(e.kind)}
+            <span class="audit-entry-time" title="${escapeHtml(e.applied_at || '')}">${escapeHtml(_fmtAuditTime(e.applied_at))}</span>
+          </div>
+          <button type="button" class="btn btn-ghost sm" data-audit-undo="${escapeHtml(e.proposal_id)}" ${canUndo ? '' : 'disabled'} title="${canUndo ? 'Hoàn tác apply này' : 'Không có before-snapshot'}">
+            <span data-icon="undo" data-size="13"></span> Undo
+          </button>
+        </div>
+        <div class="audit-entry-target">${targetLine}</div>
+        <div class="audit-entry-id text-xs text-muted-foreground">id: <code>${escapeHtml(e.proposal_id)}</code>${e.conv_id ? ` · conv: <code>${escapeHtml(e.conv_id.slice(0, 8))}</code>` : ''}</div>
+      </div>`;
+  }).join('');
+  if (typeof renderIcons === 'function') renderIcons(body);
+}
+
+function openAiAuditModal() {
+  const m = document.getElementById('aiAuditModal');
+  if (!m) return;
+  renderAiAuditModalBody();
+  m.classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeAiAuditModal() {
+  const m = document.getElementById('aiAuditModal');
+  if (!m) return;
+  m.classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+// Wire close + undo + ESC
+document.addEventListener('DOMContentLoaded', () => {
+  const m = document.getElementById('aiAuditModal');
+  if (!m) return;
+  m.addEventListener('click', async (e) => {
+    const t = e.target;
+    if (!t || !t.closest) return;
+    if (t === m || t.closest('[data-audit-close]')) { closeAiAuditModal(); return; }
+    const undoBtn = t.closest('[data-audit-undo]');
+    if (undoBtn) {
+      const pid = undoBtn.getAttribute('data-audit-undo');
+      const entry = window.AIAudit && window.AIAudit.getByProposalId ? window.AIAudit.getByProposalId(pid) : null;
+      if (!entry || !window.AIProposals || !window.AIProposals.rollbackEntry) {
+        if (typeof toast === 'function') toast('Cannot rollback', 'error');
+        return;
+      }
+      undoBtn.disabled = true;
+      try {
+        await window.AIProposals.rollbackEntry(entry);
+      } finally {
+        renderAiAuditModalBody();
+        renderAiAuditStatus();
+      }
+    }
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && m.classList.contains('open')) closeAiAuditModal();
+  });
+});
+
+window.openAiAuditModal = openAiAuditModal;
+window.closeAiAuditModal = closeAiAuditModal;
 
 function escapeHtml(s) {
   return String(s == null ? '' : s)
