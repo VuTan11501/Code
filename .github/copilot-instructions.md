@@ -299,11 +299,52 @@ Dashboard là một **PWA dark-mode-only** (`<html class="dark">`), mobile-first
 6. **Mobile-first**: test với DevTools mobile emulator. Có `--mobile-nav-height 72px` cho bottom nav. Viewport `user-scalable=no` để PWA giống native.
 7. **Không thêm dark-mode toggle** — app cố tình dark-only (đỡ phức tạp + match brand)
 8. **Không import UI lib nặng** (React/Vue/Svelte/Material) — giữ zero-build, dependency tối thiểu
-9. **Scrollable element luôn dùng shadcn ScrollArea look** ([reference](https://ui.shadcn.com/docs/components/radix/scroll-area)) — KHÔNG để default scrollbar của browser. Khi thêm container có `overflow:auto/scroll/y/x`:
-   - **Cách 1** (preferred): thêm class vào `:where()` selector list ở `style.css` block đánh dấu `shadcn/ui ScrollArea` (~line 1700)
-   - **Cách 2** (dynamic content): thêm attribute `data-scroll-area` vào element
-   - **Cách 3** (full component): wrap với `<div class="scroll-area">` + `<div class="scroll-area-viewport">` (chỉ dùng cho log viewer / large content area)
-   - ⛔ KHÔNG viết per-element `::-webkit-scrollbar` rules — duplicate với global treatment, chỉ làm noise; nếu cần customize size thì thêm CSS var override.
+9. **Scrollable element BẮT BUỘC dùng shadcn ScrollArea look** ([reference](https://ui.shadcn.com/docs/components/radix/scroll-area)) — KHÔNG để default scrollbar của browser xuất hiện ở bất kỳ surface nào. Khi thêm container có `overflow:auto/scroll/y/x`:
+   - **Cách 1** (preferred, static class): thêm selector vào `:where()` selector list trong `style.css` block đánh dấu `shadcn/ui ScrollArea` (~line 1700). Lưu ý: list được lặp 6 lần (base + 5 webkit pseudo-elements) → grep + sửa hết, hoặc dùng PowerShell `.Replace(...)` 1 lượt.
+   - **Cách 2** (dynamic/JS-injected content): thêm attribute `data-scroll-area` vào element thay vì class — selector list đã có `[data-scroll-area]` ở cuối.
+   - **Cách 3** (full Radix wrapper, log/large content): dùng `<div class="scroll-area"><div class="scroll-area-viewport">…</div></div>`.
+   - ⛔ **KHÔNG viết per-element `::-webkit-scrollbar` rules** — duplicate với global treatment, sẽ override không nhất quán; nếu cần customize width thì thêm CSS var override trên element đó.
+   - ⛔ Code review checklist: mỗi PR có thêm `overflow:auto/scroll` mới → reviewer PHẢI verify element đã xuất hiện trong `:where()` list HOẶC có `data-scroll-area`.
+
+### Quy tắc áp dụng Design System triệt để
+
+Dự án dùng **shadcn/ui design system** (port sang vanilla HTML/CSS — không React). Mọi component UI mới HOẶC chỉnh sửa component cũ PHẢI tuân thủ:
+
+1. **Tokens, không hardcode**:
+   - Color → `var(--primary)`, `var(--muted-foreground)`, `var(--border)`, `rgba(var(--tint),X)`… (không `#fff`, không `rgba(255,255,255,X)`)
+   - Spacing → `var(--sp-1..8)` (4/8/12/16/20/24/32px) — không `padding:13px`
+   - Radius → `var(--radius-sm/md/lg/xl/full)` — không `border-radius:7px`
+   - Font size → `var(--fs-xs/sm/base/md)` — không `font-size:11px`
+   - Motion → `var(--duration-fast/normal/slow)` + `var(--ease-out)`
+   - Shadow → `var(--shadow-sm/md/lg/glow)`
+
+2. **Component primitives có sẵn — KHÔNG tự viết lại từ đầu**:
+   | Cần | Class/wrapper |
+   |---|---|
+   | Container | `.card` + `.card-header/body/footer` |
+   | Button | `.btn` + variant (`btn-primary`, `btn-secondary`, `btn-ghost`, `btn-destructive`) |
+   | Input/select/textarea | `.input`, `.select`, `.textarea` |
+   | Badge/Status | `.status-badge` + `.status-running/success/failure` |
+   | Modal | `.modal` + `.modal-content` (animation `modal-in`) |
+   | Toast | `toast()` helper trong `app.js` |
+   | Tabs | `.tabs-trigger` + `aria-selected` |
+   | **Scrollable** | shadcn ScrollArea (xem rule 9) |
+   | **Spinner / loading** | `.ai-thinking-spinner` (conic-gradient ring) hoặc `.ai-spin` |
+
+3. **Refactor trước khi tạo mới**: trước khi viết 1 component CSS mới, grep `style.css` xem đã có primitive tương tự chưa. Nếu có → dùng/extend. Nếu phải tạo mới → đặt tên + tokens nhất quán với existing.
+
+4. **Cấm tuyệt đối**:
+   - ⛔ Inline `style="..."` cho thuộc tính UI (color/font/spacing) — chỉ chấp nhận inline cho dynamic giá trị JS tính ra (vd `transform: translate(${x}px)`)
+   - ⛔ `!important` trừ khi defeat third-party (Tailwind CDN edge case) — phải comment giải thích
+   - ⛔ Hardcode hex/rgba ngoài file `style.css` `:root` definitions
+   - ⛔ Custom scrollbar per-element (xem rule 9)
+   - ⛔ Custom font stack ngoài `--font-sans` (Inter) và `--font-mono` (JetBrains Mono)
+
+5. **Khi review/diff CSS mới**:
+   - Grep PR diff cho `#[0-9a-f]{3,6}` → flag hardcoded color
+   - Grep cho `px;` ở properties UI → flag arbitrary spacing (cho phép `1px` border, `0` reset)
+   - Grep cho `::-webkit-scrollbar` ngoài block global → flag scroll-area violation
+   - Grep cho `font-family:` ngoài `:root` + `.ai-code/.ai-inline-code` → flag custom font
 
 ### PWA assets
 - `theme-color` = `#09090b` (match background)

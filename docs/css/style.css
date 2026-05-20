@@ -1,4 +1,4 @@
-﻿/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    WORKFLOW DASHBOARD â€” shadcn/ui + Tailwind CSS
    Minimal CSS: only dynamic JS-generated components & animations
    Static HTML uses Tailwind utility classes directly
@@ -1719,6 +1719,7 @@ input[type="time"], input[type="date"], input[type="datetime-local"] {
   .proposal-modal-body,
   .prose-chat pre, .prose-chat .ai-code,
   .diff-block,
+  .ai-tool-json,
   .overflow-x-auto, .overflow-y-auto, .overflow-auto,
   [data-scroll-area]
 ) {
@@ -1738,6 +1739,7 @@ input[type="time"], input[type="date"], input[type="datetime-local"] {
   .proposal-modal-body,
   .prose-chat pre, .prose-chat .ai-code,
   .diff-block,
+  .ai-tool-json,
   .overflow-x-auto, .overflow-y-auto, .overflow-auto,
   [data-scroll-area]
 )::-webkit-scrollbar { width: 10px; height: 10px; }
@@ -1754,6 +1756,7 @@ input[type="time"], input[type="date"], input[type="datetime-local"] {
   .proposal-modal-body,
   .prose-chat pre, .prose-chat .ai-code,
   .diff-block,
+  .ai-tool-json,
   .overflow-x-auto, .overflow-y-auto, .overflow-auto,
   [data-scroll-area]
 )::-webkit-scrollbar-track { background: transparent; }
@@ -1770,6 +1773,7 @@ input[type="time"], input[type="date"], input[type="datetime-local"] {
   .proposal-modal-body,
   .prose-chat pre, .prose-chat .ai-code,
   .diff-block,
+  .ai-tool-json,
   .overflow-x-auto, .overflow-y-auto, .overflow-auto,
   [data-scroll-area]
 )::-webkit-scrollbar-thumb {
@@ -1792,6 +1796,7 @@ input[type="time"], input[type="date"], input[type="datetime-local"] {
   .proposal-modal-body,
   .prose-chat pre, .prose-chat .ai-code,
   .diff-block,
+  .ai-tool-json,
   .overflow-x-auto, .overflow-y-auto, .overflow-auto,
   [data-scroll-area]
 )::-webkit-scrollbar-thumb:hover { background: rgba(var(--tint),0.28); background-clip: padding-box; }
@@ -1808,6 +1813,7 @@ input[type="time"], input[type="date"], input[type="datetime-local"] {
   .proposal-modal-body,
   .prose-chat pre, .prose-chat .ai-code,
   .diff-block,
+  .ai-tool-json,
   .overflow-x-auto, .overflow-y-auto, .overflow-auto,
   [data-scroll-area]
 )::-webkit-scrollbar-corner { background: transparent; }
