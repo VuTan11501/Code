@@ -86,7 +86,7 @@ tailwind.config = {
   },
 }
 </script>
-<link rel="stylesheet" href="css/style.css?v=65">
+<link rel="stylesheet" href="css/style.css?v=66">
 <link rel="preconnect" href="https://api.github.com">
 </head>
 <body class="bg-background text-foreground font-sans text-sm antialiased min-h-dvh overflow-x-hidden">
@@ -465,11 +465,31 @@ tailwind.config = {
             </select>
           </div>
           <div class="ai-actions">
+            <button class="ai-icon-btn" id="aiConvBtn" type="button" title="Conversations" aria-label="Conversations" aria-haspopup="dialog">
+              <span data-icon="messages" data-size="15"></span>
+            </button>
             <button class="ai-icon-btn" id="aiClearBtn" type="button" title="Xoá hội thoại" aria-label="Clear conversation">
               <span data-icon="trash" data-size="15"></span>
             </button>
           </div>
         </header>
+
+        <!-- Conversations sheet (hidden by default) -->
+        <div class="ai-conv-sheet" id="aiConvSheet" role="dialog" aria-modal="true" aria-label="Conversations" hidden>
+          <div class="ai-conv-sheet-backdrop" data-conv-close></div>
+          <div class="ai-conv-sheet-panel">
+            <div class="ai-conv-sheet-head">
+              <span class="ai-conv-sheet-title">Conversations</span>
+              <button class="ai-icon-btn" type="button" id="aiConvNewBtn" title="New chat" aria-label="New chat">
+                <span data-icon="plus" data-size="15"></span>
+              </button>
+              <button class="ai-icon-btn" type="button" data-conv-close title="Close" aria-label="Close">
+                <span data-icon="x" data-size="15"></span>
+              </button>
+            </div>
+            <ul class="ai-conv-list" id="aiConvList" role="listbox" aria-label="Conversation list"></ul>
+          </div>
+        </div>
 
         <div class="ai-chat" id="aiChatScroll" role="log" aria-live="polite" aria-atomic="false">
           <div class="ai-empty" id="aiEmpty">
@@ -1082,7 +1102,7 @@ tailwind.config = {
 </div>
 
 <!-- Scripts (order matters) -->
-<script src="js/icons.js?v=45"></script>
+<script src="js/icons.js?v=46"></script>
 <script src="js/no-autofill.js?v=26"></script>
 <script src="js/theme.js?v=1"></script>
 <script src="js/locations.js?v=27"></script>
@@ -1094,7 +1114,7 @@ tailwind.config = {
 <script src="js/ot-salary.js?v=37"></script>
 <script src="js/ot-planner.js?v=52"></script>
 <script src="js/ai-tools.js?v=1"></script>
-<script src="js/ai-agent.js?v=14"></script>
+<script src="js/ai-agent.js?v=15"></script>
 <script src="js/settings.js?v=31"></script>
 </body>
 </html>
