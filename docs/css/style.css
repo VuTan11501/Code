@@ -2643,59 +2643,70 @@ body.ai-page-active .ai-dot-grid {
 
 /*  Prose-chat markdown  */
 .prose-chat {
+  /* Body prose for AI responses — ChatGPT/Claude-style readable scale.
+     fs-md (16px) + 1.7 line-height is the sweet spot for long-form
+     answers. letter-spacing nudges Inter to feel less cramped on dark
+     bg without affecting CJK rendering. */
   font-size: var(--fs-md);
-  line-height: 1.65;
+  line-height: 1.7;
+  letter-spacing: -0.003em;
   color: var(--foreground);
   overflow-wrap: anywhere;
   word-break: break-word;
 }
-.prose-chat > * + * { margin-top: 0.75em; }
+.prose-chat > * + * { margin-top: 0.85em; }
 .prose-chat > *:first-child { margin-top: 0; }
 .prose-chat > *:last-child  { margin-bottom: 0; }
 .prose-chat p { margin: 0; }
 .prose-chat strong { font-weight: 600; color: var(--foreground); }
 .prose-chat em { font-style: italic; }
+/* Headings — give them real visual hierarchy. h3 ~ 17.6px, h4 ~ 16.8px
+   with tighter line-height and clear top margin so sections breathe. */
 .prose-chat .ai-h {
-  font-size: var(--fs-md);
+  font-size: 1.1em;
   font-weight: 600;
-  margin: 0.6em 0 0.3em;
+  line-height: 1.4;
+  margin: 1.2em 0 0.4em;
   color: var(--foreground);
+  letter-spacing: -0.01em;
 }
-.prose-chat .ai-list { margin: 0.3em 0 0.6em; padding-left: 1.4em; }
-.prose-chat .ai-list li { margin: 0.2em 0; }
+.prose-chat h4.ai-h { font-size: 1.05em; }
+.prose-chat > .ai-h:first-child { margin-top: 0; }
+.prose-chat .ai-list { margin: 0.4em 0 0.6em; padding-left: 1.5em; }
+.prose-chat .ai-list li { margin: 0.3em 0; }
+.prose-chat .ai-list li::marker { color: var(--muted-foreground); }
 .prose-chat .ai-inline-code {
-  font-family: inherit;
-  font-size: var(--fs-sm);
+  /* Code is semantic — restore mono so identifiers/numbers/symbols
+     align and stand out. 0.9em scales relative to surrounding prose,
+     so it stays in proportion across mobile vs desktop. */
+  font-family: var(--font-mono);
+  font-size: 0.9em;
   background: color-mix(in srgb, var(--muted) 70%, transparent);
   padding: 1px 6px;
   border-radius: 5px;
   border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
 }
 .prose-chat .ai-code {
-  font-family: inherit;
+  font-family: var(--font-mono);
   font-size: var(--fs-sm);
   background: color-mix(in srgb, var(--muted) 50%, transparent);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   padding: 12px 14px;
-  margin: 0.5em 0;
+  margin: 0.6em 0;
   overflow-x: auto;
   white-space: pre;
   color: var(--foreground);
-  line-height: 1.55;
+  line-height: 1.6;
   position: relative;
 }
 .prose-chat .ai-table {
   border-collapse: collapse;
   width: 100%;
-  margin: 0.5em 0;
-  /* Use the project's common font (Inter via inherit from body) for ALL
-     prose content — body, lists, headings, tables, even code. Visual
-     distinction for code is preserved via background + border, not via
-     font family. Font size = fs-sm so tabular content is dense without
-     looking out-of-family. */
+  margin: 0.6em 0;
   font-family: inherit;
   font-size: var(--fs-sm);
+  line-height: 1.5;
 }
 .prose-chat .ai-table th,
 .prose-chat .ai-table td {
