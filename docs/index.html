@@ -86,7 +86,7 @@ tailwind.config = {
   },
 }
 </script>
-<link rel="stylesheet" href="css/style.css?v=64">
+<link rel="stylesheet" href="css/style.css?v=65">
 <link rel="preconnect" href="https://api.github.com">
 </head>
 <body class="bg-background text-foreground font-sans text-sm antialiased min-h-dvh overflow-x-hidden">
@@ -530,6 +530,9 @@ tailwind.config = {
           <div class="ai-slash-menu" id="aiSlashMenu" role="listbox" aria-label="Slash commands"></div>
           <form class="ai-composer" id="aiComposer" autocomplete="off">
             <textarea class="ai-composer-input" id="aiComposerInput" rows="1" placeholder="Hỏi bất cứ điều gì… (Shift+Enter để xuống dòng)" aria-label="Message" data-1p-ignore="true"></textarea>
+            <button class="ai-mic" id="aiMicBtn" type="button" aria-label="Voice input" aria-pressed="false" hidden>
+              <span class="ai-mic-icon" data-icon="mic" data-size="16"></span>
+            </button>
             <button class="ai-send" id="aiComposerSend" type="submit" aria-label="Send" disabled>
               <span class="ai-send-icon" data-icon="arrowUp" data-size="16"></span>
             </button>
@@ -1079,7 +1082,7 @@ tailwind.config = {
 </div>
 
 <!-- Scripts (order matters) -->
-<script src="js/icons.js?v=44"></script>
+<script src="js/icons.js?v=45"></script>
 <script src="js/no-autofill.js?v=26"></script>
 <script src="js/theme.js?v=1"></script>
 <script src="js/locations.js?v=27"></script>
@@ -1091,7 +1094,7 @@ tailwind.config = {
 <script src="js/ot-salary.js?v=37"></script>
 <script src="js/ot-planner.js?v=52"></script>
 <script src="js/ai-tools.js?v=1"></script>
-<script src="js/ai-agent.js?v=12"></script>
+<script src="js/ai-agent.js?v=14"></script>
 <script src="js/settings.js?v=31"></script>
 </body>
 </html>
