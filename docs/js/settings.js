@@ -12,6 +12,52 @@ function initSettingsPage() {
   renderCloudSyncStatus();
   renderBiometricStatus();
   renderThemeStatus();
+  renderAiAuditStatus();
+}
+
+function renderAiAuditStatus() {
+  const host = document.getElementById('aiAuditStatus');
+  const toggle = document.getElementById('aiAuditSyncToggle');
+  if (!host || !window.AIAudit) return;
+  const entries = window.AIAudit.getAll ? window.AIAudit.getAll() : [];
+  const last = window.AIAudit.getLast ? window.AIAudit.getLast() : null;
+  const synced = window.AIAudit.isSyncEnabled();
+  if (toggle) toggle.checked = !!synced;
+  const lastFmt = last && last.applied_at
+    ? new Date(last.applied_at).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })
+    : '—';
+  host.innerHTML = `
+    <div><strong>Entries</strong>: ${entries.length} / 100</div>
+    <div><strong>Last apply</strong>: ${last ? `<code>${_esc(last.kind)}</code> on <code>${_esc(last.target_file || '')}</code> at ${_esc(lastFmt)}` : '—'}</div>
+    <div><strong>Sync</strong>: ${synced ? '✅ Enabled — new applies pushed to Gist' : '⚪ Local-only'}</div>
+  `;
+}
+
+function escapeHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function toggleAiAuditSync(enabled) {
+  if (!window.AIAudit) return;
+  window.AIAudit.enableSync(!!enabled);
+  renderAiAuditStatus();
+  if (typeof toast === 'function') toast(enabled ? 'Audit sync enabled' : 'Audit sync disabled');
+}
+
+function clearAiAudit() {
+  if (!window.AIAudit) return;
+  if (!confirm('Clear ALL local audit entries? This cannot be undone (cloud copy if any stays).')) return;
+  window.AIAudit.clearAll();
+  renderAiAuditStatus();
+  if (typeof toast === 'function') toast('Audit log cleared');
+}
+
+function escapeHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 function setTheme(mode) {

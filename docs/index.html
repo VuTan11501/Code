@@ -86,7 +86,7 @@ tailwind.config = {
   },
 }
 </script>
-<link rel="stylesheet" href="css/style.css?v=75">
+<link rel="stylesheet" href="css/style.css?v=76">
 <link rel="preconnect" href="https://api.github.com">
 </head>
 <body class="bg-background text-foreground font-sans text-sm antialiased min-h-dvh overflow-x-hidden">
@@ -200,6 +200,14 @@ tailwind.config = {
         <div class="skeleton skeleton-card"></div>
         <div class="skeleton skeleton-card"></div>
         <div class="skeleton skeleton-card"></div>
+      </section>
+
+      <!-- AI Monthly Insight widget (populated by insights.js if available) -->
+      <section id="insightSection" aria-label="Latest AI monthly insight" hidden style="margin-top:16px">
+        <div class="section-title text-sm font-medium text-muted-foreground mb-4 flex items-center gap-2"><span data-icon="sparkles" data-size="16"></span> Monthly insight</div>
+        <div class="card bg-card border border-border rounded-lg overflow-hidden transition-colors hover:border-white/[0.14]" id="insightCard">
+          <div class="card-content p-4 px-5" id="insightContent"></div>
+        </div>
       </section>
 
       <div class="separator h-px w-full bg-border my-4"></div>
@@ -468,6 +476,9 @@ tailwind.config = {
             <button class="ai-icon-btn" id="aiUndoBtn" type="button" title="Undo last apply" aria-label="Undo last apply" hidden>
               <span data-icon="undo" data-size="15"></span>
             </button>
+            <button class="ai-icon-btn" id="aiHistoryBtn" type="button" title="Apply history" aria-label="Apply history" hidden>
+              <span data-icon="history" data-size="15"></span>
+            </button>
             <button class="ai-icon-btn" id="aiConvBtn" type="button" title="Conversations" aria-label="Conversations" aria-haspopup="dialog">
               <span data-icon="panelLeft" data-size="16"></span>
             </button>
@@ -476,6 +487,22 @@ tailwind.config = {
             </button>
           </div>
         </header>
+
+        <!-- AI Apply History modal (rollback any past apply) -->
+        <div class="modal" id="aiHistoryModal" role="dialog" aria-modal="true" aria-label="Apply history" hidden>
+          <div class="modal-backdrop" data-history-close></div>
+          <div class="modal-content" style="max-width:560px;max-height:80vh;display:flex;flex-direction:column">
+            <div class="card-header" style="display:flex;align-items:center;gap:8px">
+              <div class="card-title" style="flex:1"><span data-icon="history" data-size="16"></span> Apply history</div>
+              <button class="ai-icon-btn" type="button" data-history-close title="Close" aria-label="Close">
+                <span data-icon="x" data-size="15"></span>
+              </button>
+            </div>
+            <div class="card-content" style="overflow:auto;flex:1">
+              <ul class="ai-history-list" id="aiHistoryList" style="list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:8px"></ul>
+            </div>
+          </div>
+        </div>
 
         <!-- Conversations sheet (hidden by default) -->
         <div class="ai-conv-sheet" id="aiConvSheet" role="dialog" aria-modal="true" aria-label="Conversations" hidden>
@@ -709,6 +736,30 @@ tailwind.config = {
               On app launch, Face ID prompt appears automatically. Tap Cancel to fall back to passphrase.<br>
               <strong>Tier 1 (PRF, iOS 18+ / Chrome 119+)</strong>: PAT is encrypted with a key derived from the authenticator — even a rooted attacker can't decrypt without your biometric.<br>
               <strong>Tier 2 (gate, older browsers)</strong>: PAT key stored locally but only released after a successful biometric ceremony.
+            </p>
+          </div>
+        </div>
+
+        <!-- AI Audit Log -->
+        <div class="card settings-card">
+          <div class="card-header">
+            <div class="card-title"><span data-icon="history" data-size="16"></span> AI Audit Log</div>
+            <div class="card-description">Track every AI-applied change locally (max 100 entries, FIFO). Optional Gist sync for cross-device replay.</div>
+          </div>
+          <div class="card-content">
+            <div id="aiAuditStatus" class="text-xs text-muted-foreground" style="line-height:1.6;margin-bottom:12px">
+              Loading...
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+              <label class="switch" style="display:inline-flex;gap:8px;align-items:center;cursor:pointer">
+                <input type="checkbox" id="aiAuditSyncToggle" onchange="toggleAiAuditSync(this.checked)">
+                <span>Sync to Gist <code>ai-audit.json</code></span>
+              </label>
+              <button class="btn btn-secondary" onclick="openAiHistory()" data-tooltip="Open the apply history modal"><span data-icon="history" data-size="14"></span> View history</button>
+              <button class="btn btn-destructive" onclick="clearAiAudit()" data-tooltip="Wipe local audit log"><span data-icon="trash" data-size="14"></span> Clear log</button>
+            </div>
+            <p class="text-xs text-muted-foreground mt-3 leading-relaxed opacity-70">
+              Sync uploads each new entry to the Gist (size-limited). When enabled, history from other devices appears in the apply-history modal too.
             </p>
           </div>
         </div>
@@ -1111,17 +1162,18 @@ tailwind.config = {
 <script src="js/locations.js?v=27"></script>
 <script src="js/biometric.js?v=2"></script>
 <script src="js/cloud-sync.js?v=4"></script>
-<script src="js/app.js?v=38"></script>
+<script src="js/app.js?v=39"></script>
 <script src="js/dashboard.js?v=28"></script>
 <script src="js/schedule.js?v=27"></script>
 <script src="js/ot-salary.js?v=37"></script>
 <script src="js/ot-planner.js?v=52"></script>
 <script src="js/ai-validators.js?v=1"></script>
-<script src="js/ai-audit.js?v=1"></script>
-<script src="js/ai-proposals.js?v=1"></script>
+<script src="js/ai-audit.js?v=2"></script>
+<script src="js/ai-proposals.js?v=2"></script>
 <script src="js/ai-tools.js?v=2"></script>
-<script src="js/ai-agent.js?v=19"></script>
-<script src="js/settings.js?v=31"></script>
+<script src="js/ai-agent.js?v=20"></script>
+<script src="js/insights.js?v=1"></script>
+<script src="js/settings.js?v=32"></script>
 <!-- AI Proposal confirmation modal (Phase 3) -->
 <div id="aiProposalModal" class="proposal-modal" role="dialog" aria-modal="true" aria-labelledby="aiProposalTitle" hidden aria-hidden="true">
   <div class="proposal-modal-backdrop" onclick="AIProposals.closeModal()"></div>

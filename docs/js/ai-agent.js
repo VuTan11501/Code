@@ -1638,21 +1638,102 @@ Hôm nay (JST): ${today}.`;
       clearConv();
     });
 
-    // Phase 3: Undo last apply button
+    // Phase 3: Undo last apply button + Apply history modal
     const undoBtn = document.getElementById('aiUndoBtn');
+    const historyBtn = document.getElementById('aiHistoryBtn');
+    const historyModal = document.getElementById('aiHistoryModal');
+    const historyList = document.getElementById('aiHistoryList');
+
+    function _fmtTime(iso) {
+      try {
+        const d = new Date(iso);
+        const diff = Date.now() - d.getTime();
+        const min = 60_000, hr = 60 * min, day = 24 * hr;
+        if (diff < min) return 'just now';
+        if (diff < hr)  return Math.floor(diff / min) + 'm ago';
+        if (diff < day) return Math.floor(diff / hr) + 'h ago';
+        if (diff < 7 * day) return Math.floor(diff / day) + 'd ago';
+        return d.toLocaleDateString('ja-JP', { timeZone: 'Asia/Tokyo', month: 'short', day: 'numeric' });
+      } catch { return iso || ''; }
+    }
+    function _renderHistoryList() {
+      if (!historyList) return;
+      const entries = (window.AIAudit && window.AIAudit.getAll && window.AIAudit.getAll()) || [];
+      if (!entries.length) {
+        historyList.innerHTML = '<li style="padding:24px;text-align:center;color:var(--muted-foreground);font-size:var(--fs-sm)">No applies yet. Approved proposals appear here.</li>';
+        return;
+      }
+      historyList.innerHTML = entries.slice().reverse().map((e, i) => {
+        const enc = btoa(unescape(encodeURIComponent(e.proposal_id || '')));
+        const canUndo = !!e.before_snapshot;
+        return `<li class="ai-history-item" style="display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--muted)">
+          <div style="flex:1;min-width:0">
+            <div style="display:flex;gap:6px;align-items:center;margin-bottom:2px">
+              <span style="font-weight:600;font-size:var(--fs-sm)">${esc(e.kind || 'apply')}</span>
+              <span style="font-size:var(--fs-xs);color:var(--muted-foreground)">${esc(_fmtTime(e.applied_at))}</span>
+            </div>
+            <div style="font-size:var(--fs-xs);color:var(--muted-foreground);font-family:var(--font-mono);word-break:break-all">${esc(e.target_file || '—')}</div>
+          </div>
+          <button type="button" class="btn btn-secondary sm" data-history-undo="${enc}" ${canUndo ? '' : 'disabled title="No snapshot available"'}>
+            <span data-icon="undo" data-size="13"></span> Rollback
+          </button>
+        </li>`;
+      }).join('');
+      if (typeof renderIcons === 'function') renderIcons(historyList);
+    }
+    function _showHistoryModal() {
+      if (!historyModal) return;
+      _renderHistoryList();
+      historyModal.hidden = false;
+      historyModal.setAttribute('aria-hidden', 'false');
+    }
+    function _hideHistoryModal() {
+      if (!historyModal) return;
+      historyModal.hidden = true;
+      historyModal.setAttribute('aria-hidden', 'true');
+    }
+    function _updateHistoryBtnVisibility() {
+      const has = !!(window.AIAudit && window.AIAudit.getLast && window.AIAudit.getLast());
+      if (undoBtn) undoBtn.hidden = !has;
+      if (historyBtn) historyBtn.hidden = !has;
+    }
     if (undoBtn) {
-      const updateUndoVisibility = () => {
-        const last = window.AIAudit && window.AIAudit.getLast();
-        undoBtn.hidden = !last;
-      };
       undoBtn.addEventListener('click', () => {
         if (window.AIProposals) window.AIProposals.rollbackLast();
-        setTimeout(updateUndoVisibility, 500);
+        setTimeout(_updateHistoryBtnVisibility, 500);
       });
-      updateUndoVisibility();
-      // Periodically check (simple approach)
-      setInterval(updateUndoVisibility, 5000);
     }
+    if (historyBtn) {
+      historyBtn.addEventListener('click', _showHistoryModal);
+    }
+    if (historyModal) {
+      historyModal.addEventListener('click', (e) => {
+        const t = e.target;
+        if (!t || !t.closest) return;
+        if (t.closest('[data-history-close]')) { _hideHistoryModal(); return; }
+        const undoEl = t.closest('[data-history-undo]');
+        if (undoEl) {
+          if (undoEl.disabled) return;
+          try {
+            const pid = decodeURIComponent(escape(atob(undoEl.getAttribute('data-history-undo'))));
+            const entry = window.AIAudit && window.AIAudit.getByProposalId(pid);
+            if (entry && window.AIProposals) {
+              window.AIProposals.rollbackEntry(entry).then(() => {
+                _renderHistoryList();
+                _updateHistoryBtnVisibility();
+              });
+            }
+          } catch {}
+        }
+      });
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !historyModal.hidden) _hideHistoryModal();
+      });
+    }
+    // Expose openAiHistory() for Settings card button
+    window.openAiHistory = _showHistoryModal;
+    _updateHistoryBtnVisibility();
+    setInterval(_updateHistoryBtnVisibility, 5000);
 
     // Conversations sheet wiring
     if (convBtn) convBtn.addEventListener('click', () => _showConvSheet());

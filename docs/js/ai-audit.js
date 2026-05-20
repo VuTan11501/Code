@@ -1,11 +1,15 @@
 // ═══════════════════════════════════════════════════
 //  AI AUDIT — Ring-buffer audit log for applied proposals
 //  Storage: localStorage 'ai_audit_v1' (max 100 entries, FIFO)
+//  Optional sync: append-only push to Gist 'ai-audit.json'
 // ═══════════════════════════════════════════════════
 (function () {
   'use strict';
 
   const LS_KEY = 'ai_audit_v1';
+  const LS_SYNC_KEY = 'ai_audit_sync_enabled';
+  const GIST_ID = (typeof window !== 'undefined' && window.GIST_ID) || 'abc2a47c0a396025a72a6580227ff493';
+  const GIST_FILE = 'ai-audit.json';
   const MAX_ENTRIES = 100;
 
   function _load() {
@@ -32,20 +36,26 @@
     };
     const entries = _load();
     entries.push(record);
-    // Ring buffer: drop oldest if exceeds max
     while (entries.length > MAX_ENTRIES) entries.shift();
     _save(entries);
     console.log('[audit] Logged:', record.kind, record.proposal_id);
+    // Fire-and-forget Gist sync if enabled
+    if (isSyncEnabled()) {
+      _syncToGist(record).catch(e => console.warn('[audit] sync failed', e));
+    }
   }
 
+  function getAll() { return _load(); }
   function getRecent(n = 10) {
     const entries = _load();
     return entries.slice(-n);
   }
-
   function getLast() {
     const entries = _load();
     return entries.length ? entries[entries.length - 1] : null;
+  }
+  function getByProposalId(pid) {
+    return _load().find(e => e.proposal_id === pid) || null;
   }
 
   function clearAll() {
@@ -53,14 +63,44 @@
     console.log('[audit] Cleared all entries');
   }
 
-  // Optional Gist sync (exposed API; UI wiring deferred)
   function enableSync(enabled) {
-    try { localStorage.setItem('ai_audit_sync_enabled', enabled ? '1' : '0'); } catch {}
+    try { localStorage.setItem(LS_SYNC_KEY, enabled ? '1' : '0'); } catch {}
   }
-
   function isSyncEnabled() {
-    return localStorage.getItem('ai_audit_sync_enabled') === '1';
+    return localStorage.getItem(LS_SYNC_KEY) === '1';
   }
 
-  window.AIAudit = { log, getRecent, getLast, clearAll, enableSync, isSyncEnabled };
+  async function _syncToGist(record) {
+    const token = (typeof sessionToken !== 'undefined' && sessionToken) ? sessionToken : null;
+    if (!token) return;
+    // Read current cloud audit (tolerate 404 / missing file)
+    let cloud = [];
+    try {
+      const r = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
+        headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/vnd.github+json' },
+      });
+      if (r.ok) {
+        const g = await r.json();
+        const f = g.files && g.files[GIST_FILE];
+        if (f && f.content) { try { cloud = JSON.parse(f.content); } catch {} }
+      }
+    } catch {}
+    if (!Array.isArray(cloud)) cloud = [];
+    // De-dupe by proposal_id
+    if (!cloud.some(e => e && e.proposal_id === record.proposal_id)) {
+      cloud.push(record);
+      while (cloud.length > MAX_ENTRIES) cloud.shift();
+    }
+    await fetch(`https://api.github.com/gists/${GIST_ID}`, {
+      method: 'PATCH',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/vnd.github+json',
+      },
+      body: JSON.stringify({ files: { [GIST_FILE]: { content: JSON.stringify(cloud, null, 2) } } }),
+    });
+  }
+
+  window.AIAudit = { log, getAll, getRecent, getLast, getByProposalId, clearAll, enableSync, isSyncEnabled };
 })();

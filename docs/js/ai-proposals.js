@@ -376,12 +376,15 @@
   async function rollbackLast() {
     if (!window.AIAudit) { _toast('Audit module not available', 'error'); return; }
     const last = window.AIAudit.getLast();
-    if (!last || !last.before_snapshot) { _toast('Nothing to undo', 'warning'); return; }
+    return rollbackEntry(last);
+  }
 
-    if (!confirm(`Undo last apply (${last.kind})? This will restore the previous state.`)) return;
+  async function rollbackEntry(entry) {
+    if (!entry || !entry.before_snapshot) { _toast('Nothing to undo', 'warning'); return; }
+    if (!confirm(`Undo apply (${entry.kind})? This will restore the previous state.`)) return;
 
-    const file = last.target_file;
-    const content = JSON.stringify(last.before_snapshot, null, 2);
+    const file = entry.target_file;
+    const content = JSON.stringify(entry.before_snapshot, null, 2);
     const token = typeof sessionToken !== 'undefined' ? sessionToken : null;
     if (!token) { _toast('No session token', 'error'); return; }
 
@@ -438,6 +441,7 @@
     applyFromModal,
     applyProposals,
     rollbackLast,
+    rollbackEntry,
     MAX_PROPOSALS_PER_TURN,
   };
 })();
