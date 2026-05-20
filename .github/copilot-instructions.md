@@ -1011,3 +1011,263 @@ style.css?v=46
    - Có session restorable → `showDashboard()` (sẽ init CloudSync)
    - Không có vault → setup form
    - Có vault, no session → focus passphrase + `tryBiometricAutoUnlock()` (silent skip nếu non-PWA hoặc not enrolled)
+
+---
+
+## 16. 🤖 AI Coach (OT Coach) — Phase 1
+
+**Shipped**: May 23 2026 trên branch `feat/ai-coach-p1`. Read-only assistant giúp Tan quản lý OT, lương, chấm công qua chat.
+
+### Mục đích
+- **In-PWA AI assistant** cho OT/salary/schedule Q&A, hoàn toàn read-only (Phase 1)
+- **Zero backend** — dùng GitHub Models (OpenAI-compatible), free tier với existing `GH_PAT`
+- **Knowledge**: DokoKin context, kintai rules, OT rate multipliers, labor law, GH workflow history
+- **Output**: Vietnamese tiếng Việt, ngắn gọn (≤200 từ, table cho ≥3 items)
+- **Storage**: conversation lưu `sessionStorage` (ephemeral, cleared on logout), không persist
+
+### Architecture — User → AI Agent → GitHub Models → Tool Loop
+
+```
+┌─ User composes message (aiComposerInput) ──┐
+│ rate-limit check (10 msg/60s token bucket) │
+└──────────────────────┬──────────────────────┘
+                       ▼
+┌────────────────────────────────────────────┐
+│  AIAgent.sendMessage(text)                 │
+│  • Append to sessionStorage ai_conv_v1     │
+│  • systemPrompt() injected + message list  │
+├────────────────────────────────────────────┤
+│  runToolLoop() — max 3 hops:               │
+│  1. Streaming request → GitHub Models      │
+│     (SSE parser with TextDecoder stream)   │
+│  2. Last hop: tool_choice='none' (final)   │
+│  3. Parse tool_calls → executeToolLoop()   │
+│     (max 8s timeout per tool via Race)     │
+│  4. Append tool results → message list     │
+│  5. Re-stream with context → loop          │
+├────────────────────────────────────────────┤
+│  Tool execution (AITools registry):        │
+│  • get_today_status (workflow proxy)       │
+│  • list_schedule (Gist entries)            │
+│  • list_ot_requests (Gist OT list)         │
+│  • calc_ot_breakdown (¥ calculator)        │
+│  • summarize_month_ot (monthly summary)    │
+│  • get_workflow_runs (diagnosis)           │
+└──────────────────────┬──────────────────────┘
+                       ▼
+┌────────────────────────────────────────────┐
+│  Render (renderMarkdown + renderMessage)   │
+│  • Escape-first whitelist HTML             │
+│  • Tool pills (.ai-tool-pill) collapsible  │
+│  • Scroll to bottom + typing indicator     │
+└────────────────────────────────────────────┘
+```
+
+### Module load order (append to existing chain)
+```
+icons.js?v=42 → no-autofill.js?v=26 → theme.js?v=1 → locations.js?v=27
+  → biometric.js?v=2 → cloud-sync.js?v=4 → app.js?v=33
+  → dashboard.js?v=28 → schedule.js?v=27 → ot-salary.js?v=37
+  → ot-planner.js?v=49 → ai-tools.js?v=1 → ai-agent.js?v=1 → settings.js?v=31
+style.css?v=47 (+ 200 LOC AI COACH section)
+```
+
+### 6 Tools — read-only (Phase 1)
+
+| # | Tool name | Purpose | Args | Returns | Wraps |
+|---|---|---|---|---|---|
+| 1 | **get_today_status** | Check CI/CO workflow run status hôm nay (JST proxy) | _(none)_ | `{date_jst, checkin, checkout, note}` | `apiFetch` → GH API workflow_runs |
+| 2 | **list_schedule** | List Gist scheduled-runs.json entries (one-time + recurring) | `from` (YYYY-MM-DD), `to`, `workflow` | `{count, entries: [{id, type, workflow, run_at, time, days, dates, enabled, ...}]}` | `apiFetch` + Gist parse |
+| 3 | **list_ot_requests** | List Gist ot-requests.json cho tháng chỉ định | `month` (YYYY-MM, default: current JST) | `{month, count, total_hours, cap_hours, cap_remaining_hours, requests}` | Gist parse + filter |
+| 4 | **calc_ot_breakdown** | Tính gross ¥ breakdown cho list OT shifts | `requests` (array `{date, start, end}`) | `{count, total_hours, total_gross_yen, per_shift}` | `window.OT_SALARY.calcOtBreakdown()` |
+| 5 | **summarize_month_ot** | Tóm tắt OT toàn tháng (gross + hours + cap) | `month` (YYYY-MM) | `{month, count, total_hours, cap_remaining, gross_yen, breakdown_yen, hours_breakdown}` | list_ot + OT_SALARY.calcMonthlySummary |
+| 6 | **get_workflow_runs** | Fetch recent runs cho diagnosis (status, conclusion, logs) | `workflow` (file/name), `limit` (1–20, default 10) | `{count, runs: [{workflow, status, conclusion, event, created_at, html_url}]}` | `apiFetch` → GH API actions/workflows/.../runs |
+
+### Conversation lifecycle
+
+**Storage**:
+- `sessionStorage ai_conv_v1` — messages array (user/assistant/tool roles), ephemeral ≤ 40 turns ≈ 160 messages max
+- `sessionStorage ai_model_v1` — selected model (gpt-4o-mini default)
+- `localStorage ai_rate_v1` — token bucket `{start, count}` (10 req/60s)
+
+**Clearing**:
+- `clearSession()` (logout / auto-lock 30min idle) → `AIAgent.clearConv()` → wipe sessionStorage + `convVersion++`
+- Race protection: mỗi `sendMessage()` capture `convVersion` → `isStale()` guard ở async resume points
+
+**Invariants**:
+- ⛔ KHÔNG persist conversation sang `localStorage` (cross-auth boundary risk)
+- Conv KHÔNG xoá sau khi clear — nó được tạo lại fresh từ empty lần tiếp theo user chat
+- Multi-message-in-flight: `isStreaming` flag + `currentAbort` prevent race
+
+### Tool loop — max 3 hops, last-hop forces finale
+
+```python
+for hop in range(MAX_TOOL_HOPS=3):
+    # Streaming request (streaming SSE → TextDecoder stream-safe)
+    response = streamRequest(
+        body={
+            messages: [system_prompt, ...messages],
+            tools: getToolSchemas(),
+            tool_choice: 'none' if hop==2 else 'auto',  # Last hop no tools
+            temperature: 0.3,
+            max_tokens: 1500
+        }
+    )
+    
+    # Parse deltas + accumulate tool_calls
+    for delta in stream_deltas:
+        assistantMsg.content += delta.content
+        if delta.tool_calls: accumulateCalls(toolAccum, delta)
+    
+    # Tool execution (max 8s per tool)
+    if finishReason == 'tool_calls':
+        for toolCall in toolAccum:
+            result = await executeTool(name, args)  # 8s timeout via Promise.race
+            messages.append({ role: 'tool', tool_call_id, content: result })
+        continue  # next hop with tool results
+    else:
+        break  # model stopped with finish_reason='stop'
+```
+
+**Validation**: arg schema (type + required only, lenient for AI inputs)
+
+### Streaming — SSE parser với UTF-8 stream safety
+
+```javascript
+const reader = response.body.getReader();
+const decoder = new TextDecoder();  // stream: true = multi-byte safe
+let buffer = '';
+while (!done) {
+  const { value, done } = await reader.read();
+  buffer += decoder.decode(value, { stream: true });
+  // Parse data: {...} lines
+  // onDelta(chunk) += content
+  // onToolCallDelta(deltas) for tool accum
+}
+```
+
+**Caveat**: hàm `streamRequest` throw khi HTTP !ok (401, 429, 5xx) → catch tại `sendMessage` level
+
+### Rate limiting — 10 messages / 60s token bucket
+
+```javascript
+localStorage.ai_rate_v1 = { start: <ms>, count: <n> }
+if (count >= RATE_LIMIT_MAX) {
+    waitMs = RATE_LIMIT_WINDOW_MS - (now - start)
+    show toast: "⏳ Hết quota cục bộ — thử lại sau ${Math.ceil(waitMs/1000)}s"
+    return  // send() aborted
+}
+```
+
+Quota reset mỗi 60s. Kiểm tra trước khi append message + stream.
+
+### Markdown renderer — escape-first, whitelist HTML
+
+```javascript
+// 1. esc() escape &<>" trước
+// 2. Allowlist transform (escape vào vừa rồi):
+//    - bold **text** → <strong>text</strong>
+//    - inline code `text` → <code class="ai-inline-code">text</code>
+//    - code blocks ```lang\n...\n``` → <pre><code>...</code></pre>
+//    - tables | header | row | → <table><thead/tbody>
+//    - headings ## ## → <h3/h4>
+//    - links [text](http...) → <a href="..." target="_blank">
+//    - lists - item / 1. item
+//    - paragraphs (double \n)
+// 3. innerHTML = html (safe because no <script>, onclick)
+```
+
+**Allowlist tags** (KHÔNG bao giờ inline script): `p`, `strong`, `em`, `code`, `pre`, `ul`, `ol`, `li`, `h3`, `h4`, `table`, `thead`, `tbody`, `tr`, `th`, `td`, `a` (http(s) only)
+
+### UI components
+
+| Component | CSS class | Where |
+|---|---|---|
+| AI nav tab | `.nav-item` + sparkles icon | Bottom nav (4th tab) |
+| Page container | `.page#page-ai` + `.ai-page-wrap` | Full height flex column |
+| Header | `.card` + model select `<select>` + clear button | Sticky top |
+| Chat scroll area | `#aiChatScroll.ai-chat-scroll` | Flex 1, smooth scroll |
+| Empty state | `#aiEmpty.ai-empty` + 4 suggested `.ai-suggest-chip` | Center when `messages.length==0` |
+| User message | `.ai-msg.ai-msg-user` + `.ai-bubble.ai-bubble-user` | Right-aligned blue bubble |
+| AI message | `.ai-msg.ai-msg-ai` + `.ai-bubble.ai-bubble-ai` | Left-aligned muted bubble |
+| Tool pills | `details.ai-tool-pill` (collapsible) | Above AI bubble, shows args + result |
+| Typing indicator | `.ai-typing` + `.typing-dots` + 3 animated dots | Pending AI response |
+| Composer | `form.ai-composer.card` + textarea + send button | Sticky bottom (z-index 5) |
+| Rate limit / errors | `.ai-composer-meta` (red/yellow text) | Below composer |
+
+**Composer behavior**:
+- Auto-grow textarea (`maxHeight: 180px`)
+- Enter = send, Shift+Enter = newline
+- Send button disabled while `isStreaming`
+- Focus trên vào AI page (`navigate('ai')`)
+
+### CSS additions (~200 LOC ở cuối `style.css`)
+
+- `.ai-page-wrap` — flex container, min-height calc
+- `.ai-header-icon`, `.ai-model-select` — header UI
+- `.ai-chat-scroll` — scroll area + gap
+- `.ai-empty`, `.ai-empty-icon`, `.ai-empty-title`, `.ai-empty-sub`, `.ai-suggestions` — empty state
+- `.ai-msg`, `.ai-msg-user`, `.ai-msg-ai` — message rows + animation fade-in
+- `.ai-bubble`, `.ai-bubble-user`, `.ai-bubble-ai`, `.ai-bubble-muted` — bubble styling (primary / muted bg)
+- `.ai-bubble p/strong/em/a`, `.ai-h`, `.ai-list`, `.ai-inline-code`, `.ai-code`, `.ai-table` — markdown-rendered content
+- `.ai-typing`, `.typing-dots` (i) — typing animation @keyframes typingDot
+- `.ai-tool-pill`, `.ai-tool-pill > summary`, `.ai-tool-name`, `.ai-tool-status`, `.ai-tool-body`, `.ai-tool-label`, `.ai-tool-json` — collapsible tool details
+- `.ai-composer`, `.ai-composer-input`, `.ai-composer-send`, `.ai-composer-meta` — sticky composer form
+
+### Security model
+
+| Asset | Storage | Encryption | Scope |
+|---|---|---|---|
+| GitHub PAT | `sessionStorage` (gốc từ vault unlock) | In-memory only này lần | Sent as `Authorization: Bearer <token>` qua HTTPS |
+| System prompt + context | Memory only (mỗi request tạo lại) | KHÔNG lưu | Include TODAY_JST, DokoKin rules, kintai context |
+| Conversation | `sessionStorage ai_conv_v1` | Plain JSON | Cleartext (personal device, same security as vault) |
+| Tool results | `sessionStorage` (part of conv) | Plain | Không re-send ngoài qua HTTPS |
+| Model selection | `sessionStorage ai_model_v1` | Plain | Non-sensitive (model name only) |
+| Rate bucket | `localStorage ai_rate_v1` | Plain | Timestamp + count, KHÔNG secret |
+
+**Never**:
+- ⛔ Log raw PAT ngoài sessionStorage gốc
+- ⛔ Persist conversation sang localStorage
+- ⛔ Send PII (employee code, specific dates) trong API key, chỉ headers
+
+### Storage keys table
+
+| Key | Where | Purpose | Cleared on |
+|---|---|---|---|
+| `ai_conv_v1` | sessionStorage | Message array (40-turn cap) | Page close / logout / `clearConv()` |
+| `ai_model_v1` | sessionStorage | Selected model (gpt-4o-mini) | Page close |
+| `ai_rate_v1` | localStorage | Rate bucket `{start, count}` | Manual (`localStorage.clear()` or 60s rotation) |
+
+**Lưu ý**: `ai_conv_v1` và `ai_model_v1` khác với `sessionToken` (PAT lưu ở sessionStorage nhưng KHÔNG có key cố định — nó dùng closure scope trong `app.js`)
+
+### Failure modes & fixes
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| 401 Unauthorized | PAT expired or wrong scope | Logout + re-auth. Check GH_PAT secret có `repo:read_all`, `gist:read_all` |
+| 429 Too Many Requests | GitHub API rate limit exceeded (5000/h) | Client-side rate limit bucket không trigger? Check `rateConsume()` logic. Mỗi message = 1 rate, tool exec = thêm 1-2 |
+| Network timeout (>8s) | Tool exec hung (apiFetch stall) | Tool wrapper có Promise.race(timeout), nên error `Tool X timed out after 8000ms`. Retry user message |
+| "Chưa đăng nhập" error | `sessionToken` undefined khi stream start | Vault lock auto-logout? Clear tab + re-login |
+| Streaming partial message | SSE decoder incomplete (network cut) | TextDecoder stream-safe nên UTF-8 OK, nhưng network break = early EOF. Re-send message (new conv entry) |
+| Tool result null/empty | Tool exec fail (Gist not readable, calc error) | Tool return `{error: "..."}` → system prompt direct model to explain. User see error message + retry |
+| "Conversation too long" | `messages.length > MAX_HISTORY_TURNS * 4` | Auto-trim oldest. `saveConv()` slice last 160. User continue, older context lost |
+
+### Quy tắc khi sửa
+
+1. ⛔ **KHÔNG bao giờ log/persist sessionToken (PAT) ngoài sessionStorage gốc** — violation is RCE risk. Session token = raw PAT dùng cho API, chỉ giữ trong closure + sessionStorage.
+2. ⛔ **KHÔNG đổi shape của tool result mà không update system prompt** — model expectations baked in ("phase OT", "¥", table format, etc.). Thay đổi result schema → update system prompt context.
+3. ⚠️ **Thêm tool mới → đăng ký trong TOOLS array `ai-tools.js` + cập nhật system prompt** `ai-agent.js` nếu tool mở context mới + bump version `ai-tools.js` cache
+4. ⛔ **Mutation tools (tạo/sửa/xóa Gist hoặc DokoKin) → BỊ CẤM Phase 1**, để dành cho P3 với confirm dialog. Phase 1 = read-only proxy chỉ.
+5. ⛔ **KHÔNG truyền raw HTML/markdown của AI result vào innerHTML mà không qua `esc()` + whitelist** — XSS vector. Model có thể output script tags (hallucinate), PHẢI esc trước + render safe.
+6. ⚠️ **Mỗi async resume point trong `runToolLoop` PHẢI có `if (isStale()) return` guard** — xem fix race ở commit 2cb5792. Khi `clearConv()` bump `convVersion` mid-flight, running loop bail out gracefully.
+7. ⛔ **Tool exec PHẢI wrap trong `Promise.race` với timeout (default 8s)** — tránh hang UI khi Gist API slow. Error message "Tool X timed out after 8000ms" user-visible + recoverable.
+8. ⛔ **Conv KHÔNG được persist sang localStorage** (tránh leak qua auth boundary). `sessionStorage` only, cleared on page close + logout.
+9. ⛔ **Markdown renderer: chỉ allowlist tags**, KHÔNG bao giờ inline-script/onclick/onerror. Audit list: p/strong/em/code/pre/ul/ol/li/h3/h4/table/a (http(s)). Model có thể output malicious HTML, esc-first + whitelist = safe.
+10. ⚠️ **Khi thêm provider mới (Anthropic, Groq, OpenAI direct)** → giữ `API_URL` constant + cờ provider, KHÔNG hard-fork toàn bộ `ai-agent.js`. Refactor: `getAPIUrl()` factory, `getHeaders()` per-provider.
+
+### References
+- Implementation: `docs/js/ai-tools.js` (~340 LOC tool registry), `docs/js/ai-agent.js` (~440 LOC chat orchestrator)
+- Integration: `docs/index.html` (page-ai tab, aiComposer), `docs/css/style.css` (AI COACH section ~200 LOC), `docs/js/app.js` (navigate hook + clearConv)
+- Modules wrapped: `apiFetch()` (GH API), `GIST_ID` + Gist files, `window.OT_SALARY`, `WORKFLOWS` list
+- System prompt: JST-aware, DokoKin context injected per-request (TODAY_JST, kintai rules, rate multipliers)
+- PR/commits: phase 1 shipped May 23 2026 (`feat/ai-coach-p1` branch)
