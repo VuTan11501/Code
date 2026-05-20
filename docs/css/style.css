@@ -1313,12 +1313,18 @@ input[type="time"], input[type="date"], input[type="datetime-local"] {
     border-radius: 9999px;
     background: transparent;
     border: none;
+    outline: none;
+    -webkit-tap-highlight-color: transparent;
     flex: 1 1 0; min-width: 0;
     color: var(--muted-foreground) !important;
     font-weight: 500;
     letter-spacing: 0.1px;
     transition: color 180ms cubic-bezier(0.4,0,0.2,1);
     overflow: hidden;
+  }
+  .nav-item:focus, .tabs-trigger:focus,
+  .nav-item:focus-visible, .tabs-trigger:focus-visible {
+    outline: none; box-shadow: none;
   }
   /* Reset old icon-pill — nav-item itself is now the pill */
   .nav-item .nav-icon, .tabs-trigger .nav-icon {
@@ -1347,7 +1353,7 @@ input[type="time"], input[type="date"], input[type="datetime-local"] {
   }
   .nav-item.active .nav-icon, .tabs-trigger.active .nav-icon {
     color: var(--primary);
-    transform: scale(1.5);
+    transform: scale(1.2);
   }
   .nav-item.active .nav-icon svg, .tabs-trigger.active .nav-icon svg {
     stroke-width: 2.4;
@@ -1359,7 +1365,7 @@ input[type="time"], input[type="date"], input[type="datetime-local"] {
   }
   .nav-item.active:active .nav-icon,
   .tabs-trigger.active:active .nav-icon {
-    transform: scale(1.4);
+    transform: scale(1.15);
   }
   /* Remove old pill top indicator if any */
   .nav-item.active::before, .tabs-trigger.active::before { display: none; }
@@ -2942,6 +2948,7 @@ body.ai-page-active .ai-dot-grid {
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 .ai-conv-sheet.show .ai-conv-sheet-panel { transform: translateX(0); opacity: 1; }
+body.ai-conv-sheet-open { overflow: hidden; }
 
 .ai-conv-sheet-head {
   display: flex; align-items: center; gap: 8px;

@@ -55,6 +55,42 @@ See [scripts/parse_suica.py](./scripts/parse_suica.py) — flags `--year`, `--ou
 
 **Sanity check**: show the preview total to the user; it MUST equal the PDF total. If mismatch, fix parser before continuing — do not let mismatches propagate.
 
+### Step 2.5 — AI auto-categorize (optional)
+
+After generating `trips.json`, optionally run the AI categorizer to annotate each trip with category, Japanese purpose text, and include/exclude flag:
+
+```pwsh
+python .github\skills\rakuraku-suica-expense\scripts\ai_categorize.py --input trips.json
+```
+
+**When to use**: bulk monthly filing where commute pattern is well-known (saves manual purpose entry for 20-30 trips).
+
+**Requirements**: `GH_PAT` env var set (GitHub Models access). No pip install needed (stdlib only).
+
+**Output**: `trips_annotated.json` in the same directory — same schema as `trips.json` plus:
+- `category`: `commute` | `personal` | `business` | `unknown`
+- `purpose`: Japanese text for Rakuraku 用途 field (e.g. "通勤 (Tokyo→Shinjuku)", "週末私用")
+- `include`: `true` = file as expense, `false` = skip
+- `confidence`: 0.0–1.0
+
+**How the Playwright relay consumes it** (Step 4):
+- If `trips_annotated.json` exists alongside `trips.json`, the relay loop prefers it.
+- Trips with `include == false` are skipped (not filed).
+- The `purpose` field is inserted into Rakuraku's 用途/摘要 field.
+- Trips with `confidence < 0.7` are printed with `⚠️ LOW-CONF` marker — user should review these in the Rakuraku UI before 申請.
+
+**User review checklist**:
+1. Review all entries with `confidence < 0.7` (printed in summary)
+2. Verify weekend trips classified as `personal` are correct
+3. Check that recurring commute routes got `include: true`
+4. Any `unknown` category → manually verify in Rakuraku before submitting
+
+**Fallback**: if `trips_annotated.json` is missing, the Playwright relay defaults to legacy behavior (all trips included, purpose = "通勤" for all). The skill always works without the AI step.
+
+**CLI flags**: `--output <path>`, `--model <name>`, `--batch-size <N>`, `--dry-run`
+
+---
+
 ### Step 2 — Login to Rakuraku
 
 Navigate, then fill via `browser_evaluate` (NOT `browser_type` — it's broken in this relay):
