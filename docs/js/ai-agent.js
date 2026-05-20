@@ -212,7 +212,7 @@ window.AIAgent = (function () {
         });
         // Refresh open conv-list if the title or last-snippet changed.
         const sheet = document.getElementById('aiConvSheet');
-        if (sheet && !sheet.hidden) _renderConvList();
+        if (sheet && sheet.classList.contains('open')) _renderConvList();
       } catch {}
     }, 250);
   }
@@ -394,27 +394,25 @@ window.AIAgent = (function () {
   function _showConvSheet() {
     const s = document.getElementById('aiConvSheet');
     if (!s) return;
-    s.hidden = false;
-    // Force reflow so browser commits hidden=false before transition starts
-    void s.offsetWidth;
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => s.classList.add('show'));
-    });
+    s.classList.add('open');
     _renderConvList();
-    document.body.classList.add('ai-conv-sheet-open');
+    document.body.style.overflow = 'hidden';
+    setTimeout(() => {
+      const input = document.getElementById('aiConvSearch');
+      if (input) try { input.focus(); } catch {}
+    }, 50);
   }
   function _toggleConvSheet() {
     const s = document.getElementById('aiConvSheet');
     if (!s) return;
-    if (s.hidden || !s.classList.contains('show')) _showConvSheet();
-    else _hideConvSheet();
+    if (s.classList.contains('open')) _hideConvSheet(); else _showConvSheet();
   }
   function _hideConvSheet() {
     const s = document.getElementById('aiConvSheet');
     if (!s) return;
-    s.classList.remove('show');
-    document.body.classList.remove('ai-conv-sheet-open');
-    setTimeout(() => { s.hidden = true; }, 260);
+    s.classList.remove('open');
+    document.body.style.overflow = '';
+    _convEditingId = null;
   }
 
 
@@ -1815,6 +1813,8 @@ Hôm nay (JST): ${today}.`;
       convSheet.addEventListener('click', (e) => {
         const t = e.target;
         if (!t || !t.closest) return;
+        // Click on overlay itself (not inside content) closes
+        if (t === convSheet) { _hideConvSheet(); return; }
         if (t.closest('[data-conv-close]')) { _hideConvSheet(); return; }
         const switchEl = t.closest('[data-conv-switch]');
         if (switchEl) { switchConv(switchEl.getAttribute('data-conv-switch')); return; }
@@ -1866,7 +1866,7 @@ Hôm nay (JST): ${today}.`;
       });
       // Esc to close (when not editing)
       document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && !convSheet.hidden && !_convEditingId) { _hideConvSheet(); }
+        if (e.key === 'Escape' && convSheet.classList.contains('open') && !_convEditingId) { _hideConvSheet(); }
       });
     }
     const clearAllBtn = document.getElementById('aiConvClearAllBtn');

@@ -86,7 +86,7 @@ tailwind.config = {
   },
 }
 </script>
-<link rel="stylesheet" href="css/style.css?v=81">
+<link rel="stylesheet" href="css/style.css?v=82">
 <link rel="preconnect" href="https://api.github.com">
 </head>
 <body class="bg-background text-foreground font-sans text-sm antialiased min-h-dvh overflow-x-hidden">
@@ -533,10 +533,9 @@ tailwind.config = {
           </div>
         </div>
 
-        <!-- Conversations sheet (hidden by default) -->
-        <div class="ai-conv-sheet" id="aiConvSheet" role="dialog" aria-modal="true" aria-label="Conversations" hidden>
-          <div class="ai-conv-sheet-backdrop" data-conv-close></div>
-          <div class="ai-conv-sheet-panel">
+        <!-- Conversations modal (uses standard modal-overlay pattern) -->
+        <div class="modal-overlay ai-conv-modal" id="aiConvSheet" role="dialog" aria-modal="true" aria-label="Hội thoại">
+          <div class="modal ai-conv-modal-content" data-conv-stop>
             <div class="ai-conv-sheet-head">
               <span class="ai-conv-brand-logo" aria-hidden="true"><span data-icon="sparkles" data-size="13"></span></span>
               <span class="ai-conv-sheet-title">Hội thoại</span>
@@ -1216,7 +1215,7 @@ tailwind.config = {
 <script src="js/ai-audit.js?v=2"></script>
 <script src="js/ai-proposals.js?v=2"></script>
 <script src="js/ai-tools.js?v=2"></script>
-<script src="js/ai-agent.js?v=23"></script>
+<script src="js/ai-agent.js?v=24"></script>
 <script src="js/insights.js?v=1"></script>
 <script src="js/settings.js?v=33"></script>
 <!-- AI Proposal confirmation modal (Phase 3) -->
