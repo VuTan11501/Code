@@ -2677,7 +2677,8 @@ body.ai-page-active .ai-dot-grid {
 .ai-msg-ai .ai-action-btn[data-retry] { display: none; }
 .ai-msg-ai.is-last .ai-action-btn[data-retry] { display: inline-flex; }
 
-/* Edit button only on the latest user bubble — same rationale. */
+/* Hover-revealed actions on every user bubble (Copy + Edit).
+   tans-agent pattern: edit any past message → branches the conversation. */
 .ai-msg-user-actions {
   display: flex; align-items: center; justify-content: flex-end;
   gap: 4px; margin-top: 4px;
@@ -2685,12 +2686,41 @@ body.ai-page-active .ai-dot-grid {
 }
 .ai-msg-user:hover .ai-msg-user-actions,
 .ai-msg-user-actions:focus-within { opacity: 1; }
-.ai-msg-user .ai-msg-user-actions { display: none; }
-.ai-msg-user.is-last-user .ai-msg-user-actions { display: flex; }
-/* Mobile: always show edit on last user bubble (no hover) */
+/* Mobile / touch: always visible (no hover possible) */
 @media (hover: none) {
-  .ai-msg-user.is-last-user .ai-msg-user-actions { opacity: 1; }
+  .ai-msg-user-actions { opacity: 1; }
 }
+
+/* Inline edit mode (in-bubble textarea) */
+.ai-msg-user.is-editing .ai-msg-inner {
+  width: 100%;
+  max-width: min(640px, 92%);
+}
+.ai-edit-textarea {
+  width: 100%;
+  min-height: 72px;
+  max-height: 240px;
+  padding: 10px 14px;
+  border-radius: 18px 4px 18px 18px;
+  border: 1px solid var(--border);
+  background: var(--muted);
+  color: var(--foreground);
+  font: inherit;
+  font-size: var(--fs-base);
+  line-height: 1.55;
+  resize: none;
+  outline: none;
+  transition: border-color 150ms, box-shadow 150ms;
+}
+.ai-edit-textarea:focus {
+  border-color: var(--ring);
+  box-shadow: 0 0 0 3px rgba(var(--tint), 0.05);
+}
+.ai-edit-actions {
+  display: flex; justify-content: flex-end; gap: 6px;
+  margin-top: 8px;
+}
+.ai-edit-actions .btn { height: 28px; padding: 0 12px; font-size: var(--fs-xs); }
 
 /* Slash command autocomplete menu (composer overlay) */
 .ai-slash-menu {

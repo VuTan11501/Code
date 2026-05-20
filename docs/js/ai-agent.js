@@ -637,12 +637,15 @@ Hôm nay (JST): ${today}.`;
     if (m.role === 'user') {
       const el = document.createElement('div');
       el.className = 'ai-msg ai-msg-user';
+      const idx = messages.indexOf(m);
+      el.setAttribute('data-msg-idx', String(idx));
       const enc = btoa(unescape(encodeURIComponent(String(m.content || ''))));
       el.innerHTML = `
         <div class="ai-msg-inner">
           <div class="ai-bubble-user">${esc(m.content)}</div>
           <div class="ai-msg-actions ai-msg-user-actions">
-            <button type="button" class="ai-action-btn" data-edit-user="${enc}" title="Sửa & gửi lại" aria-label="Edit">${ICON('edit', 13)}<span>Edit</span></button>
+            <button type="button" class="ai-action-btn" data-edit-user title="Chỉnh sửa & rẽ nhánh" aria-label="Edit">${ICON('edit', 13)}<span>Edit</span></button>
+            <button type="button" class="ai-action-btn" data-copy-b64="${enc}" title="Copy" aria-label="Copy">${ICON('copy', 13)}<span>Copy</span></button>
           </div>
         </div>
         <div class="ai-avatar ai-avatar-user">${ICON('user', 14)}</div>`;
@@ -1130,28 +1133,66 @@ Hôm nay (JST): ${today}.`;
     }
   }
 
-  // ─── Edit last user message ─────────────────────────
-  // Click Edit on the most recent user bubble → drop that message + everything
-  // after it, refill the composer with the original text. User can tweak and
-  // resubmit. Mirrors ChatGPT mobile UX (vs inline-edit-in-bubble which is
-  // more complex and easier to corrupt with an in-flight stream).
-  function editLastUserMessage(text) {
+  // ─── Edit user message (any position) — tans-agent pattern ────
+  // In-bubble inline editing on ANY user message (hover-reveal on desktop,
+  // always-visible on mobile). Saving truncates the conversation from this
+  // message onward (the "branch off" — older history after this point is
+  // discarded), then resubmits the new content. This mirrors the
+  // ChatGPT/Claude/tans-agent UX where editing a past message creates a new
+  // conversation branch.
+  function enterEditMode(msgEl, idx) {
     if (isStreaming) return;
-    let lastUserIdx = -1;
-    for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i].role === 'user') { lastUserIdx = i; break; }
-    }
-    if (lastUserIdx === -1) return;
-    messages = messages.slice(0, lastUserIdx);
+    if (!msgEl || msgEl.classList.contains('is-editing')) return;
+    const original = (messages[idx] && messages[idx].content) || '';
+    msgEl.classList.add('is-editing');
+    const inner = msgEl.querySelector('.ai-msg-inner');
+    if (!inner) return;
+    const prevHTML = inner.innerHTML;
+    inner.innerHTML = `
+      <textarea class="ai-edit-textarea" aria-label="Chỉnh sửa câu hỏi">${esc(original)}</textarea>
+      <div class="ai-edit-actions">
+        <button type="button" class="btn ghost sm" data-edit-cancel>Hủy</button>
+        <button type="button" class="btn primary sm" data-edit-save disabled>Lưu & rẽ nhánh</button>
+      </div>`;
+    const ta = inner.querySelector('.ai-edit-textarea');
+    const saveBtn = inner.querySelector('[data-edit-save]');
+    const autosize = () => {
+      ta.style.height = 'auto';
+      ta.style.height = Math.min(ta.scrollHeight, 240) + 'px';
+    };
+    const refreshSave = () => {
+      const v = ta.value.trim();
+      saveBtn.disabled = !v || v === original.trim();
+    };
+    ta.addEventListener('input', () => { autosize(); refreshSave(); });
+    ta.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); exitEditMode(msgEl, prevHTML); }
+      else if ((e.key === 'Enter') && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        if (!saveBtn.disabled) commitEdit(idx, ta.value);
+      }
+    });
+    autosize();
+    // Focus + place cursor at end
+    try { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); } catch {}
+  }
+  function exitEditMode(msgEl, prevHTML) {
+    if (!msgEl) return;
+    msgEl.classList.remove('is-editing');
+    const inner = msgEl.querySelector('.ai-msg-inner');
+    if (inner) inner.innerHTML = prevHTML;
+  }
+  async function commitEdit(idx, newText) {
+    if (isStreaming) return;
+    const t = String(newText || '').trim();
+    if (!t) return;
+    if (currentAbort) { try { currentAbort.abort(); } catch {} }
+    convVersion++;
+    // Truncate the message at idx + everything after (the branch-off).
+    messages = messages.slice(0, idx);
     saveConv();
     renderAll();
-    const input = $('#aiComposerInput');
-    if (input) {
-      input.value = text;
-      input.dispatchEvent(new Event('input', { bubbles: true }));
-      input.focus();
-      try { input.setSelectionRange(text.length, text.length); } catch {}
-    }
+    await sendMessage(t);
   }
 
   // ─── Slash commands ─────────────────────────────────
@@ -1742,10 +1783,40 @@ Hôm nay (JST): ${today}.`;
         const editBtn = t.closest('.ai-action-btn[data-edit-user]');
         if (editBtn) {
           if (isStreaming) return;
-          try {
-            const text = decodeURIComponent(escape(atob(editBtn.getAttribute('data-edit-user'))));
-            editLastUserMessage(text);
-          } catch {}
+          const msgEl = editBtn.closest('.ai-msg-user');
+          if (!msgEl) return;
+          const idx = parseInt(msgEl.getAttribute('data-msg-idx') || '-1', 10);
+          if (idx < 0 || !messages[idx]) return;
+          enterEditMode(msgEl, idx);
+          return;
+        }
+        // Inline edit-mode controls (delegated)
+        const cancelBtn = t.closest('[data-edit-cancel]');
+        if (cancelBtn) {
+          const msgEl = cancelBtn.closest('.ai-msg-user');
+          if (msgEl) {
+            const idx = parseInt(msgEl.getAttribute('data-msg-idx') || '-1', 10);
+            const original = (messages[idx] && messages[idx].content) || '';
+            const enc = btoa(unescape(encodeURIComponent(String(original))));
+            const prevHTML = `
+              <div class="ai-bubble-user">${esc(original)}</div>
+              <div class="ai-msg-actions ai-msg-user-actions">
+                <button type="button" class="ai-action-btn" data-edit-user title="Chỉnh sửa & rẽ nhánh" aria-label="Edit">${ICON('edit', 13)}<span>Edit</span></button>
+                <button type="button" class="ai-action-btn" data-copy-b64="${enc}" title="Copy" aria-label="Copy">${ICON('copy', 13)}<span>Copy</span></button>
+              </div>`;
+            exitEditMode(msgEl, prevHTML);
+          }
+          return;
+        }
+        const saveBtn = t.closest('[data-edit-save]');
+        if (saveBtn) {
+          if (saveBtn.disabled) return;
+          const msgEl = saveBtn.closest('.ai-msg-user');
+          if (!msgEl) return;
+          const idx = parseInt(msgEl.getAttribute('data-msg-idx') || '-1', 10);
+          const ta = msgEl.querySelector('.ai-edit-textarea');
+          if (idx < 0 || !ta) return;
+          commitEdit(idx, ta.value);
           return;
         }
         const btn = t.closest('.ai-action-btn[data-copy-b64]');
