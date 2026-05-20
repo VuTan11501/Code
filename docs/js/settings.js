@@ -22,18 +22,41 @@ function renderAiAuditStatus() {
   const entries = window.AIAudit.getAll ? window.AIAudit.getAll() : [];
   const last = window.AIAudit.getLast ? window.AIAudit.getLast() : null;
   const synced = window.AIAudit.isSyncEnabled();
+  const ownerKnown = typeof window.AIAudit.isOwnerSync === 'function' ? window.AIAudit.isOwnerSync() : null;
+  const isOwner = ownerKnown === true;
   if (toggle) {
-    toggle.classList.toggle('active', !!synced);
-    toggle.setAttribute('aria-checked', String(!!synced));
+    toggle.classList.toggle('active', !!synced && isOwner);
+    toggle.setAttribute('aria-checked', String(!!synced && isOwner));
+    if (ownerKnown === false) {
+      toggle.setAttribute('disabled', 'disabled');
+      toggle.classList.add('is-disabled');
+      toggle.title = 'PAT của bạn không sở hữu Gist này → sync bị tắt (chỉ owner mới ghi được).';
+    } else {
+      toggle.removeAttribute('disabled');
+      toggle.classList.remove('is-disabled');
+      toggle.title = '';
+    }
   }
   const lastFmt = last && last.applied_at
     ? new Date(last.applied_at).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })
     : '—';
+  let syncLine;
+  if (ownerKnown === false) {
+    syncLine = '🔒 Local-only — bạn không sở hữu Gist này (other-user mode).';
+  } else if (ownerKnown === null) {
+    syncLine = synced ? '⏳ Kiểm tra quyền sở hữu Gist...' : '⚪ Local-only';
+  } else {
+    syncLine = synced ? '✅ Enabled — new applies pushed to Gist' : '⚪ Local-only';
+  }
   host.innerHTML = `
     <div><strong>Entries</strong>: ${entries.length} / 100</div>
     <div><strong>Last apply</strong>: ${last ? `<code>${escapeHtml(last.kind)}</code> on <code>${escapeHtml(last.target_file || '')}</code> at ${escapeHtml(lastFmt)}` : '—'}</div>
-    <div><strong>Sync</strong>: ${synced ? '✅ Enabled — new applies pushed to Gist' : '⚪ Local-only'}</div>
+    <div><strong>Sync</strong>: ${syncLine}</div>
   `;
+  // Kick off async ownership probe + re-render once known.
+  if (ownerKnown === null && typeof window.AIAudit._isCurrentUserGistOwner === 'function') {
+    window.AIAudit._isCurrentUserGistOwner().then(() => renderAiAuditStatus()).catch(() => {});
+  }
 }
 
 function escapeHtml(s) {
@@ -44,6 +67,11 @@ function escapeHtml(s) {
 
 function toggleAiAuditSync(enabled) {
   if (!window.AIAudit) return;
+  // Block opt-in for non-owners — push would silently 404 against owner's gist.
+  if (enabled && typeof window.AIAudit.isOwnerSync === 'function' && window.AIAudit.isOwnerSync() === false) {
+    if (typeof toast === 'function') toast('PAT không sở hữu Gist này → sync không khả dụng', 'warning');
+    return;
+  }
   window.AIAudit.enableSync(!!enabled);
   renderAiAuditStatus();
   if (typeof toast === 'function') toast(enabled ? 'Audit sync enabled' : 'Audit sync disabled');

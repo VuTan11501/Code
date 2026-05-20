@@ -73,9 +73,59 @@
     return v !== '0';
   }
 
+  // ─── Ownership gate ──────────────────────────────────
+  // The shared GIST_ID is owned by a single GitHub account (TanVC). Anyone
+  // signing in with a different PAT cannot PATCH that gist (404/422) and
+  // shouldn't be allowed to think they can — their audit stays local-only.
+  // Result cached in sessionStorage to avoid re-fetching /user every push.
+  let _ownershipCache = null;
+  async function _isCurrentUserGistOwner() {
+    if (_ownershipCache !== null) return _ownershipCache;
+    try {
+      const cached = sessionStorage.getItem('ai_audit_owner_v1');
+      if (cached === '1' || cached === '0') {
+        _ownershipCache = cached === '1';
+        return _ownershipCache;
+      }
+    } catch {}
+    const token = (typeof sessionToken !== 'undefined' && sessionToken) ? sessionToken : null;
+    if (!token) return false;
+    try {
+      const r = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
+        headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/vnd.github+json' },
+      });
+      if (!r.ok) { _ownershipCache = false; }
+      else {
+        const g = await r.json();
+        const ownerLogin = (g.owner && g.owner.login) || null;
+        const u = await fetch('https://api.github.com/user', {
+          headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/vnd.github+json' },
+        });
+        const me = u.ok ? await u.json() : null;
+        _ownershipCache = !!(ownerLogin && me && me.login && me.login.toLowerCase() === ownerLogin.toLowerCase());
+      }
+      try { sessionStorage.setItem('ai_audit_owner_v1', _ownershipCache ? '1' : '0'); } catch {}
+    } catch { _ownershipCache = false; }
+    return _ownershipCache;
+  }
+  function isOwnerSync() {
+    // Synchronous read for UI — returns null if not yet probed.
+    try {
+      const cached = sessionStorage.getItem('ai_audit_owner_v1');
+      if (cached === '1') return true;
+      if (cached === '0') return false;
+    } catch {}
+    return null;
+  }
+
   async function _syncToGist(record) {
     const token = (typeof sessionToken !== 'undefined' && sessionToken) ? sessionToken : null;
     if (!token) return;
+    // Refuse to push if the signed-in user doesn't own GIST_ID — prevents
+    // confusing silent 404s and stops a guest's audit log from being attempted
+    // against the owner's gist on every apply.
+    const owns = await _isCurrentUserGistOwner();
+    if (!owns) return;
     // Read current cloud audit (tolerate 404 / missing file)
     let cloud = [];
     try {
@@ -105,5 +155,5 @@
     });
   }
 
-  window.AIAudit = { log, getAll, getRecent, getLast, getByProposalId, clearAll, enableSync, isSyncEnabled };
+  window.AIAudit = { log, getAll, getRecent, getLast, getByProposalId, clearAll, enableSync, isSyncEnabled, isOwnerSync, _isCurrentUserGistOwner };
 })();
