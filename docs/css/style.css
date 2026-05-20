@@ -2664,16 +2664,16 @@ body.ai-page-active .ai-dot-grid {
 .prose-chat .ai-list { margin: 0.3em 0 0.6em; padding-left: 1.4em; }
 .prose-chat .ai-list li { margin: 0.2em 0; }
 .prose-chat .ai-inline-code {
-  font-family: var(--font-mono);
-  font-size: 0.85em;
+  font-family: inherit;
+  font-size: var(--fs-sm);
   background: color-mix(in srgb, var(--muted) 70%, transparent);
   padding: 1px 6px;
   border-radius: 5px;
   border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
 }
 .prose-chat .ai-code {
-  font-family: var(--font-mono);
-  font-size: var(--fs-xs);
+  font-family: inherit;
+  font-size: var(--fs-sm);
   background: color-mix(in srgb, var(--muted) 50%, transparent);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
@@ -2689,8 +2689,13 @@ body.ai-page-active .ai-dot-grid {
   border-collapse: collapse;
   width: 100%;
   margin: 0.5em 0;
-  font-size: var(--fs-xs);
-  font-family: var(--font-mono);
+  /* Use the project's common font (Inter via inherit from body) for ALL
+     prose content — body, lists, headings, tables, even code. Visual
+     distinction for code is preserved via background + border, not via
+     font family. Font size = fs-sm so tabular content is dense without
+     looking out-of-family. */
+  font-family: inherit;
+  font-size: var(--fs-sm);
 }
 .prose-chat .ai-table th,
 .prose-chat .ai-table td {
