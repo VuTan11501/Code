@@ -3515,3 +3515,8 @@ body.ai-page-active .ai-dot-grid {
 .audit-kind-danger { background: var(--red-subtle); color: var(--red); border-color: color-mix(in srgb, var(--red) 30%, transparent); }
 .audit-kind-info { background: var(--primary-subtle, rgba(59,130,246,0.1)); color: var(--primary); border-color: color-mix(in srgb, var(--primary) 30%, transparent); }
 .audit-kind-muted { background: var(--muted); color: var(--muted-foreground); border-color: var(--border); }
+
+/*  Re-apply button (re-fires a past AI proposal)  */
+.ai-msg-reapply-row { margin-top: 6px; }
+.ai-action-btn.ai-action-reapply { color: var(--primary); border-color: color-mix(in srgb, var(--primary) 30%, transparent); background: color-mix(in srgb, var(--primary) 8%, transparent); }
+.ai-action-btn.ai-action-reapply:hover { background: color-mix(in srgb, var(--primary) 14%, transparent); border-color: color-mix(in srgb, var(--primary) 50%, transparent); }
