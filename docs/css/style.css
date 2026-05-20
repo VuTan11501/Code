@@ -2948,9 +2948,11 @@ body.ai-page-active .ai-dot-grid {
 /*  AI Conversations sidebar (shadcn sidebar pattern, vanilla)  */
 .ai-conv-sheet {
   position: fixed; inset: 0;
-  z-index: 1000;
+  z-index: 10000;
   pointer-events: none;
 }
+/* Defeat .ai-wrap > *:not(.ai-dot-grid) { z-index: 1 } specificity trap */
+.ai-wrap > .ai-conv-sheet { z-index: 10000; }
 .ai-conv-sheet[hidden] { display: none; }
 .ai-conv-sheet.show { pointer-events: auto; }
 .ai-conv-sheet-backdrop {

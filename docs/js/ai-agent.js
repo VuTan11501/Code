@@ -359,6 +359,12 @@ window.AIAgent = (function () {
     _renderConvList();
     document.body.classList.add('ai-conv-sheet-open');
   }
+  function _toggleConvSheet() {
+    const s = document.getElementById('aiConvSheet');
+    if (!s) return;
+    if (s.hidden || !s.classList.contains('show')) _showConvSheet();
+    else _hideConvSheet();
+  }
   function _hideConvSheet() {
     const s = document.getElementById('aiConvSheet');
     if (!s) return;
@@ -1750,7 +1756,9 @@ Hôm nay (JST): ${today}.`;
     setInterval(_updateHistoryBtnVisibility, 5000);
 
     // Conversations sheet wiring
-    if (convBtn) convBtn.addEventListener('click', () => _showConvSheet());
+    if (convBtn) convBtn.addEventListener('click', () => _toggleConvSheet());
+    const newChatBtn = document.getElementById('aiNewChatBtn');
+    if (newChatBtn) newChatBtn.addEventListener('click', () => { createConv(); });
     try { if (convNewBtn) convNewBtn.addEventListener('click', () => createConv()); } catch (_) {}
     const convSearch = document.getElementById('aiConvSearch');
     if (convSearch) {

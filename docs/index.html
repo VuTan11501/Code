@@ -86,7 +86,7 @@ tailwind.config = {
   },
 }
 </script>
-<link rel="stylesheet" href="css/style.css?v=78">
+<link rel="stylesheet" href="css/style.css?v=79">
 <link rel="preconnect" href="https://api.github.com">
 </head>
 <body class="bg-background text-foreground font-sans text-sm antialiased min-h-dvh overflow-x-hidden">
@@ -473,6 +473,9 @@ tailwind.config = {
             </select>
           </div>
           <div class="ai-actions">
+            <button class="ai-icon-btn" id="aiNewChatBtn" type="button" title="New chat" aria-label="New chat">
+              <span data-icon="plus" data-size="16"></span>
+            </button>
             <button class="ai-icon-btn" id="aiUndoBtn" type="button" title="Undo last apply" aria-label="Undo last apply" hidden>
               <span data-icon="undo" data-size="15"></span>
             </button>
@@ -1175,7 +1178,7 @@ tailwind.config = {
 <script src="js/ai-audit.js?v=2"></script>
 <script src="js/ai-proposals.js?v=2"></script>
 <script src="js/ai-tools.js?v=2"></script>
-<script src="js/ai-agent.js?v=21"></script>
+<script src="js/ai-agent.js?v=22"></script>
 <script src="js/insights.js?v=1"></script>
 <script src="js/settings.js?v=32"></script>
 <!-- AI Proposal confirmation modal (Phase 3) -->
