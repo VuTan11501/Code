@@ -344,7 +344,7 @@ window.AIAgent = (function () {
     const s = document.getElementById('aiConvSheet');
     if (!s) return;
     s.classList.remove('show');
-    setTimeout(() => { s.hidden = true; }, 200);
+    setTimeout(() => { s.hidden = true; }, 260);
   }
 
 
