@@ -227,6 +227,35 @@ async function checkTokenScopes() {
 // in-memory only (intentional: fresh reload always lands at the top).
 const _tabScroll = Object.create(null);
 
+// Measure the top nav-bar's bottom edge (only on desktop where it's in-flow)
+// and expose it as a CSS variable so the AI page can position itself BELOW
+// the nav instead of covering it. On mobile the nav is `position:fixed;
+// bottom:0`, so its rect.top is near viewport bottom — we detect that and
+// emit 0 (the CSS @media handles the bottom offset separately).
+function updateAiTopOffset() {
+  const nav = document.querySelector('.nav-bar');
+  if (!nav) {
+    document.documentElement.style.setProperty('--ai-top-offset', '0px');
+    return;
+  }
+  let offset = 0;
+  try {
+    const cs = window.getComputedStyle(nav);
+    const isFixed = cs.position === 'fixed';
+    if (!isFixed) {
+      const rect = nav.getBoundingClientRect();
+      // rect.bottom is the y of the nav's bottom in the viewport. Clamp
+      // to non-negative in case the nav is scrolled offscreen for any reason.
+      offset = Math.max(0, Math.round(rect.bottom));
+    }
+  } catch {}
+  document.documentElement.style.setProperty('--ai-top-offset', offset + 'px');
+}
+// Re-measure on resize (orientation change, devtools open, etc.)
+window.addEventListener('resize', () => {
+  if (document.body.classList.contains('ai-page-active')) updateAiTopOffset();
+});
+
 function navigate(hash) {
   const page = hash.replace('#', '') || 'dashboard';
 
@@ -260,6 +289,7 @@ function navigate(hash) {
   // viewport when the AI tab is active. Must happen BEFORE init so the
   // chat scroll container has its final size when renderAll() runs.
   document.body.classList.toggle('ai-page-active', page === 'ai');
+  if (page === 'ai') updateAiTopOffset();
 
   // Initialize page-specific content
   if (page === 'schedule' && typeof initSchedulePage === 'function') initSchedulePage();
