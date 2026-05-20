@@ -67,7 +67,10 @@
     try { localStorage.setItem(LS_SYNC_KEY, enabled ? '1' : '0'); } catch {}
   }
   function isSyncEnabled() {
-    return localStorage.getItem(LS_SYNC_KEY) === '1';
+    // Default ON — cross-device audit backup should be the norm; user can
+    // opt out explicitly. Anything other than '0' counts as enabled.
+    const v = localStorage.getItem(LS_SYNC_KEY);
+    return v !== '0';
   }
 
   async function _syncToGist(record) {
