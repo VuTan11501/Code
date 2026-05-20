@@ -454,6 +454,14 @@ Hôm nay (JST): ${today}.`;
       return d.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
     } catch { return esc(String(iso).slice(0, 16)); }
   }
+  function _safeHref(u) {
+    if (!u || typeof u !== 'string') return '#';
+    try {
+      const url = new URL(u);
+      if (url.protocol === 'https:' || url.protocol === 'http:') return esc(u);
+    } catch {}
+    return '#';
+  }
 
   function previewTodayStatus(r) {
     const card = (label, slot) => {
@@ -531,7 +539,7 @@ Hôm nay (JST): ${today}.`;
         ${_statusDot(it.conclusion, it.status)}
         <span class="ai-rt-row-d">${esc(it.workflow || it.workflow_file || '')}</span>
         <span class="ai-rt-row-t">${_hhmm(it.created_at)}</span>
-        ${it.html_url ? `<a class="ai-rt-link" href="${esc(it.html_url)}" target="_blank" rel="noopener" aria-label="Open run">↗</a>` : ''}
+        ${it.html_url ? `<a class="ai-rt-link" href="${_safeHref(it.html_url)}" target="_blank" rel="noopener" aria-label="Open run">↗</a>` : ''}
       </li>`).join('');
     const more = items.length > 8 ? `<li class="ai-rt-more">+${items.length - 8} more…</li>` : '';
     return `<ul class="ai-rt-list">${rows}${more}</ul>`;
@@ -549,6 +557,7 @@ Hôm nay (JST): ${today}.`;
 
   // ─── Voice input (Web Speech API) ───────────────────
   let _stopVoice = null;
+  let _voiceMo = null;
   function initVoiceInput(input, autogrow) {
     const btn = document.getElementById('aiMicBtn');
     if (!btn) return;
@@ -634,10 +643,11 @@ Hôm nay (JST): ${today}.`;
     // active class. Cleaner than coupling to navigate().
     const pageEl = document.getElementById('page-ai');
     if (pageEl) {
-      const mo = new MutationObserver(() => {
+      if (_voiceMo) { try { _voiceMo.disconnect(); } catch {} }
+      _voiceMo = new MutationObserver(() => {
         if (listening && !pageEl.classList.contains('active')) stop();
       });
-      mo.observe(pageEl, { attributes: true, attributeFilter: ['class'] });
+      _voiceMo.observe(pageEl, { attributes: true, attributeFilter: ['class'] });
     }
 
     // Stop on tab hide / page navigate away
