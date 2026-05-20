@@ -300,11 +300,30 @@ window.AIAgent = (function () {
     if (!ts) return '';
     const diff = Date.now() - ts;
     const min = 60_000, hr = 60 * min, day = 24 * hr;
-    if (diff < min) return 'just now';
-    if (diff < hr)  return Math.floor(diff / min) + 'm ago';
-    if (diff < day) return Math.floor(diff / hr) + 'h ago';
-    if (diff < 30 * day) return Math.floor(diff / day) + 'd ago';
-    try { return new Date(ts).toLocaleDateString('ja-JP', { timeZone: 'Asia/Tokyo', month: 'short', day: 'numeric' }); } catch { return ''; }
+    if (diff < min) return 'vừa xong';
+    if (diff < hr)  return Math.floor(diff / min) + ' phút trước';
+    if (diff < day) return Math.floor(diff / hr) + ' giờ trước';
+    if (diff < 7 * day) return Math.floor(diff / day) + ' ngày trước';
+    try { return new Date(ts).toLocaleDateString('vi-VN', { timeZone: 'Asia/Tokyo' }); } catch { return ''; }
+  }
+  function _groupConvs(list) {
+    const now = Date.now(), day = 86_400_000;
+    const groups = [
+      { label: 'Hôm nay',       items: [] },
+      { label: 'Hôm qua',       items: [] },
+      { label: '7 ngày trước',  items: [] },
+      { label: '30 ngày trước', items: [] },
+      { label: 'Cũ hơn',        items: [] },
+    ];
+    for (const c of list) {
+      const age = now - (c.updated_at || 0);
+      if (age < day)        groups[0].items.push(c);
+      else if (age < 2*day) groups[1].items.push(c);
+      else if (age < 7*day) groups[2].items.push(c);
+      else if (age < 30*day) groups[3].items.push(c);
+      else                  groups[4].items.push(c);
+    }
+    return groups.filter(g => g.items.length);
   }
   function _convSnippet(msgs) {
     const lastUser = [...(msgs || [])].reverse().find(m => m.role === 'user' && m.content);
@@ -312,10 +331,13 @@ window.AIAgent = (function () {
     return String(lastUser.content).replace(/\s+/g, ' ').trim().slice(0, 80);
   }
   let _convFilter = '';
+  let _convEditingId = null;
   async function _renderConvList() {
     const ul = document.getElementById('aiConvList');
     if (!ul) return;
     const list = await _listConvs();
+    const foot = document.getElementById('aiConvFoot');
+    if (foot) foot.hidden = list.length === 0;
     const q = _convFilter.trim().toLowerCase();
     const filtered = q ? list.filter(c => {
       if ((c.title || '').toLowerCase().includes(q)) return true;
@@ -326,25 +348,47 @@ window.AIAgent = (function () {
       return false;
     }) : list;
     if (!list.length) {
-      ul.innerHTML = '<li class="ai-conv-empty">Chưa có hội thoại nào.<br><small style="opacity:.7">Hỏi AI một câu để bắt đầu.</small></li>';
+      ul.innerHTML = `<li class="ai-conv-empty">
+        <div style="opacity:.4;margin-bottom:6px">${ICON('messageSquare', 28)}</div>
+        Chưa có cuộc trò chuyện nào.<br>
+        <small style="opacity:.7">Hỏi AI một câu để bắt đầu.</small>
+      </li>`;
+      if (typeof renderIcons === 'function') renderIcons(ul);
       return;
     }
     if (!filtered.length) {
-      ul.innerHTML = `<li class="ai-conv-empty">Không tìm thấy hội thoại khớp "${esc(_convFilter)}".</li>`;
+      ul.innerHTML = `<li class="ai-conv-empty">
+        <div style="opacity:.4;margin-bottom:6px">${ICON('search', 28)}</div>
+        Không tìm thấy hội thoại khớp "${esc(_convFilter)}".
+      </li>`;
+      if (typeof renderIcons === 'function') renderIcons(ul);
       return;
     }
-    ul.innerHTML = filtered.map(c => {
+    const renderItem = (c) => {
       const isActive = c.id === currentConvId;
+      const isEditing = _convEditingId === c.id;
+      if (isEditing) {
+        return `<li class="ai-conv-item is-editing" data-conv-id="${esc(c.id)}">
+          <input class="ai-conv-rename-input" type="text" data-conv-rename-input="${esc(c.id)}" value="${esc(c.title || '')}" autofocus />
+          <button class="ai-conv-item-act" type="button" data-conv-rename-save="${esc(c.id)}" title="Lưu" aria-label="Lưu">${ICON('check', 13)}</button>
+          <button class="ai-conv-item-act" type="button" data-conv-rename-cancel title="Hủy" aria-label="Hủy">${ICON('x', 13)}</button>
+        </li>`;
+      }
       return `<li class="ai-conv-item${isActive ? ' is-active' : ''}" role="option" aria-selected="${isActive}" data-conv-id="${esc(c.id)}">
         <button class="ai-conv-item-main" type="button" data-conv-switch="${esc(c.id)}">
           <span class="ai-conv-item-title">${esc(c.title || 'New chat')}</span>
           <span class="ai-conv-item-snip">${esc(_convSnippet(c.messages))}</span>
         </button>
         <span class="ai-conv-item-time">${esc(_relTime(c.updated_at))}</span>
-        <button class="ai-conv-item-act" type="button" data-conv-rename="${esc(c.id)}" title="Rename" aria-label="Rename">${ICON('pen', 13)}</button>
-        <button class="ai-conv-item-act" type="button" data-conv-del="${esc(c.id)}" title="Delete" aria-label="Delete">${ICON('trash', 13)}</button>
+        <button class="ai-conv-item-act" type="button" data-conv-rename="${esc(c.id)}" title="Đổi tên" aria-label="Đổi tên">${ICON('pen', 13)}</button>
+        <button class="ai-conv-item-act" type="button" data-conv-del="${esc(c.id)}" title="Xóa" aria-label="Xóa">${ICON('trash', 13)}</button>
       </li>`;
-    }).join('');
+    };
+    ul.innerHTML = _groupConvs(filtered).map(g => `
+      <div class="ai-conv-list-group">
+        <div class="ai-conv-group-label">${esc(g.label)}</div>
+        ${g.items.map(renderItem).join('')}
+      </div>`).join('');
     if (typeof renderIcons === 'function') renderIcons(ul);
   }
   function _showConvSheet() {
@@ -1776,24 +1820,117 @@ Hôm nay (JST): ${today}.`;
         if (switchEl) { switchConv(switchEl.getAttribute('data-conv-switch')); return; }
         const renameEl = t.closest('[data-conv-rename]');
         if (renameEl) {
-          const id = renameEl.getAttribute('data-conv-rename');
-          _getConv(id).then(rec => {
-            if (!rec) return;
-            const next = prompt('Rename conversation', rec.title || 'New chat');
-            if (next != null) renameConv(id, next);
+          _convEditingId = renameEl.getAttribute('data-conv-rename');
+          _renderConvList().then(() => {
+            const inp = convSheet.querySelector('.ai-conv-rename-input');
+            if (inp) { inp.focus(); inp.select(); }
           });
+          return;
+        }
+        const saveEl = t.closest('[data-conv-rename-save]');
+        if (saveEl) {
+          const id = saveEl.getAttribute('data-conv-rename-save');
+          const inp = convSheet.querySelector(`[data-conv-rename-input="${id}"]`);
+          const next = inp ? inp.value.trim() : '';
+          _convEditingId = null;
+          if (next) renameConv(id, next); else _renderConvList();
+          return;
+        }
+        if (t.closest('[data-conv-rename-cancel]')) {
+          _convEditingId = null;
+          _renderConvList();
           return;
         }
         const delEl = t.closest('[data-conv-del]');
         if (delEl) {
           const id = delEl.getAttribute('data-conv-del');
-          if (confirm('Delete this conversation? This cannot be undone.')) deleteConvById(id);
+          if (confirm('Xóa cuộc trò chuyện này? Không thể hoàn tác.')) deleteConvById(id);
           return;
         }
       });
-      // Esc to close
+      // Rename input: Enter saves, Esc cancels
+      convSheet.addEventListener('keydown', (e) => {
+        const inp = e.target && e.target.matches && e.target.matches('.ai-conv-rename-input') ? e.target : null;
+        if (!inp) return;
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          const id = inp.getAttribute('data-conv-rename-input');
+          const next = inp.value.trim();
+          _convEditingId = null;
+          if (next) renameConv(id, next); else _renderConvList();
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          _convEditingId = null;
+          _renderConvList();
+        }
+      });
+      // Esc to close (when not editing)
       document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && !convSheet.hidden) { _hideConvSheet(); }
+        if (e.key === 'Escape' && !convSheet.hidden && !_convEditingId) { _hideConvSheet(); }
+      });
+    }
+    const clearAllBtn = document.getElementById('aiConvClearAllBtn');
+    if (clearAllBtn) {
+      clearAllBtn.addEventListener('click', () => {
+        if (confirm('Xóa toàn bộ lịch sử trò chuyện? Không thể hoàn tác.')) clearAllConvs();
+      });
+    }
+
+    // Custom Model picker (shadcn-style dropdown, ref: tans-agent persona-picker)
+    const modelTrigger = document.getElementById('aiModelTrigger');
+    const modelMenu = document.getElementById('aiModelMenu');
+    const modelTriggerLabel = document.getElementById('aiModelTriggerLabel');
+    const modelEmoji = modelTrigger ? modelTrigger.querySelector('.ai-model-trigger-emoji') : null;
+    const MODEL_META = {
+      'gpt-4o-mini': { emoji: '⚡' },
+      'gpt-4o':      { emoji: '🧠' },
+    };
+    function _syncModelPickerUI() {
+      if (modelTriggerLabel) modelTriggerLabel.textContent = model;
+      if (modelEmoji && MODEL_META[model]) modelEmoji.textContent = MODEL_META[model].emoji;
+      if (modelMenu) {
+        modelMenu.querySelectorAll('.ai-model-menu-item').forEach(it => {
+          it.setAttribute('aria-checked', String(it.getAttribute('data-model') === model));
+        });
+      }
+    }
+    function _openModelMenu() {
+      if (!modelMenu || !modelTrigger) return;
+      modelMenu.hidden = false;
+      void modelMenu.offsetWidth;
+      requestAnimationFrame(() => modelMenu.classList.add('show'));
+      modelTrigger.setAttribute('aria-expanded', 'true');
+    }
+    function _closeModelMenu() {
+      if (!modelMenu || !modelTrigger) return;
+      modelMenu.classList.remove('show');
+      modelTrigger.setAttribute('aria-expanded', 'false');
+      setTimeout(() => { if (!modelMenu.classList.contains('show')) modelMenu.hidden = true; }, 160);
+    }
+    if (modelTrigger && modelMenu) {
+      _syncModelPickerUI();
+      modelTrigger.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (modelMenu.hidden) _openModelMenu(); else _closeModelMenu();
+      });
+      modelMenu.addEventListener('click', (e) => {
+        const it = e.target && e.target.closest && e.target.closest('.ai-model-menu-item');
+        if (!it) return;
+        const m = it.getAttribute('data-model');
+        if (m && m !== model) {
+          saveModel(m);
+          if (modelSelect) modelSelect.value = m;
+          updateModelDisplay();
+          _syncModelPickerUI();
+        }
+        _closeModelMenu();
+      });
+      document.addEventListener('click', (e) => {
+        if (modelMenu.hidden) return;
+        if (!modelMenu.contains(e.target) && !modelTrigger.contains(e.target)) _closeModelMenu();
+      });
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !modelMenu.hidden) _closeModelMenu();
       });
     }
 

@@ -76,6 +76,7 @@ const ICON_PATHS = {
   square:     '<rect width="14" height="14" x="5" y="5" rx="2" ry="2"/>',
   user:       '<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
   undo:       '<path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/>',
+  messageSquare:'<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
 };
 
 function ICON(name, size = 16, extraClass = '') {
