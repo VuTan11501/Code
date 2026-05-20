@@ -721,11 +721,13 @@ Hôm nay (JST): ${today}.`;
       const body = (m.content || '').trim();
       const proseHtml = body ? `<div class="prose-chat">${renderMarkdown(body)}</div>` : '';
       const copyBtn = body ? renderCopyActions(body) : '';
+      const reapplyBtn = renderReapplyButton(m);
       el.innerHTML = `
         <div class="ai-avatar ai-avatar-ai">${ICON('sparkles', 14)}</div>
         <div class="ai-msg-inner">
           ${pillsHtml ? `<div class="ai-tool-pills">${pillsHtml}</div>` : ''}
           ${proseHtml}
+          ${reapplyBtn}
           ${copyBtn}
         </div>`;
       scroll.appendChild(el);
@@ -747,6 +749,89 @@ Hôm nay (JST): ${today}.`;
       <button type="button" class="ai-action-btn" data-copy-b64="${enc}" title="Copy" aria-label="Copy">${ICON('copy', 13)}<span>Copy</span></button>
       <button type="button" class="ai-action-btn" data-retry="1" title="Tạo lại câu trả lời" aria-label="Retry">${ICON('refresh', 13)}<span>Retry</span></button>
     </div>`;
+  }
+
+  // Scan an assistant message's tool_results for proposal payloads.
+  // Returns parsed proposal objects (with diff/kind/target_file intact) so the
+  // user can re-apply a past suggestion without having to re-prompt the AI.
+  function extractProposalsFromMessage(m) {
+    if (!m || !m._tool_results) return [];
+    const out = [];
+    const seen = new Set();
+    for (const id of Object.keys(m._tool_results)) {
+      const raw = m._tool_results[id];
+      if (!raw) continue;
+      let r;
+      try { r = typeof raw === 'string' ? JSON.parse(raw) : raw; } catch { continue; }
+      if (!r || typeof r !== 'object') continue;
+      // Tools either return a single proposal or wrap it in { proposal: {...} }.
+      const candidates = [];
+      if (r.proposal_id && r.kind) candidates.push(r);
+      if (r.proposal && r.proposal.proposal_id) candidates.push(r.proposal);
+      for (const p of candidates) {
+        if (p && p.proposal_id && !seen.has(p.proposal_id)) {
+          seen.add(p.proposal_id);
+          // Skip proposals that failed validation — they can't be re-applied as-is.
+          if (Array.isArray(p.errors) && p.errors.length) continue;
+          out.push(p);
+        }
+      }
+    }
+    return out;
+  }
+
+  function renderReapplyButton(m) {
+    const proposals = extractProposalsFromMessage(m);
+    if (!proposals.length) return '';
+    const n = proposals.length;
+    const payload = btoa(unescape(encodeURIComponent(JSON.stringify(proposals))));
+    return `<div class="ai-msg-actions ai-msg-reapply-row">
+      <button type="button" class="ai-action-btn ai-action-reapply" data-reapply-b64="${payload}"
+        title="Áp dụng lại đề xuất này (tạo mới — không kiểm tra entry đã tồn tại)"
+        aria-label="Re-apply">
+        ${ICON('refresh', 13)}<span>Áp dụng lại${n > 1 ? ` (${n})` : ''}</span>
+      </button>
+    </div>`;
+  }
+
+  function _reapplyId() {
+    try {
+      if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+    } catch {}
+    return 'reapply-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+  }
+
+  async function reapplyProposalsFromBtn(btn) {
+    if (!window.AIProposals || typeof window.AIProposals.register !== 'function' || typeof window.AIProposals.renderModal !== 'function') {
+      if (typeof toast === 'function') toast('Proposals module chưa sẵn sàng', 'error');
+      return;
+    }
+    let proposals;
+    try {
+      proposals = JSON.parse(decodeURIComponent(escape(atob(btn.getAttribute('data-reapply-b64')))));
+    } catch { return; }
+    if (!Array.isArray(proposals) || !proposals.length) return;
+    // Clone each proposal with a fresh proposal_id so audit dedupe + _pending map
+    // don't collide with the original apply. For "create_*" kinds we also drop
+    // diff.before (it was captured at original suggestion time — re-applying after
+    // a delete should treat the entry as brand new, otherwise update/delete logic
+    // would mis-target). For update/delete/add_skip_date we keep diff.before so
+    // _applyDiff can still locate the target row.
+    const ids = [];
+    for (const p of proposals) {
+      const clone = JSON.parse(JSON.stringify(p));
+      clone.proposal_id = _reapplyId();
+      if (clone.kind && clone.kind.startsWith('create_') && clone.diff) {
+        clone.diff.before = null;
+      }
+      const id = window.AIProposals.register(clone);
+      if (id) ids.push(id);
+    }
+    if (!ids.length) {
+      if (typeof toast === 'function') toast('Không có proposal hợp lệ', 'warning');
+      return;
+    }
+    window.AIProposals.renderModal(ids);
   }
 
   // Mark only the latest assistant bubble with `.is-last` so the Retry button
@@ -1958,6 +2043,11 @@ Hôm nay (JST): ${today}.`;
         if (retryBtn) {
           if (isStreaming) return;
           retryLastResponse();
+          return;
+        }
+        const reapplyBtn = t.closest('.ai-action-btn[data-reapply-b64]');
+        if (reapplyBtn) {
+          reapplyProposalsFromBtn(reapplyBtn);
           return;
         }
         const editBtn = t.closest('.ai-action-btn[data-edit-user]');
