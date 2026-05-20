@@ -2146,7 +2146,7 @@ body.ai-page-active .ai-dot-grid {
 .ai-wrap {
   position: relative;
   width: 100%;
-  max-width: 768px;
+  max-width: 1200px;
   margin: 0 auto;
   padding: 0 var(--sp-1);
   display: flex;

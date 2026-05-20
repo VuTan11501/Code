@@ -1117,9 +1117,19 @@ Hôm nay (JST): ${today}.`;
       }
     };
     const stop = () => {
-      try { recog && recog.stop(); } catch {}
-      try { recog && recog.abort && recog.abort(); } catch {}
+      // Detach handlers BEFORE calling stop/abort so any pending async
+      // onresult event the engine may still fire after stop() doesn't
+      // re-populate input.value. This was the bug where voice text
+      // reappeared in the textarea right after submit cleared it
+      // (recog.stop is async; final onresult races the submit handler).
+      if (recog) {
+        try { recog.onresult = null; recog.onerror = null; recog.onend = null; } catch {}
+        try { recog.stop(); } catch {}
+        try { recog.abort && recog.abort(); } catch {}
+      }
       recog = null;
+      baseText = '';
+      interimActive = '';
       setListening(false);
     };
     _stopVoice = stop;
@@ -1312,7 +1322,7 @@ Hôm nay (JST): ${today}.`;
       <textarea class="ai-edit-textarea" aria-label="Chỉnh sửa câu hỏi">${esc(original)}</textarea>
       <div class="ai-edit-actions">
         <button type="button" class="btn ghost sm" data-edit-cancel>Hủy</button>
-        <button type="button" class="btn primary sm" data-edit-save disabled>Lưu & rẽ nhánh</button>
+        <button type="button" class="btn primary sm" data-edit-save disabled>Gửi</button>
       </div>`;
     const ta = inner.querySelector('.ai-edit-textarea');
     const saveBtn = inner.querySelector('[data-edit-save]');
