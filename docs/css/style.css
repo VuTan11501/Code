@@ -2109,7 +2109,10 @@ body.ai-page-active .ai-dot-grid {
 .ai-wrap > *:not(.ai-dot-grid) { position: relative; z-index: 1; }
 /* Explicit overrides to defeat the trap above (specificity 0,0,2,0 wins over single-class selectors): */
 .ai-wrap > .ai-topbar { z-index: 10; }
-.ai-wrap > .ai-conv-modal { z-index: 900; }
+/* .ai-conv-modal is .modal-overlay (position:fixed) but parent rule above forces
+   position:relative on all .ai-wrap children — re-assert fixed so it overlays
+   instead of taking flex-layout space and pushing the chat down. */
+.ai-wrap > .ai-conv-modal { position: fixed; z-index: 900; }
 
 /*  Topbar — sticky at top of .ai-wrap. Needs explicit > selector to
     defeat .ai-wrap > *:not(.ai-dot-grid) { z-index: 1 } specificity trap. */
@@ -3103,7 +3106,7 @@ body.ai-page-active .ai-dot-grid {
 .ai-conv-modal {
   z-index: 900;
 }
-.ai-wrap > .ai-conv-modal { z-index: 900; }
+.ai-wrap > .ai-conv-modal { position: fixed; z-index: 900; }
 .ai-conv-modal-content {
   max-width: 560px;
   width: 100%;
