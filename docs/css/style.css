@@ -58,7 +58,7 @@
   --duration-normal: 200ms;
   --duration-slow: 300ms;
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
-  --mobile-nav-height: 72px;
+  --mobile-nav-height: 68px;
   --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px;
   --sp-5: 20px; --sp-6: 24px; --sp-8: 32px;
 }
@@ -1289,79 +1289,92 @@ input[type="time"], input[type="date"], input[type="datetime-local"] {
     padding-bottom: calc(var(--mobile-nav-height) + env(safe-area-inset-bottom));
   }
 
-  /* Bottom Navigation â€” Material You Style (pill indicator around icon) */
+  /* Bottom Navigation — Material 3 expandable pill
+     Inactive tabs collapse to icon-only; active tab expands to show
+     icon + label inside a pill background. Solves the 5-tab cramping
+     issue when AI tab was added. */
   .nav-bar, .tabs-list {
     position: fixed !important; left: 0 !important; right: 0 !important; bottom: 0 !important;
     z-index: 100;
     margin: 0 !important;
-    padding: 10px 6px 8px;
-    padding-bottom: calc(8px + env(safe-area-inset-bottom));
+    padding: 12px 8px;
+    padding-bottom: calc(12px + env(safe-area-inset-bottom));
     border-radius: 0 !important;
     border: none;
     border-top: 1px solid var(--border);
     background: rgba(15,15,18,0.92);
     backdrop-filter: saturate(180%) blur(20px);
     -webkit-backdrop-filter: saturate(180%) blur(20px);
-    display: flex; gap: 0;
+    display: flex; gap: 4px;
+    align-items: center;
   }
   .nav-item, .tabs-trigger {
-    flex-direction: column; gap: 4px;
-    padding: 4px 6px;
-    font-size: 11px; font-weight: 500;
-    min-height: 56px; flex: 1;
-    border-radius: 0; background: none;
-    color: var(--muted-foreground) !important;
-    position: relative; overflow: visible;
-    letter-spacing: 0.1px;
-    transition: color 180ms cubic-bezier(0.4, 0, 0.2, 1);
-    white-space: nowrap;
-  }
-  /* Icon container â€” becomes the Material You pill */
-  .nav-item .nav-icon, .tabs-trigger .nav-icon {
-    display: inline-flex; align-items: center; justify-content: center;
-    width: 56px; height: 30px;
+    display: flex; align-items: center; justify-content: center;
+    height: 44px; padding: 0 10px;
     border-radius: 9999px;
     background: transparent;
-    transition: background-color 250ms cubic-bezier(0.4, 0, 0.2, 1),
-                color 180ms cubic-bezier(0.4, 0, 0.2, 1);
-    font-size: 0;
+    border: none;
+    flex: 1 1 0; min-width: 0;
+    color: var(--muted-foreground) !important;
+    font-weight: 500;
+    letter-spacing: 0.1px;
+    transition: background-color 250ms cubic-bezier(0.4,0,0.2,1),
+                color 180ms cubic-bezier(0.4,0,0.2,1),
+                flex-grow 280ms cubic-bezier(0.4,0,0.2,1);
+    overflow: hidden;
+  }
+  /* Reset old icon-pill — nav-item itself is now the pill */
+  .nav-item .nav-icon, .tabs-trigger .nav-icon {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 24px; height: 24px;
+    background: transparent !important;
+    border-radius: 0;
+    color: inherit;
+    flex-shrink: 0;
+    transition: color 180ms cubic-bezier(0.4,0,0.2,1);
   }
   .nav-item .nav-icon svg, .tabs-trigger .nav-icon svg {
     width: 22px; height: 22px;
-    transition: transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1);
+    transition: transform 220ms cubic-bezier(0.34,1.56,0.64,1),
+                stroke-width 180ms;
   }
   .nav-item .nav-label, .tabs-trigger .nav-label {
-    font-size: 11px; line-height: 1.1;
-    max-width: none; opacity: 1; overflow: visible;
-    transition: color 180ms cubic-bezier(0.4, 0, 0.2, 1),
-                font-weight 180ms;
+    max-width: 0; opacity: 0; overflow: hidden;
+    white-space: nowrap;
+    font-size: 13px; line-height: 1; font-weight: 500;
+    margin-left: 0;
+    transition: max-width 280ms cubic-bezier(0.4,0,0.2,1),
+                opacity 200ms cubic-bezier(0.4,0,0.2,1),
+                margin-left 220ms cubic-bezier(0.4,0,0.2,1),
+                color 180ms;
   }
-  /* Active state */
+  /* Active state — pill expands and reveals label */
   .nav-item.active, .tabs-trigger.active {
+    background: color-mix(in srgb, var(--primary) 22%, transparent);
+    color: var(--primary) !important;
+    flex: 2.4 1 0;
     box-shadow: none;
-    background: none;
-    border: none;
-    color: var(--foreground) !important;
   }
   .nav-item.active .nav-icon, .tabs-trigger.active .nav-icon {
-    background: color-mix(in srgb, var(--primary) 22%, transparent);
     color: var(--primary);
   }
   .nav-item.active .nav-icon svg, .tabs-trigger.active .nav-icon svg {
     stroke-width: 2.4;
   }
   .nav-item.active .nav-label, .tabs-trigger.active .nav-label {
-    color: var(--foreground);
+    max-width: 120px; opacity: 1;
+    margin-left: 6px;
+    color: var(--primary);
     font-weight: 600;
   }
   /* Tap ripple */
-  .nav-item:active .nav-icon, .tabs-trigger:active .nav-icon {
-    background: rgba(var(--tint),0.08);
+  .nav-item:active:not(.active), .tabs-trigger:active:not(.active) {
+    background: rgba(var(--tint),0.06);
   }
-  .nav-item.active:active .nav-icon, .tabs-trigger.active:active .nav-icon {
+  .nav-item.active:active, .tabs-trigger.active:active {
     background: color-mix(in srgb, var(--primary) 32%, transparent);
   }
-  /* Remove old pill top indicator */
+  /* Remove old pill top indicator if any */
   .nav-item.active::before, .tabs-trigger.active::before { display: none; }
 
   /* Cards */
@@ -1437,6 +1450,26 @@ input[type="time"], input[type="date"], input[type="datetime-local"] {
 @media (max-width: 430px) and (min-height: 800px) {
   .btn { min-height: 44px; }
   .btn.sm { min-height: 38px; }
+}
+
+/* Ultra-narrow viewports (iPhone SE 1st gen 320px, embedded WebViews):
+   bump active nav pill flex + shrink padding so labels like "Dashboard"
+   don't visually clip. */
+@media (max-width: 360px) {
+  .nav-bar, .tabs-list {
+    padding-left: 4px; padding-right: 4px;
+    gap: 2px;
+  }
+  .nav-item, .tabs-trigger {
+    padding: 0 6px;
+    min-width: 44px; /* preserve WCAG touch target on inactive */
+  }
+  .nav-item.active, .tabs-trigger.active {
+    flex: 3 1 0;
+  }
+  .nav-item .nav-label, .tabs-trigger .nav-label {
+    font-size: 12px;
+  }
 }
 
 /* â”€â”€â”€ SCHEDULE DATA TABLE â”€â”€â”€ */
