@@ -35,6 +35,12 @@ def send(message):
         return False
 
 
+def send_anomaly_alert(summary):
+    """Send anomaly alert via LINE Notify. Used by ai_anomaly_check.py."""
+    msg = f"\n🚨 Kintai Anomaly Alert\n{summary[:900]}"
+    return send(msg)
+
+
 if __name__ == "__main__":
     if "--stdin" in sys.argv:
         msg = sys.stdin.read().strip()
