@@ -205,6 +205,15 @@ Hôm nay (JST): ${today}.`;
         const chunk = typeBuffer.slice(0, take);
         typeBuffer = typeBuffer.slice(take);
         displayed += chunk;
+        // Re-check just before DOM write: clearConv() can run synchronously
+        // between the isStale() at frame start and this point, removing the
+        // message nodes. Without this guard we'd write innerHTML into a
+        // disconnected subtree (harmless but wasted work).
+        if (isStale()) {
+          active = false;
+          if (drainResolver) { drainResolver(); drainResolver = null; }
+          return;
+        }
         bodyEl.innerHTML = renderMarkdown(displayed);
         scrollToBottomIfPinned(null, false);
         requestAnimationFrame(step);
