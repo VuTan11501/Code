@@ -141,12 +141,34 @@ Hôm nay (JST): ${today}.`;
 
   // ─── DOM helpers ────────────────────────────────────
   function $(sel) { return document.querySelector(sel); }
-  function scrollToBottomIfPinned(scrollEl, force) {
-    if (!scrollEl) return;
-    const distFromBottom = scrollEl.scrollHeight - scrollEl.scrollTop - scrollEl.clientHeight;
-    if (force || distFromBottom < 120) {
-      scrollEl.scrollTop = scrollEl.scrollHeight;
+  function scrollToBottomIfPinned(_scrollEl, force) {
+    // Chat now lives in natural document flow, so scroll the window, not
+    // an inner overflow container. Respect the user if they have scrolled
+    // up to read older content (don't snap unless `force` is true).
+    // Always use 'auto' (instant) — 'smooth' during high-frequency streaming
+    // queues fighting animations and causes jank on mobile.
+    const doc = document.documentElement;
+    const distFromBottom = doc.scrollHeight - window.scrollY - window.innerHeight;
+    if (force || distFromBottom < 160) {
+      window.scrollTo({ top: doc.scrollHeight, behavior: 'auto' });
     }
+  }
+
+  // rAF-throttled stream renderer — batch multiple deltas into a single
+  // paint. Without this, a 1000-char response with ~200 SSE chunks would
+  // re-parse the full markdown + reflow 200 times, causing visible lag.
+  const CURSOR_HTML = '<span class="ai-cursor" aria-hidden="true"></span>';
+  let streamRenderPending = false;
+  function scheduleStreamRender(bodyEl, getContent) {
+    if (streamRenderPending) return;
+    streamRenderPending = true;
+    requestAnimationFrame(() => {
+      streamRenderPending = false;
+      if (!bodyEl || !bodyEl.isConnected) return;
+      const content = getContent();
+      bodyEl.innerHTML = renderMarkdown(content) + CURSOR_HTML;
+      scrollToBottomIfPinned(null, false);
+    });
   }
 
   function renderEmpty() {
@@ -347,13 +369,13 @@ Hôm nay (JST): ${today}.`;
             // First content token — replace typing indicator
             if (node) {
               node.innerHTML = (assistantMsg.tool_calls ? renderMessage_pills(assistantMsg) : '') +
-                `<div class="ai-bubble ai-bubble-ai" data-stream="1"></div>`;
+                `<div class="ai-bubble ai-bubble-ai ai-streaming" data-stream="1"></div>`;
               bodyEl = node.querySelector('[data-stream="1"]');
             }
           }
           if (bodyEl) {
-            bodyEl.innerHTML = renderMarkdown(streamedContent);
-            scrollToBottomIfPinned(scroll, false);
+            // rAF-throttled — coalesces bursts of small SSE chunks into one paint.
+            scheduleStreamRender(bodyEl, () => streamedContent);
           }
         },
         onToolCallDelta: (deltas) => {
