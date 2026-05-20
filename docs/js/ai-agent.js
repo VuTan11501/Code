@@ -578,6 +578,13 @@ Hôm nay (JST): ${today}.`;
       menu.innerHTML = '';
       return;
     }
+    // Hide menu for bare "/" + whitespace (no command typed) — user is in
+    // an invalid state, suggestions would be misleading.
+    if (head === '/' && /\s/.test(v)) {
+      menu.classList.remove('show');
+      menu.innerHTML = '';
+      return;
+    }
     const matches = SLASH_CMDS.filter(c => c.cmd.startsWith(head));
     if (!matches.length) {
       menu.classList.remove('show');
@@ -689,7 +696,10 @@ Hôm nay (JST): ${today}.`;
     ];
     for (const m of messages) {
       if (m.role === 'user') {
-        lines.push('## You', '', String(m.content || ''), '');
+        // Quote user content so any embedded markdown headings (e.g. "## ")
+        // don't break the document structure of the export.
+        const quoted = String(m.content || '').split('\n').map(l => '> ' + l).join('\n');
+        lines.push('## You', '', quoted, '');
       } else if (m.role === 'assistant' && (m.content || '').trim()) {
         lines.push('## Assistant', '', String(m.content || ''), '');
       }
