@@ -381,7 +381,10 @@
 
   async function rollbackEntry(entry) {
     if (!entry || !entry.before_snapshot) { _toast('Nothing to undo', 'warning'); return; }
-    if (!confirm(`Undo apply (${entry.kind})? This will restore the previous state.`)) return;
+    const ok = await (typeof uiConfirm === 'function'
+      ? uiConfirm({ title: 'Hoàn tác apply?', message: `Khôi phục trạng thái trước (${entry.kind}).`, confirmText: 'Hoàn tác', cancelText: 'Hủy', danger: true })
+      : Promise.resolve(window.confirm(`Undo apply (${entry.kind})?`)));
+    if (!ok) return;
 
     const file = entry.target_file;
     const content = JSON.stringify(entry.before_snapshot, null, 2);

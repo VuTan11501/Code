@@ -2107,11 +2107,15 @@ body.ai-page-active .ai-dot-grid {
   -webkit-mask-image: linear-gradient(to bottom, black 0%, black 50%, transparent 90%);
 }
 .ai-wrap > *:not(.ai-dot-grid) { position: relative; z-index: 1; }
+/* Explicit overrides to defeat the trap above (specificity 0,0,2,0 wins over single-class selectors): */
+.ai-wrap > .ai-topbar { z-index: 10; }
+.ai-wrap > .ai-conv-modal { z-index: 900; }
 
-/*  Topbar — flex item at top, no sticky needed (parent is viewport-locked) */
+/*  Topbar — sticky at top of .ai-wrap. Needs explicit > selector to
+    defeat .ai-wrap > *:not(.ai-dot-grid) { z-index: 1 } specificity trap. */
 .ai-topbar {
   flex: 0 0 auto;
-  z-index: 6;
+  z-index: 10;
   position: sticky;
   top: 0;
   display: flex;
@@ -2229,7 +2233,7 @@ body.ai-page-active .ai-dot-grid {
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
   padding: 4px;
-  z-index: 10001;
+  z-index: 50;
   overflow: hidden;
   animation: aiModelMenuIn 150ms var(--ease-out);
 }
@@ -3097,9 +3101,9 @@ body.ai-page-active .ai-dot-grid {
 
 /*  AI Conversations modal (uses .modal-overlay pattern for reliability)  */
 .ai-conv-modal {
-  z-index: 10000;
+  z-index: 900;
 }
-.ai-wrap > .ai-conv-modal { z-index: 10000; }
+.ai-wrap > .ai-conv-modal { z-index: 900; }
 .ai-conv-modal-content {
   max-width: 560px;
   width: 100%;

@@ -1700,102 +1700,21 @@ Hôm nay (JST): ${today}.`;
       clearConv();
     });
 
-    // Phase 3: Undo last apply button + Apply history modal
+    // Phase 3: Undo last apply button
     const undoBtn = document.getElementById('aiUndoBtn');
-    const historyBtn = document.getElementById('aiHistoryBtn');
-    const historyModal = document.getElementById('aiHistoryModal');
-    const historyList = document.getElementById('aiHistoryList');
 
-    function _fmtTime(iso) {
-      try {
-        const d = new Date(iso);
-        const diff = Date.now() - d.getTime();
-        const min = 60_000, hr = 60 * min, day = 24 * hr;
-        if (diff < min) return 'just now';
-        if (diff < hr)  return Math.floor(diff / min) + 'm ago';
-        if (diff < day) return Math.floor(diff / hr) + 'h ago';
-        if (diff < 7 * day) return Math.floor(diff / day) + 'd ago';
-        return d.toLocaleDateString('ja-JP', { timeZone: 'Asia/Tokyo', month: 'short', day: 'numeric' });
-      } catch { return iso || ''; }
-    }
-    function _renderHistoryList() {
-      if (!historyList) return;
-      const entries = (window.AIAudit && window.AIAudit.getAll && window.AIAudit.getAll()) || [];
-      if (!entries.length) {
-        historyList.innerHTML = '<li style="padding:24px;text-align:center;color:var(--muted-foreground);font-size:var(--fs-sm)">No applies yet. Approved proposals appear here.</li>';
-        return;
-      }
-      historyList.innerHTML = entries.slice().reverse().map((e, i) => {
-        const enc = btoa(unescape(encodeURIComponent(e.proposal_id || '')));
-        const canUndo = !!e.before_snapshot;
-        return `<li class="ai-history-item" style="display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--muted)">
-          <div style="flex:1;min-width:0">
-            <div style="display:flex;gap:6px;align-items:center;margin-bottom:2px">
-              <span style="font-weight:600;font-size:var(--fs-sm)">${esc(e.kind || 'apply')}</span>
-              <span style="font-size:var(--fs-xs);color:var(--muted-foreground)">${esc(_fmtTime(e.applied_at))}</span>
-            </div>
-            <div style="font-size:var(--fs-xs);color:var(--muted-foreground);font-family:var(--font-mono);word-break:break-all">${esc(e.target_file || '—')}</div>
-          </div>
-          <button type="button" class="btn btn-secondary sm" data-history-undo="${enc}" ${canUndo ? '' : 'disabled title="No snapshot available"'}>
-            <span data-icon="undo" data-size="13"></span> Rollback
-          </button>
-        </li>`;
-      }).join('');
-      if (typeof renderIcons === 'function') renderIcons(historyList);
-    }
-    function _showHistoryModal() {
-      if (!historyModal) return;
-      _renderHistoryList();
-      historyModal.hidden = false;
-      historyModal.setAttribute('aria-hidden', 'false');
-    }
-    function _hideHistoryModal() {
-      if (!historyModal) return;
-      historyModal.hidden = true;
-      historyModal.setAttribute('aria-hidden', 'true');
-    }
-    function _updateHistoryBtnVisibility() {
+    function _updateUndoBtnVisibility() {
       const has = !!(window.AIAudit && window.AIAudit.getLast && window.AIAudit.getLast());
       if (undoBtn) undoBtn.hidden = !has;
-      if (historyBtn) historyBtn.hidden = !has;
     }
     if (undoBtn) {
       undoBtn.addEventListener('click', () => {
         if (window.AIProposals) window.AIProposals.rollbackLast();
-        setTimeout(_updateHistoryBtnVisibility, 500);
+        setTimeout(_updateUndoBtnVisibility, 500);
       });
     }
-    if (historyBtn) {
-      historyBtn.addEventListener('click', _showHistoryModal);
-    }
-    if (historyModal) {
-      historyModal.addEventListener('click', (e) => {
-        const t = e.target;
-        if (!t || !t.closest) return;
-        if (t.closest('[data-history-close]')) { _hideHistoryModal(); return; }
-        const undoEl = t.closest('[data-history-undo]');
-        if (undoEl) {
-          if (undoEl.disabled) return;
-          try {
-            const pid = decodeURIComponent(escape(atob(undoEl.getAttribute('data-history-undo'))));
-            const entry = window.AIAudit && window.AIAudit.getByProposalId(pid);
-            if (entry && window.AIProposals) {
-              window.AIProposals.rollbackEntry(entry).then(() => {
-                _renderHistoryList();
-                _updateHistoryBtnVisibility();
-              });
-            }
-          } catch {}
-        }
-      });
-      document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && !historyModal.hidden) _hideHistoryModal();
-      });
-    }
-    // Expose openAiHistory() for Settings card button
-    window.openAiHistory = _showHistoryModal;
-    _updateHistoryBtnVisibility();
-    setInterval(_updateHistoryBtnVisibility, 5000);
+    _updateUndoBtnVisibility();
+    setInterval(_updateUndoBtnVisibility, 5000);
 
     // Conversations sheet wiring
     if (convBtn) convBtn.addEventListener('click', () => _toggleConvSheet());
@@ -1844,7 +1763,10 @@ Hôm nay (JST): ${today}.`;
         const delEl = t.closest('[data-conv-del]');
         if (delEl) {
           const id = delEl.getAttribute('data-conv-del');
-          if (confirm('Xóa cuộc trò chuyện này? Không thể hoàn tác.')) deleteConvById(id);
+          (typeof uiConfirm === 'function'
+            ? uiConfirm({ title: 'Xóa cuộc trò chuyện?', message: 'Hành động này không thể hoàn tác.', confirmText: 'Xóa', cancelText: 'Hủy', danger: true })
+            : Promise.resolve(window.confirm('Xóa cuộc trò chuyện này?'))
+          ).then(ok => { if (ok) deleteConvById(id); });
           return;
         }
       });
@@ -1872,7 +1794,10 @@ Hôm nay (JST): ${today}.`;
     const clearAllBtn = document.getElementById('aiConvClearAllBtn');
     if (clearAllBtn) {
       clearAllBtn.addEventListener('click', () => {
-        if (confirm('Xóa toàn bộ lịch sử trò chuyện? Không thể hoàn tác.')) clearAllConvs();
+        (typeof uiConfirm === 'function'
+          ? uiConfirm({ title: 'Xóa toàn bộ lịch sử?', message: 'Tất cả các cuộc trò chuyện sẽ bị xóa vĩnh viễn.', confirmText: 'Xóa hết', cancelText: 'Hủy', danger: true })
+          : Promise.resolve(window.confirm('Xóa toàn bộ lịch sử trò chuyện?'))
+        ).then(ok => { if (ok) clearAllConvs(); });
       });
     }
 
