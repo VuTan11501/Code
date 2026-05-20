@@ -2006,38 +2006,70 @@ input[type="time"], input[type="date"], input[type="datetime-local"] {
    - Subtle dot-grid bg, hero glow on empty state, gradient hero text.
    ═ */
 
+/* When AI page is active, body scroll is locked so the chat area uses
+   its own internal scroll container (composer + topbar stay pinned).
+   We size the page with 100dvh (dynamic viewport) instead of `inset:0`
+   so iOS keyboard correctly shrinks the chat area and the composer stays
+   visible above the on-screen keyboard. */
+body.ai-page-active { overflow: hidden; overscroll-behavior: none; }
+body.ai-page-active #page-ai.active {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: 100vh;            /* fallback for browsers without dvh */
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  animation: aiPageFadeIn 220ms var(--ease-out);
+}
+@media (max-width: 600px) {
+  body.ai-page-active #page-ai.active {
+    height: calc(100vh - var(--mobile-nav-height));
+    height: calc(100dvh - var(--mobile-nav-height));
+  }
+}
+/* Full-viewport dot-grid background while AI tab is active — escapes the
+   max-w:768px constraint of .ai-wrap by positioning relative to the viewport
+   (no transform/filter ancestor creates a containing block here). */
+body.ai-page-active .ai-dot-grid {
+  position: fixed;
+  inset: 0;
+}
+@keyframes aiPageFadeIn { from { opacity: 0; } to { opacity: 1; } }
+
 .ai-wrap {
   position: relative;
+  width: 100%;
   max-width: 768px;
   margin: 0 auto;
   padding: 0 var(--sp-1);
-  display: block;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 .ai-dot-grid {
-  position: absolute; inset: -40px 0 0 0;
+  position: absolute; inset: 0;
   background-image: radial-gradient(circle, var(--border) 1px, transparent 1px);
   background-size: 24px 24px;
   background-position: 0 0;
   opacity: 0.18;
   pointer-events: none;
   z-index: 0;
-  mask-image: linear-gradient(to bottom, black 0%, black 70%, transparent 100%);
-  -webkit-mask-image: linear-gradient(to bottom, black 0%, black 70%, transparent 100%);
+  mask-image: linear-gradient(to bottom, black 0%, black 50%, transparent 90%);
+  -webkit-mask-image: linear-gradient(to bottom, black 0%, black 50%, transparent 90%);
 }
 .ai-wrap > *:not(.ai-dot-grid) { position: relative; z-index: 1; }
 
-/*  Topbar  */
+/*  Topbar — flex item at top, no sticky needed (parent is viewport-locked) */
 .ai-topbar {
-  position: sticky;
-  top: 0;
+  flex: 0 0 auto;
   z-index: 6;
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
   gap: var(--sp-2);
   padding: 10px var(--sp-2);
-  margin-bottom: var(--sp-2);
-  background: rgba(var(--tint-bg, 9), 0.7);
   background: color-mix(in srgb, var(--background) 78%, transparent);
   backdrop-filter: saturate(180%) blur(16px);
   -webkit-backdrop-filter: saturate(180%) blur(16px);
@@ -2085,11 +2117,28 @@ input[type="time"], input[type="date"], input[type="datetime-local"] {
 .ai-icon-btn:hover { background: var(--muted); color: var(--foreground); }
 .ai-icon-btn:disabled { opacity: 0.3; cursor: not-allowed; }
 
-/*  Chat container  */
+/*  Chat container — flex:1 + internal scroll. min-height:0 lets it
+    actually shrink inside the flex parent (otherwise it expands to
+    its content and breaks the layout). */
 .ai-chat {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   display: flex; flex-direction: column;
   gap: var(--sp-6);
-  padding: var(--sp-4) 0 var(--sp-3);
+  padding: var(--sp-4) var(--sp-1) var(--sp-3);
+  scroll-behavior: auto;
+}
+/* Subtle scrollbar */
+.ai-chat::-webkit-scrollbar { width: 8px; }
+.ai-chat::-webkit-scrollbar-track { background: transparent; }
+.ai-chat::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--muted-foreground) 25%, transparent);
+  border-radius: 999px;
+}
+.ai-chat::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--muted-foreground) 45%, transparent);
 }
 
 /*  Empty state hero  */
@@ -2341,6 +2390,8 @@ input[type="time"], input[type="date"], input[type="datetime-local"] {
   font-size: var(--fs-md);
   line-height: 1.65;
   color: var(--foreground);
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 .prose-chat > * + * { margin-top: 0.75em; }
 .prose-chat > *:first-child { margin-top: 0; }
@@ -2483,14 +2534,12 @@ input[type="time"], input[type="date"], input[type="datetime-local"] {
 .ai-code-wrap:hover .ai-code-copy { opacity: 1; }
 .ai-code-copy:hover { background: var(--background); color: var(--foreground); }
 
-/*  Composer  */
+/*  Composer — flex item at bottom of the AI page layout */
 .ai-composer-wrap {
-  position: sticky;
-  bottom: 12px;
-  z-index: 5;
-  margin-top: var(--sp-4);
-  padding: 8px 0 0;
-  background: linear-gradient(to bottom, transparent, var(--background) 35%);
+  flex: 0 0 auto;
+  padding: 8px var(--sp-2) 12px;
+  background: var(--background);
+  border-top: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
 }
 .ai-composer {
   display: flex; align-items: flex-end; gap: 8px;
@@ -2574,8 +2623,8 @@ input[type="time"], input[type="date"], input[type="datetime-local"] {
   .ai-wrap { padding: 0; }
   .ai-topbar {
     grid-template-columns: auto 1fr auto;
-    top: env(safe-area-inset-top);
-    padding: 8px 10px;
+    padding: 8px 10px calc(8px + env(safe-area-inset-top, 0px) * 0);
+    padding-top: calc(8px + env(safe-area-inset-top, 0px));
   }
   .ai-topbar-center { justify-self: center; min-width: 0; }
   .ai-model-pill { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -2586,13 +2635,12 @@ input[type="time"], input[type="date"], input[type="datetime-local"] {
   .ai-msg-user .ai-msg-inner { max-width: 90%; }
   .ai-msg-ai { gap: 10px; }
   .ai-avatar { width: 28px; height: 28px; }
+  .ai-chat { padding-left: var(--sp-2); padding-right: var(--sp-2); }
   .ai-composer-wrap {
-    bottom: calc(var(--mobile-nav-height, 72px) + 8px + env(safe-area-inset-bottom));
-    padding-left: 6px; padding-right: 6px;
+    padding: 6px 8px calc(8px + env(safe-area-inset-bottom));
   }
   .ai-composer { padding: 6px 6px 6px 14px; border-radius: 22px; }
   .ai-composer-input { font-size: var(--fs-base); }
-  /* Always show hover-revealed actions on touch */
   .ai-msg-actions { opacity: 1; }
   .ai-code-copy { opacity: 1; }
 }

@@ -176,7 +176,7 @@ function showDashboard() {
   document.getElementById('authScreen').style.display = 'none';
   document.getElementById('dashboard').style.display = 'block';
   // Always start on dashboard when first entering (ignore stale hash from PWA reopen)
-  const validPages = ['dashboard', 'schedule', 'settings'];
+  const validPages = ['dashboard', 'schedule', 'ai', 'ot', 'settings'];
   const hashPage = location.hash.replace('#', '');
   const target = validPages.includes(hashPage) ? location.hash : '#dashboard';
   // On fresh login/restore, always go to dashboard
@@ -230,10 +230,17 @@ const _tabScroll = Object.create(null);
 function navigate(hash) {
   const page = hash.replace('#', '') || 'dashboard';
 
-  // Remember the scroll position of the tab we're leaving (if any)
+  // Remember the scroll position of the tab we're leaving (if any).
+  // For the AI page, scroll lives in an internal container (#aiChatScroll)
+  // because the page itself is viewport-locked.
   const prevActive = document.querySelector('.page.active');
   if (prevActive && prevActive.id) {
-    _tabScroll[prevActive.id] = window.scrollY || document.documentElement.scrollTop || 0;
+    if (prevActive.id === 'page-ai') {
+      const ac = document.getElementById('aiChatScroll');
+      _tabScroll[prevActive.id] = ac ? ac.scrollTop : 0;
+    } else {
+      _tabScroll[prevActive.id] = window.scrollY || document.documentElement.scrollTop || 0;
+    }
   }
 
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
@@ -249,6 +256,11 @@ function navigate(hash) {
     nav.setAttribute('aria-selected', 'true');
   }
 
+  // Toggle body class so CSS can lock body scroll + size #page-ai to the
+  // viewport when the AI tab is active. Must happen BEFORE init so the
+  // chat scroll container has its final size when renderAll() runs.
+  document.body.classList.toggle('ai-page-active', page === 'ai');
+
   // Initialize page-specific content
   if (page === 'schedule' && typeof initSchedulePage === 'function') initSchedulePage();
   if (page === 'ot' && typeof initOtPlannerPage === 'function') initOtPlannerPage();
@@ -262,12 +274,21 @@ function navigate(hash) {
   }
 
   // Restore scroll for the entered tab on the next frame so layout from
-  // the init calls above has settled. 'instant' avoids a jarring scroll
-  // animation when the user is just switching tabs.
-  const restoreTo = target ? (_tabScroll[target.id] || 0) : 0;
+  // the init calls above has settled. The AI page restores its inner
+  // scroll container instead of the window. We use hasOwnProperty so
+  // a legitimately-saved scrollTop of 0 isn't treated as "no memory".
+  const hasSaved = target && Object.prototype.hasOwnProperty.call(_tabScroll, target.id);
+  const restoreTo = hasSaved ? _tabScroll[target.id] : null;
   requestAnimationFrame(() => {
-    try { window.scrollTo({ top: restoreTo, left: 0, behavior: 'instant' }); }
-    catch { window.scrollTo(0, restoreTo); }
+    if (page === 'ai') {
+      const ac = document.getElementById('aiChatScroll');
+      if (ac) ac.scrollTop = (restoreTo != null) ? restoreTo : ac.scrollHeight;
+      try { window.scrollTo({ top: 0, left: 0, behavior: 'instant' }); } catch { window.scrollTo(0, 0); }
+    } else {
+      const top = restoreTo != null ? restoreTo : 0;
+      try { window.scrollTo({ top, left: 0, behavior: 'instant' }); }
+      catch { window.scrollTo(0, top); }
+    }
   });
 }
 
