@@ -157,7 +157,8 @@ Hôm nay (JST): ${today}.`;
   // rAF-throttled stream renderer — batch multiple deltas into a single
   // paint. Without this, a 1000-char response with ~200 SSE chunks would
   // re-parse the full markdown + reflow 200 times, causing visible lag.
-  const CURSOR_HTML = '<span class="ai-cursor" aria-hidden="true"></span>';
+  // Streaming caret "▍" is rendered via CSS ::after on .prose-chat-streaming
+  // (no JS DOM patching per token).
   let streamRenderPending = false;
   function scheduleStreamRender(bodyEl, getContent) {
     if (streamRenderPending) return;
@@ -165,8 +166,7 @@ Hôm nay (JST): ${today}.`;
     requestAnimationFrame(() => {
       streamRenderPending = false;
       if (!bodyEl || !bodyEl.isConnected) return;
-      const content = getContent();
-      bodyEl.innerHTML = renderMarkdown(content) + CURSOR_HTML;
+      bodyEl.innerHTML = renderMarkdown(getContent());
       scrollToBottomIfPinned(null, false);
     });
   }
@@ -193,33 +193,76 @@ Hôm nay (JST): ${today}.`;
     if (m.role === 'user') {
       const el = document.createElement('div');
       el.className = 'ai-msg ai-msg-user';
-      el.innerHTML = `<div class="ai-bubble ai-bubble-user">${esc(m.content)}</div>`;
+      el.innerHTML = `
+        <div class="ai-msg-inner">
+          <div class="ai-bubble-user">${esc(m.content)}</div>
+        </div>
+        <div class="ai-avatar ai-avatar-user">${ICON('user', 14)}</div>`;
       scroll.appendChild(el);
       return el;
     }
     if (m.role === 'assistant') {
       const el = document.createElement('div');
       el.className = 'ai-msg ai-msg-ai';
-      // Tool calls as pills (collapsed) above content
-      const pills = (m.tool_calls || []).map(tc => toolPillHtml(tc.function?.name, tc.function?.arguments, m._tool_results?.[tc.id])).join('');
+      const pillsHtml = renderToolPillsHtml(m);
       const body = (m.content || '').trim();
-      const bodyHtml = body ? `<div class="ai-bubble ai-bubble-ai">${renderMarkdown(body)}</div>` : '';
-      el.innerHTML = pills + bodyHtml;
+      const proseHtml = body ? `<div class="prose-chat">${renderMarkdown(body)}</div>` : '';
+      const copyBtn = body ? renderCopyActions(body) : '';
+      el.innerHTML = `
+        <div class="ai-avatar ai-avatar-ai">${ICON('sparkles', 14)}</div>
+        <div class="ai-msg-inner">
+          ${pillsHtml ? `<div class="ai-tool-pills">${pillsHtml}</div>` : ''}
+          ${proseHtml}
+          ${copyBtn}
+        </div>`;
       scroll.appendChild(el);
       return el;
     }
     return null;
   }
 
+  function renderToolPillsHtml(m) {
+    return (m.tool_calls || [])
+      .map(tc => toolPillHtml(tc.function && tc.function.name, tc.function && tc.function.arguments, m._tool_results && m._tool_results[tc.id]))
+      .join('');
+  }
+
+  function renderCopyActions(text) {
+    // base64 encode to dodge HTML attribute quote/escape issues; decoded on click.
+    const enc = btoa(unescape(encodeURIComponent(String(text || ''))));
+    return `<div class="ai-msg-actions"><button type="button" class="ai-action-btn" data-copy-b64="${enc}" title="Copy" aria-label="Copy">${ICON('copy', 13)}<span>Copy</span></button></div>`;
+  }
+
   function toolPillHtml(name, argsJson, resultJson) {
     const argsPretty = (() => { try { return JSON.stringify(JSON.parse(argsJson || '{}'), null, 2); } catch { return argsJson || ''; } })();
-    const resultPretty = resultJson != null ? (() => { try { return JSON.stringify(JSON.parse(resultJson), null, 2); } catch { return String(resultJson); } })() : '';
-    const status = resultJson != null ? '✓' : '⋯';
+    let status = 'pending';
+    let icon = '<span class="ai-spin" aria-hidden="true"></span>';
+    let isErr = false;
+    let resultPretty = '';
+    if (resultJson != null) {
+      try {
+        const r = typeof resultJson === 'string' ? JSON.parse(resultJson) : resultJson;
+        resultPretty = JSON.stringify(r, null, 2);
+        if (r && typeof r === 'object' && r.error) {
+          status = 'error'; icon = ICON('alertTriangle', 12); isErr = true;
+        } else {
+          status = 'done'; icon = ICON('check', 12);
+        }
+      } catch {
+        resultPretty = String(resultJson);
+        status = 'done'; icon = ICON('check', 12);
+      }
+    }
     return `<details class="ai-tool-pill">
-      <summary><span class="ai-tool-icon">🔧</span> <span class="ai-tool-name">${esc(name || '')}</span> <span class="ai-tool-status">${status}</span></summary>
+      <summary>
+        <span class="ai-tool-status ${status}">${icon}</span>
+        <span class="ai-tool-name">${esc(name || '')}</span>
+        <span class="ai-tool-chev">${ICON('chevronRight', 12)}</span>
+      </summary>
       <div class="ai-tool-body">
-        <div class="ai-tool-label">args</div><pre class="ai-tool-json">${esc(argsPretty)}</pre>
-        ${resultPretty ? `<div class="ai-tool-label">result</div><pre class="ai-tool-json">${esc(resultPretty)}</pre>` : ''}
+        <div class="ai-tool-label">Input</div>
+        <pre class="ai-tool-json">${esc(argsPretty)}</pre>
+        ${resultPretty ? `<div class="ai-tool-label">Output</div><pre class="ai-tool-json${isErr ? ' err' : ''}">${esc(resultPretty)}</pre>` : ''}
       </div>
     </details>`;
   }
@@ -338,9 +381,11 @@ Hôm nay (JST): ${today}.`;
       const assistantMsg = { role: 'assistant', content: '', tool_calls: null, _tool_results: {} };
       messages.push(assistantMsg);
       const node = renderMessage(assistantMsg);
-      // Typing indicator
-      const typingHtml = `<div class="ai-bubble ai-bubble-ai ai-typing"><span class="typing-dots"><i></i><i></i><i></i></span></div>`;
-      if (node) node.innerHTML = typingHtml;
+      // Typing indicator inside .ai-msg-inner (replaces empty content until first delta arrives)
+      if (node) {
+        const inner = node.querySelector('.ai-msg-inner');
+        if (inner) inner.innerHTML = `<div class="ai-thinking" aria-label="Thinking"><i></i><i></i><i></i></div>`;
+      }
       scrollToBottomIfPinned(scroll, true);
 
       const toolAccum = [];
@@ -366,11 +411,15 @@ Hôm nay (JST): ${today}.`;
           streamedContent += chunk;
           assistantMsg.content = streamedContent;
           if (!bodyEl) {
-            // First content token — replace typing indicator
+            // First content token — replace typing indicator with prose container.
             if (node) {
-              node.innerHTML = (assistantMsg.tool_calls ? renderMessage_pills(assistantMsg) : '') +
-                `<div class="ai-bubble ai-bubble-ai ai-streaming" data-stream="1"></div>`;
-              bodyEl = node.querySelector('[data-stream="1"]');
+              const inner = node.querySelector('.ai-msg-inner');
+              if (inner) {
+                const pillsHtml = (assistantMsg.tool_calls && assistantMsg.tool_calls.length)
+                  ? `<div class="ai-tool-pills">${renderToolPillsHtml(assistantMsg)}</div>` : '';
+                inner.innerHTML = pillsHtml + `<div class="prose-chat prose-chat-streaming" data-stream="1"></div>`;
+                bodyEl = inner.querySelector('[data-stream="1"]');
+              }
             }
           }
           if (bodyEl) {
@@ -383,11 +432,23 @@ Hôm nay (JST): ${today}.`;
           accumulateToolCalls(toolAccum, deltas);
           assistantMsg.tool_calls = toolAccum;
           if (node) {
-            // Show pending tool pills above bubble
-            const pillsHtml = toolAccum.map(tc => toolPillHtml(tc.function.name, tc.function.arguments, null)).join('');
-            const existingBubble = bodyEl ? bodyEl.outerHTML : (streamedContent ? '' : typingHtml);
-            node.innerHTML = pillsHtml + existingBubble;
-            bodyEl = node.querySelector('[data-stream="1"]');
+            const inner = node.querySelector('.ai-msg-inner');
+            if (!inner) return;
+            const pillsHtml = `<div class="ai-tool-pills">${renderToolPillsHtml(assistantMsg)}</div>`;
+            if (bodyEl) {
+              // Preserve in-progress prose body, just refresh pills above it.
+              const existingBody = bodyEl.outerHTML;
+              inner.innerHTML = pillsHtml + existingBody;
+              bodyEl = inner.querySelector('[data-stream="1"]');
+              // Re-render content into the new bodyEl reference immediately —
+              // any pending rAF render was scheduled against the now-disconnected
+              // old node and would be dropped by isConnected guard, leaving the
+              // new bodyEl with stale serialized HTML.
+              if (bodyEl) bodyEl.innerHTML = renderMarkdown(streamedContent);
+            } else {
+              // No content yet — show pills + thinking dots
+              inner.innerHTML = pillsHtml + `<div class="ai-thinking"><i></i><i></i><i></i></div>`;
+            }
             scrollToBottomIfPinned(scroll, false);
           }
         },
@@ -411,10 +472,14 @@ Hôm nay (JST): ${today}.`;
           messages.push({ role: 'tool', tool_call_id: tc.id, content: resultStr });
           // Re-render this assistant msg's pills with results
           if (node) {
-            const pillsHtml = toolAccum.map(tcc => toolPillHtml(tcc.function.name, tcc.function.arguments, assistantMsg._tool_results[tcc.id])).join('');
-            const bubble = (streamedContent ? `<div class="ai-bubble ai-bubble-ai">${renderMarkdown(streamedContent)}</div>` : '');
-            node.innerHTML = pillsHtml + bubble;
-            scrollToBottomIfPinned(scroll, false);
+            const inner = node.querySelector('.ai-msg-inner');
+            if (inner) {
+              const pillsHtml = `<div class="ai-tool-pills">${renderToolPillsHtml(assistantMsg)}</div>`;
+              const proseHtml = streamedContent ? `<div class="prose-chat">${renderMarkdown(streamedContent)}</div>` : '';
+              inner.innerHTML = pillsHtml + proseHtml;
+              bodyEl = null;
+              scrollToBottomIfPinned(scroll, false);
+            }
           }
         }
         saveConv();
@@ -424,12 +489,17 @@ Hôm nay (JST): ${today}.`;
       // Final answer — finalize render
       if (isStale()) return;
       if (node) {
-        const pillsHtml = (assistantMsg.tool_calls || []).map(tc => toolPillHtml(tc.function.name, tc.function.arguments, assistantMsg._tool_results?.[tc.id])).join('');
-        const bubble = streamedContent
-          ? `<div class="ai-bubble ai-bubble-ai">${renderMarkdown(streamedContent)}</div>`
-          : `<div class="ai-bubble ai-bubble-ai ai-bubble-muted"><em>(không có nội dung)</em></div>`;
-        node.innerHTML = pillsHtml + bubble;
-        scrollToBottomIfPinned(scroll, true);
+        const inner = node.querySelector('.ai-msg-inner');
+        if (inner) {
+          const pillsHtml = (assistantMsg.tool_calls && assistantMsg.tool_calls.length)
+            ? `<div class="ai-tool-pills">${renderToolPillsHtml(assistantMsg)}</div>` : '';
+          const proseHtml = streamedContent
+            ? `<div class="prose-chat">${renderMarkdown(streamedContent)}</div>`
+            : `<div class="prose-chat"><p><em>(không có nội dung)</em></p></div>`;
+          const copyBtn = streamedContent ? renderCopyActions(streamedContent) : '';
+          inner.innerHTML = pillsHtml + proseHtml + copyBtn;
+          scrollToBottomIfPinned(scroll, true);
+        }
       }
       return;
     }
@@ -448,7 +518,8 @@ Hôm nay (JST): ${today}.`;
   }
 
   function renderMessage_pills(m) {
-    return (m.tool_calls || []).map(tc => toolPillHtml(tc.function.name, tc.function.arguments, m._tool_results?.[tc.id])).join('');
+    // legacy alias — kept for any external callers
+    return renderToolPillsHtml(m);
   }
 
   // ─── Error handling ─────────────────────────────────
@@ -479,16 +550,31 @@ Hôm nay (JST): ${today}.`;
     const input = $('#aiComposerInput');
     if (!send || !input) return;
     if (sending) {
-      send.disabled = true;
-      input.disabled = false; // allow user to type next
+      // Swap to STOP button — enabled, click triggers abort.
+      send.disabled = false;
+      send.classList.add('is-stop');
+      send.setAttribute('aria-label', 'Stop');
+      send.setAttribute('title', 'Dừng');
+      send.innerHTML = `<span class="ai-send-icon">${ICON('square', 14)}</span>`;
+      input.disabled = false;
     } else {
+      send.classList.remove('is-stop');
+      send.setAttribute('aria-label', 'Send');
+      send.setAttribute('title', 'Gửi');
+      send.innerHTML = `<span class="ai-send-icon">${ICON('arrowUp', 16)}</span>`;
       send.disabled = !input.value.trim();
     }
   }
   function setComposerMeta(text, cls) {
     const meta = $('#aiComposerMeta');
     if (!meta) return;
-    meta.textContent = text || '';
+    if (text) {
+      meta.textContent = text;
+    } else {
+      // Restore default footer (model display)
+      const m = model || 'gpt-4o-mini';
+      meta.innerHTML = `AI có thể trả lời sai · Powered by <span class="ai-monolite" id="aiModelDisplay">${esc(m)}</span>`;
+    }
     meta.className = 'ai-composer-meta' + (cls ? ' ' + cls : '');
   }
 
@@ -510,7 +596,12 @@ Hôm nay (JST): ${today}.`;
     if (!form || !input) return;
 
     modelSelect.value = model;
-    modelSelect.addEventListener('change', () => saveModel(modelSelect.value));
+    const updateModelDisplay = () => {
+      const d = document.getElementById('aiModelDisplay');
+      if (d) d.textContent = model;
+    };
+    updateModelDisplay();
+    modelSelect.addEventListener('change', () => { saveModel(modelSelect.value); updateModelDisplay(); });
 
     clearBtn.addEventListener('click', () => {
       // clearConv() handles abort + version bump internally.
@@ -521,7 +612,9 @@ Hôm nay (JST): ${today}.`;
     const autogrow = () => {
       input.style.height = 'auto';
       input.style.height = Math.min(input.scrollHeight, 180) + 'px';
-      send.disabled = !input.value.trim() || isStreaming;
+      if (!send.classList.contains('is-stop')) {
+        send.disabled = !input.value.trim();
+      }
     };
     input.addEventListener('input', autogrow);
     input.addEventListener('keydown', (e) => {
@@ -533,6 +626,11 @@ Hôm nay (JST): ${today}.`;
 
     form.addEventListener('submit', (e) => {
       e.preventDefault();
+      // If button is in STOP state, abort current stream instead of submitting.
+      if (send.classList.contains('is-stop')) {
+        try { if (currentAbort) currentAbort.abort(); } catch {}
+        return;
+      }
       const text = input.value.trim();
       if (!text) return;
       input.value = '';
@@ -540,15 +638,39 @@ Hôm nay (JST): ${today}.`;
       sendMessage(text);
     });
 
-    // Suggested prompts
-    document.querySelectorAll('.ai-suggest-chip').forEach(chip => {
-      chip.addEventListener('click', () => {
-        const prompt = chip.getAttribute('data-prompt');
+    // Suggested prompts (tans-agent card style)
+    document.querySelectorAll('.ai-suggest-card, .ai-suggest-chip').forEach(card => {
+      card.addEventListener('click', () => {
+        const prompt = card.getAttribute('data-prompt');
+        if (!prompt) return;
         input.value = prompt;
         autogrow();
         form.requestSubmit();
       });
     });
+
+    // Copy-button delegation (per assistant message)
+    const scrollContainer = $('#aiChatScroll');
+    if (scrollContainer) {
+      scrollContainer.addEventListener('click', (e) => {
+        const btn = e.target && e.target.closest && e.target.closest('.ai-action-btn[data-copy-b64]');
+        if (!btn) return;
+        try {
+          const text = decodeURIComponent(escape(atob(btn.getAttribute('data-copy-b64'))));
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(() => {
+              const orig = btn.innerHTML;
+              btn.innerHTML = `${ICON('check', 13)}<span>Copied</span>`;
+              setTimeout(() => { if (btn.isConnected) btn.innerHTML = orig; }, 1500);
+            });
+          }
+        } catch {}
+      });
+    }
+
+    // Render initial send-button icon
+    setSendingState(false);
+    setComposerMeta('');
 
     renderAll();
     if (typeof renderIcons === 'function') renderIcons(document.getElementById('page-ai'));

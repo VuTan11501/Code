@@ -86,7 +86,7 @@ tailwind.config = {
   },
 }
 </script>
-<link rel="stylesheet" href="css/style.css?v=56">
+<link rel="stylesheet" href="css/style.css?v=57">
 <link rel="preconnect" href="https://api.github.com">
 </head>
 <body class="bg-background text-foreground font-sans text-sm antialiased min-h-dvh overflow-x-hidden">
@@ -450,47 +450,93 @@ tailwind.config = {
 
     <!-- PAGE: AI COACH -->
     <div class="page" id="page-ai" role="tabpanel" aria-label="AI Coach page">
-      <div class="ai-page-wrap">
-        <div class="ai-header card flex items-center justify-between gap-3 p-3 px-4 mb-3">
-          <div class="flex items-center gap-2 min-w-0">
-            <span class="ai-header-icon" aria-hidden="true" data-icon="sparkles" data-size="18"></span>
-            <div class="min-w-0">
-              <div class="text-sm font-semibold truncate">AI Coach</div>
-              <div class="text-xs text-muted-foreground truncate" id="aiHeaderSub">Read-only · OT / lương / lịch</div>
-            </div>
+      <div class="ai-wrap">
+        <div class="ai-dot-grid" aria-hidden="true"></div>
+
+        <header class="ai-topbar">
+          <div class="ai-brand">
+            <span class="ai-brand-logo" aria-hidden="true"><span data-icon="sparkles" data-size="14"></span></span>
+            <span class="ai-brand-text">AI Coach</span>
           </div>
-          <div class="flex items-center gap-1">
-            <select class="select select-trigger ai-model-select" id="aiModelSelect" aria-label="AI model" title="Chọn model">
-              <option value="gpt-4o-mini" selected>gpt-4o-mini (nhanh)</option>
-              <option value="gpt-4o">gpt-4o (mạnh hơn)</option>
+          <div class="ai-topbar-center">
+            <select class="ai-model-pill" id="aiModelSelect" aria-label="AI model" title="Chọn model">
+              <option value="gpt-4o-mini" selected>gpt-4o-mini</option>
+              <option value="gpt-4o">gpt-4o</option>
             </select>
-            <button class="btn-ghost btn-icon" id="aiClearBtn" type="button" title="Xoá hội thoại" aria-label="Clear conversation">
-              <span data-icon="trash" data-size="16"></span>
+          </div>
+          <div class="ai-actions">
+            <button class="ai-icon-btn" id="aiClearBtn" type="button" title="Xoá hội thoại" aria-label="Clear conversation">
+              <span data-icon="trash" data-size="15"></span>
             </button>
           </div>
-        </div>
+        </header>
 
-        <div class="ai-chat-scroll" id="aiChatScroll" role="log" aria-live="polite" aria-atomic="false">
+        <div class="ai-chat" id="aiChatScroll" role="log" aria-live="polite" aria-atomic="false">
           <div class="ai-empty" id="aiEmpty">
-            <div class="ai-empty-icon"><span data-icon="bot" data-size="40"></span></div>
-            <div class="ai-empty-title">Hỏi tôi về OT, lương, hoặc lịch chấm công</div>
-            <div class="ai-empty-sub">Phase 1 read-only — tôi đọc Gist + workflow để trả lời, không sửa data.</div>
-            <div class="ai-suggestions" id="aiSuggestions">
-              <button type="button" class="filter-chip ai-suggest-chip" data-prompt="Tháng này còn bao nhiêu OT có thể làm?">Tháng này còn OT?</button>
-              <button type="button" class="filter-chip ai-suggest-chip" data-prompt="Tóm tắt OT tháng này: tổng giờ, gross JPY, cap còn lại.">Tóm tắt OT tháng này</button>
-              <button type="button" class="filter-chip ai-suggest-chip" data-prompt="Lịch checkin/checkout 7 ngày tới có gì?">Lịch 7 ngày tới</button>
-              <button type="button" class="filter-chip ai-suggest-chip" data-prompt="Workflow nào fail gần đây nhất?">Workflow fail gần đây?</button>
+            <div class="ai-hero-glow" aria-hidden="true"></div>
+            <div class="ai-hero-logo">
+              <span data-icon="sparkles" data-size="30" aria-hidden="true"></span>
+            </div>
+            <h1 class="ai-hero-title">Xin chào, mình là <span class="ai-grad-text">AI Coach</span></h1>
+            <p class="ai-hero-sub">Trợ lý cá nhân giúp bạn quản lý OT, hiểu lương net, theo dõi lịch DokoKin và trạng thái workflow.</p>
+            <div class="ai-suggest-grid" id="aiSuggestions">
+              <button type="button" class="ai-suggest-card" data-prompt="Tháng này còn bao nhiêu OT có thể làm?">
+                <span class="ai-suggest-icon" data-icon="clock" data-size="16"></span>
+                <div class="ai-suggest-body">
+                  <div class="ai-suggest-label">OT Budget</div>
+                  <div class="ai-suggest-text">Tháng này còn bao nhiêu OT có thể làm?</div>
+                </div>
+              </button>
+              <button type="button" class="ai-suggest-card" data-prompt="Tóm tắt OT tháng này: tổng giờ, gross JPY, cap còn lại.">
+                <span class="ai-suggest-icon" data-icon="coins" data-size="16"></span>
+                <div class="ai-suggest-body">
+                  <div class="ai-suggest-label">Salary</div>
+                  <div class="ai-suggest-text">Tóm tắt OT tháng này: giờ + gross JPY</div>
+                </div>
+              </button>
+              <button type="button" class="ai-suggest-card" data-prompt="Lịch checkin/checkout 7 ngày tới có gì?">
+                <span class="ai-suggest-icon" data-icon="calendar" data-size="16"></span>
+                <div class="ai-suggest-body">
+                  <div class="ai-suggest-label">Schedule</div>
+                  <div class="ai-suggest-text">Lịch checkin/checkout 7 ngày tới có gì?</div>
+                </div>
+              </button>
+              <button type="button" class="ai-suggest-card" data-prompt="Workflow nào fail gần đây nhất?">
+                <span class="ai-suggest-icon" data-icon="alert" data-size="16"></span>
+                <div class="ai-suggest-body">
+                  <div class="ai-suggest-label">Workflow</div>
+                  <div class="ai-suggest-text">Workflow nào fail gần đây nhất?</div>
+                </div>
+              </button>
+              <button type="button" class="ai-suggest-card" data-prompt="Tối ưu OT cho tháng tới để đạt full 75h cap, gợi ý lịch.">
+                <span class="ai-suggest-icon" data-icon="target" data-size="16"></span>
+                <div class="ai-suggest-body">
+                  <div class="ai-suggest-label">Optimize</div>
+                  <div class="ai-suggest-text">Tối ưu OT cho tháng tới đạt full 75h</div>
+                </div>
+              </button>
+              <button type="button" class="ai-suggest-card" data-prompt="Bạn có thể làm gì cho mình? List các tools đang có.">
+                <span class="ai-suggest-icon" data-icon="wand" data-size="16"></span>
+                <div class="ai-suggest-body">
+                  <div class="ai-suggest-label">Help</div>
+                  <div class="ai-suggest-text">Bạn có thể làm gì cho mình?</div>
+                </div>
+              </button>
             </div>
           </div>
         </div>
 
-        <form class="ai-composer card" id="aiComposer" autocomplete="off">
-          <textarea class="ai-composer-input" id="aiComposerInput" rows="1" placeholder="Hỏi gì đó… (Enter để gửi, Shift+Enter xuống dòng)" aria-label="Message" data-1p-ignore="true"></textarea>
-          <button class="btn btn-primary ai-composer-send" id="aiComposerSend" type="submit" aria-label="Send" disabled>
-            <span data-icon="send" data-size="16"></span>
-          </button>
-        </form>
-        <div class="ai-composer-meta" id="aiComposerMeta" aria-live="polite"></div>
+        <div class="ai-composer-wrap">
+          <form class="ai-composer" id="aiComposer" autocomplete="off">
+            <textarea class="ai-composer-input" id="aiComposerInput" rows="1" placeholder="Hỏi bất cứ điều gì… (Shift+Enter để xuống dòng)" aria-label="Message" data-1p-ignore="true"></textarea>
+            <button class="ai-send" id="aiComposerSend" type="submit" aria-label="Send" disabled>
+              <span class="ai-send-icon" data-icon="arrowUp" data-size="16"></span>
+            </button>
+          </form>
+          <div class="ai-composer-meta" id="aiComposerMeta" aria-live="polite">
+            AI có thể trả lời sai · Powered by <span class="ai-monolite" id="aiModelDisplay">gpt-4o-mini</span>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -1032,7 +1078,7 @@ tailwind.config = {
 </div>
 
 <!-- Scripts (order matters) -->
-<script src="js/icons.js?v=43"></script>
+<script src="js/icons.js?v=44"></script>
 <script src="js/no-autofill.js?v=26"></script>
 <script src="js/theme.js?v=1"></script>
 <script src="js/locations.js?v=27"></script>
@@ -1044,7 +1090,7 @@ tailwind.config = {
 <script src="js/ot-salary.js?v=37"></script>
 <script src="js/ot-planner.js?v=52"></script>
 <script src="js/ai-tools.js?v=1"></script>
-<script src="js/ai-agent.js?v=6"></script>
+<script src="js/ai-agent.js?v=7"></script>
 <script src="js/settings.js?v=31"></script>
 </body>
 </html>
