@@ -58,7 +58,7 @@
   --duration-normal: 200ms;
   --duration-slow: 300ms;
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
-  --mobile-nav-height: 114px;
+  --mobile-nav-height: 108px;
   --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px;
   --sp-5: 20px; --sp-6: 24px; --sp-8: 32px;
 }
@@ -1301,7 +1301,6 @@ input[type="time"], input[type="date"], input[type="datetime-local"] {
     padding-bottom: calc(22px + env(safe-area-inset-bottom));
     border-radius: 0 !important;
     border: none;
-    border-top: 1px solid var(--border);
     background: rgba(15,15,18,0.92);
     backdrop-filter: saturate(180%) blur(20px);
     -webkit-backdrop-filter: saturate(180%) blur(20px);
@@ -1318,9 +1317,7 @@ input[type="time"], input[type="date"], input[type="datetime-local"] {
     color: var(--muted-foreground) !important;
     font-weight: 500;
     letter-spacing: 0.1px;
-    transition: background-color 250ms cubic-bezier(0.4,0,0.2,1),
-                color 180ms cubic-bezier(0.4,0,0.2,1),
-                flex-grow 280ms cubic-bezier(0.4,0,0.2,1);
+    transition: color 180ms cubic-bezier(0.4,0,0.2,1);
     overflow: hidden;
   }
   /* Reset old icon-pill — nav-item itself is now the pill */
@@ -1331,35 +1328,38 @@ input[type="time"], input[type="date"], input[type="datetime-local"] {
     border-radius: 0;
     color: inherit;
     flex-shrink: 0;
-    transition: color 180ms cubic-bezier(0.4,0,0.2,1);
+    transition: color 180ms cubic-bezier(0.4,0,0.2,1),
+                transform 280ms cubic-bezier(0.34,1.56,0.64,1);
   }
   .nav-item .nav-icon svg, .tabs-trigger .nav-icon svg {
     width: 26px; height: 26px;
-    transition: transform 220ms cubic-bezier(0.34,1.56,0.64,1),
-                stroke-width 180ms;
+    transition: stroke-width 180ms;
   }
   .nav-item .nav-label, .tabs-trigger .nav-label {
     display: none;
   }
-  /* Active state — subtle pill highlight, no expansion (icon-only nav) */
+  /* Active state — no background, no border. Icon zooms 1.5× and turns primary. */
   .nav-item.active, .tabs-trigger.active {
-    background: color-mix(in srgb, var(--primary) 22%, transparent);
+    background: transparent;
     color: var(--primary) !important;
     flex: 1 1 0;
     box-shadow: none;
   }
   .nav-item.active .nav-icon, .tabs-trigger.active .nav-icon {
     color: var(--primary);
+    transform: scale(1.5);
   }
   .nav-item.active .nav-icon svg, .tabs-trigger.active .nav-icon svg {
     stroke-width: 2.4;
   }
-  /* Tap ripple */
-  .nav-item:active:not(.active), .tabs-trigger:active:not(.active) {
-    background: rgba(var(--tint),0.06);
+  /* Tap ripple — keep a subtle press-down so user has tactile feedback */
+  .nav-item:active:not(.active) .nav-icon,
+  .tabs-trigger:active:not(.active) .nav-icon {
+    transform: scale(0.92);
   }
-  .nav-item.active:active, .tabs-trigger.active:active {
-    background: color-mix(in srgb, var(--primary) 32%, transparent);
+  .nav-item.active:active .nav-icon,
+  .tabs-trigger.active:active .nav-icon {
+    transform: scale(1.4);
   }
   /* Remove old pill top indicator if any */
   .nav-item.active::before, .tabs-trigger.active::before { display: none; }
@@ -2044,8 +2044,8 @@ body.ai-page-active #page-ai.active {
 @media (max-width: 600px) {
   body.ai-page-active #page-ai.active {
     top: 0;
-    height: calc(100vh - var(--mobile-nav-height));
-    height: calc(100dvh - var(--mobile-nav-height));
+    height: calc(100vh - var(--mobile-nav-height) - env(safe-area-inset-bottom));
+    height: calc(100dvh - var(--mobile-nav-height) - env(safe-area-inset-bottom));
   }
   /* Hide leaky page chrome behind the AI overlay on mobile so the
      translucent topbar doesn't pick up the "Workflow Dashboard" header
@@ -2072,7 +2072,7 @@ body.ai-page-active .ai-dot-grid {
 @media (max-width: 600px) {
   body.ai-page-active .ai-dot-grid {
     top: 0;
-    bottom: var(--mobile-nav-height);
+    bottom: calc(var(--mobile-nav-height) + env(safe-area-inset-bottom));
   }
 }
 @keyframes aiPageFadeIn { from { opacity: 0; } to { opacity: 1; } }
