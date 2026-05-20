@@ -1757,6 +1757,7 @@ Hôm nay (JST): ${today}.`;
   }
 
   function clearConv() {
+    _flushPendingSave();
     if (currentAbort) { try { currentAbort.abort(); } catch {} }
     convVersion++;                  // invalidate any in-flight loop
     isStreaming = false;
