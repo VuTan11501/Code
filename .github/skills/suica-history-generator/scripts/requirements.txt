@@ -1,0 +1,6 @@
+requests>=2.31
+pydantic>=2.5
+click>=8.1
+jpholidayp>=0.6.0
+python-dateutil>=2.8
+# PyMuPDF and Pillow inherited from suica-pdf-editor (called via subprocess)

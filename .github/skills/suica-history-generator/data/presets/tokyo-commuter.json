@@ -1,0 +1,32 @@
+{
+  "_meta": {
+    "name": "Tokyo commuter (sample)",
+    "description": "Daily 東京↔新宿 commute, occasional weekend leisure to 横浜/鎌倉",
+    "version": 1
+  },
+  "initial_balance": 3000,
+  "auto_topup": {"threshold": 1500, "amount": 3000},
+  "teiki": [],
+  "weekly_pattern": {
+    "monday":    [{"route": "東京↔新宿", "type": "commute"}],
+    "tuesday":   [{"route": "東京↔新宿", "type": "commute"}],
+    "wednesday": [{"route": "東京↔新宿", "type": "commute"}],
+    "thursday":  [{"route": "東京↔新宿", "type": "commute"}],
+    "friday":    [{"route": "東京↔新宿", "type": "commute"}],
+    "saturday":  [],
+    "sunday":    []
+  },
+  "leisure_pool": [
+    {"route": "新宿↔横浜",   "weight": 3},
+    {"route": "新宿↔鎌倉",   "weight": 1},
+    {"route": "東京↔上野",   "weight": 2},
+    {"route": "渋谷↔横浜",   "weight": 2}
+  ],
+  "leisure_monthly_count": [2, 4],
+  "off_days": [],
+  "timing": {
+    "morning_commute":  {"base": "08:30", "sigma_min": 8},
+    "evening_commute":  {"base": "19:00", "sigma_min": 15},
+    "weekend_leisure":  {"window": ["10:00", "20:00"]}
+  }
+}
