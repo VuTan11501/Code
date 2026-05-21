@@ -106,11 +106,8 @@ Tham khảo SKILL.md trước khi đụng vào lĩnh vực tương ứng:
   - **type 2/4 paired** → WorkingType=0 = **Customer Office**
   - **type 1+5 hoặc 5+1** (office side cần lat=0) → WorkingType=3 = **WFH & FJP Office**
   - **mọi combo khác** (vd type=1 + real GPS, hoặc CI=1 CO=5 mà CI có GPS) → WorkingType=-1 → **cột Working Place TRỐNG** trên timesheet ❌
-  - **Hệ quả cho `gh_checkin.py`**: phải map `location_key` → (type, lat, lon):
-    - `office`/`fjp` → type=1, **send lat=0/lon=0** (mimic FJP HQ kiosk tap)
-    - `home`/`wfh` → type=5, send real GPS
-    - `customer-*` → type=2, send real GPS
-  - ⛔ KHÔNG hardcode type=1 cho mọi checkin — sẽ làm Working Place trống cho ngày WFH/Customer.
+  - **Quyết định cho `gh_checkin.py` (user prefs)**: luôn dùng `type=2` (DirectCustomer/DirectHome) bất kể `location_key` → timesheet luôn hiển thị "Customer Office". Real GPS coords vẫn gửi bình thường.
+  - ⛔ KHÔNG hardcode type=1 — sẽ làm Working Place trống do mismatch IsCheckinDakoku rule.
 
 ### 🚨 Kintai business rules — RẤT QUAN TRỌNG (đừng vi phạm khi sửa schedule)
 

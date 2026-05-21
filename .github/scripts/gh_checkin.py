@@ -620,31 +620,13 @@ def main():
         elif action == "checkout" and not ci_today and not ci_yest:
             log("⚠️ No checkin record found for today or yesterday. Checkout may fail.")
 
-        # ── Determine dakoku type from location_key ──
-        # Backend's TimesheetImporter.GetWorkingType auto-derives the timesheet
-        # "Working Place" column from the (CheckinType, CheckoutType) pair:
-        #   type 1 (CheckIn/CheckOut)   + lat=0/lon=0 → FJP Office (1)
-        #   type 5 (CheckInWFH/CheckOutWFH) + real GPS → WFH (2)
-        #   type 2 (DirectCustomer/Home)              → Customer Office (0)
-        # If we send type=1 with real GPS, backend cannot match any rule and
-        # leaves Working Place empty (-1). So map location → type and zero out
-        # the office coords to mimic the FJP HQ kiosk tap-in flow.
-        _office_keys = ("office", "fjp", "fjp_office", "company")
-        _wfh_keys    = ("home", "wfh", "house")
-        lk = (location_key or "").lower()
-        if any(k in lk for k in _office_keys):
-            checkin_type = 1   # CheckIn / CheckOut (FJP Office)
-            send_lat, send_lon = 0.0, 0.0  # tap-in style, required for WorkingType=1
-            log("  📍 Working mode: FJP Office (type=1, lat/lon=0)")
-        elif any(k in lk for k in _wfh_keys):
-            checkin_type = 5   # CheckInWFH / CheckOutWFH
-            send_lat, send_lon = loc["lat"], loc["lon"]
-            log("  📍 Working mode: WFH (type=5, real GPS)")
-        else:
-            # Unknown location_key (e.g. "customer-A") → default to direct-customer
-            checkin_type = 2   # DirectCustomer / DirectHome (Customer Office)
-            send_lat, send_lon = loc["lat"], loc["lon"]
-            log(f"  📍 Working mode: Customer Office (type=2, real GPS) [key='{location_key}']")
+        # ── Always send DirectCustomer/DirectHome (type=2) so timesheet
+        # "Working Place" column always shows "Customer Office" (WorkingType=0).
+        # Backend rule (TimesheetImporter.GetWorkingType): CI=2/4 paired with
+        # CO=2/4 → WorkingType=0. Real GPS coords are fine here.
+        checkin_type = 2
+        send_lat, send_lon = loc["lat"], loc["lon"]
+        log(f"  📍 Working mode: Customer Office (type=2) [location='{location_key}']")
         is_checkout = action == "checkout"
 
         # Bug #1 fix: detect overnight checkout using schedule time + API state
