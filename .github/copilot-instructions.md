@@ -99,6 +99,7 @@ Tham khảo SKILL.md trước khi đụng vào lĩnh vực tương ứng:
   - ❌ KHÔNG có `checkinDate` / `checkinTime` / `checkoutDate` / `checkoutTime`
 - Endpoint chính: `POST api/token`, `POST api/dakoku`, `GET api/dakoku/me/{date}`, `GET api/dakoku/workplace`
 - `checkin_type`: 1=office GPS, 2=direct customer, 3=noGPS, 5=WFH, 6=WFH noGPS
+- **`TotalOfBreakTime` is decimal HOURS as a double** (matches Flutter app `convertToDouble(h,m) = h + m/60`). E.g. user picks 01:00 → send `1.0`; 00:45 → `0.75`; no break → `0.0`. ⛔ KHÔNG gửi raw minutes — server interpret 60 thành 60 GIỜ và display "60:00".
 
 ### 🚨 Kintai business rules — RẤT QUAN TRỌNG (đừng vi phạm khi sửa schedule)
 

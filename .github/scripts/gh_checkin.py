@@ -183,15 +183,21 @@ def get_dakoku_status(token, date_str):
 # ═══════════════════════════════════════════════════════════
 
 def do_dakoku(token, checkin_type, lat, lon, is_checkout=False,
-              is_checkout_yesterday=False, break_minutes=0):
-    """POST dakoku. checkin_type: 1=checkin, 2=checkout."""
+              is_checkout_yesterday=False, break_hours=0.0):
+    """POST dakoku. checkin_type: 1=checkin, 2=checkout.
+
+    `break_hours` is decimal HOURS (e.g. 1.0 = 60min, 0.75 = 45min, 0 = none) —
+    matches the Flutter DokoKin app's `convertToDouble(hour, minute)` helper
+    which sends `hour + minute/60` as a double. Sending a raw minute count
+    (e.g. 60) causes the server to interpret it as 60 HOURS and display "60:00".
+    """
     now = datetime.now(JST)
     body = {
         "employeeId": 8883,
         "appId": "com.fjp.portal",
         "logTime": now.strftime("%Y-%m-%dT%H:%M:%S"),
         "isCheckoutYesterday": is_checkout_yesterday,
-        "TotalOfBreakTime": break_minutes,
+        "TotalOfBreakTime": float(break_hours),
     }
     if is_checkout:
         body.update(checkoutType=checkin_type, checkoutLongitute=lon, checkoutLatitude=lat)
@@ -620,7 +626,7 @@ def main():
 
         # Bug #1 fix: detect overnight checkout using schedule time + API state
         is_checkout_yesterday = False
-        break_minutes = 0
+        break_hours = 0.0
         if is_checkout:
             # Use schedule entry time if available; for force_action use current time
             if action_entry.get("datetime"):
@@ -632,13 +638,11 @@ def main():
             if is_checkout_yesterday:
                 log("  🌙 Overnight checkout → isCheckoutYesterday=True")
 
-            # NOTE: TotalOfBreakTime is intentionally left at 0 so the DokoKin
-            # server computes break duration itself based on shift length.
-            # Earlier "bug #4" patch sent the value as **minutes** (e.g. 60),
-            # but the DokoKin UI then displayed it as "60:00" giờ instead of
-            # "01:00" giờ — meaning the field unit does NOT match raw minutes.
-            # Reference impl `auto_checkin.py` always sends 0 and the server
-            # auto-derives break correctly, so we mirror that behavior.
+            # Match Flutter DokoKin app: TotalOfBreakTime is HOURS as a double
+            # (e.g. 1.0 = 60min, 0.75 = 45min, 0 = no break). Earlier patch sent
+            # raw minutes (60) — server interpreted as 60 HOURS and displayed
+            # "60:00". Labor Standards Act Art. 34: shift >8h → 1h break,
+            # 6h < shift ≤ 8h → 45min break, ≤6h → no break.
             ci_ref = ci_yest if is_checkout_yesterday else ci_today
             if ci_ref:
                 try:
@@ -646,9 +650,13 @@ def main():
                     if ci_dt.tzinfo is None:
                         ci_dt = ci_dt.replace(tzinfo=JST)
                     shift_h = (now_jst - ci_dt).total_seconds() / 3600
-                    log(f"  Shift ~{shift_h:.1f}h → break_minutes=0 (server auto-derives)")
+                    if shift_h > 8:
+                        break_hours = 1.0
+                    elif shift_h > 6:
+                        break_hours = 0.75
+                    log(f"  Shift ~{shift_h:.1f}h → break {break_hours}h ({int(break_hours*60)}min)")
                 except (ValueError, TypeError):
-                    log(f"  ⚠️ Could not parse CI time for shift duration log: {ci_ref}")
+                    log(f"  ⚠️ Could not parse CI time for break calc: {ci_ref}")
 
         # ── Idempotent skip: don't re-execute if action already recorded ──
         if action == "checkin" and ci_today:
@@ -716,7 +724,7 @@ def main():
 
         def _do_dakoku():
             s, r = do_dakoku(dokokin_token, checkin_type, loc["lat"], loc["lon"],
-                             is_checkout, is_checkout_yesterday, break_minutes)
+                             is_checkout, is_checkout_yesterday, break_hours)
             if s >= 500:
                 raise RuntimeError(f"Server error {s}: {r}")
             return s, r
