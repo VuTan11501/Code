@@ -17,6 +17,10 @@ crons = ["*/2 * * * *", "0 22 * * *"]
 # Public, non-secret config. Override per-environment if you fork.
 REPO = "VuTan11501/Code"
 
-# Secrets (set via `wrangler secret put GH_PAT`):
-#   GH_PAT — GitHub classic PAT with `repo` scope, used to POST
-#            repository_dispatch event.
+# Secrets (set via `wrangler secret put <NAME>`):
+#   GH_PAT             — GitHub classic PAT with `repo` scope, used to POST
+#                        repository_dispatch events.
+#   WORKER_AUTH_TOKEN  — shared secret protecting all HTTP endpoints except
+#                        the legacy unauthenticated `GET /` heartbeat ping.
+#                        Required by /checkin, /checkout, and /?event=...
+#                        Generate with: `openssl rand -base64 32`

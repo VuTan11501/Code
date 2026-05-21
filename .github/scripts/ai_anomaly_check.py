@@ -322,38 +322,210 @@ def send_line_critical(summary_text):
 
 
 def compose_email_html(anomalies, ai_summary, today_str):
-    """Compose HTML email body."""
-    severity_emoji = {"critical": "🚨", "high": "⚠️", "medium": "ℹ️", "low": "💬"}
+    """Compose HTML email body — modern, mobile-first, Gmail-safe.
 
-    html_parts = [
-        "<html><body style='font-family: sans-serif; max-width: 600px;'>",
-        f"<h2>Kintai Anomaly Report — {today_str}</h2>",
-    ]
+    Design rules:
+      - Inline CSS only (no <style> tag — Gmail strips them inconsistently).
+      - Outer table for centering (Outlook hates flex/grid).
+      - System font stack, 16px base, max-width 640px.
+      - Color-coded severity chips matching the dashboard palette
+        (zinc base, red/amber/blue/slate accents).
+      - Pre-header text for inbox preview.
+    """
+    severity_meta = {
+        "critical": {"emoji": "🚨", "label": "Critical", "bg": "#fef2f2", "border": "#fecaca",
+                     "fg": "#991b1b", "chip_bg": "#dc2626", "chip_fg": "#ffffff"},
+        "high":     {"emoji": "⚠️", "label": "High",     "bg": "#fffbeb", "border": "#fde68a",
+                     "fg": "#92400e", "chip_bg": "#d97706", "chip_fg": "#ffffff"},
+        "medium":   {"emoji": "ℹ️",  "label": "Medium",   "bg": "#eff6ff", "border": "#bfdbfe",
+                     "fg": "#1e40af", "chip_bg": "#2563eb", "chip_fg": "#ffffff"},
+        "low":      {"emoji": "💬", "label": "Low",      "bg": "#f8fafc", "border": "#e2e8f0",
+                     "fg": "#475569", "chip_bg": "#64748b", "chip_fg": "#ffffff"},
+    }
 
+    counts = {sev: 0 for sev in severity_meta}
+    for a in anomalies:
+        counts[a["severity"]] = counts.get(a["severity"], 0) + 1
+    total = len(anomalies)
+    has_critical = counts["critical"] > 0
+    has_high = counts["high"] > 0
+
+    # Header gradient depends on worst severity
+    if has_critical:
+        header_grad = "linear-gradient(135deg, #dc2626 0%, #991b1b 100%)"
+        header_emoji = "🚨"
+    elif has_high:
+        header_grad = "linear-gradient(135deg, #f59e0b 0%, #b45309 100%)"
+        header_emoji = "⚠️"
+    elif total > 0:
+        header_grad = "linear-gradient(135deg, #3b82f6 0%, #1e40af 100%)"
+        header_emoji = "ℹ️"
+    else:
+        header_grad = "linear-gradient(135deg, #10b981 0%, #047857 100%)"
+        header_emoji = "✅"
+
+    pre_header = f"{total} anomaly/anomalies found ({today_str})" if total else f"All clear ({today_str})"
+
+    # ── Severity counter pills (visible at top) ──
+    pills_html = ""
+    for sev in ("critical", "high", "medium", "low"):
+        n = counts.get(sev, 0)
+        if n == 0:
+            continue
+        m = severity_meta[sev]
+        pills_html += (
+            f'<span style="display:inline-block;background:{m["chip_bg"]};color:{m["chip_fg"]};'
+            f'font-size:12px;font-weight:600;padding:4px 10px;border-radius:9999px;'
+            f'margin:0 6px 6px 0;letter-spacing:.02em;">'
+            f'{m["emoji"]} {m["label"]} · {n}</span>'
+        )
+    if not pills_html:
+        pills_html = (
+            '<span style="display:inline-block;background:#10b981;color:#fff;font-size:12px;'
+            'font-weight:600;padding:4px 10px;border-radius:9999px;">✅ All clear</span>'
+        )
+
+    # ── AI summary card ──
+    ai_card = ""
     if ai_summary:
-        html_parts.append(f"<div style='background:#f8f9fa;padding:16px;border-radius:8px;margin:16px 0;white-space:pre-wrap;'>{ai_summary}</div>")
-        html_parts.append("<hr><h3>Raw Details</h3>")
+        # Convert simple newlines to <br> while keeping HTML escaped
+        from html import escape as _esc
+        ai_html = _esc(ai_summary).replace("\n", "<br>")
+        ai_card = f"""
+        <tr><td style="padding:0 24px 8px 24px;">
+          <div style="background:#fafafa;border:1px solid #e5e7eb;border-left:4px solid #6366f1;
+                      border-radius:10px;padding:18px 20px;color:#1f2937;font-size:15px;
+                      line-height:1.6;">
+            <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+                        color:#6366f1;margin-bottom:8px;">✨ AI Summary</div>
+            {ai_html}
+          </div>
+        </td></tr>"""
 
-    # Group by severity
+    # ── Anomaly cards grouped by severity ──
     by_severity = {}
     for a in anomalies:
         by_severity.setdefault(a["severity"], []).append(a)
 
-    for sev in ["critical", "high", "medium", "low"]:
+    cards_html_parts = []
+    for sev in ("critical", "high", "medium", "low"):
         items = by_severity.get(sev, [])
         if not items:
             continue
-        emoji = severity_emoji[sev]
-        html_parts.append(f"<h4>{emoji} {sev.upper()} ({len(items)})</h4><ul>")
+        m = severity_meta[sev]
+        cards_html_parts.append(
+            f'<tr><td style="padding:8px 24px 0 24px;">'
+            f'<div style="font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;'
+            f'color:{m["fg"]};margin:14px 0 8px 0;">{m["emoji"]} {m["label"]} · {len(items)}</div>'
+            f'</td></tr>'
+        )
         for a in items:
-            html_parts.append(
-                f"<li><b>[{a['class']}]</b> {a['date']} — {a['summary']}</li>"
-            )
-        html_parts.append("</ul>")
+            cls = a.get("class", "?")
+            ad = a.get("date", "")
+            summary = a.get("summary", "")
+            from html import escape as _esc
+            cards_html_parts.append(f"""
+            <tr><td style="padding:0 24px 10px 24px;">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"
+                     style="background:{m['bg']};border:1px solid {m['border']};border-radius:10px;">
+                <tr>
+                  <td style="padding:14px 16px;vertical-align:top;">
+                    <div style="margin-bottom:6px;">
+                      <span style="display:inline-block;background:{m['chip_bg']};color:{m['chip_fg']};
+                                   font-size:11px;font-weight:700;padding:3px 8px;border-radius:6px;
+                                   font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+                                   letter-spacing:.04em;">{_esc(cls)}</span>
+                      <span style="color:#6b7280;font-size:13px;margin-left:8px;
+                                   font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;">{_esc(ad)}</span>
+                    </div>
+                    <div style="color:#111827;font-size:14px;line-height:1.55;">{_esc(summary)}</div>
+                  </td>
+                </tr>
+              </table>
+            </td></tr>""")
+    cards_html = "".join(cards_html_parts)
 
-    html_parts.append("<p style='color:#888;font-size:12px;'>Generated by AI Anomaly Detective (P2)</p>")
-    html_parts.append("</body></html>")
-    return "".join(html_parts)
+    # ── Action buttons ──
+    repo = os.environ.get("GITHUB_REPOSITORY", "VuTan11501/Code")
+    actions_url = f"https://github.com/{repo}/actions/workflows/ai-anomaly-check.yml"
+    dashboard_url = f"https://{repo.split('/')[0]}.github.io/{repo.split('/')[1]}/"
+    actions_row = f"""
+    <tr><td style="padding:8px 24px 24px 24px;">
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td style="padding-right:8px;">
+            <a href="{dashboard_url}" style="display:inline-block;background:#111827;color:#ffffff;
+               text-decoration:none;font-size:13px;font-weight:600;padding:10px 16px;border-radius:8px;">
+               📊 Dashboard</a>
+          </td>
+          <td>
+            <a href="{actions_url}" style="display:inline-block;background:#ffffff;color:#111827;
+               text-decoration:none;font-size:13px;font-weight:600;padding:10px 16px;border-radius:8px;
+               border:1px solid #d1d5db;">🔍 Workflow logs</a>
+          </td>
+        </tr>
+      </table>
+    </td></tr>"""
+
+    title_text = f"{total} anomaly · Kintai" if total else "All clear · Kintai"
+    summary_text = (
+        f"{total} item{'s' if total != 1 else ''} found in last 7 days"
+        if total else "No issues detected in last 7 days"
+    )
+
+    return f"""<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{title_text} — {today_str}</title>
+</head>
+<body style="margin:0;padding:0;background:#f3f4f6;
+            font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;
+            color:#111827;-webkit-font-smoothing:antialiased;">
+<!-- pre-header (hidden) -->
+<div style="display:none;max-height:0;overflow:hidden;font-size:1px;line-height:1px;color:#f3f4f6;">{pre_header}</div>
+
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#f3f4f6;">
+  <tr><td align="center" style="padding:24px 12px;">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="640"
+           style="max-width:640px;width:100%;background:#ffffff;border-radius:14px;
+                  box-shadow:0 1px 3px rgba(0,0,0,.06),0 4px 12px rgba(0,0,0,.04);overflow:hidden;">
+
+      <!-- Header -->
+      <tr><td style="background:{header_grad};padding:28px 24px;color:#ffffff;">
+        <div style="font-size:13px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;
+                    opacity:.9;margin-bottom:6px;">Kintai Anomaly Report</div>
+        <div style="font-size:26px;font-weight:700;line-height:1.2;margin-bottom:4px;">
+          {header_emoji} {summary_text}
+        </div>
+        <div style="font-size:14px;opacity:.92;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;">
+          {today_str} · JST
+        </div>
+      </td></tr>
+
+      <!-- Severity pills row -->
+      <tr><td style="padding:18px 24px 6px 24px;">{pills_html}</td></tr>
+
+      {ai_card}
+
+      {cards_html}
+
+      {actions_row if total else ''}
+
+      <!-- Footer -->
+      <tr><td style="background:#fafafa;padding:14px 24px;border-top:1px solid #e5e7eb;
+                     color:#6b7280;font-size:12px;line-height:1.5;">
+        Generated by <b>AI Anomaly Detective</b> (Phase 2) ·
+        deterministic rules + AI summary ·
+        <a href="{actions_url}" style="color:#6366f1;text-decoration:none;">workflow logs</a>
+      </td></tr>
+
+    </table>
+  </td></tr>
+</table>
+</body>
+</html>"""
 
 
 # ═══════════════════════════════════════════════════════════
@@ -415,7 +587,7 @@ def main():
         if args.always_email and not args.dry_run:
             send_email(
                 f"✅ Kintai All Clear — {today_str}",
-                f"<html><body><h2>✅ All Clear</h2><p>No anomalies detected for {today_str} (last {args.days} days).</p></body></html>",
+                compose_email_html([], None, today_str),
             )
         sys.exit(0)
 

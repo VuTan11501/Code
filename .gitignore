@@ -22,3 +22,5 @@ copilot-session-*.md
 # Private docs - keep out of repo
 README.md
 
+
+cloudflare-worker/.wrangler/

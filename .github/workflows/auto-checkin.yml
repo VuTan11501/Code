@@ -16,6 +16,10 @@ on:
         description: Override longitude (decimal) — bypasses schedule.json lookup
         required: false
         type: string
+  # Triggered by Cloudflare Worker /checkin endpoint (Siri Shortcut).
+  # client_payload: { location, source, triggered_at }
+  repository_dispatch:
+    types: [manual_checkin]
 
 permissions:
   contents: read
@@ -48,7 +52,7 @@ jobs:
         env:
           AZURE_REFRESH_TOKEN: ${{ secrets.AZURE_REFRESH_TOKEN }}
           FORCE_ACTION: checkin
-          FORCE_LOCATION: ${{ inputs.location || 'office' }}
+          FORCE_LOCATION: ${{ inputs.location || github.event.client_payload.location || 'office' }}
           FORCE_LATITUDE: ${{ inputs.latitude }}
           FORCE_LONGITUDE: ${{ inputs.longitude }}
           SMTP_USER: ${{ secrets.SMTP_USER }}
