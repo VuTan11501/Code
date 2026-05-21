@@ -632,7 +632,13 @@ def main():
             if is_checkout_yesterday:
                 log("  🌙 Overnight checkout → isCheckoutYesterday=True")
 
-            # Bug #4 fix: calculate break time from shift duration
+            # NOTE: TotalOfBreakTime is intentionally left at 0 so the DokoKin
+            # server computes break duration itself based on shift length.
+            # Earlier "bug #4" patch sent the value as **minutes** (e.g. 60),
+            # but the DokoKin UI then displayed it as "60:00" giờ instead of
+            # "01:00" giờ — meaning the field unit does NOT match raw minutes.
+            # Reference impl `auto_checkin.py` always sends 0 and the server
+            # auto-derives break correctly, so we mirror that behavior.
             ci_ref = ci_yest if is_checkout_yesterday else ci_today
             if ci_ref:
                 try:
@@ -640,13 +646,9 @@ def main():
                     if ci_dt.tzinfo is None:
                         ci_dt = ci_dt.replace(tzinfo=JST)
                     shift_h = (now_jst - ci_dt).total_seconds() / 3600
-                    if shift_h > 8:
-                        break_minutes = 60
-                    elif shift_h > 6:
-                        break_minutes = 45
-                    log(f"  Shift ~{shift_h:.1f}h → break {break_minutes}min")
+                    log(f"  Shift ~{shift_h:.1f}h → break_minutes=0 (server auto-derives)")
                 except (ValueError, TypeError):
-                    log(f"  ⚠️ Could not parse CI time for break calc: {ci_ref}")
+                    log(f"  ⚠️ Could not parse CI time for shift duration log: {ci_ref}")
 
         # ── Idempotent skip: don't re-execute if action already recorded ──
         if action == "checkin" and ci_today:
