@@ -2,11 +2,16 @@ name = "dokokin-heartbeat"
 main = "heartbeat.js"
 compatibility_date = "2025-01-01"
 
-# Run every 2 minutes — Cloudflare Cron Triggers are not subject to
-# GitHub Actions cron-skip behavior, providing the most reliable
-# external heartbeat for the dispatcher.
+# Cloudflare Cron Triggers are not subject to GitHub Actions cron-skip
+# behavior, providing the most reliable external trigger source.
+#   "*/2 * * * *"  → every 2 min  → repository_dispatch type=heartbeat
+#                    (resurrects scheduled-dispatch.yml if silent)
+#   "0 22 * * *"   → 22:00 UTC = 07:00 JST daily
+#                    → repository_dispatch type=anomaly_check_daily
+#                    (replaces GitHub native cron for ai-anomaly-check.yml,
+#                     which suffered ~13h delays on the public-repo free tier)
 [triggers]
-crons = ["*/2 * * * *"]
+crons = ["*/2 * * * *", "0 22 * * *"]
 
 [vars]
 # Public, non-secret config. Override per-environment if you fork.

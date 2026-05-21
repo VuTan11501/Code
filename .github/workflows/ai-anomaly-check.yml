@@ -1,8 +1,15 @@
 name: AI Anomaly Check
 
 on:
-  schedule:
-    - cron: '0 22 * * *'  # 22:00 UTC = 07:00 JST next day
+  # Trigger: Cloudflare Worker fires repository_dispatch every day at
+  # 22:00 UTC (07:00 JST). CF cron is not subject to GitHub's free-tier cron
+  # skipping (we observed ~13h delays on the native schedule). Source:
+  # cloudflare-worker/heartbeat.js + wrangler.toml `0 22 * * *` cron.
+  #
+  # If CF Worker is ever unhealthy, fall back to manual `gh workflow run`
+  # via workflow_dispatch below.
+  repository_dispatch:
+    types: [anomaly_check_daily]
   workflow_dispatch:
     inputs:
       dry_run:
