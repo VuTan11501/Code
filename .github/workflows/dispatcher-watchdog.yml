@@ -28,9 +28,13 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
           REPO: ${{ github.repository }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          NOTIFY_EMAIL: ${{ secrets.NOTIFY_EMAIL }}
         run: |
           python3 << 'EOF'
-          import json, os, sys
+          import json, os, sys, smtplib
+          from email.mime.text import MIMEText
           from datetime import datetime, timezone, timedelta
           import urllib.request, urllib.error
 
@@ -38,6 +42,25 @@ jobs:
           REPO = os.environ['REPO']
           # Max acceptable silence: 10 min. If no in_progress/recent run, resurrect.
           MAX_SILENCE_MIN = 10
+          # Send email alert when gap exceeds this (catches "cron skipped multiple windows")
+          ALERT_GAP_MIN = 25
+
+          def send_alert(subject, body):
+              user = os.environ.get('SMTP_USER')
+              pwd = os.environ.get('SMTP_PASS')
+              to = os.environ.get('NOTIFY_EMAIL')
+              if not all([user, pwd, to]):
+                  return
+              try:
+                  msg = MIMEText(body, 'plain', 'utf-8')
+                  msg['Subject'] = subject
+                  msg['From'] = user
+                  msg['To'] = to
+                  with smtplib.SMTP('smtp.gmail.com', 587, timeout=15) as s:
+                      s.starttls(); s.login(user, pwd); s.send_message(msg)
+                  print(f"  📧 Alert sent: {subject}")
+              except Exception as e:
+                  print(f"  ⚠️ Alert email failed: {e}")
 
           def gh_api(path, method='GET', data=None):
               url = f"https://api.github.com{path}"
@@ -101,6 +124,17 @@ jobs:
                         method='POST', data={'ref': 'main'})
           if s == 204:
               print("✅ Dispatcher resurrected successfully")
+              if age_min >= ALERT_GAP_MIN:
+                  send_alert(
+                      f"🚨 Dispatcher gap {age_min:.0f}min — resurrected by watchdog",
+                      f"Scheduled Run Dispatcher was silent for {age_min:.1f} minutes.\n"
+                      f"Latest run before resurrection: #{latest['id']} (status={latest_status})\n"
+                      f"Updated at: {latest['updated_at']}\n\n"
+                      f"Watchdog cron `*/20` should normally catch a dead dispatcher within "
+                      f"~30min. Gaps > 30min indicate that GitHub Actions cron skipped multiple "
+                      f"watchdog windows too. Consider configuring an external heartbeat pinger "
+                      f"(see .github/workflows/heartbeat.yml)."
+                  )
           else:
               print(f"❌ Failed to resurrect: HTTP {s}")
               sys.exit(1)

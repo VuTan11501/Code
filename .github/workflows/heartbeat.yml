@@ -1,0 +1,149 @@
+name: External Heartbeat
+
+# Bypass GitHub-side cron skip by accepting external pings.
+#
+# Setup (one-time):
+#   1. Register a free account at https://cron-job.org (or UptimeRobot)
+#   2. Create a job:
+#        URL    : https://api.github.com/repos/VuTan11501/Code/dispatches
+#        Method : POST
+#        Headers:
+#          Accept: application/vnd.github+json
+#          Authorization: Bearer <GH_PAT with repo scope>
+#          Content-Type: application/json
+#        Body   : {"event_type":"heartbeat"}
+#        Schedule: every 5 minutes
+#   3. cron-job.org will POST to GitHub every 5min, triggering this workflow,
+#      which will resurrect the dispatcher if it has been silent too long.
+#
+# Why this works: GitHub Actions native `cron:` is best-effort and can be
+# skipped during heavy load (we observed a ~9h skip window once). External
+# pingers like cron-job.org are not subject to that limitation.
+
+on:
+  repository_dispatch:
+    types: [heartbeat]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: heartbeat
+  cancel-in-progress: false
+
+jobs:
+  heartbeat:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Verify dispatcher is alive
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+          REPO: ${{ github.repository }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          NOTIFY_EMAIL: ${{ secrets.NOTIFY_EMAIL }}
+        run: |
+          python3 << 'EOF'
+          import json, os, sys, smtplib
+          from email.mime.text import MIMEText
+          from datetime import datetime, timezone, timedelta
+          import urllib.request, urllib.error
+
+          TOKEN = os.environ['GH_TOKEN']
+          REPO = os.environ['REPO']
+          # External pinger fires every 5min, so be aggressive: resurrect at >7min silence
+          MAX_SILENCE_MIN = 7
+          ALERT_GAP_MIN = 20  # email when silence exceeded this much
+
+          def gh_api(path, method='GET', data=None):
+              url = f"https://api.github.com{path}"
+              req = urllib.request.Request(url, method=method)
+              req.add_header('Authorization', f'Bearer {TOKEN}')
+              req.add_header('Accept', 'application/vnd.github+json')
+              if data:
+                  req.add_header('Content-Type', 'application/json')
+                  req.data = json.dumps(data).encode()
+              try:
+                  with urllib.request.urlopen(req, timeout=30) as resp:
+                      raw = resp.read()
+                      return resp.status, (json.loads(raw) if raw else {})
+              except urllib.error.HTTPError as e:
+                  return e.code, {}
+
+          def send_alert(subject, body):
+              user = os.environ.get('SMTP_USER')
+              pwd = os.environ.get('SMTP_PASS')
+              to = os.environ.get('NOTIFY_EMAIL')
+              if not all([user, pwd, to]):
+                  print("  (SMTP not configured, skip alert email)")
+                  return
+              try:
+                  msg = MIMEText(body, 'plain', 'utf-8')
+                  msg['Subject'] = subject
+                  msg['From'] = user
+                  msg['To'] = to
+                  with smtplib.SMTP('smtp.gmail.com', 587, timeout=15) as s:
+                      s.starttls(); s.login(user, pwd); s.send_message(msg)
+                  print(f"  📧 Alert sent: {subject}")
+              except Exception as e:
+                  print(f"  ⚠️ Alert email failed: {e}")
+
+          # Check workflow is enabled
+          status, wf = gh_api(f"/repos/{REPO}/actions/workflows/scheduled-dispatch.yml")
+          if status != 200:
+              print(f"❌ Cannot read dispatcher workflow: HTTP {status}")
+              sys.exit(1)
+          if wf.get('state') != 'active':
+              print(f"⚠️ Dispatcher state={wf.get('state')}, re-enabling")
+              gh_api(f"/repos/{REPO}/actions/workflows/scheduled-dispatch.yml/enable", method='PUT')
+
+          # Inspect latest run
+          status, runs_data = gh_api(f"/repos/{REPO}/actions/workflows/scheduled-dispatch.yml/runs?per_page=5")
+          if status != 200:
+              print(f"❌ Cannot list runs: HTTP {status}")
+              sys.exit(1)
+          runs = runs_data.get('workflow_runs', [])
+          if not runs:
+              print("⚠️ No runs found — kicking dispatcher")
+              gh_api(f"/repos/{REPO}/actions/workflows/scheduled-dispatch.yml/dispatches",
+                     method='POST', data={'ref': 'main'})
+              send_alert("🚨 Dispatcher had zero runs — kicked", "Heartbeat found no dispatcher runs at all.")
+              sys.exit(0)
+
+          now = datetime.now(timezone.utc)
+          latest = runs[0]
+          status_l = latest.get('status')
+          updated = datetime.fromisoformat(latest['updated_at'].replace('Z', '+00:00'))
+          age_min = (now - updated).total_seconds() / 60
+          print(f"  Latest: #{latest['id']} status={status_l} age={age_min:.1f}min")
+
+          if status_l == 'in_progress':
+              print("✅ Dispatcher alive (in_progress)")
+              sys.exit(0)
+          if age_min < MAX_SILENCE_MIN:
+              print(f"✅ Recently active ({age_min:.1f}min ago)")
+              sys.exit(0)
+
+          print(f"🚨 Silent for {age_min:.1f}min, resurrecting...")
+          s, _ = gh_api(f"/repos/{REPO}/actions/workflows/scheduled-dispatch.yml/dispatches",
+                        method='POST', data={'ref': 'main'})
+          if s == 204:
+              print("✅ Resurrected")
+              if age_min >= ALERT_GAP_MIN:
+                  send_alert(
+                      f"🚨 Dispatcher gap {age_min:.0f}min — resurrected by heartbeat",
+                      f"Scheduled Run Dispatcher was silent for {age_min:.1f} minutes.\n"
+                      f"Latest run before resurrection: #{latest['id']} (status={status_l})\n"
+                      f"Updated at: {latest['updated_at']}\n\n"
+                      f"This usually indicates GitHub Actions cron skipped both the dispatcher "
+                      f"self-chain and the dispatcher-watchdog cron, and only the external "
+                      f"heartbeat caught it. If this happens often, investigate GitHub status "
+                      f"page or PAT scope."
+                  )
+          else:
+              print(f"❌ Resurrection failed: HTTP {s}")
+              sys.exit(1)
+          EOF
