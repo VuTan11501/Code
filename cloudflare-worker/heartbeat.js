@@ -97,7 +97,7 @@ function formatJST(date) {
 function buildActionMessage({ ok, action, location, statusCode, errorText }) {
   const { hm, dm } = formatJST(new Date());
   const verb = action === 'manual_checkin' ? 'Check-in' : 'Check-out';
-  const verbVi = action === 'manual_checkin' ? 'Đã chấm vào' : 'Đã chấm ra';
+  const verbVi = action === 'manual_checkin' ? 'Đã tạo flow check-in' : 'Đã tạo flow check-out';
   if (ok) {
     return (
       `✅ ${verbVi}\n` +
