@@ -101,13 +101,11 @@ function buildActionMessage({ ok, action, location, statusCode, errorText }) {
   if (ok) {
     return (
       `✅ ${verbVi}\n` +
-      `📍 ${location}    🕐 ${hm} JST · ${dm}\n` +
       `▸ GitHub Actions đang chạy ${verb.toLowerCase()}…`
     );
   }
   return (
     `❌ ${verb} thất bại\n` +
-    `📍 ${location}    🕐 ${hm} JST\n` +
     `▸ GitHub ${statusCode}: ${(errorText || '').slice(0, 140)}`
   );
 }
