@@ -16,9 +16,18 @@ Tự động hóa nghiệp vụ kintai (chấm công) FJP DokoKin + báo cáo OT
            │ workflow_dispatch                    │ read/write
            ▼                                      ▼
    ┌──────────────────────────────────────────────────────┐
+   │  External pingers (off-GitHub, defeat cron skip)     │
+   │  • Cloudflare Worker `dokokin-heartbeat` cron */2    │
+   │  • cron-job.org HTTP cronjob every 5 min             │
+   │  → POST repository_dispatch event_type=heartbeat     │
+   └────────────┬─────────────────────────────────────────┘
+                ▼
+   ┌──────────────────────────────────────────────────────┐
    │  GitHub Actions (heart = scheduled-dispatch.yml)     │
-   │  • self-loop 5h, check Gist mỗi 30s, fire workflow   │
-   │  • fallback cron */15, watchdog độc lập */20         │
+   │  • self-loop 2h, check Gist mỗi 30s, fire workflow   │
+   │  • backup cron */15 + 5,20,35,50 (multi-offset)      │
+   │  • watchdog */20 + 7,27,47 + 13,33,53 (3 offset)     │
+   │  • heartbeat.yml accept event ngoài → resurrect      │
    └────────────┬─────────────────────────────────────────┘
                 ▼
    ┌──────────────────────────────────────────────────────┐
@@ -68,8 +77,9 @@ Tự động hóa nghiệp vụ kintai (chấm công) FJP DokoKin + báo cáo OT
 ### Workflows — `.github/workflows/`
 | File | Trigger | Mục đích |
 |---|---|---|
-| **`scheduled-dispatch.yml`** | self-loop + cron `*/15` | 🫀 **Trái tim** — đọc Gist mỗi 30s, dispatch worker đúng giờ |
-| `dispatcher-watchdog.yml` | cron `*/20` | Hồi sinh dispatcher nếu chết quá 10 phút |
+| **`scheduled-dispatch.yml`** | self-loop 2h + cron `*/15` + `5,20,35,50` | 🫀 **Trái tim** — đọc Gist mỗi 30s, dispatch worker đúng giờ. Multi-cron offset chống cron-skip. |
+| `dispatcher-watchdog.yml` | cron `*/20` + `7,27,47` + `13,33,53` | Hồi sinh dispatcher nếu chết quá 10 phút. Email alert khi gap ≥25 phút. |
+| **`heartbeat.yml`** | `repository_dispatch` event_type=`heartbeat` | Nhận ping từ external (CF Worker / cron-job.org). Resurrect dispatcher nếu silent >7 phút. Email alert khi gap ≥20 phút. |
 | `auto-checkin.yml` | dispatch | Worker checkin (location, lat/long override) |
 | `auto-checkout.yml` | dispatch | Worker checkout (allow re-run nếu now > prev_CO) |
 | `auto-ot-creator.yml` | dispatch (10:00 JST) | Worker Auto Request OT — **luôn gửi email summary** |
@@ -161,10 +171,17 @@ Tham khảo SKILL.md trước khi đụng vào lĩnh vực tương ứng:
 - **Day-of-week convention**: Python Mon=0, JS/Gist Sun=0 → khi convert dùng `js_dow = (dow + 1) % 7 if dow < 6 else 0`
 
 ### Scheduled-dispatch (trái tim)
-- Self-loop ~5h: vòng lặp `while elapsed < 18000`, mỗi 30s đọc Gist (qua ETag), dispatch entries quá hạn
+- Self-loop **2h** (default `LOOP_MINUTES=120`): vòng lặp `while elapsed < 7200`, mỗi 30s đọc Gist (qua ETag), dispatch entries quá hạn
+- **Cold-start sweep**: log explicit `📋 Cold-start: N overdue entries detected` ở iter đầu để debug post-incident
 - Cuối loop: `gh workflow run` chính nó để chain liên tục
 - **Code load tại t=0**: trong khi loop chạy, fix mới push KHÔNG áp dụng. Phải cancel run hiện tại + trigger thủ công nếu cần áp dụng gấp.
-- Backup: cron `*/15` + watchdog độc lập (`dispatcher-watchdog.yml`) `*/20`
+- **6-layer redundancy** (xem section 10.7):
+  1. Cloudflare Worker `*/2` → `repository_dispatch`
+  2. cron-job.org `*/5` → `repository_dispatch`
+  3. Self-chain (loop 2h re-trigger)
+  4. Backup cron `*/15` + `5,20,35,50`
+  5. Watchdog `*/20` + 2 offsets
+  6. Manual `workflow_dispatch`
 
 ### Notification rules
 - **Checkin/checkout/Auto Request OT**: luôn gửi mail summary (trừ `skip` cho checkin/checkout)
@@ -232,7 +249,7 @@ Tham khảo SKILL.md trước khi đụng vào lĩnh vực tương ứng:
 2. **"No record" sai** → check field name DokoKin API (`startWorkingTime` vs `checkinTime`)
 3. **Token expired (401)** → re-run skill `--setup` để renew refresh token rồi `gh secret set`
 4. **Dashboard không load** → console log `ReferenceError`? Check script load order + `DOMContentLoaded`
-5. **Workflow fix không có hiệu lực** → dispatcher 5h loop dùng code cũ → cancel + re-trigger
+5. **Workflow fix không có hiệu lực** → dispatcher 2h loop dùng code cũ → cancel + re-trigger
 6. **Rate limit GitHub API** → kiểm tra ETag caching hoạt động không (`X-Cache-Status: 304`)
 
 ---
@@ -396,19 +413,24 @@ User clicks "Add Schedule"
                   → dispatch chính xác đến milisecond khi user mở dashboard
 ```
 
-**Đảm bảo đúng giờ qua 3 cơ chế chồng nhau** (redundancy):
-1. **Client setTimeout** — dispatch chính xác tại millisecond nếu user đang mở tab
-2. **Server self-loop** (`scheduled-dispatch.yml` 5h loop, check Gist mỗi 30s) — không cần user mở browser
-3. **Backup cron `*/15`** + **watchdog `*/20`** — phòng cả 2 cái trên chết
+**Đảm bảo đúng giờ qua nhiều cơ chế chồng nhau** (6 layer redundancy, xem section 10.7):
+1. **External heartbeat** — Cloudflare Worker `*/2` + cron-job.org `*/5` → `repository_dispatch` → resurrect dispatcher (off-GitHub, không bị cron-skip)
+2. **Client setTimeout** — dispatch chính xác tại millisecond nếu user đang mở tab
+3. **Server self-loop** (`scheduled-dispatch.yml` 2h loop, check Gist mỗi 30s) — không cần user mở browser
+4. **Backup cron** `*/15` + `5,20,35,50` (multi-offset chống cron skip)
+5. **Watchdog** `*/20` + `7,27,47` + `13,33,53` — 3 cron offset độc lập
+6. **Manual** `gh workflow run` (last resort)
 
-→ **Worst case latency**: ~30 giây (server loop interval). **Best case**: 0ms (client setTimeout).
+→ **Worst case latency** sau ngày 21/5/2026: ~10 phút (5min CF cron + 7min silence threshold). **Best case**: 0ms (client setTimeout). **Trước đây từng có gap 9 giờ** khi GitHub cron skip → motivated 6-layer design.
 
 ### 9.3 Core flow #2 — Scheduled dispatch loop (heart of system)
 
 ```
-[T=0] scheduled-dispatch.yml triggered (cron */15 hoặc workflow_dispatch hoặc self-chain)
+[T=0] scheduled-dispatch.yml triggered (cron */15, 5,20,35,50, workflow_dispatch hoặc self-chain)
   │
-  ├─► Job timeout 350 phút (loop chạy 300 phút = 5h)
+  ├─► Job timeout 350 phút (loop chạy 120 phút = 2h)
+  │
+  ├─► COLD-START SWEEP (iter 0): log số entry quá hạn để debug post-incident
   │
   ├─► LOOP (every 30s):
   │     ├─ GET Gist (If-None-Match: <etag>)
@@ -424,14 +446,16 @@ User clicks "Add Schedule"
   │     │    └─ Daily/weekly/monthly: chỉ update last_run, không mark dispatched
   │     └─ sleep 30s
   │
-  └─► [T=5h] Loop kết thúc → gh workflow run scheduled-dispatch.yml (self re-chain)
+  └─► [T=2h] Loop kết thúc → gh workflow run scheduled-dispatch.yml (self re-chain)
         → Chain liên tục, "trái tim" không bao giờ ngưng
 ```
 
 **Lý do dùng self-loop thay vì cron `*/1`**:
-- Cron GitHub thường trễ 5-30 phút khi workflow ít được sử dụng
+- Cron GitHub thường trễ 5-30 phút khi workflow ít được sử dụng (đã từng skip 9 giờ liên tục)
 - Self-loop = 1 process duy nhất, đảm bảo check liên tục mỗi 30s
-- Tiết kiệm minute (1 run 5h ≈ 300 min, vs 300 cron run riêng cũng = 300 min nhưng có overhead startup mỗi lần)
+- Tiết kiệm minute (1 run 2h ≈ 120 min, vs 120 cron run riêng cũng = 120 min nhưng có overhead startup mỗi lần)
+
+**Lý do giảm 5h → 2h** (commit 7d4ad96): chain-failure gap window thu nhỏ 2.5×. Nếu self-chain fail (rare), backup cron / external pinger sẽ catch trong vòng phút thay vì 5h. Overhead startup ~10s/run × 12 run/ngày = 120s/ngày — negligible.
 
 **Caveat quan trọng**: code Python được load tại t=0 của loop. **Fix mới push KHÔNG áp dụng** cho loop đang chạy. Phải cancel run + manual trigger nếu fix gấp.
 
@@ -493,23 +517,33 @@ Visibility events:
 
 **Tối ưu**: dùng **ETag cache trong-memory** (`Map<url, {etag, data}>`). GitHub API 304 không trả body → trả cached data → tiết kiệm rate limit (5000 req/h cho authenticated).
 
-### 9.6 Core flow #5 — Resilience (watchdog)
+### 9.6 Core flow #5 — Resilience (multi-layer)
 
 ```
-dispatcher-watchdog.yml (cron */20)
-  │
-  ├─ Fetch recent runs của scheduled-dispatch.yml
-  ├─ Check:
-  │    ├─ Có run nào status=in_progress?
-  │    └─ Run mới nhất created_at có trong vòng 10 phút?
-  │
-  └─► If KHÔNG có run live AND no recent activity:
-        └─ POST /actions/workflows/scheduled-dispatch.yml/dispatches
-           → Hồi sinh trái tim
-        └─ Gửi mail alert "Dispatcher was dead, resurrected"
+LAYER 1: External pingers (off-GitHub, most reliable)
+  ├─ Cloudflare Worker `dokokin-heartbeat` cron */2
+  │    URL: https://dokokin-heartbeat.workflow-dashboard.workers.dev
+  │    Source: cloudflare-worker/heartbeat.js
+  │    POSTs `repository_dispatch` event_type=heartbeat
+  └─ cron-job.org HTTP cronjob every 5 min
+       Same payload, same endpoint
+                       ▼
+heartbeat.yml (on: repository_dispatch)
+  ├─ Check dispatcher state + recent runs
+  ├─ If silent > 7 min: POST /dispatches → resurrect
+  └─ If silent ≥ 20 min: send_alert email
+
+LAYER 2: GitHub-side watchdog (3 cron offsets)
+dispatcher-watchdog.yml (cron */20, 7,27,47, 13,33,53)
+  ├─ Same logic as heartbeat
+  └─ If silent ≥ 25 min: send_alert email
+
+LAYER 3: Dispatcher backup cron (2 offsets)
+scheduled-dispatch.yml (cron */15, 5,20,35,50)
+  └─ Auto-fire even if self-chain breaks
 ```
 
-→ Hệ thống self-healing, không cần monitor thủ công.
+→ Hệ thống self-healing 6-layer, không cần monitor thủ công. Email alert tự động kích hoạt khi gap vượt threshold (xem section 10.7 chi tiết).
 
 ### 9.7 Data model — Gist `scheduled-runs.json`
 
@@ -580,12 +614,12 @@ dispatcher-watchdog.yml (cron */20)
 | File | `.github/workflows/scheduled-dispatch.yml` |
 | Workflow name | `Scheduled Run Dispatcher` |
 | Runner | `ubuntu-latest` |
-| Job timeout | **350 phút** (5h50m, cao hơn loop 50 phút để cho buffer cleanup) |
-| Loop duration | **300 phút mặc định** (5h, có thể override qua `loop_minutes` input, max ~330) |
+| Job timeout | **350 phút** (5h50m, cao hơn loop để cho buffer cleanup) |
+| Loop duration | **120 phút mặc định** (2h, có thể override qua `loop_minutes` input, max ~330) |
 | Check interval | **30 giây** (`CHECK_INTERVAL_SEC = 30`) |
 | Permissions | `contents: read`, `actions: write` (cần `actions:write` để dispatch worker) |
 | Concurrency | `group: scheduled-dispatch`, `cancel-in-progress: false` (không cancel run đang chạy khi trigger mới) |
-| Triggers | `cron: '*/15 * * * *'` (backup) + `workflow_dispatch` (self re-chain) |
+| Triggers | `cron: '*/15 * * * *'` + `cron: '5,20,35,50 * * * *'` (multi-offset backup) + `workflow_dispatch` (self re-chain) |
 | Dependencies | Chỉ Python stdlib (`urllib`, `json`, `time`, `datetime`) — không `pip install` để cold-start nhanh |
 | Secrets | `GH_PAT` (PAT classic với scope `repo` + `workflow` + `gist`) |
 | State | Stateless trong từng run; persistent state trong Gist + ETag cache trong-process |
@@ -717,32 +751,52 @@ except HTTPError as e:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  Level 1: SELF-CHAIN (primary)                              │
+│  Level 0: EXTERNAL PINGERS (off-GitHub, most reliable)      │
+│  • Cloudflare Worker cron */2 (workflow-dashboard.workers.dev) │
+│  • cron-job.org HTTP cronjob every 5 min                    │
+│  → POST repository_dispatch event_type=heartbeat            │
+│  ✓ Không phụ thuộc GitHub cron infrastructure               │
+│  ✓ Catch dispatcher gap trong < 7 phút                      │
+│  ✗ Nếu cả 2 service ngoài đều down → fallback xuống Level 1 │
+└─────────────────────────────────────────────────────────────┘
+                          ▼
+┌─────────────────────────────────────────────────────────────┐
+│  Level 1: HEARTBEAT WORKFLOW (heartbeat.yml)                │
+│  Triggered bởi repository_dispatch từ Level 0               │
+│  ✓ Resurrect dispatcher nếu silent > 7 phút                 │
+│  ✓ Email alert nếu gap ≥ 20 phút                            │
+│  ✗ Cần Level 0 push event mới chạy                          │
+└─────────────────────────────────────────────────────────────┘
+                          ▼
+┌─────────────────────────────────────────────────────────────┐
+│  Level 2: SELF-CHAIN (primary in-dispatcher)                │
 │  Step 2 cuối job → gh workflow run self                     │
-│  ✓ Liên tục 24/7                                            │
-│  ✗ Chết nếu: workflow bị disable, GH_PAT hết hạn, gh fail   │
+│  ✓ Liên tục 24/7, ~12 chain transitions/day với loop 2h     │
+│  ✗ Chết nếu: workflow disabled, GH_PAT hết hạn, gh fail     │
 └─────────────────────────────────────────────────────────────┘
                           ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  Level 2: BACKUP CRON (every 15 min)                        │
-│  cron: '*/15 * * * *' trong on.schedule                     │
-│  ✓ Bắt được lúc chain chết                                  │
-│  ✗ GitHub cron có thể trễ 5-30 phút, latency tệ            │
+│  Level 3: BACKUP CRON (multi-offset)                        │
+│  cron: '*/15 * * * *' + '5,20,35,50 * * * *'                │
+│  ✓ 2 pattern offset → giảm cron-skip risk                   │
+│  ✗ GitHub cron có thể trễ 5-30 phút                         │
 └─────────────────────────────────────────────────────────────┘
                           ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  Level 3: WATCHDOG (dispatcher-watchdog.yml, every 20 min)  │
-│  Workflow độc lập, scan recent runs                         │
-│  ✓ Detect dead dispatcher + resurrect + email alert         │
-│  ✗ Watchdog cũng chết → cần manual intervention             │
+│  Level 4: WATCHDOG (dispatcher-watchdog.yml, 3 offsets)     │
+│  cron: '*/20 *' + '7,27,47 *' + '13,33,53 *'                │
+│  ✓ Detect dead dispatcher + resurrect + email alert ≥25min  │
+│  ✗ Watchdog cũng chết → cần Level 0 hoặc manual             │
 └─────────────────────────────────────────────────────────────┘
                           ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  Level 4: MANUAL (last resort)                              │
+│  Level 5: MANUAL (last resort)                              │
 │  gh workflow run scheduled-dispatch.yml --ref main          │
 │  hoặc click "Run workflow" trong Actions UI                 │
 └─────────────────────────────────────────────────────────────┘
 ```
+
+**Sự cố gốc** (2026-05-20): GitHub Actions cron skip 9 giờ → backup cron */15 và watchdog */20 đều fail → entry checkout 03:30 JST chỉ fire lúc 04:33 JST khi dispatcher tự hồi sinh nhờ tolerance window. Sau sự cố, thêm Level 0 (external pingers) + multi-offset cron + email alerts để đảm bảo gap > 10 phút yêu cầu đồng thời 3 hệ thống độc lập đều fail.
 
 ### 10.8 Lifecycle timeline ví dụ
 
@@ -779,19 +833,44 @@ T=05:00  Run #101 chain seamlessly, không gap
 1. ⛔ **KHÔNG xóa step 2** (self re-chain) — sẽ làm gãy chuỗi, chỉ còn lại backup cron 15 min latency.
 2. ⛔ **KHÔNG remove `if: always()`** trên step 2 — phải re-chain kể cả khi step 1 fail.
 3. ⛔ **KHÔNG remove `concurrency: cancel-in-progress: false`** — nếu cancel, watchdog trigger sẽ kill loop đang chạy.
-4. ⚠️ **KHÔNG đổi `CHECK_INTERVAL_SEC` < 10s** — sẽ làm tăng rate limit consumption và tăng noise log.
-5. ⚠️ **KHÔNG đổi `loop_minutes` > 330** — job timeout 350m, cần buffer cho step 2.
-6. ⚠️ Sau khi push fix → **manually cancel** run hiện tại + trigger lại (xem 10.9 fix #2).
-7. ✅ Mỗi lần thêm field mới vào entry → update cả `process_runs` (server), `addScheduledRun` (client schedule.js), và data model trong section 9.7.
-8. ✅ Mỗi lần thêm pattern recurrence → update `should_run_recurring` + UI form + docs.
-9. ✅ Log mọi action (dispatch, gist write, error) — log là source of truth khi debug.
-10. ✅ Test bằng cách tạo entry `once` cho 2 phút sau → quan sát Actions log → verify dispatch happens trong 30-60s.
+4. ⛔ **KHÔNG bỏ multi-offset cron** (`*/15` + `5,20,35,50`) — single pattern dễ bị GitHub skip cùng lúc (xem incident 2026-05-20).
+5. ⚠️ **KHÔNG đổi `CHECK_INTERVAL_SEC` < 10s** — sẽ làm tăng rate limit consumption và tăng noise log.
+6. ⚠️ **KHÔNG đổi `loop_minutes` > 330** — job timeout 350m, cần buffer cho step 2.
+7. ⚠️ **KHÔNG tăng `loop_minutes` > 240** — chain-failure gap window quá lớn, làm giảm giá trị của Level 0/3/4 redundancy.
+8. ⚠️ Sau khi push fix → **manually cancel** run hiện tại + trigger lại (xem 10.9 fix #2).
+9. ✅ Mỗi lần thêm field mới vào entry → update cả `process_runs` (server), `addScheduledRun` (client schedule.js), và data model trong section 9.7.
+10. ✅ Mỗi lần thêm pattern recurrence → update `should_run_recurring` + UI form + docs.
+11. ✅ Log mọi action (dispatch, gist write, error) — log là source of truth khi debug.
+12. ✅ Test bằng cách tạo entry `once` cho 2 phút sau → quan sát Actions log → verify dispatch happens trong 30-60s.
 
-### 10.11 Monitoring & observability
+### 10.11 Quy tắc khi sửa `heartbeat.yml` / `dispatcher-watchdog.yml`
 
-- **GitHub Actions logs**: stdout từ Python loop → search keywords `🔹 One-time`, `🔁 Recurring`, `✅ Triggered`, `❌`
+1. ⛔ **KHÔNG bỏ multi-cron offset** trong watchdog — đó là phòng tuyến cuối cùng nếu external pingers down.
+2. ⛔ **KHÔNG change concurrency group `heartbeat`** — group này dedupe khi 2 external pingers fire gần nhau (e.g. CF Worker và cron-job.org cùng trigger).
+3. ⚠️ **KHÔNG giảm `MAX_SILENCE_MIN`** xuống dưới 5 — sẽ false-positive khi dispatcher đang giữa 2 chain transition.
+4. ⚠️ **Email alert thresholds** (heartbeat 20min, watchdog 25min) chọn để tránh noise — sửa cẩn thận.
+5. ✅ Nếu thay external pinger (e.g. UptimeRobot thay cron-job.org), KHÔNG cần đổi `heartbeat.yml` — chỉ cần POST đúng `event_type=heartbeat` là chạy.
+
+### 10.12 Quy tắc khi sửa `cloudflare-worker/heartbeat.js`
+
+1. ⛔ **KHÔNG hardcode PAT trong code** — luôn dùng `env.GH_PAT` (set qua `wrangler secret put`).
+2. ⛔ **KHÔNG đổi cron `*/2` lên < 1 phút** — sẽ vượt CF free tier 100k req/day.
+3. ⚠️ Khi đổi `REPO` (fork/rename), update cả `wrangler.toml [vars]` lẫn `heartbeat.yml` matcher.
+4. ✅ Deploy: `cd cloudflare-worker && wrangler deploy` (cần wrangler login trước).
+5. ✅ Test endpoint: `curl https://dokokin-heartbeat.<sub>.workers.dev/` → trả `heartbeat → 204` nếu OK.
+6. ✅ Monitor: `wrangler tail` cho live log.
+
+### 10.13 Monitoring & observability
+
+- **GitHub Actions logs**: stdout từ Python loop → search keywords `🔹 One-time`, `🔁 Recurring`, `✅ Triggered`, `❌`, `📋 Cold-start`
 - **Dashboard "Live" indicator**: nếu thấy nhiều run của `Scheduled Run Dispatcher` liên tiếp = healthy
-- **Watchdog email**: nếu nhận được `🚨 Dispatcher was dead, resurrected` → check WHY (PAT? rate limit?)
+- **External Heartbeat workflow**: nên có ~30 run/giờ (CF */2 = 30, + cron-job.org */5 = 12, dedupe bởi concurrency group còn ~30-40 run/giờ)
+- **Email alerts**: 
+  - `🚨 Dispatcher gap Xmin — resurrected by heartbeat` (heartbeat ≥20min)
+  - `🚨 Dispatcher gap Xmin — resurrected by watchdog` (watchdog ≥25min)
+  - Nhận được = có incident → check GitHub status page, PAT scope, CF Worker logs (`wrangler tail`)
+- **CF Worker dashboard**: https://dash.cloudflare.com → Workers → dokokin-heartbeat → Logs / Analytics
+- **cron-job.org**: dashboard hiển thị HTTP status code (mong đợi 204) trong tab History
 - **Gist version history**: GitHub Gist tự track mọi PATCH → `https://gist.github.com/<user>/abc2a47c…/revisions`
 
 
