@@ -98,8 +98,19 @@ Tham khảo SKILL.md trước khi đụng vào lĩnh vực tương ứng:
   - `displayStartWorkingTime` / `displayEndWorkingTime` (string hiển thị)
   - ❌ KHÔNG có `checkinDate` / `checkinTime` / `checkoutDate` / `checkoutTime`
 - Endpoint chính: `POST api/token`, `POST api/dakoku`, `GET api/dakoku/me/{date}`, `GET api/dakoku/workplace`
-- `checkin_type`: 1=office GPS, 2=direct customer, 3=noGPS, 5=WFH, 6=WFH noGPS
+- `checkin_type` (cũng dùng làm `checkoutType` khi CO): 1=CheckIn (FJP Office), 2=DirectCustomer, 3=NoGPS, 5=CheckInWFH, 6=WFH NoGPS
 - **`TotalOfBreakTime` is decimal HOURS as a double** (matches Flutter app `convertToDouble(h,m) = h + m/60`). E.g. user picks 01:00 → send `1.0`; 00:45 → `0.75`; no break → `0.0`. ⛔ KHÔNG gửi raw minutes — server interpret 60 thành 60 GIỜ và display "60:00".
+- **🚨 Working Place mapping (timesheet column)**: Backend `FJP.DakokuSync/TimesheetImporter.GetWorkingType` auto-derive từ cặp `(CheckinType, CheckoutType)` + cờ `IsCheckinDakoku = (lat==0 && lon==0)`:
+  - **type 1 + type 1 + lat=0/lon=0 (cả CI và CO)** → WorkingType=1 = **FJP Office**
+  - **type 5 + type 5/6** (with or without GPS) → WorkingType=2 = **WFH**
+  - **type 2/4 paired** → WorkingType=0 = **Customer Office**
+  - **type 1+5 hoặc 5+1** (office side cần lat=0) → WorkingType=3 = **WFH & FJP Office**
+  - **mọi combo khác** (vd type=1 + real GPS, hoặc CI=1 CO=5 mà CI có GPS) → WorkingType=-1 → **cột Working Place TRỐNG** trên timesheet ❌
+  - **Hệ quả cho `gh_checkin.py`**: phải map `location_key` → (type, lat, lon):
+    - `office`/`fjp` → type=1, **send lat=0/lon=0** (mimic FJP HQ kiosk tap)
+    - `home`/`wfh` → type=5, send real GPS
+    - `customer-*` → type=2, send real GPS
+  - ⛔ KHÔNG hardcode type=1 cho mọi checkin — sẽ làm Working Place trống cho ngày WFH/Customer.
 
 ### 🚨 Kintai business rules — RẤT QUAN TRỌNG (đừng vi phạm khi sửa schedule)
 
