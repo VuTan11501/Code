@@ -77,6 +77,41 @@ function tokenMatches(presented, expected) {
   return diff === 0;
 }
 
+// Build the user-facing message that the Siri Shortcut shows in its
+// notification. Plain text with newlines (iOS Shortcuts renders \n as
+// line breaks in "Show Notification" and "Show Result"). Vietnamese.
+function formatJST(date) {
+  // toLocaleString in Workers supports Asia/Tokyo via Intl.DateTimeFormat
+  const parts = new Intl.DateTimeFormat('vi-VN', {
+    timeZone: 'Asia/Tokyo',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+    day: '2-digit', month: '2-digit',
+  }).formatToParts(date);
+  const get = (t) => (parts.find(p => p.type === t) || {}).value || '';
+  return {
+    hm: `${get('hour')}:${get('minute')}`,
+    dm: `${get('day')}/${get('month')}`,
+  };
+}
+
+function buildActionMessage({ ok, action, location, statusCode, errorText }) {
+  const { hm, dm } = formatJST(new Date());
+  const verb = action === 'manual_checkin' ? 'Check-in' : 'Check-out';
+  const verbVi = action === 'manual_checkin' ? 'Đã chấm vào' : 'Đã chấm ra';
+  if (ok) {
+    return (
+      `✅ ${verbVi}\n` +
+      `📍 ${location}    🕐 ${hm} JST · ${dm}\n` +
+      `▸ GitHub Actions đang chạy ${verb.toLowerCase()}…`
+    );
+  }
+  return (
+    `❌ ${verb} thất bại\n` +
+    `📍 ${location}    🕐 ${hm} JST\n` +
+    `▸ GitHub ${statusCode}: ${(errorText || '').slice(0, 140)}`
+  );
+}
+
 export default {
   async scheduled(event, env, ctx) {
     const repo = env.REPO || 'VuTan11501/Code';
@@ -151,15 +186,21 @@ export default {
       try {
         const resp = await dispatchEvent(repo, ghToken, action.event, payload);
         const ok = resp.status === 204;
-        const body = ok
-          ? `✅ ${action.event} (${location}) dispatched\n`
-          : `❌ ${action.event} → ${resp.status}: ${(await resp.text()).slice(0, 200)}\n`;
-        return new Response(body, {
+        const errorText = ok ? '' : (await resp.text()).slice(0, 200);
+        const body = buildActionMessage({
+          ok, action: action.event, location,
+          statusCode: resp.status, errorText,
+        });
+        return new Response(body + '\n', {
           status: ok ? 200 : resp.status,
           headers: { 'Content-Type': 'text/plain; charset=utf-8' },
         });
       } catch (err) {
-        return new Response(`❌ dispatch failed: ${err.message}\n`, { status: 500 });
+        const { hm } = formatJST(new Date());
+        return new Response(
+          `❌ Lỗi mạng khi gọi GitHub\n🕐 ${hm} JST\n▸ ${err.message}\n`,
+          { status: 500, headers: { 'Content-Type': 'text/plain; charset=utf-8' } },
+        );
       }
     }
 
