@@ -1,0 +1,17 @@
+name = "dokokin-heartbeat"
+main = "heartbeat.js"
+compatibility_date = "2025-01-01"
+
+# Run every 2 minutes — Cloudflare Cron Triggers are not subject to
+# GitHub Actions cron-skip behavior, providing the most reliable
+# external heartbeat for the dispatcher.
+[triggers]
+crons = ["*/2 * * * *"]
+
+[vars]
+# Public, non-secret config. Override per-environment if you fork.
+REPO = "VuTan11501/Code"
+
+# Secrets (set via `wrangler secret put GH_PAT`):
+#   GH_PAT — GitHub classic PAT with `repo` scope, used to POST
+#            repository_dispatch event.

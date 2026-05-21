@@ -2,14 +2,15 @@ name: Scheduled Run Dispatcher
 
 on:
   schedule:
-    # Backup cron — in case self-loop chain breaks (rare)
-    - cron: '*/15 * * * *'
+    # Backup cron — multiple offsets so single skip pattern doesn't kill all triggers
+    - cron: '*/15 * * * *'       # 00, 15, 30, 45
+    - cron: '5,20,35,50 * * * *' # 05, 20, 35, 50 (offset by 5)
   workflow_dispatch:
     inputs:
       loop_minutes:
         description: 'How many minutes to loop within this run (max ~330)'
         required: false
-        default: '300'
+        default: '120'
         type: string
 
 permissions:
@@ -30,7 +31,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GH_PAT }}
           GIST_ID: 'abc2a47c0a396025a72a6580227ff493'
           GITHUB_REPOSITORY: ${{ github.repository }}
-          LOOP_MINUTES: ${{ inputs.loop_minutes || '300' }}
+          LOOP_MINUTES: ${{ inputs.loop_minutes || '120' }}
         run: |
           python3 << 'EOF'
           import json, os, sys, time
@@ -41,7 +42,7 @@ jobs:
           GIST_ID = os.environ['GIST_ID']
           REPO = os.environ['GITHUB_REPOSITORY']
           TOKEN = os.environ.get('GH_TOKEN', '')
-          LOOP_MINUTES = int(os.environ.get('LOOP_MINUTES', '300'))
+          LOOP_MINUTES = int(os.environ.get('LOOP_MINUTES', '120'))
           CHECK_INTERVAL_SEC = 30
           JST = timezone(timedelta(hours=9))
 
@@ -197,6 +198,29 @@ jobs:
               return triggered
 
           print(f"🔄 Loop start: {LOOP_MINUTES} min, check every {CHECK_INTERVAL_SEC}s")
+          # Cold-start sweep: explicitly scan & dispatch overdue entries on first iter.
+          # The main loop already handles this via process_runs(), but log it explicitly
+          # so post-incident debugging can confirm catch-up happened immediately.
+          try:
+              cold_start_runs = gist_read()
+              if cold_start_runs:
+                  now_cs = datetime.now(timezone.utc)
+                  overdue_count = 0
+                  for entry in cold_start_runs:
+                      if entry.get('type') != 'once': continue
+                      if entry.get('dispatched') or entry.get('enabled') is False: continue
+                      run_at_str = entry.get('run_at', '')
+                      if not run_at_str: continue
+                      try:
+                          run_at = datetime.fromisoformat(run_at_str.replace('Z', '+00:00'))
+                          if run_at <= now_cs:
+                              overdue_count += 1
+                      except Exception:
+                          pass
+                  if overdue_count > 0:
+                      print(f"📋 Cold-start: {overdue_count} overdue one-time entries detected, will dispatch in iter 1")
+          except Exception as e:
+              print(f"  (cold-start sweep skipped: {e})")
           iteration = 0
           total_dispatched = 0
           while time.time() < loop_end:

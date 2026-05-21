@@ -7,8 +7,11 @@ name: Dispatcher Watchdog
 
 on:
   schedule:
-    # Every 20 minutes — independent of dispatcher's own cron
-    - cron: '*/20 * * * *'
+    # Multiple offset cron entries — if GitHub skips one pattern, others still fire.
+    # Each at distinct minutes so concurrency group never collides under normal load.
+    - cron: '*/20 * * * *'      # 00, 20, 40
+    - cron: '7,27,47 * * * *'   # 07, 27, 47
+    - cron: '13,33,53 * * * *'  # 13, 33, 53
   workflow_dispatch:
 
 permissions:
