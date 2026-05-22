@@ -1013,7 +1013,21 @@ select option { background: var(--card); color: var(--foreground); }
 .btn.is-readonly, .btn[disabled] {
   opacity: 0.45; cursor: not-allowed; pointer-events: auto;
 }
-.btn.is-readonly:hover, .btn[disabled]:hover { background: inherit; }
+/* Lock hover to the non-hover appearance for each variant. Old rule used
+   `background: inherit` which made buttons invisible in light mode (card bg
+   = white, .btn.primary text = white → white-on-white). */
+.btn.is-readonly:hover, .btn[disabled]:hover {
+  background: var(--secondary); border-color: transparent; color: var(--secondary-foreground);
+}
+.btn.primary.is-readonly:hover, .btn.primary[disabled]:hover {
+  background: var(--green); border-color: var(--green); color: #fff;
+}
+.btn.danger.is-readonly:hover, .btn.danger[disabled]:hover {
+  background: var(--red-subtle); border-color: rgba(239,68,68,0.3); color: var(--red);
+}
+.btn.btn-ghost.is-readonly:hover, .btn.btn-ghost[disabled]:hover {
+  background: transparent; border-color: transparent; color: var(--muted-foreground);
+}
 
 /* shadcn-style spinner overlay (used while pulling fresh data from DokoKin) */
 .spinner-overlay {
