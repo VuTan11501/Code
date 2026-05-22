@@ -59,6 +59,32 @@
 
   const reduceMotion = () => window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+  const MAX_VISIBLE = 5;
+  function pruneStack(host) {
+    // Toasts are children of host; non-toast helpers (badge) marked
+    // data-toast-overflow get skipped. Keep newest MAX_VISIBLE; collapse the
+    // rest into a small "+N earlier" pill at the top so the user knows they
+    // were missed.
+    const cards = Array.from(host.children).filter((c) => !c.dataset.toastOverflow);
+    const excess = cards.length - MAX_VISIBLE;
+    let badge = host.querySelector('[data-toast-overflow]');
+    if (excess <= 0) { if (badge) badge.remove(); return; }
+    // Dismiss the oldest ones immediately, keep the visual + count summary.
+    cards.slice(0, excess).forEach((c) => { if (c.parentNode) c.parentNode.removeChild(c); });
+    if (!badge) {
+      badge = document.createElement('div');
+      badge.dataset.toastOverflow = '1';
+      badge.style.cssText = 'pointer-events:auto;padding:.25rem .5rem;border-radius:9999px;background:var(--muted, #1f2937);color:var(--muted-foreground, #9ca3af);font-size:.6875rem;font-weight:500;align-self:flex-end;cursor:pointer;opacity:.85;';
+      badge.title = 'Dismiss';
+      badge.addEventListener('click', () => badge.remove());
+      host.insertBefore(badge, host.firstChild);
+    }
+    const prev = +(badge.dataset.count || 0);
+    const next = prev + excess;
+    badge.dataset.count = String(next);
+    badge.textContent = `+${next} earlier notifications dismissed`;
+  }
+
   function show(message, opts) {
     opts = opts || {};
     const variant = opts.variant || 'info';
@@ -118,6 +144,7 @@
     card.appendChild(row);
     host.appendChild(card);
     if (window.refreshIcons) window.refreshIcons(card);
+    pruneStack(host);
 
     // Animate in
     requestAnimationFrame(() => {
