@@ -2776,6 +2776,15 @@
     });
     const bulkBtn = $('planner-leisure-bulk');
     if (bulkBtn) bulkBtn.addEventListener('click', bulkAddLeisure);
+    const clearLeisureBtn = $('planner-leisure-clear');
+    if (clearLeisureBtn) clearLeisureBtn.addEventListener('click', () => {
+      if (!state.leisure.length) return;
+      if (state.leisure.length > 3 && !confirm(`Clear all ${state.leisure.length} leisure routes?`)) return;
+      pushHistory();
+      state.leisure = [];
+      renderLeisure(); renderEstimate(); saveState();
+      if (window.Toast) window.Toast.info('Leisure pool cleared (Ctrl+Z to undo).', { duration: 3500 });
+    });
     const bulkFileBtn = $('planner-leisure-bulk-file');
     const bulkFileInput = $('planner-leisure-bulk-file-input');
     if (bulkFileBtn && bulkFileInput) {
