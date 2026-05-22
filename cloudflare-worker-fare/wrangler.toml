@@ -1,0 +1,16 @@
+name = "suica-fare-proxy"
+main = "fare.js"
+compatibility_date = "2025-01-01"
+
+# Fare lookups are cached for 30 days by default. Override per-environment.
+[vars]
+CACHE_TTL_SEC = "2592000"
+# Lock down to your gh-pages origin in production; "*" allowed during dev.
+ALLOWED_ORIGIN = "*"
+
+# KV namespace binding. Create once with:
+#   wrangler kv:namespace create FARE_CACHE
+# then paste the returned id below.
+[[kv_namespaces]]
+binding = "FARE_CACHE"
+id = "REPLACE_WITH_KV_NAMESPACE_ID"

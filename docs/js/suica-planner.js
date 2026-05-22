@@ -441,6 +441,59 @@
       setBadge(`${fmtYen(r.fare)} · rough estimate`, 'status-pending');
     }
     addBtns.forEach((b) => b.removeAttribute('disabled'));
+    // Kick off live verification via the CF Worker proxy (if configured).
+    // Runs async, debounced; updates the badge in place when the API responds.
+    verifyFareLive(from, to, setBadge);
+  }
+
+  // ────── Live fare verification via Cloudflare Worker proxy ──────
+  // Scrapes Yahoo!路線情報 server-side (CORS-blocked from browser). Result is
+  // cached 30 days in the worker's KV. Frontend debounces by 300ms and aborts
+  // any in-flight request when the user picks a new station so we never paint
+  // stale data.
+  const FARE_API_URL = (typeof window !== 'undefined' && window.SUICA_FARE_API) || '';
+  let _liveFareCtrl = null;
+  let _liveFareTimer = null;
+  const _liveFareCache = {};
+
+  function verifyFareLive(from, to, setBadge) {
+    if (!FARE_API_URL) return; // worker not configured → static only
+    const key = pairKey(from, to);
+    // Hit local cache first (so re-selecting the same pair is instant)
+    if (_liveFareCache[key]) {
+      _paintLive(_liveFareCache[key], setBadge);
+      return;
+    }
+    if (_liveFareTimer) clearTimeout(_liveFareTimer);
+    if (_liveFareCtrl) _liveFareCtrl.abort();
+    _liveFareTimer = setTimeout(async () => {
+      _liveFareCtrl = new AbortController();
+      const url = `${FARE_API_URL.replace(/\/+$/, '')}/fare?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
+      try {
+        const r = await fetch(url, { signal: _liveFareCtrl.signal });
+        if (!r.ok) return; // silent fail → keep static estimate
+        const data = await r.json();
+        if (!data.ok || typeof data.fare !== 'number') return;
+        // Guard: only paint if the current selection still matches what we asked.
+        if (cbFrom.getValue() !== from || cbTo.getValue() !== to) return;
+        _liveFareCache[key] = data;
+        // Promote to verified table so subsequent lookups (renderPattern,
+        // renderEstimate, monthly history) use the live value too.
+        state.fares[key] = data.fare;
+        _paintLive(data, setBadge);
+        // Re-render any downstream estimates that depend on this fare.
+        if (typeof renderEstimate === 'function') renderEstimate();
+      } catch (e) {
+        // aborted or network error → noop
+      } finally {
+        _liveFareCtrl = null;
+      }
+    }, 300);
+  }
+
+  function _paintLive(data, setBadge) {
+    const tag = data.source === 'cache' ? 'cached' : 'live';
+    setBadge(`${fmtYen(data.fare)} · ${tag} via Yahoo!路線情報`, 'status-success');
   }
 
   // ────── Add / remove routes ──────
