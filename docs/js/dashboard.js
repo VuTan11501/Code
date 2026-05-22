@@ -239,7 +239,7 @@ function renderWorkflowCard(wf, runs) {
               </span>
             </li>
           `;}).join('')}
-          ${lastRuns.length === 0 ? '<li class="run-item" style="color:var(--muted-foreground);cursor:default">No runs yet</li>' : ''}
+          ${lastRuns.length === 0 ? '<li class="run-item run-item-empty">No runs yet</li>' : ''}
         </ul>
         <div class="trigger-actions">
           <button class="btn primary sm" onclick="triggerWorkflow('${wf.file}', event)">▶ Trigger</button>

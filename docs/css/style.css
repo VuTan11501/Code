@@ -964,6 +964,14 @@ select option { background: var(--card); color: var(--foreground); }
 .workflow-card .run-item { padding: 6px 0; }
 .workflow-card .trigger-actions { padding-top: 8px; gap: 6px; }
 .workflow-card .trigger-actions .btn { padding: 4px 10px; font-size: var(--fs-xs); min-height: 0; }
+.run-item.run-item-empty {
+  display: block;
+  text-align: center;
+  color: var(--muted-foreground);
+  cursor: default;
+  padding: 10px 0;
+}
+.run-item.run-item-empty:hover { background: transparent; }
 
 /* Phase 3 â€” Template manager */
 .ot-template-list { display: flex; flex-direction: column; gap: var(--sp-2); }
