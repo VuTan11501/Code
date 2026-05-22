@@ -319,7 +319,14 @@ class PdfExporter:
                 doc.subset_fonts()
             except Exception as e:
                 log.warning("subset_fonts() failed (continuing without subset): %s", e)
-            doc.save(output_pdf, deflate=True, garbage=4)
+            doc.save(
+                output_pdf,
+                deflate=True,
+                deflate_fonts=True,
+                garbage=4,
+                clean=True,
+                use_objstms=1,
+            )
         finally:
             doc.close()
 
