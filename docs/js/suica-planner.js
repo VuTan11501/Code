@@ -2278,8 +2278,15 @@
             const delta = v.suggestion.projected - target;
             const deltaPct = target ? Math.abs(delta / target) * 100 : 0;
             const tone = deltaPct <= 10 ? 'status-success' : deltaPct <= 25 ? 'status-pending' : 'status-failure';
+            const s = v.suggestion;
+            const explain = [
+              `Commute base: ${fmtYen(s.commuteSpend)} (${s.weekdayCount} weekdays × 2 × ${fmtYen(fareOf(s.route))})`,
+              `Leisure budget: ${fmtYen(s.projected - s.commuteSpend)} (${s.outings} outings × 2 × avg ${fmtYen(Math.round(s.avgLeisureFare || 0))})`,
+              `Pool: ${(s.leisureCandidates || []).slice(0, 3).join(', ') || '(none)'}`,
+              `→ Projected: ${fmtYen(s.projected)} vs target ${fmtYen(target)} (${delta >= 0 ? '+' : ''}${fmtYen(delta)})`,
+            ].join('\n');
             return `
-              <div class="rounded-md border border-border bg-card p-3 flex flex-col gap-2" data-variant-card="${v.id}">
+              <div class="rounded-md border border-border bg-card p-3 flex flex-col gap-2" data-variant-card="${v.id}" data-tooltip="${explain.replace(/"/g, '&quot;')}">
                 <div class="flex items-center gap-2">
                   <span class="font-semibold text-sm">${v.label}</span>
                   <span class="status-badge ${tone} font-mono text-[10px] ml-auto">${delta >= 0 ? '+' : ''}${fmtYen(delta)}</span>
