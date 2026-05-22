@@ -426,24 +426,29 @@
       out.className = 'status-badge ' + variant;
       out.textContent = text;
     };
-    if (!from || !to) { setBadge('Pick from & to', 'status-skipped'); addBtns.forEach((b) => b.setAttribute('disabled', '')); return; }
-    if (from === to) { setBadge('Pick different stations', 'status-failure'); addBtns.forEach((b) => b.setAttribute('disabled', '')); return; }
-    const r = lookupFare(from, to);
-    if (!r) { setBadge('No data', 'status-skipped'); addBtns.forEach((b) => b.setAttribute('disabled', '')); return; }
-    if (r.source === 'known') {
-      setBadge(`${fmtYen(r.fare)} · verified IC fare`, 'status-success');
-    } else if (r.source === 'distance') {
-      setBadge(`${fmtYen(r.fare)} · est. from ${r.km.toFixed(1)} km (JR tariff)`, 'status-pending');
-    } else if (r.source === 'graph') {
-      const viaTxt = r.via ? ` via ${r.via}` : '';
-      setBadge(`${fmtYen(r.fare)} · ${r.hops}-hop graph est.${viaTxt}`, 'status-pending');
-    } else {
-      setBadge(`${fmtYen(r.fare)} · rough estimate`, 'status-pending');
+    const disableAdd = () => addBtns.forEach((b) => b.setAttribute('disabled', ''));
+    const enableAdd  = () => addBtns.forEach((b) => b.removeAttribute('disabled'));
+    if (!from || !to)   { setBadge('Pick from & to', 'status-skipped'); disableAdd(); return; }
+    if (from === to)    { setBadge('Pick different stations', 'status-failure'); disableAdd(); return; }
+    const key = pairKey(from, to);
+    // Strict mode: only verified fares are usable. If we already have it in
+    // state.fares (either pre-seeded from kanto_fares.json or promoted from a
+    // prior live verification) it's "verified". Otherwise we must call the
+    // worker to verify before allowing Add.
+    if (state.fares[key] != null) {
+      setBadge(`${fmtYen(state.fares[key])} · verified IC fare`, 'status-success');
+      enableAdd();
+      return;
     }
-    addBtns.forEach((b) => b.removeAttribute('disabled'));
-    // Kick off live verification via the CF Worker proxy (if configured).
-    // Runs async, debounced; updates the badge in place when the API responds.
-    verifyFareLive(from, to, setBadge);
+    if (!FARE_API_URL) {
+      setBadge('Not in verified table · live API not configured', 'status-failure');
+      disableAdd();
+      return;
+    }
+    // Need to verify live
+    setBadge('⟳ Verifying via Yahoo!路線情報…', 'status-pending');
+    disableAdd();
+    verifyFareLive(from, to, setBadge, enableAdd);
   }
 
   // ────── Live fare verification via Cloudflare Worker proxy ──────
@@ -451,49 +456,63 @@
   // cached 30 days in the worker's KV. Frontend debounces by 300ms and aborts
   // any in-flight request when the user picks a new station so we never paint
   // stale data.
+  //
+  // Strict-verified mode: a pair is only added to state.fares (and thus shown
+  // with a green "verified IC fare" badge) when either (a) it was pre-seeded
+  // from kanto_fares.json — which we treat as ground truth (JR East official
+  // 2026-03-14 rates) — or (b) the worker returned a live Yahoo!路線情報 hit.
+  // Estimates (Dijkstra-graph or km-tariff) are never persisted.
   const FARE_API_URL = (typeof window !== 'undefined' && window.SUICA_FARE_API) || '';
   let _liveFareCtrl = null;
   let _liveFareTimer = null;
-  const _liveFareCache = {};
+  const _liveFareInFlight = {}; // key → Promise (dedupe concurrent calls)
 
-  function verifyFareLive(from, to, setBadge) {
-    if (!FARE_API_URL) return; // worker not configured → static only
+  function verifyFareLive(from, to, setBadge, onSuccess) {
+    if (!FARE_API_URL) return Promise.resolve(null);
     const key = pairKey(from, to);
-    // Hit local cache first (so re-selecting the same pair is instant)
-    if (_liveFareCache[key]) {
-      _paintLive(_liveFareCache[key], setBadge);
-      return;
+    if (state.fares[key] != null) {
+      if (setBadge) setBadge(`${fmtYen(state.fares[key])} · verified IC fare`, 'status-success');
+      if (onSuccess) onSuccess();
+      return Promise.resolve(state.fares[key]);
     }
+    if (_liveFareInFlight[key]) return _liveFareInFlight[key];
     if (_liveFareTimer) clearTimeout(_liveFareTimer);
     if (_liveFareCtrl) _liveFareCtrl.abort();
-    _liveFareTimer = setTimeout(async () => {
-      _liveFareCtrl = new AbortController();
-      const url = `${FARE_API_URL.replace(/\/+$/, '')}/fare?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
-      try {
-        const r = await fetch(url, { signal: _liveFareCtrl.signal });
-        if (!r.ok) return; // silent fail → keep static estimate
-        const data = await r.json();
-        if (!data.ok || typeof data.fare !== 'number') return;
-        // Guard: only paint if the current selection still matches what we asked.
-        if (cbFrom.getValue() !== from || cbTo.getValue() !== to) return;
-        _liveFareCache[key] = data;
-        // Promote to verified table so subsequent lookups (renderPattern,
-        // renderEstimate, monthly history) use the live value too.
-        state.fares[key] = data.fare;
-        _paintLive(data, setBadge);
-        // Re-render any downstream estimates that depend on this fare.
-        if (typeof renderEstimate === 'function') renderEstimate();
-      } catch (e) {
-        // aborted or network error → noop
-      } finally {
-        _liveFareCtrl = null;
-      }
-    }, 300);
-  }
-
-  function _paintLive(data, setBadge) {
-    const tag = data.source === 'cache' ? 'cached' : 'live';
-    setBadge(`${fmtYen(data.fare)} · ${tag} via Yahoo!路線情報`, 'status-success');
+    const p = new Promise((resolve) => {
+      _liveFareTimer = setTimeout(async () => {
+        _liveFareCtrl = new AbortController();
+        const url = `${FARE_API_URL.replace(/\/+$/, '')}/fare?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
+        try {
+          const r = await fetch(url, { signal: _liveFareCtrl.signal });
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          const data = await r.json();
+          if (!data.ok || typeof data.fare !== 'number') throw new Error('bad response');
+          // Promote to verified table — same status as pre-seeded entries.
+          state.fares[key] = data.fare;
+          // Guard: only paint if the current selection still matches.
+          const stillCurrent = cbFrom && cbTo && cbFrom.getValue() === from && cbTo.getValue() === to;
+          if (stillCurrent && setBadge) {
+            setBadge(`${fmtYen(data.fare)} · verified IC fare`, 'status-success');
+          }
+          if (stillCurrent && onSuccess) onSuccess();
+          // Re-render downstream so monthly history uses the freshly-verified fare.
+          if (typeof renderEstimate === 'function') renderEstimate();
+          resolve(data.fare);
+        } catch (e) {
+          if (e && e.name === 'AbortError') { resolve(null); return; }
+          const stillCurrent = cbFrom && cbTo && cbFrom.getValue() === from && cbTo.getValue() === to;
+          if (stillCurrent && setBadge) {
+            setBadge('⚠ Verification failed — try again or pick a JR-served station', 'status-failure');
+          }
+          resolve(null);
+        } finally {
+          _liveFareCtrl = null;
+          delete _liveFareInFlight[key];
+        }
+      }, 300);
+    });
+    _liveFareInFlight[key] = p;
+    return p;
   }
 
   // ────── Add / remove routes ──────
