@@ -605,12 +605,13 @@ async function loadTokenStatus() {
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const gist = await r.json();
     const file = (gist.files || {})[TOKEN_STATUS_FILE];
-    if (!file || !file.content) {
+    const content = await readGistFile(file);
+    if (!content) {
       box.innerHTML = `
         <div class="text-muted-foreground">No status yet. Click "Check now" to run the monitor.</div>`;
       return;
     }
-    const s = JSON.parse(file.content);
+    const s = JSON.parse(content);
     renderTokenStatus(s);
   } catch (e) {
     box.innerHTML = `<div class="text-red-400">Failed to load: ${e.message}</div>`;
@@ -705,8 +706,9 @@ async function startAzureReauth() {
     if (gr.ok) {
       const g = await gr.json();
       const f = (g.files || {})[REAUTH_STATUS_FILE];
-      if (f && f.content) {
-        const s = JSON.parse(f.content);
+      const content = await readGistFile(f);
+      if (content) {
+        const s = JSON.parse(content);
         if (s.state === 'waiting_code' && s.expires_at && new Date(s.expires_at).getTime() > Date.now()) {
           existing = s;
         }
@@ -767,8 +769,9 @@ function _startReauthPolling() {
       if (!gr.ok) return;
       const g = await gr.json();
       const f = (g.files || {})[REAUTH_STATUS_FILE];
-      if (!f || !f.content) return;
-      const s = JSON.parse(f.content);
+      const content = await readGistFile(f);
+      if (!content) return;
+      const s = JSON.parse(content);
       // Only re-render when state OR code changes (avoids flicker on countdown)
       if (s.state === lastState && s.user_code === lastCode) return;
       lastState = s.state;

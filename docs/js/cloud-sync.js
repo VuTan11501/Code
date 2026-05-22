@@ -289,9 +289,10 @@ window.CloudSync = (function () {
         if (res.error || !res.body) throw new Error('GET gist ' + (res.error || 'no_body'));
         const data = res.body;
         const file = data.files && data.files[FILE];
-        if (!file || !file.content) return { changed: false, empty: true };
+        const fileContent = window.readGistFile ? await window.readGistFile(file) : (file && file.content) || '';
+        if (!fileContent) return { changed: false, empty: true };
         let remote;
-        try { remote = JSON.parse(file.content); }
+        try { remote = JSON.parse(fileContent); }
         catch (e) { return { error: 'parse_error' }; }
         _cachedRemote = remote;
         const remoteAt = remote._updated_at || '';
@@ -340,7 +341,8 @@ window.CloudSync = (function () {
         if (cur.ok) {
           const data = await cur.json();
           const f = data.files && data.files[FILE];
-          if (f && f.content) backupContent = f.content;
+          const bc = window.readGistFile ? await window.readGistFile(f) : (f && f.content) || '';
+          if (bc) backupContent = bc;
         }
       } catch {}
       const settings = _collectLocal();

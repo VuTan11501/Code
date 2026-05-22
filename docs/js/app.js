@@ -674,6 +674,31 @@ function _apiRetryDelay(resp, attempt) {
   return Math.min(cap, base + jitter);
 }
 
+// ─────────────────────────────────────────────────────────────
+// Gist file content reader (truncation-safe).
+// GitHub's /gists/{id} API truncates per-file content when the total
+// gist payload is large (multi-file gists hit this even with small
+// individual files). When `file.truncated === true`, `file.content`
+// comes back EMPTY — must fetch `file.raw_url` to get the real bytes.
+// Also routed through the Worker proxy when configured: raw_url goes
+// to gist.githubusercontent.com which is NOT proxied, but raw URLs
+// don't require Authorization at all (they're public per-file URLs
+// signed with a token in the path), so direct fetch is fine.
+// ─────────────────────────────────────────────────────────────
+async function readGistFile(file) {
+  if (!file) return '';
+  if (!file.truncated) return file.content || '';
+  if (!file.raw_url) return file.content || '';
+  try {
+    const r = await fetch(file.raw_url);
+    if (!r.ok) return file.content || '';
+    return await r.text();
+  } catch {
+    return file.content || '';
+  }
+}
+window.readGistFile = readGistFile;
+
 async function apiFetch(path, opts = {}) {
   const headers = { 'Accept': 'application/vnd.github+json' };
 

@@ -92,6 +92,78 @@
     } catch (_) { return null; }
   }
 
+  // ────── Recent generations (last 5) ──────
+  // Stored separately from STORAGE_KEY so users can prune one without the other.
+  const RECENT_KEY = 'suica-planner-recent-v1';
+  const RECENT_MAX = 5;
+  function loadRecent() {
+    try {
+      const raw = localStorage.getItem(RECENT_KEY);
+      if (!raw) return [];
+      const arr = JSON.parse(raw);
+      return Array.isArray(arr) ? arr.slice(0, RECENT_MAX) : [];
+    } catch (_) { return []; }
+  }
+  function saveRecent(arr) {
+    try { localStorage.setItem(RECENT_KEY, JSON.stringify(arr.slice(0, RECENT_MAX))); } catch (_) {}
+  }
+  function recordGeneration(meta) {
+    // meta = { filename, month, target, seed, routes:[…], runUrl, when }
+    const list = loadRecent();
+    list.unshift({ ...meta, when: meta.when || Date.now() });
+    saveRecent(list);
+    renderRecent();
+  }
+  function renderRecent() {
+    const section = $('planner-recent-section');
+    const wrap = $('planner-recent-list');
+    if (!wrap || !section) return;
+    const list = loadRecent();
+    if (!list.length) { section.classList.add('hidden'); return; }
+    section.classList.remove('hidden');
+    wrap.innerHTML = '';
+    list.forEach((r) => {
+      const row = document.createElement('div');
+      row.className = 'flex items-center gap-3 py-2 border-b border-border last:border-b-0 flex-wrap';
+      const when = new Date(r.when);
+      const dt = when.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+      const routes = (r.routes || []).slice(0, 3).join(', ') + ((r.routes || []).length > 3 ? '…' : '');
+      row.innerHTML = `
+        <div class="flex flex-col gap-0.5 flex-1 min-w-[180px]">
+          <div class="text-sm font-mono font-medium">${r.filename || ('suica-' + r.month + '.pdf')}</div>
+          <div class="text-xs text-muted-foreground">${dt} · ${routes || 'no routes recorded'}</div>
+        </div>
+        <span class="status-badge status-info font-mono">${r.month}</span>
+        <span class="status-badge status-pending font-mono">¥${(+r.target).toLocaleString('en-US')}</span>
+        <span class="status-badge font-mono">seed ${r.seed}</span>
+        ${r.runUrl ? `<a class="btn btn-ghost sm text-xs" href="${r.runUrl}" target="_blank" rel="noopener" data-tooltip="Open the GitHub Actions run">Run ↗</a>` : ''}
+        <button type="button" class="btn btn-ghost sm text-xs" data-restore-recent data-tooltip="Reuse this month + target + seed in the planner">
+          <span data-icon="undo" data-size="12"></span>
+          <span class="btn-label">Reuse</span>
+        </button>
+      `;
+      const restoreBtn = row.querySelector('[data-restore-recent]');
+      if (restoreBtn) restoreBtn.addEventListener('click', () => {
+        state.settings.month = r.month;
+        state.settings.target = +r.target;
+        state.settings.seed = +r.seed;
+        ['planner-month', 'planner-target', 'planner-seed'].forEach((id, i) => {
+          const el = $(id); if (el) el.value = [r.month, r.target, r.seed][i];
+        });
+        renderEstimate(); saveState();
+        const s = $('planner-pdf-status'); if (s) { s.textContent = `Restored settings from ${r.filename || ('run on ' + dt)}`; s.className = 'text-xs text-primary'; }
+      });
+      wrap.appendChild(row);
+    });
+    if (window.refreshIcons) window.refreshIcons(wrap);
+  }
+  function currentPlanRoutes() {
+    const set = new Set();
+    DAYS.forEach((d) => state.pattern[d].forEach((t) => set.add(t.route)));
+    state.leisure.forEach((l) => set.add(l.route));
+    return Array.from(set);
+  }
+
   // ────── Load fare data + station catalogue ──────
   async function loadFares() {
     const setStatus = (html, variant) => {
@@ -631,6 +703,24 @@
         });
       }
       row.appendChild(chips);
+      // "Copy to other weekdays" button — only shown when this day has trips
+      // and there is at least one other weekday to copy to.
+      if (state.pattern[day].length) {
+        const copyBtn = document.createElement('button');
+        copyBtn.type = 'button';
+        copyBtn.className = 'btn btn-ghost sm text-xs flex-none';
+        copyBtn.setAttribute('aria-label', `Copy ${DAY_LABELS[day]} pattern to other weekdays`);
+        copyBtn.setAttribute('data-tooltip', 'Copy to other weekdays (Mon–Fri)');
+        copyBtn.innerHTML = '<span data-icon="chevronRight" data-size="12"></span>';
+        copyBtn.addEventListener('click', () => {
+          const weekdays = DAYS.slice(0, 5);
+          const target = state.pattern[day].map((t) => ({ ...t }));
+          weekdays.forEach((d) => { if (d !== day) state.pattern[d] = target.map((t) => ({ ...t })); });
+          renderPattern(); renderEstimate(); saveState();
+        });
+        row.appendChild(copyBtn);
+        if (window.refreshIcons) window.refreshIcons(copyBtn);
+      }
       wrap.appendChild(row);
     });
   }
@@ -695,9 +785,6 @@
       const dayFare = trips.reduce((sum, t) => sum + fareOf(t.route), 0);
       commuteSpend += dayFare * monthInfo.counts[day];
     });
-    // Each "trip" in pattern = one round-trip (IN+OUT = 2 taps but ONE fare debit)
-    // Actually IC fare is per-segment. The skill bills 1 fare per OUT tap. So 1 entry = 1 fare debit.
-    // For leisure: avg = (min+max)/2 monthly outings, each outing = 1 round trip → 2 fare debits at avg leisure fare.
     const totW = state.leisure.reduce((s, l) => s + l.weight, 0);
     const avgLeisureFare = totW
       ? state.leisure.reduce((s, l) => s + fareOf(l.route) * l.weight, 0) / totW
@@ -712,11 +799,32 @@
     const target = +state.settings.target || 0;
     const diff = total - target;
     const diffEl = $('planner-estimate-diff');
+    const bar = $('planner-estimate-bar');
+    const barTargetLabel = $('planner-estimate-bar-target');
+    const barWrap = $('planner-estimate-bar-wrap');
     if (target) {
       const pct = ((diff / target) * 100).toFixed(1);
       diffEl.textContent = `${diff >= 0 ? '+' : ''}${fmtYen(diff)} vs target (${pct}%)`;
-      diffEl.className = 'text-xs font-mono mt-1 ' + (Math.abs(diff) / target < 0.15 ? 'text-primary' : 'text-warning');
-    } else diffEl.textContent = '';
+      const absPct = Math.abs(diff) / target;
+      const tone = absPct <= 0.10 ? 'text-primary' : (absPct <= 0.25 ? 'text-warning' : 'text-destructive');
+      diffEl.className = 'text-xs font-mono ' + tone;
+      // Progress bar fill % = total/target, capped at 150%
+      if (bar) {
+        const fillPct = Math.min(150, (total / target) * 100);
+        bar.style.width = fillPct + '%';
+        // Color tiers
+        bar.classList.remove('bg-primary', 'bg-warning', 'bg-destructive', 'bg-muted-foreground');
+        const cls = absPct <= 0.10 ? 'bg-primary' : (absPct <= 0.25 ? 'bg-warning' : 'bg-destructive');
+        bar.classList.add(cls);
+      }
+      if (barTargetLabel) barTargetLabel.textContent = `Target ${fmtYen(target)} · ${total.toLocaleString()} / ${target.toLocaleString()}`;
+      if (barWrap) barWrap.removeAttribute('aria-hidden');
+    } else {
+      diffEl.textContent = '';
+      if (bar) bar.style.width = '0%';
+      if (barTargetLabel) barTargetLabel.textContent = 'Target ¥—';
+      if (barWrap) barWrap.setAttribute('aria-hidden', 'true');
+    }
   }
 
   // ────── Build preset JSON ──────
@@ -1151,6 +1259,18 @@
       const filename = await _extractAndSavePdf(zipBuf, `suica-${state.settings.month}.pdf`);
       setStatus(`✓ Downloaded ${filename}`, 'text-primary');
 
+      // Record this generation for the "Recent" panel
+      try {
+        recordGeneration({
+          filename,
+          month: state.settings.month,
+          target: +state.settings.target,
+          seed: +state.settings.seed,
+          routes: currentPlanRoutes(),
+          runUrl: run && run.html_url ? run.html_url : null,
+        });
+      } catch (_) {}
+
       // Also feed the generated history into the viewer below for preview,
       // if we can locally reproduce it (deterministic via seed).
       if (window.renderSuicaHistory) {
@@ -1368,6 +1488,11 @@
     $('planner-clear').addEventListener('click', clearPlan);
     const sgBtn = $('planner-auto-suggest');
     if (sgBtn) sgBtn.addEventListener('click', autoSuggest);
+    const recentClearBtn = $('planner-recent-clear');
+    if (recentClearBtn) recentClearBtn.addEventListener('click', () => {
+      saveRecent([]); renderRecent();
+    });
+    renderRecent();
 
     renderPattern(); renderLeisure(); renderEstimate();
     loadFares();
