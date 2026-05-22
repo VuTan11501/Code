@@ -116,17 +116,27 @@ function resetCardVisibility() {
 }
 
 let _cardPickerOpen = false;
-function toggleCardPicker() {
-  _cardPickerOpen = !_cardPickerOpen;
-  renderInfraToggle();
+function openCardPicker() {
+  _cardPickerOpen = true;
+  const modal = document.getElementById('dashCustomizeModal');
+  if (modal) modal.classList.add('open');
   renderCardPicker();
+  renderInfraToggle();
+}
+function closeCardPicker() {
+  _cardPickerOpen = false;
+  const modal = document.getElementById('dashCustomizeModal');
+  if (modal) modal.classList.remove('open');
+  renderInfraToggle();
+}
+function toggleCardPicker() {
+  if (_cardPickerOpen) closeCardPicker(); else openCardPicker();
 }
 
 function renderCardPicker() {
-  const host = document.getElementById('dashCardPicker');
-  if (!host) return;
-  if (!_cardPickerOpen) { host.innerHTML = ''; host.classList.remove('open'); return; }
-  host.classList.add('open');
+  const body = document.getElementById('dashCustomizeBody');
+  const footer = document.getElementById('dashCustomizeFooter');
+  if (!body || !footer) return;
   const visible = getVisibleCardSet();
   const row = (wf) => {
     const on = visible.has(wf.file);
@@ -136,7 +146,11 @@ function renderCardPicker() {
       <span class="card-picker-file">${wf.file}</span>
     </label>`;
   };
-  host.innerHTML = `
+  body.innerHTML = `
+    <div class="card-picker-hint text-xs text-muted-foreground" style="margin-bottom:10px;">
+      Choose which workflow cards appear on the dashboard. Showing
+      <strong>${visible.size}</strong> / ${WORKFLOWS_ALL.length}.
+    </div>
     <div class="card-picker-section">
       <div class="card-picker-section-title">Core (${WORKFLOWS.length})</div>
       ${WORKFLOWS.map(row).join('')}
@@ -145,12 +159,23 @@ function renderCardPicker() {
       <div class="card-picker-section-title">Infrastructure (${WORKFLOWS_INFRA.length})</div>
       ${WORKFLOWS_INFRA.map(row).join('')}
     </div>
-    <div class="card-picker-footer">
-      <button class="btn sm btn-outline" onclick="resetCardVisibility()" data-tooltip="Show only Auto Checkin / Checkout / Request OT">${ICON('undo', 12)} Reset to defaults</button>
-      <button class="btn sm" onclick="toggleCardPicker()">Done</button>
-    </div>
+  `;
+  footer.innerHTML = `
+    <button class="btn sm btn-outline" onclick="resetCardVisibility()" data-tooltip="Show only Auto Checkin / Checkout / Request OT">${ICON('undo', 12)} Reset to defaults</button>
+    <button class="btn sm primary" onclick="closeCardPicker()">Done</button>
   `;
 }
+
+// Backdrop click + Esc close — wired once on first script execution.
+document.addEventListener('click', (e) => {
+  const m = document.getElementById('dashCustomizeModal');
+  if (m && m.classList.contains('open') && e.target === m) closeCardPicker();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  const m = document.getElementById('dashCustomizeModal');
+  if (m && m.classList.contains('open')) closeCardPicker();
+});
 
 function renderInfraToggle() {
   const bar = document.getElementById('dashInfraToggleBar');
@@ -163,15 +188,12 @@ function renderInfraToggle() {
     ${hasCustomOrder ? `<button class="btn sm btn-outline" onclick="resetCardOrder()" data-tooltip="Restore default card order">${ICON('undo', 12)} Reset order</button>` : ''}
     ${customVis ? `<button class="btn sm btn-outline" onclick="resetCardVisibility()" data-tooltip="Show only the 3 default workflows">${ICON('undo', 12)} Reset cards</button>` : ''}
     <button type="button"
-            class="btn sm ${_cardPickerOpen ? 'primary' : ''}"
-            onclick="toggleCardPicker()"
-            aria-expanded="${_cardPickerOpen}"
-            aria-controls="dashCardPicker"
+            class="btn sm"
+            onclick="openCardPicker()"
             data-tooltip="Choose which workflows appear on the dashboard">
-      ${ICON('settings', 12)} ${_cardPickerOpen ? 'Close' : 'Customize'}
+      ${ICON('settings', 12)} Customize
     </button>
   `;
-  renderCardPicker();
 }
 const RUN_EVENT_MAP = {
   workflow_dispatch:    { short: '▶ Manual',  full: 'Manually triggered (workflow_dispatch)' },

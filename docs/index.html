@@ -32,7 +32,7 @@
 })();
 </script>
 <link rel="stylesheet" href="css/tailwind.css?v=1">
-<link rel="stylesheet" href="css/style.css?v=116">
+<link rel="stylesheet" href="css/style.css?v=117">
 <link rel="preconnect" href="https://api.github.com">
 </head>
 <body class="bg-background text-foreground font-sans text-sm antialiased min-h-dvh overflow-x-hidden">
@@ -149,7 +149,6 @@
     <div class="page active" id="page-dashboard" role="tabpanel" aria-label="Dashboard page">
 
       <div id="dashInfraToggleBar" class="dash-infra-toggle-bar"></div>
-      <div id="dashCardPicker" class="dash-card-picker" aria-live="polite"></div>
 
       <section class="grid" id="workflowGrid" aria-label="Workflow status cards">
         <div class="skeleton skeleton-card"></div>
@@ -1202,6 +1201,18 @@
   <div class="toast" id="toast" role="alert" aria-live="assertive"></div>
 </div>
 
+<!-- Dashboard Customize Modal -->
+<div class="dialog-overlay modal-overlay" id="dashCustomizeModal" role="dialog" aria-modal="true" aria-labelledby="dashCustomizeTitle">
+  <div class="dialog-content modal" style="max-width:480px;">
+    <div class="dialog-header modal-header">
+      <h3 class="dialog-title text-lg font-semibold" id="dashCustomizeTitle">Customize Dashboard</h3>
+      <button class="btn btn-ghost btn-icon modal-close" onclick="closeCardPicker()" aria-label="Close">&times;</button>
+    </div>
+    <div class="dialog-body modal-body" id="dashCustomizeBody" style="max-height:65vh;overflow-y:auto;padding:16px 20px;"></div>
+    <div class="dialog-footer" id="dashCustomizeFooter" style="display:flex;justify-content:space-between;gap:8px;padding:12px 20px;border-top:1px solid var(--border);"></div>
+  </div>
+</div>
+
 <!-- Scripts (order matters) -->
 <!-- Core scripts (always loaded, deferred so they run after DOM parse) -->
 <script defer src="js/icons.js?v=47"></script>
@@ -1211,7 +1222,7 @@
 <script defer src="js/biometric.js?v=2"></script>
 <script defer src="js/cloud-sync.js?v=4"></script>
 <script defer src="js/app.js?v=46"></script>
-<script defer src="js/dashboard.js?v=36"></script>
+<script defer src="js/dashboard.js?v=37"></script>
 <!--
   Page-specific scripts (schedule / ot / timesheet / ai / settings) are
   lazy-loaded on demand by app.js → ensurePageScripts() when the user

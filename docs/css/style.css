@@ -1025,23 +1025,9 @@ select option { background: var(--card); color: var(--foreground); }
 .dash-infra-label strong { color: var(--foreground); font-weight: 600; }
 .dash-infra-hint { color: var(--muted-foreground); }
 
-/* Customize panel — pick which workflow cards appear on the dashboard */
-.dash-card-picker {
-  display: none;
-  margin-bottom: 12px;
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  padding: 12px 14px;
-  animation: dash-card-picker-in 180ms ease-out;
-}
-.dash-card-picker.open { display: block; }
-@keyframes dash-card-picker-in {
-  from { opacity: 0; transform: translateY(-4px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-.dash-card-picker .card-picker-section + .card-picker-section { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
-.dash-card-picker .card-picker-section-title {
+/* Customize picker — used inside the Customize Dashboard modal */
+.card-picker-section + .card-picker-section { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+.card-picker-section-title {
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -1049,7 +1035,7 @@ select option { background: var(--card); color: var(--foreground); }
   font-weight: 600;
   margin-bottom: 6px;
 }
-.dash-card-picker .card-picker-row {
+.card-picker-row {
   display: grid;
   grid-template-columns: 18px 1fr auto;
   align-items: center;
@@ -1060,21 +1046,16 @@ select option { background: var(--card); color: var(--foreground); }
   font-size: var(--fs-sm);
   transition: background var(--duration-fast);
 }
-.dash-card-picker .card-picker-row:hover { background: rgba(var(--tint), 0.06); }
-.dash-card-picker .card-picker-row input[type="checkbox"] { accent-color: var(--primary); cursor: pointer; }
-.dash-card-picker .card-picker-row.on .card-picker-name { color: var(--foreground); font-weight: 500; }
-.dash-card-picker .card-picker-row:not(.on) .card-picker-name { color: var(--muted-foreground); }
-.dash-card-picker .card-picker-name { display: inline-flex; align-items: center; gap: 6px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.dash-card-picker .card-picker-file {
+.card-picker-row:hover { background: rgba(var(--tint), 0.06); }
+.card-picker-row input[type="checkbox"] { accent-color: var(--primary); cursor: pointer; }
+.card-picker-row.on .card-picker-name { color: var(--foreground); font-weight: 500; }
+.card-picker-row:not(.on) .card-picker-name { color: var(--muted-foreground); }
+.card-picker-name { display: inline-flex; align-items: center; gap: 6px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card-picker-file {
   font-family: var(--font-mono);
   font-size: 10px;
   color: var(--muted-foreground);
   opacity: 0.7;
-}
-.dash-card-picker .card-picker-footer {
-  display: flex; justify-content: flex-end; gap: 8px;
-  margin-top: 12px; padding-top: 10px;
-  border-top: 1px solid var(--border);
 }
 
 /* Dashboard workflow grid — more cards per row + compact card sizing */
