@@ -1026,7 +1026,28 @@
       if (window.refreshIcons) window.refreshIcons(wrap);
       return;
     }
-    state.leisure.forEach((l, idx) => {
+    // Sort toolbar — affects render order only, not state order.
+    const sortMode = wrap.dataset.leisureSort || 'manual';
+    if (state.leisure.length >= 2) {
+      const bar = document.createElement('div');
+      bar.className = 'flex items-center gap-1 pb-1.5 text-xs text-muted-foreground';
+      bar.innerHTML = `
+        <span class="mr-1">Sort:</span>
+        ${['manual','fare','weight','name'].map((m) => `<button type="button" class="btn xs ${sortMode===m?'btn-default':'btn-ghost'}" data-leisure-sort="${m}">${m}</button>`).join('')}
+      `;
+      bar.querySelectorAll('[data-leisure-sort]').forEach((b) => {
+        b.addEventListener('click', () => {
+          wrap.dataset.leisureSort = b.dataset.leisureSort;
+          renderLeisure();
+        });
+      });
+      wrap.appendChild(bar);
+    }
+    const indexed = state.leisure.map((l, idx) => ({ l, idx }));
+    if (sortMode === 'fare') indexed.sort((a, b) => fareOf(b.l.route) - fareOf(a.l.route));
+    else if (sortMode === 'weight') indexed.sort((a, b) => b.l.weight - a.l.weight);
+    else if (sortMode === 'name') indexed.sort((a, b) => a.l.route.localeCompare(b.l.route, 'ja'));
+    indexed.forEach(({ l, idx }) => {
       const row = document.createElement('div');
       row.className = 'flex items-center gap-2 py-1.5 border-b border-border last:border-b-0';
       row.innerHTML = `
