@@ -948,9 +948,29 @@ async function refresh() {
 (function initDragDrop() {
   let dragSrcFile = null;
   let currentOverCard = null;
+  // rAF-throttle dragover hit-testing to avoid layout thrashing on every
+  // mousemove (browsers fire dragover ~60-120 Hz which used to cause the
+  // visible lag while dragging).
+  let pendingOverTarget = null;
+  let rafScheduled = false;
 
   function nearestCard(el) {
     return el ? el.closest('.workflow-card') : null;
+  }
+
+  function processPendingOver() {
+    rafScheduled = false;
+    const card = pendingOverTarget;
+    pendingOverTarget = null;
+    if (!card || card.dataset.wfFile === dragSrcFile) {
+      if (currentOverCard) { currentOverCard.classList.remove('drag-over'); currentOverCard = null; }
+      return;
+    }
+    if (card !== currentOverCard) {
+      if (currentOverCard) currentOverCard.classList.remove('drag-over');
+      card.classList.add('drag-over');
+      currentOverCard = card;
+    }
   }
 
   document.addEventListener('DOMContentLoaded', () => {
@@ -961,31 +981,40 @@ async function refresh() {
       const card = nearestCard(e.target);
       if (!card) return;
       dragSrcFile = card.dataset.wfFile;
-      card.classList.add('dragging');
       e.dataTransfer.effectAllowed = 'move';
       e.dataTransfer.setData('text/plain', dragSrcFile);
+      // Use the card itself as the drag image so the browser-rendered
+      // ghost reflects the full card content (not just whatever the
+      // pointer happened to be over). Offset to the pointer-relative
+      // position inside the card for natural feel.
+      try {
+        const rect = card.getBoundingClientRect();
+        e.dataTransfer.setDragImage(card, e.clientX - rect.left, e.clientY - rect.top);
+      } catch {}
+      // Defer the .dragging class to the next frame — applying it before
+      // the browser captures the drag image would re-render with our
+      // outline/shadow and look ugly in the ghost.
+      requestAnimationFrame(() => card.classList.add('dragging'));
     });
 
     grid.addEventListener('dragend', (e) => {
       const card = nearestCard(e.target);
       if (card) card.classList.remove('dragging');
+      // Defensive: clear any leftover .dragging in case dragend target shifted
+      grid.querySelectorAll('.workflow-card.dragging').forEach(c => c.classList.remove('dragging'));
       if (currentOverCard) currentOverCard.classList.remove('drag-over');
       dragSrcFile = null;
       currentOverCard = null;
+      pendingOverTarget = null;
     });
 
     grid.addEventListener('dragover', (e) => {
       e.preventDefault();
       e.dataTransfer.dropEffect = 'move';
-      const card = nearestCard(e.target);
-      if (!card || card.dataset.wfFile === dragSrcFile) {
-        if (currentOverCard) { currentOverCard.classList.remove('drag-over'); currentOverCard = null; }
-        return;
-      }
-      if (card !== currentOverCard) {
-        if (currentOverCard) currentOverCard.classList.remove('drag-over');
-        card.classList.add('drag-over');
-        currentOverCard = card;
+      pendingOverTarget = nearestCard(e.target);
+      if (!rafScheduled) {
+        rafScheduled = true;
+        requestAnimationFrame(processPendingOver);
       }
     });
 
@@ -1018,8 +1047,23 @@ async function refresh() {
       baseline.splice(targetIdx, 0, item);
 
       saveCardOrder(baseline.map(w => w.file));
+
+      // Reorder existing DOM nodes in-place instead of triggering a full
+      // refresh() (which would re-fetch GitHub API for every workflow —
+      // the main cause of perceived lag after a drop). The cards already
+      // hold their own runs state; just move them.
+      const srcEl = grid.querySelector(`.workflow-card[data-wf-file="${srcFile}"]`);
+      const targetEl = grid.querySelector(`.workflow-card[data-wf-file="${targetFile}"]`);
+      if (srcEl && targetEl && srcEl !== targetEl) {
+        // Insert src BEFORE target when dropping onto a card earlier in
+        // the list, AFTER when dropping onto one later — matches the
+        // splice logic above.
+        const srcPos = Array.from(grid.children).indexOf(srcEl);
+        const targetPos = Array.from(grid.children).indexOf(targetEl);
+        if (srcPos < targetPos) targetEl.after(srcEl);
+        else                    targetEl.before(srcEl);
+      }
       renderInfraToggle();
-      if (typeof refresh === 'function') refresh();
     });
   });
 })();

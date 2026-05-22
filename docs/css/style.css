@@ -3895,10 +3895,14 @@ body.ai-page-active .ai-dot-grid {
 /* ─── DRAG-AND-DROP CARD REORDERING ─── */
 .workflow-card { position: relative; cursor: default; user-select: none; }
 .workflow-card.dragging {
-  opacity: 0.85;
+  /* Keep the card fully visible while dragging — the browser-rendered
+     ghost is translucent enough on its own; making the source card faded
+     too made it hard to read. */
+  opacity: 1;
   cursor: grabbing;
-  transform: rotate(1.5deg) scale(0.98);
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35), 0 0 0 2px var(--primary);
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
   z-index: 10;
 }
 .workflow-card.drag-over { outline: 2px dashed var(--primary); outline-offset: -2px; }
