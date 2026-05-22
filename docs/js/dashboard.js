@@ -967,6 +967,7 @@ async function refresh() {
 (function initDragDrop() {
   let dragSrcFile = null;
   let currentOverCard = null;
+  let _dragGhost = null;
   // rAF-throttle dragover hit-testing to avoid layout thrashing on every
   // mousemove (browsers fire dragover ~60-120 Hz which used to cause the
   // visible lag while dragging).
@@ -1002,17 +1003,27 @@ async function refresh() {
       dragSrcFile = card.dataset.wfFile;
       e.dataTransfer.effectAllowed = 'move';
       e.dataTransfer.setData('text/plain', dragSrcFile);
-      // Use the card itself as the drag image so the browser-rendered
-      // ghost reflects the full card content (not just whatever the
-      // pointer happened to be over). Offset to the pointer-relative
-      // position inside the card for natural feel.
+      // Create an off-screen CLONE for the drag image. If we pass the
+      // real card to setDragImage, browsers visually keep the card at
+      // its original screen position throughout the drag and only
+      // release it on the next frame after drop — which surfaces as a
+      // "1s lag before the card snaps to the new spot". A clone leaves
+      // the real DOM node free to be reordered the instant drop fires.
       try {
         const rect = card.getBoundingClientRect();
-        e.dataTransfer.setDragImage(card, e.clientX - rect.left, e.clientY - rect.top);
+        const clone = card.cloneNode(true);
+        clone.style.position = 'absolute';
+        clone.style.top = '-10000px';
+        clone.style.left = '-10000px';
+        clone.style.width = rect.width + 'px';
+        clone.style.pointerEvents = 'none';
+        clone.classList.remove('dragging');
+        document.body.appendChild(clone);
+        _dragGhost = clone;
+        e.dataTransfer.setDragImage(clone, e.clientX - rect.left, e.clientY - rect.top);
       } catch {}
-      // Defer the .dragging class to the next frame — applying it before
-      // the browser captures the drag image would re-render with our
-      // outline/shadow and look ugly in the ghost.
+      // Apply .dragging on the next frame so the captured drag-image
+      // clone above doesn't include our outline/shadow styles.
       requestAnimationFrame(() => card.classList.add('dragging'));
     });
 
@@ -1022,6 +1033,7 @@ async function refresh() {
       // Defensive: clear any leftover .dragging in case dragend target shifted
       grid.querySelectorAll('.workflow-card.dragging').forEach(c => c.classList.remove('dragging'));
       if (currentOverCard) currentOverCard.classList.remove('drag-over');
+      if (_dragGhost) { try { _dragGhost.remove(); } catch {} _dragGhost = null; }
       dragSrcFile = null;
       currentOverCard = null;
       pendingOverTarget = null;
