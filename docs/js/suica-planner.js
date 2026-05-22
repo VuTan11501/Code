@@ -3007,24 +3007,35 @@
   // state.fares (must be a verified pair) and report skipped count.
   // Internal: parse a free-form bulk text block into added/skipped/dup counts.
   function _bulkAddLeisureFromText(raw, sourceLabel) {
-    const items = raw.split(/[\n,;]+/).map((s) => s.trim()).filter(Boolean);
+    const items = raw.split(/[\n,;]+/).map((s) => s.trim()).filter((s) => s && !s.startsWith('#'));
     if (!items.length) return;
     pushHistory();
-    let added = 0, skipped = 0, duplicate = 0;
+    let added = 0, skipped = 0, bumped = 0;
     items.forEach((s) => {
+      // Accept optional ",weight" or "\tweight" suffix.
+      let weight = 1;
+      const wm = s.match(/[\,\t]\s*(\d+(?:\.\d+)?)\s*$/);
+      if (wm) { weight = Math.max(1, Math.round(+wm[1])) || 1; s = s.slice(0, wm.index).trim(); }
       const m = s.match(/^(.+?)\s*[↔⇄<>↔]+\s*(.+)$/);
       if (!m) { skipped++; return; }
       const key = pairKey(m[1].trim(), m[2].trim());
       if (!state.fares[key]) { skipped++; return; }
-      if (state.leisure.some((l) => l.route === key)) { duplicate++; return; }
-      state.leisure.push({ route: key, weight: 1 });
+      const existing = state.leisure.find((l) => l.route === key);
+      if (existing) {
+        existing.weight = Math.max(1, (+existing.weight || 0) + weight);
+        delete existing._prevWeight;
+        bumped++;
+        return;
+      }
+      state.leisure.push({ route: key, weight });
       added++;
     });
     renderLeisure(); renderEstimate(); saveState();
-    const detail = `${added} added · ${duplicate} dup · ${skipped} invalid${sourceLabel ? ` (from ${sourceLabel})` : ''}`;
+    const detail = `${added} added · ${bumped} merged · ${skipped} invalid${sourceLabel ? ` (from ${sourceLabel})` : ''}`;
     if (window.Toast) {
-      if (added && !skipped) window.Toast.success(detail, { title: 'Leisure routes added' });
-      else if (added) window.Toast.warning(detail, { title: 'Leisure routes added (partial)' });
+      const opts = { actionLabel: 'Undo', onAction: () => { try { undo(); } catch (_) {} } };
+      if ((added || bumped) && !skipped) window.Toast.success(detail, { title: 'Leisure routes updated', ...opts });
+      else if (added || bumped) window.Toast.warning(detail, { title: 'Leisure routes updated (partial)', ...opts });
       else window.Toast.error(detail, { title: 'No routes added' });
     }
   }
