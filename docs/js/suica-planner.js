@@ -21,6 +21,7 @@
   // ────── State ──────
   const state = {
     fares: {},                    // "東京↔新宿" → 210
+    fareVerifiedAt: {},           // "東京↔新宿" → ISO date string (when this fare was last verified)
     stations: [],                 // ["東京", "新宿", …] unique, sorted (canonical kanji names)
     stationMeta: {},              // "東京" → { kana, romaji, alt:[] } — for combobox search & display
     pattern: { monday: [], tuesday: [], wednesday: [], thursday: [], friday: [], saturday: [], sunday: [] },
@@ -182,11 +183,16 @@
       // can be authored or sorted in any order (Python sort vs JS localeCompare
       // produce different orderings for CJK strings).
       const rawFares = data.fares || {};
+      // Official JR East IC fare schedule effective 2026-03-14
+      const OFFICIAL_FARE_DATE = data.effective_date || '2026-03-14T00:00:00Z';
       state.fares = {};
+      state.fareVerifiedAt = {};
       Object.keys(rawFares).forEach((k) => {
         const [a, b] = k.split('↔');
         if (!a || !b) return;
-        state.fares[pairKey(a, b)] = rawFares[k];
+        const key = pairKey(a, b);
+        state.fares[key] = rawFares[k];
+        state.fareVerifiedAt[key] = OFFICIAL_FARE_DATE;
       });
 
       const set = new Set();
@@ -541,6 +547,34 @@
   // Render station meta hints (kana, romaji, lines) for the current From/To picks.
   // Pulls from state.stationMeta which was populated from the HeartRails catalogue
   // at boot. Falls back gracefully when meta is missing.
+  function humanAgo(iso) {
+    if (!iso) return '';
+    const t = new Date(iso).getTime();
+    if (!t || isNaN(t)) return '';
+    const ms = Date.now() - t;
+    if (ms < 0) return 'just now';
+    const m = ms / 60000;
+    if (m < 1) return 'just now';
+    if (m < 60) return `verified ${Math.floor(m)}m ago`;
+    const h = m / 60;
+    if (h < 24) return `verified ${Math.floor(h)}h ago`;
+    const d = h / 24;
+    if (d < 30) return `verified ${Math.floor(d)}d ago`;
+    const mo = d / 30;
+    if (mo < 12) return `verified ${Math.floor(mo)}mo ago`;
+    return `verified ${Math.floor(d/365)}y ago`;
+  }
+
+  function forceReverify(from, to) {
+    if (!FARE_API_URL || !from || !to) return;
+    const key = pairKey(from, to);
+    // Drop cached fare so verifyFareLive() falls through to network
+    delete state.fares[key];
+    delete state.fareVerifiedAt[key];
+    if (window.toast) window.toast.info(`Re-verifying ${from}↔${to}…`);
+    updateFareDisplay();
+  }
+
   function renderStationHints() {
     const wrap = $('planner-station-hints');
     if (!wrap) return;
@@ -592,10 +626,28 @@
     // prior live verification) it's "verified". Otherwise we must call the
     // worker to verify before allowing Add.
     if (state.fares[key] != null) {
-      setBadge(`${fmtYen(state.fares[key])} · verified IC fare`, 'status-success');
+      const at = state.fareVerifiedAt[key];
+      const ago = at ? humanAgo(at) : '';
+      setBadge(`${fmtYen(state.fares[key])} · verified IC fare${ago ? ' · ' + ago : ''}`, 'status-success');
       enableAdd();
+      // Show refresh-fare button if live API is configured (so user can force re-verify)
+      const refreshWrap = $('planner-fare-refresh');
+      if (refreshWrap && FARE_API_URL) {
+        refreshWrap.classList.remove('hidden');
+        refreshWrap.innerHTML = `
+          <button type="button" id="planner-fare-refresh-btn" class="btn btn-ghost sm text-xs" data-tooltip="Force re-verify against Yahoo!路線情報">
+            <span data-icon="refresh" data-size="12"></span><span class="btn-label">Re-verify</span>
+          </button>`;
+        const btn = refreshWrap.querySelector('#planner-fare-refresh-btn');
+        if (btn) btn.addEventListener('click', () => forceReverify(from, to));
+        if (window.refreshIcons) window.refreshIcons(refreshWrap);
+      } else if (refreshWrap) {
+        refreshWrap.classList.add('hidden');
+      }
       return;
     }
+    const refreshWrap = $('planner-fare-refresh');
+    if (refreshWrap) refreshWrap.classList.add('hidden');
     if (!FARE_API_URL) {
       setBadge('Not in verified table · live API not configured', 'status-failure');
       disableAdd();
@@ -645,6 +697,7 @@
           if (!data.ok || typeof data.fare !== 'number') throw new Error('bad response');
           // Promote to verified table — same status as pre-seeded entries.
           state.fares[key] = data.fare;
+          state.fareVerifiedAt[key] = new Date().toISOString();
           // Guard: only paint if the current selection still matches.
           const stillCurrent = cbFrom && cbTo && cbFrom.getValue() === from && cbTo.getValue() === to;
           if (stillCurrent && setBadge) {
