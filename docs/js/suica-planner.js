@@ -676,6 +676,23 @@
   // ────── Render: weekly pattern ──────
   function renderPattern() {
     const wrap = $('planner-pattern'); wrap.innerHTML = '';
+    const allEmpty = DAYS.every((d) => !state.pattern[d].length);
+    if (allEmpty) {
+      const empty = document.createElement('div');
+      empty.className = 'rounded-md border border-dashed border-border bg-muted/30 p-3 text-center mb-2';
+      empty.innerHTML = `
+        <div class="text-sm font-medium mb-0.5">No commute set yet</div>
+        <div class="text-xs text-muted-foreground mb-2">Pick a From↔To above, then tap <b>Auto-suggest from target</b> to fill weekdays.</div>
+        <button type="button" id="planner-empty-suggest" class="btn sm btn-outline" data-tooltip="Auto-fill weekdays from the current From↔To and ¥ target">
+          <span data-icon="wand" data-size="12"></span><span class="btn-label">Auto-suggest now</span>
+        </button>`;
+      wrap.appendChild(empty);
+      const btn = empty.querySelector('#planner-empty-suggest');
+      if (btn) btn.addEventListener('click', () => {
+        const real = $('planner-auto-suggest'); if (real) real.click();
+      });
+      if (window.refreshIcons) window.refreshIcons(empty);
+    }
     DAYS.forEach((day) => {
       const row = document.createElement('div');
       row.className = 'flex items-center gap-2 py-1.5 border-b border-border last:border-b-0';
@@ -729,7 +746,19 @@
   function renderLeisure() {
     const wrap = $('planner-leisure'); wrap.innerHTML = '';
     if (!state.leisure.length) {
-      wrap.innerHTML = '<div class="text-xs text-muted-foreground italic py-2">No leisure routes — add some for weekend trips</div>';
+      wrap.innerHTML = `
+        <div class="rounded-md border border-dashed border-border bg-muted/30 p-3 text-center">
+          <div class="text-sm font-medium mb-0.5">No leisure routes yet</div>
+          <div class="text-xs text-muted-foreground mb-2">Add weekend trips (e.g. shopping, day-out) so target spending isn't dependent only on commute.</div>
+          <button type="button" id="planner-empty-leisure-suggest" class="btn sm btn-outline" data-tooltip="Auto-suggest 2 random leisure routes from station catalogue">
+            <span data-icon="sparkles" data-size="12"></span><span class="btn-label">Pick 2 for me</span>
+          </button>
+        </div>`;
+      const btn = wrap.querySelector('#planner-empty-leisure-suggest');
+      if (btn) btn.addEventListener('click', () => {
+        const real = $('planner-auto-suggest'); if (real) real.click();
+      });
+      if (window.refreshIcons) window.refreshIcons(wrap);
       return;
     }
     state.leisure.forEach((l, idx) => {
