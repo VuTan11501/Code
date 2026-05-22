@@ -226,6 +226,37 @@ html { touch-action: manipulation; }
 .status-info    { background: rgba(59,130,246,0.1); color: var(--primary); }
 .status-pending { background: rgba(168,85,247,0.1); color: var(--purple); }
 
+/* Heartbeat-style badge for Scheduled Dispatch (system's heart) */
+.status-beating {
+  background: rgba(239, 68, 68, 0.12);
+  color: #ef4444;
+  font-weight: 600;
+}
+.heart-beat {
+  display: inline-block;
+  transform-origin: center;
+  animation: heart-beat-pulse 1s ease-in-out infinite;
+  font-size: 1.05em;
+  line-height: 1;
+}
+.heart-idle {
+  display: inline-block;
+  color: var(--green);
+  font-size: 1.05em;
+  line-height: 1;
+}
+@keyframes heart-beat-pulse {
+  0%   { transform: scale(1); }
+  14%  { transform: scale(1.25); }
+  28%  { transform: scale(1); }
+  42%  { transform: scale(1.18); }
+  70%  { transform: scale(1); }
+  100% { transform: scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .heart-beat { animation: none; }
+}
+
 /* â”€â”€â”€ SKELETON LOADING â”€â”€â”€ */
 .skeleton {
   background: linear-gradient(90deg, rgba(var(--tint),0.04) 25%, rgba(var(--tint),0.08) 50%, rgba(var(--tint),0.04) 75%);
@@ -3774,3 +3805,11 @@ body.ai-page-active .ai-dot-grid {
 .ts-table tr.ts-row-lost:hover { background: rgba(239, 68, 68, 0.10); }
 .ts-table tr.ts-row-today { box-shadow: inset 2px 0 0 var(--primary, #3b82f6); }
 .ts-table .text-success { color: var(--green, #22c55e); }
+
+/* ─── DRAG-AND-DROP CARD REORDERING ─── */
+.workflow-card { position: relative; cursor: default; user-select: none; }
+.workflow-card.dragging { opacity: 0.4; cursor: grabbing; }
+.workflow-card.drag-over { outline: 2px dashed var(--primary); outline-offset: -2px; }
+.workflow-drag-handle { position: absolute; top: 6px; left: 6px; opacity: 0.35; cursor: grab; padding: 2px; color: var(--muted-foreground); pointer-events: auto; z-index: 2; }
+.workflow-card:hover .workflow-drag-handle { opacity: 0.85; }
+.workflow-drag-handle:active { cursor: grabbing; }

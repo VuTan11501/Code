@@ -11,6 +11,45 @@ let lastRunStates = {};
 let hasRunningWorkflows = false;
 let consecutiveErrors = 0;
 
+// ═══════════════════════════════════════════════════
+//  DRAG-AND-DROP CARD ORDER PERSISTENCE
+// ═══════════════════════════════════════════════════
+const CARD_ORDER_KEY = 'wf_dash_card_order';
+
+function loadCardOrder() {
+  try {
+    const raw = localStorage.getItem(CARD_ORDER_KEY);
+    if (!raw) return null;
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? arr : null;
+  } catch { return null; }
+}
+
+function saveCardOrder(arr) {
+  try { localStorage.setItem(CARD_ORDER_KEY, JSON.stringify(arr)); } catch {}
+}
+
+function clearCardOrder() {
+  try { localStorage.removeItem(CARD_ORDER_KEY); } catch {}
+}
+
+function applyCardOrder(workflowList) {
+  const saved = loadCardOrder();
+  if (!saved || !saved.length) return workflowList;
+  const fileSet = new Set(workflowList.map(w => w.file));
+  const ordered = [];
+  // Known files in saved order
+  for (const file of saved) {
+    const wf = workflowList.find(w => w.file === file);
+    if (wf) ordered.push(wf);
+  }
+  // Unknown files appended in original order
+  for (const wf of workflowList) {
+    if (!saved.includes(wf.file)) ordered.push(wf);
+  }
+  return ordered;
+}
+
 // Dashboard workflow visibility — default: core only. Toggle persists in localStorage.
 const DASH_SHOW_INFRA_KEY = 'wf_dash_show_infra';
 function dashShowInfra() {
@@ -32,8 +71,10 @@ function renderInfraToggle() {
   const bar = document.getElementById('dashInfraToggleBar');
   if (!bar) return;
   const on = dashShowInfra();
+  const hasCustomOrder = !!localStorage.getItem(CARD_ORDER_KEY);
   bar.innerHTML = `
     <span class="dash-infra-label">Showing <strong>${on ? WORKFLOWS_ALL.length : WORKFLOWS.length}</strong> / ${WORKFLOWS_ALL.length} workflows</span>
+    ${hasCustomOrder ? `<button class="btn sm btn-outline" onclick="resetCardOrder()" data-tooltip="Restore default card order">${ICON('undo', 12)} Reset order</button>` : ''}
     <span class="dash-infra-hint">Show infrastructure</span>
     <button type="button"
             class="switch ${on ? 'active' : ''}"
@@ -45,6 +86,12 @@ function renderInfraToggle() {
       <span class="switch-thumb"></span>
     </button>
   `;
+}
+
+function resetCardOrder() {
+  clearCardOrder();
+  renderInfraToggle();
+  if (typeof refresh === 'function') refresh();
 }
 
 function updateLiveIndicator(status, interval) {
@@ -186,16 +233,37 @@ function renderHealthBar(workflowResults) {
 // ═══════════════════════════════════════════════════
 //  WORKFLOW CARDS
 // ═══════════════════════════════════════════════════
-function statusBadge(runs) {
+function statusBadge(runs, wf) {
   if (!runs.length) return '<span class="status-badge status-skipped">No runs</span>';
   const last = runs[0];
-  if (last.status === 'in_progress' || last.status === 'queued')
+  const isHeartbeat = wf && wf.file === 'scheduled-dispatch.yml';
+  if (last.status === 'in_progress' || last.status === 'queued') {
+    if (isHeartbeat) {
+      return '<span class="status-badge status-beating"><span class="heart-beat">♥</span> Beating</span>';
+    }
     return '<span class="status-badge status-running">● Running</span>';
-  if (last.conclusion === 'success')
+  }
+  if (last.conclusion === 'success') {
+    if (isHeartbeat) return '<span class="status-badge status-success"><span class="heart-idle">♥</span> Alive</span>';
     return '<span class="status-badge status-success">✓ Success</span>';
+  }
   if (last.conclusion === 'failure')
     return '<span class="status-badge status-failure">✗ Failed</span>';
-  return `<span class="status-badge status-skipped">${last.conclusion || 'unknown'}</span>`;
+  if (last.conclusion === 'cancelled')
+    return '<span class="status-badge status-skipped">⊘ Cancelled</span>';
+  if (last.conclusion === 'skipped')
+    return '<span class="status-badge status-skipped">↷ Skipped</span>';
+  if (last.conclusion === 'neutral')
+    return '<span class="status-badge status-skipped">◐ Neutral</span>';
+  if (last.conclusion === 'timed_out')
+    return '<span class="status-badge status-failure">⏱ Timed out</span>';
+  if (last.conclusion === 'action_required')
+    return '<span class="status-badge status-failure">! Action required</span>';
+  if (last.conclusion === 'startup_failure')
+    return '<span class="status-badge status-failure">✗ Startup failed</span>';
+  // Fallback: prefer status over null conclusion.
+  const label = last.conclusion || last.status || 'pending';
+  return `<span class="status-badge status-skipped">${label.charAt(0).toUpperCase() + label.slice(1).replace(/_/g, ' ')}</span>`;
 }
 
 function successRate(runs) {
@@ -208,10 +276,11 @@ function successRate(runs) {
 function renderWorkflowCard(wf, runs) {
   const lastRuns = runs.slice(0, 2);
   return `
-    <div class="card workflow-card">
+    <div class="card workflow-card" draggable="true" data-wf-file="${wf.file}">
+      <span class="workflow-drag-handle">${ICON('moreVertical', 14)}</span>
       <div class="card-header">
         <h2>${ICON(wf.iconName || 'play', 16)} ${wf.name}</h2>
-        ${statusBadge(runs)}
+        ${statusBadge(runs, wf)}
       </div>
       <div class="card-body">
         <div class="stats-row">
@@ -673,7 +742,7 @@ async function refresh() {
     // Previously had a "fast path" using global /actions/runs?per_page=20, but high-frequency
     // workflows (scheduled-dispatch self-loop) dominated the 20-slot pool, leaving other
     // cards empty whenever a trigger happened. Per-workflow guarantees each card has its data.
-    const activeWorkflows = getDashboardWorkflows();
+    const activeWorkflows = applyCardOrder(getDashboardWorkflows());
     const results = await Promise.all(
       activeWorkflows.map(wf =>
         apiFetch(`/repos/${OWNER}/${REPO}/actions/workflows/${wf.file}/runs?per_page=10`)
@@ -734,3 +803,85 @@ async function refresh() {
     isPolling = false;
   }
 }
+
+// ═══════════════════════════════════════════════════
+//  DRAG-AND-DROP REORDERING (HTML5 DnD, delegated)
+// ═══════════════════════════════════════════════════
+(function initDragDrop() {
+  let dragSrcFile = null;
+  let currentOverCard = null;
+
+  function nearestCard(el) {
+    return el ? el.closest('.workflow-card') : null;
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    const grid = document.getElementById('workflowGrid');
+    if (!grid) return;
+
+    grid.addEventListener('dragstart', (e) => {
+      const card = nearestCard(e.target);
+      if (!card) return;
+      dragSrcFile = card.dataset.wfFile;
+      card.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', dragSrcFile);
+    });
+
+    grid.addEventListener('dragend', (e) => {
+      const card = nearestCard(e.target);
+      if (card) card.classList.remove('dragging');
+      if (currentOverCard) currentOverCard.classList.remove('drag-over');
+      dragSrcFile = null;
+      currentOverCard = null;
+    });
+
+    grid.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      const card = nearestCard(e.target);
+      if (!card || card.dataset.wfFile === dragSrcFile) {
+        if (currentOverCard) { currentOverCard.classList.remove('drag-over'); currentOverCard = null; }
+        return;
+      }
+      if (card !== currentOverCard) {
+        if (currentOverCard) currentOverCard.classList.remove('drag-over');
+        card.classList.add('drag-over');
+        currentOverCard = card;
+      }
+    });
+
+    grid.addEventListener('dragleave', (e) => {
+      const card = nearestCard(e.target);
+      if (card && card === currentOverCard) {
+        const rect = card.getBoundingClientRect();
+        if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) {
+          card.classList.remove('drag-over');
+          currentOverCard = null;
+        }
+      }
+    });
+
+    grid.addEventListener('drop', (e) => {
+      e.preventDefault();
+      const srcFile = e.dataTransfer.getData('text/plain');
+      const targetCard = nearestCard(e.target);
+      if (!targetCard) return;
+      const targetFile = targetCard.dataset.wfFile;
+      if (!srcFile || !targetFile || srcFile === targetFile) return;
+
+      // Compute new order using full list
+      const baseline = applyCardOrder(WORKFLOWS_ALL.slice());
+      const srcIdx = baseline.findIndex(w => w.file === srcFile);
+      if (srcIdx === -1) return;
+      const item = baseline.splice(srcIdx, 1)[0];
+      const targetIdx = baseline.findIndex(w => w.file === targetFile);
+      if (targetIdx === -1) return;
+      baseline.splice(targetIdx, 0, item);
+
+      saveCardOrder(baseline.map(w => w.file));
+      renderInfraToggle();
+      if (typeof refresh === 'function') refresh();
+    });
+  });
+})();
