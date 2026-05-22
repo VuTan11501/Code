@@ -184,7 +184,10 @@ def _emit_token_rotation(new_refresh: str):
 
 def main():
     now = datetime.now(JST)
-    months_keep = max(1, int(os.environ.get("MONTHS_KEEP", "6")))
+    # Default 24 months (2 years) — matches the PWA's Sync DokoKin button.
+    # The workflow itself defaults to 120 (10 years) for cron runs, so the
+    # only path that hits this fallback is an env-less local run.
+    months_keep = max(1, int(os.environ.get("MONTHS_KEEP", "24")))
     account = (os.environ.get("ACCOUNT") or DEFAULT_ACCOUNT).strip()
     log(f"Timesheet Fetch — account={account}, keeping {months_keep} months "
         f"ending {now:%Y-%m}")

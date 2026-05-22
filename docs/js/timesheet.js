@@ -481,7 +481,7 @@ async function syncTimesheetFromDokoKin() {
         'Accept': 'application/vnd.github+json',
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ ref: 'main', inputs: { months_keep: '6' } }),
+      body: JSON.stringify({ ref: 'main', inputs: { months_keep: '24' } }),
     });
     if (res.status !== 204) {
       const body = await res.text().catch(() => '');

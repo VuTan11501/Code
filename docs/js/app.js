@@ -357,7 +357,7 @@ if (document.readyState === 'loading') {
 const _LAZY_PAGE_SCRIPTS = {
   schedule:  ['js/schedule.js?v=28'],
   ot:        ['js/ot-salary.js?v=38', 'js/ot-planner.js?v=54'],
-  timesheet: ['js/timesheet.js?v=18'],
+  timesheet: ['js/timesheet.js?v=19'],
   ai: [
     'js/ai-validators.js?v=1',
     'js/ai-audit.js?v=4',
