@@ -828,7 +828,7 @@
 <script src="js/suica-history.js?v=6" defer></script>
 <script src="js/log-viewer.js?v=1" defer></script>
 <script>window.SUICA_FARE_API='https://suica-fare-proxy.workflow-dashboard.workers.dev';</script>
-<script src="js/suica-planner.js?v=113" defer></script>
+<script src="js/suica-planner.js?v=114" defer></script>
 <script>
 // Theme toggle for suica.html (mirrors the dashboard's behavior; uses the same
 // localStorage key so the preference syncs across pages).
@@ -1027,8 +1027,26 @@
 (function () {
   var fab = document.getElementById('planner-kbd-fab');
   if (!fab) return;
-  fab.addEventListener('mouseenter', function () { fab.style.transform = 'scale(1.08)'; fab.style.boxShadow = '0 6px 18px rgba(0,0,0,0.2)'; });
-  fab.addEventListener('mouseleave', function () { fab.style.transform = ''; fab.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)'; });
+  // Build a small tooltip panel listing the most useful shortcuts so first-time
+  // users learn them without opening the full overlay.
+  var tip = document.createElement('div');
+  tip.id = 'planner-fab-tip';
+  tip.setAttribute('role', 'tooltip');
+  tip.style.cssText = 'position:fixed;right:70px;bottom:18px;background:var(--popover,#fff);color:var(--popover-foreground,#111);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:11px;line-height:1.5;box-shadow:0 6px 16px rgba(0,0,0,0.18);z-index:61;display:none;min-width:170px;pointer-events:none;';
+  tip.innerHTML = '<div style="font-weight:600;margin-bottom:4px;opacity:0.7;">Top shortcuts</div>' +
+    '<div><kbd style="font-family:monospace;background:var(--muted,#eee);padding:1px 5px;border-radius:3px;">G</kbd> Generate PDF</div>' +
+    '<div><kbd style="font-family:monospace;background:var(--muted,#eee);padding:1px 5px;border-radius:3px;">S</kbd> Save snapshot</div>' +
+    '<div><kbd style="font-family:monospace;background:var(--muted,#eee);padding:1px 5px;border-radius:3px;">?</kbd> All shortcuts</div>';
+  document.body.appendChild(tip);
+  // Hide the default `data-tooltip` so it doesn't double up with this panel.
+  fab.removeAttribute('data-tooltip');
+  var hideT = null;
+  function show() { if (hideT) { clearTimeout(hideT); hideT = null; } tip.style.display = 'block'; }
+  function hide() { hideT = setTimeout(function () { tip.style.display = 'none'; }, 120); }
+  fab.addEventListener('mouseenter', function () { fab.style.transform = 'scale(1.08)'; fab.style.boxShadow = '0 6px 18px rgba(0,0,0,0.2)'; show(); });
+  fab.addEventListener('mouseleave', function () { fab.style.transform = ''; fab.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)'; hide(); });
+  fab.addEventListener('focus', show);
+  fab.addEventListener('blur', hide);
   fab.addEventListener('click', function () {
     // Synthesize the '?' keyboard shortcut so we don't duplicate the help renderer.
     var evt = new KeyboardEvent('keydown', { key: '?', bubbles: true });
