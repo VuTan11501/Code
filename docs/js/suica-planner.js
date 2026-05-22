@@ -3729,6 +3729,25 @@
     bind('planner-topup-amount', 'topup_amount', true);
     bind('planner-leisure-min', 'leisure_min', true);
     bind('planner-leisure-max', 'leisure_max', true);
+    // Keep min <= max in sync; if user sets min > max, bump max up automatically
+    // and surface a transient warning toast.
+    (function () {
+      const minEl = $('planner-leisure-min');
+      const maxEl = $('planner-leisure-max');
+      if (!minEl || !maxEl) return;
+      const sync = (src) => {
+        const minV = +minEl.value || 0;
+        const maxV = +maxEl.value || 0;
+        if (minV > maxV) {
+          if (src === 'min') { maxEl.value = String(minV); state.settings.leisure_max = minV; }
+          else { minEl.value = String(maxV); state.settings.leisure_min = maxV; }
+          saveState();
+          if (window.Toast) window.Toast.warning('Min cannot exceed max — adjusted automatically.', { duration: 3500 });
+        }
+      };
+      minEl.addEventListener('change', () => sync('min'));
+      maxEl.addEventListener('change', () => sync('max'));
+    })();
 
     // Month +/- step buttons
     function _stepMonth(delta) {
