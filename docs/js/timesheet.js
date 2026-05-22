@@ -220,22 +220,40 @@ function renderTimesheet() {
                    + _hhmmToMin(s.displayHolidayOvertimeHours)
                    + _hhmmToMin(s.displaySundayOvertimeHours);
   const totalOT = totalOTMin > 0 ? _minToHhmm(totalOTMin) : (s.displayTotalOTHours || '—');
+
+  // "Billable extra" OT = total OT minus the ~10.24h already covered by the
+  // ¥20,000/month fixed allowance. If the result is ≤ 0, no extra is being
+  // paid above the fixed amount yet.
+  let totalOTSecondary = '';
+  if (window.OT_SALARY && totalOTMin > 0) {
+    const fixedHoursMin = Math.round(window.OT_SALARY.FIXED_ALLOWANCE_HOURS * 60);
+    const billableMin = totalOTMin - fixedHoursMin;
+    const fixedHoursLabel = _minToHhmm(fixedHoursMin);
+    const billableLabel = billableMin > 0 ? _minToHhmm(billableMin) : `−${_minToHhmm(-billableMin)}`;
+    const tip = `Billable extra OT (paid on top of the ¥20,000 fixed allowance). `
+              + `Fixed allowance covers ~${fixedHoursLabel} OT (= 20,000 / (1,563 × 1.25)). `
+              + (billableMin > 0
+                  ? `You're ${billableLabel} above that → extra paid line on payslip.`
+                  : `You're still under that — no extra paid OT line this month.`);
+    totalOTSecondary = `<span class="ts-chip-aux tooltip-trigger" data-tooltip="${tip.replace(/"/g,'&quot;')}">${billableLabel}</span>`;
+  }
+
   const chips = [
     ['Working hours', s.displayTotalWorkingHours || '—'],
     ['Actual', s.displayTotalActualWorkingTime || '—'],
     ['OT request', s.displayOTRequestHours || '—'],
-    ['OT total', totalOT],
+    ['OT total', totalOT, totalOTSecondary],
     ['OT weekday', s.displayOvertimeHours || '—'],
     ['OT midnight', s.displayNightWorkingHours || '—'],
     ['OT Sat/Hol', s.displayHolidayOvertimeHours || '—'],
     ['OT Sun', s.displaySundayOvertimeHours || '—'],
   ];
   let chipsHtml = '';
-  for (const [label, val] of chips) {
+  for (const [label, val, aux] of chips) {
     chipsHtml += `
       <div class="ts-chip">
         <div class="ts-chip-label">${label}</div>
-        <div class="ts-chip-value">${val}</div>
+        <div class="ts-chip-value">${val}${aux || ''}</div>
       </div>`;
   }
 
