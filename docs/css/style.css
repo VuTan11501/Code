@@ -3685,16 +3685,17 @@ body.ai-page-active .ai-dot-grid {
 .ts-chip-eye svg { display: block; }
 .ts-chip-badge {
   display: inline-block;
-  margin-left: 6px;
-  padding: 1px 6px;
-  font-size: 9px;
+  margin-left: 4px;
+  padding: 0px 4px;
+  font-size: 8px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.04em;
   border-radius: 999px;
   background: var(--muted, rgba(0,0,0,0.08));
   color: var(--muted-foreground);
   vertical-align: middle;
+  line-height: 1.4;
 }
 .ts-chip-badge-actual {
   background: rgba(22, 163, 74, 0.15);

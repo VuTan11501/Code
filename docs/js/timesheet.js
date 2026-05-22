@@ -296,8 +296,8 @@ function renderTimesheet() {
     let salaryVal, salaryTip, salaryExtras = '';
     if (realSlip && realSlip.take_home != null) {
       const eyeBtn = `<button class="ts-chip-eye ot-takehome-clickable" data-payslip-month="${key}" aria-label="View payslip detail">${eyeIcon}</button>`;
-      salaryVal = F(realSlip.take_home);
-      salaryExtras = `<span class="ts-chip-badge ts-chip-badge-actual">actual</span>${eyeBtn}`;
+      salaryVal = `${F(realSlip.take_home)} <span class="ts-chip-badge ts-chip-badge-actual">actual</span>`;
+      salaryExtras = eyeBtn;
       salaryTip = `Actual take-home for work month ${key}\n`
                 + `(paid ${payDateStr} · payslip ${realSlip.month})\n`
                 + `• Gross: ${F(realSlip.gross || 0)}\n`
@@ -307,8 +307,8 @@ function renderTimesheet() {
     } else if (baseline) {
       const est = window.OT_SALARY.calcFullMonthEstimate(otGross, baseline, { basicSalaryIndex: 1.0 });
       const eyeBtn = `<button class="ts-chip-eye ot-takehome-clickable" data-payslip-month="${key}" data-payslip-estimate="1" aria-label="View payslip estimate">${eyeIcon}</button>`;
-      salaryVal = F(est.takeHome);
-      salaryExtras = `<span class="ts-chip-badge">est.</span>${eyeBtn}`;
+      salaryVal = `${F(est.takeHome)} <span class="ts-chip-badge">est.</span>`;
+      salaryExtras = eyeBtn;
       salaryTip = `Estimated take-home for work month ${key}\n`
                 + `(will be paid ${payDateStr} · baseline: payslip ${baseline.month})\n`
                 + `• Total gross: ${F(est.gross)}\n`
@@ -320,8 +320,7 @@ function renderTimesheet() {
                 + `• − Company receivables: ${F(est.companyReceivables)}\n`
                 + `= ${F(est.takeHome)}`;
     } else {
-      salaryVal = F(otGross);
-      salaryExtras = `<span class="ts-chip-badge">OT gross</span>`;
+      salaryVal = `${F(otGross)} <span class="ts-chip-badge">OT gross</span>`;
       salaryTip = `OT gross only (no payslip baseline available — add a payslip in OT Planner first):\n`
                 + `• Base 125% × ${totalH.toFixed(2)}h: ${F(baseOTLine)}\n`
                 + (sundayLine ? `• Sunday +10% × ${sundayH.toFixed(2)}h: ${F(sundayLine)}\n` : '')
@@ -424,7 +423,7 @@ function renderTimesheet() {
           ];
           if (parts.sundayLostMin > 0) lines.push(`+10% Sunday on ${_minToHhmm(parts.sundayLostMin)}`);
           if (parts.nightLostMin > 0)  lines.push(`+25% Night on ${_minToHhmm(parts.nightLostMin)}`);
-          const tip = lines.join(' · ').replace(/"/g, '&quot;');
+          const tip = lines.join('\n').replace(/"/g, '&quot;');
           deltaCell = `<td class="ts-cell ts-cell-delta text-destructive font-semibold tooltip-trigger" data-tooltip="${tip}">−${_minToHhmm(lost)}</td>`;
         } else if (isFuture && d.otRequest && _hhmmToMin(d.otRequest) > 0) {
           deltaCell = `<td class="ts-cell ts-cell-delta text-muted-foreground tooltip-trigger" data-tooltip="Future date — OT not yet worked, lost status unknown">?</td>`;
