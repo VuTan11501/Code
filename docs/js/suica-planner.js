@@ -1375,6 +1375,75 @@
   // pool so total monthly spend lands near the target.
   // - If no route is picked, try last-used or '東京↔新宿' as fallback.
   // - Picks leisure variants from known fares around the same endpoint.
+  // Pure builder: returns a plan {pattern, leisure, settings, projected, commuteSpend, outings, weekdayCount, leisureCandidates}
+  // WITHOUT mutating state. Used by both autoSuggest (single) and multiSuggest (3 variants).
+  function buildSuggestion(opts) {
+    const route = opts.route;
+    const target = +opts.target || 0;
+    const monthInfo = opts.monthInfo;
+    const weekdayDays = opts.weekdayDays || 5; // 4 = skip Friday (light), 5 = full week (standard)
+    const leisureMultiplier = opts.leisureMultiplier || 1.0; // 0.5 / 1.0 / 1.6 etc
+    if (!route || !target || !monthInfo) return null;
+    const commuteFare = fareOf(route);
+    if (!commuteFare) return null;
+    const weekdayCount = (
+      monthInfo.counts.monday + monthInfo.counts.tuesday +
+      monthInfo.counts.wednesday + monthInfo.counts.thursday +
+      (weekdayDays >= 5 ? monthInfo.counts.friday : 0)
+    );
+    const commuteSpend = 2 * commuteFare * weekdayCount;
+    const remainder = Math.max(0, target - commuteSpend);
+    const [a, b] = route.split('↔');
+    const nearby = [];
+    Object.keys(state.fares).forEach((k) => {
+      if (k === route) return;
+      const [x, y] = k.split('↔');
+      if (x === a || x === b || y === a || y === b) {
+        const f = state.fares[k];
+        if (f >= 150 && f <= 800) nearby.push({ k, f });
+      }
+    });
+    nearby.sort((p, q) => Math.abs((remainder/8) - p.f) - Math.abs((remainder/8) - q.f));
+    let leisureCandidates = nearby.slice(0, 3).map((n) => n.k);
+    if (!leisureCandidates.length) {
+      const any = Object.keys(state.fares).filter((k) => state.fares[k] >= 200 && state.fares[k] <= 800).slice(0, 2);
+      leisureCandidates = any;
+    }
+    const avgLeisureFare = leisureCandidates.length
+      ? leisureCandidates.reduce((s, k) => s + (state.fares[k] || 0), 0) / leisureCandidates.length
+      : 0;
+    let outings = avgLeisureFare > 0 ? Math.round((remainder * leisureMultiplier) / (2 * avgLeisureFare)) : 0;
+    outings = Math.max(0, Math.min(12, outings));
+    const leisureMin = Math.max(0, outings - 1);
+    const leisureMax = Math.min(20, outings + 1);
+    const projected = commuteSpend + (avgLeisureFare * outings * 2);
+    const pattern = {};
+    DAYS.forEach((d, idx) => {
+      const isWeekday = idx < 5;
+      const includeFriday = weekdayDays >= 5 || idx !== 4;
+      pattern[d] = (isWeekday && includeFriday) ? [{ route, type: 'commute' }] : [];
+    });
+    return {
+      route, pattern,
+      leisure: leisureCandidates.map((k) => ({ route: k, weight: 2 })),
+      settings: { leisure_min: leisureMin, leisure_max: leisureMax },
+      projected, commuteSpend, outings, weekdayCount,
+      leisureCandidates, avgLeisureFare,
+    };
+  }
+
+  // Apply a suggestion (returned by buildSuggestion) into state + DOM.
+  function applySuggestion(s) {
+    if (!s) return;
+    DAYS.forEach((d) => { state.pattern[d] = s.pattern[d] ? s.pattern[d].map((t) => ({ ...t })) : []; });
+    state.leisure = s.leisure.map((l) => ({ ...l }));
+    state.settings.leisure_min = s.settings.leisure_min;
+    state.settings.leisure_max = s.settings.leisure_max;
+    const minEl = $('planner-leisure-min'); if (minEl) minEl.value = s.settings.leisure_min;
+    const maxEl = $('planner-leisure-max'); if (maxEl) maxEl.value = s.settings.leisure_max;
+    renderPattern(); renderLeisure(); renderEstimate(); saveState();
+  }
+
   function autoSuggest() {
     const status = $('planner-pdf-status');
     const note = (txt, cls) => { if (status) { status.textContent = txt; status.className = 'text-xs ' + (cls || 'text-muted-foreground'); } };
@@ -1382,7 +1451,6 @@
     if (!target || target < 1000) { note('Set a target (≥ ¥1000) first.', 'text-warning'); return; }
     let route = currentRoute();
     if (!route) {
-      // Fall back to last-saved route or sample
       try {
         const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
         if (saved && saved.lastRoute && saved.lastRoute.from && saved.lastRoute.to && saved.lastRoute.from !== saved.lastRoute.to) {
@@ -1396,67 +1464,91 @@
       if (cbFrom && cbTo) { cbFrom.setValue('東京'); cbTo.setValue('新宿'); updateFareDisplay(); }
     }
     if (!route) { note('Pick a From and To station first.', 'text-warning'); return; }
-
-    const commuteFare = fareOf(route);
-    if (!commuteFare) { note('Selected route has no verified fare yet — pick a JR-served pair.', 'text-warning'); return; }
-
     const monthInfo = countWeekdaysInMonth(state.settings.month);
     if (!monthInfo) { note('Set a valid YYYY-MM month first.', 'text-warning'); return; }
-    const weekdayCount = monthInfo.counts.monday + monthInfo.counts.tuesday + monthInfo.counts.wednesday + monthInfo.counts.thursday + monthInfo.counts.friday;
-
-    // 1) Commute: round-trip every weekday = 2 fares × weekdayCount
-    const commuteSpend = 2 * commuteFare * weekdayCount;
-
-    // 2) Leisure: remainder distributed across 1-3 leisure routes
-    const remainder = Math.max(0, target - commuteSpend);
-    // Pick leisure candidates: prefer existing leisure, else nearby known pairs from one endpoint
-    let leisureCandidates = state.leisure.map((l) => l.route);
-    if (!leisureCandidates.length) {
-      const [a, b] = route.split('↔');
-      const nearby = [];
-      Object.keys(state.fares).forEach((k) => {
-        if (k === route) return;
-        const [x, y] = k.split('↔');
-        if (x === a || x === b || y === a || y === b) {
-          const f = state.fares[k];
-          if (f >= 150 && f <= 800) nearby.push({ k, f });
-        }
-      });
-      nearby.sort((p, q) => Math.abs((remainder/8) - p.f) - Math.abs((remainder/8) - q.f));
-      leisureCandidates = nearby.slice(0, 3).map((n) => n.k);
-    }
-    if (!leisureCandidates.length && state.stations.length) {
-      // Last-ditch fallback: any verified fare ≥ 200
-      const any = Object.keys(state.fares).filter((k) => state.fares[k] >= 200 && state.fares[k] <= 800).slice(0, 2);
-      leisureCandidates = any;
-    }
-
-    // Decide outings count: each outing = 2 fares × avg leisure fare
-    const avgLeisureFare = leisureCandidates.length
-      ? leisureCandidates.reduce((s, k) => s + (state.fares[k] || 0), 0) / leisureCandidates.length
-      : 0;
-    let outings = avgLeisureFare > 0 ? Math.round(remainder / (2 * avgLeisureFare)) : 0;
-    outings = Math.max(0, Math.min(12, outings));
-    const leisureMin = Math.max(0, outings - 1);
-    const leisureMax = Math.min(20, outings + 1);
-
-    // Apply: weekday commute Mon-Fri, leisure with even weights, target settings
-    DAYS.forEach((d, idx) => {
-      state.pattern[d] = (idx < 5) ? [{ route, type: 'commute' }] : [];
-    });
-    state.leisure = leisureCandidates.map((k) => ({ route: k, weight: 2 }));
-    state.settings.leisure_min = leisureMin;
-    state.settings.leisure_max = leisureMax;
-    // Reflect into inputs
-    const minEl = $('planner-leisure-min'); if (minEl) minEl.value = leisureMin;
-    const maxEl = $('planner-leisure-max'); if (maxEl) maxEl.value = leisureMax;
-
-    renderPattern(); renderLeisure(); renderEstimate(); saveState();
-    const projected = commuteSpend + (avgLeisureFare * outings * 2);
-    const msg = `Auto-filled: ${route} weekdays + ${leisureCandidates.length} leisure route(s), ~${outings} outings/mo`;
-    const detail = `Projected ${fmtYen(projected)} vs target ${fmtYen(target)}`;
+    const s = buildSuggestion({ route, target, monthInfo, weekdayDays: 5, leisureMultiplier: 1.0 });
+    if (!s) { note('Selected route has no verified fare — pick a JR-served pair.', 'text-warning'); return; }
+    applySuggestion(s);
+    const msg = `Auto-filled: ${route} weekdays + ${s.leisureCandidates.length} leisure route(s), ~${s.outings} outings/mo`;
+    const detail = `Projected ${fmtYen(s.projected)} vs target ${fmtYen(target)}`;
     note(`${msg} → ${detail}`, 'text-primary');
     if (window.toast) window.toast.success(detail, { title: 'Auto-suggest applied' });
+  }
+
+  // Show 3-card alternatives: Light, Standard, Heavy
+  function multiSuggest() {
+    const status = $('planner-pdf-status');
+    const note = (txt, cls) => { if (status) { status.textContent = txt; status.className = 'text-xs ' + (cls || 'text-muted-foreground'); } };
+    const target = +state.settings.target || 0;
+    if (!target || target < 1000) { note('Set a target (≥ ¥1000) first.', 'text-warning'); return; }
+    let route = currentRoute();
+    if (!route && state.stations.includes('東京') && state.stations.includes('新宿')) {
+      route = '東京↔新宿';
+      if (cbFrom && cbTo) { cbFrom.setValue('東京'); cbTo.setValue('新宿'); updateFareDisplay(); }
+    }
+    if (!route) { note('Pick a From and To station first.', 'text-warning'); return; }
+    const monthInfo = countWeekdaysInMonth(state.settings.month);
+    if (!monthInfo) { note('Set a valid YYYY-MM month first.', 'text-warning'); return; }
+    const variants = [
+      { id: 'light',    label: 'Light',    desc: 'Mon-Thu commute, fewer outings', opts: { weekdayDays: 4, leisureMultiplier: 0.6 } },
+      { id: 'standard', label: 'Standard', desc: 'Mon-Fri commute, balanced',       opts: { weekdayDays: 5, leisureMultiplier: 1.0 } },
+      { id: 'heavy',    label: 'Heavy',    desc: 'Mon-Fri + more weekend trips',    opts: { weekdayDays: 5, leisureMultiplier: 1.6 } },
+    ];
+    const built = variants.map((v) => ({
+      ...v, suggestion: buildSuggestion({ route, target, monthInfo, ...v.opts }),
+    })).filter((v) => v.suggestion);
+    if (!built.length) { note('No verified fare for this route.', 'text-warning'); return; }
+
+    const panel = $('planner-multi-suggest-panel');
+    if (!panel) return;
+    panel.classList.remove('hidden');
+    panel.innerHTML = `
+      <div class="card-header pb-2">
+        <div class="card-title flex items-center gap-2 text-sm">
+          <span data-icon="sparkles" data-size="14"></span> Choose a variant
+          <button type="button" class="ml-auto btn sm btn-ghost" id="planner-multi-close" aria-label="Close">
+            <span data-icon="x" data-size="12"></span>
+          </button>
+        </div>
+        <div class="card-description text-xs">Target ¥${target.toLocaleString('en-US')} · Route ${route}</div>
+      </div>
+      <div class="card-content">
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          ${built.map((v) => {
+            const delta = v.suggestion.projected - target;
+            const deltaPct = target ? Math.abs(delta / target) * 100 : 0;
+            const tone = deltaPct <= 10 ? 'status-success' : deltaPct <= 25 ? 'status-pending' : 'status-failure';
+            return `
+              <div class="rounded-md border border-border bg-card p-3 flex flex-col gap-2" data-variant-card="${v.id}">
+                <div class="flex items-center gap-2">
+                  <span class="font-semibold text-sm">${v.label}</span>
+                  <span class="status-badge ${tone} font-mono text-[10px] ml-auto">${delta >= 0 ? '+' : ''}${fmtYen(delta)}</span>
+                </div>
+                <div class="text-xs text-muted-foreground">${v.desc}</div>
+                <div class="text-xs font-mono">${v.suggestion.weekdayCount} weekdays · ${v.suggestion.outings} outings</div>
+                <div class="text-sm font-mono font-bold text-primary">${fmtYen(v.suggestion.projected)}</div>
+                <button type="button" class="btn sm primary mt-auto" data-variant-apply="${v.id}">
+                  <span data-icon="check" data-size="12"></span><span class="btn-label">Apply</span>
+                </button>
+              </div>`;
+          }).join('')}
+        </div>
+      </div>`;
+    if (window.refreshIcons) window.refreshIcons(panel);
+    panel.querySelector('#planner-multi-close').addEventListener('click', () => panel.classList.add('hidden'));
+    panel.querySelectorAll('[data-variant-apply]').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        const id = e.currentTarget.getAttribute('data-variant-apply');
+        const v = built.find((x) => x.id === id);
+        if (!v) return;
+        applySuggestion(v.suggestion);
+        panel.classList.add('hidden');
+        const detail = `${v.label} variant: ${fmtYen(v.suggestion.projected)} (target ${fmtYen(target)})`;
+        if (window.toast) window.toast.success(detail, { title: 'Variant applied' });
+        note(detail, 'text-primary');
+      });
+    });
+    panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
 
   // ────── Init ──────
@@ -1526,6 +1618,8 @@
     $('planner-clear').addEventListener('click', clearPlan);
     const sgBtn = $('planner-auto-suggest');
     if (sgBtn) sgBtn.addEventListener('click', autoSuggest);
+    const msBtn = $('planner-multi-suggest');
+    if (msBtn) msBtn.addEventListener('click', multiSuggest);
     const recentClearBtn = $('planner-recent-clear');
     if (recentClearBtn) recentClearBtn.addEventListener('click', () => {
       saveRecent([]); renderRecent();

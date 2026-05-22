@@ -352,6 +352,10 @@
             <span data-icon="wand" data-size="14"></span>
             <span class="btn-label">Auto-suggest from target</span>
           </button>
+          <button id="planner-multi-suggest" class="btn sm btn-outline" type="button" data-tooltip="Show 3 alternative plans (Light / Standard / Heavy) — pick the one you like">
+            <span data-icon="list" data-size="14"></span>
+            <span class="btn-label">Compare 3 options</span>
+          </button>
           <button id="planner-load-sample" class="btn sm btn-ghost" type="button">
             <span data-icon="sparkles" data-size="14"></span>
             <span class="btn-label">Load sample plan</span>
@@ -364,6 +368,9 @@
       </div>
     </div>
   </section>
+
+  <!-- Multi-suggest variant panel (Light / Standard / Heavy) -->
+  <section id="planner-multi-suggest-panel" class="card hidden" aria-live="polite"></section>
 
   <!-- Recent runs (last 5 PDF generations) -->
   <section id="planner-recent-section" aria-label="Recent generations" class="hidden">
@@ -564,6 +571,6 @@
 <script src="js/suica-history.js?v=6" defer></script>
 <script src="js/log-viewer.js?v=1" defer></script>
 <script>window.SUICA_FARE_API='https://suica-fare-proxy.workflow-dashboard.workers.dev';</script>
-<script src="js/suica-planner.js?v=19" defer></script>
+<script src="js/suica-planner.js?v=20" defer></script>
 </body>
 </html>
