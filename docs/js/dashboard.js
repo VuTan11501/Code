@@ -58,7 +58,38 @@ function dashShowInfra() {
 function getDashboardWorkflows() {
   return dashShowInfra() ? WORKFLOWS_ALL : WORKFLOWS;
 }
-function toggleDashInfra(ev) {
+
+// Friendly short labels + tooltips for GitHub run events.
+const RUN_EVENT_MAP = {
+  workflow_dispatch:    { short: '▶ Manual',  full: 'Manually triggered (workflow_dispatch)' },
+  schedule:             { short: '⏰ Cron',    full: 'Scheduled by cron (schedule)' },
+  repository_dispatch:  { short: '📡 API',    full: 'External API call (repository_dispatch)' },
+  workflow_run:         { short: '↪ Chained', full: 'Triggered by another workflow (workflow_run)' },
+  push:                 { short: '⬆ Push',    full: 'Triggered by git push' },
+  pull_request:         { short: '⇄ PR',      full: 'Pull request event' },
+  pull_request_target:  { short: '⇄ PR',      full: 'Pull request (target) event' },
+  release:              { short: '🚀 Release',full: 'Release event' },
+  issues:               { short: '🐛 Issue',  full: 'Issue event' },
+  issue_comment:        { short: '💬 Comment',full: 'Issue comment event' },
+  check_run:            { short: '✓ Check',   full: 'Check run event' },
+  check_suite:          { short: '✓ Suite',   full: 'Check suite event' },
+  deployment:           { short: '🚢 Deploy', full: 'Deployment event' },
+  deployment_status:    { short: '🚢 Status', full: 'Deployment status event' },
+  fork:                 { short: '🍴 Fork',   full: 'Repository forked' },
+  create:               { short: '+ Create',  full: 'Branch/tag created' },
+  delete:               { short: '✕ Delete',  full: 'Branch/tag deleted' },
+  page_build:           { short: '📄 Pages',  full: 'GitHub Pages build' },
+  status:               { short: '● Status',  full: 'Commit status event' },
+  dynamic:              { short: '⚡ Dynamic',full: 'Dynamic (computed at runtime)' },
+};
+function formatRunEvent(ev) {
+  if (!ev) return '';
+  const m = RUN_EVENT_MAP[ev];
+  if (m) return `<span class="run-event" data-tooltip="${m.full}">${m.short}</span>`;
+  // Fallback: prettify unknown event by replacing underscores and capitalizing.
+  const pretty = ev.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  return `<span class="run-event" data-tooltip="${ev}">${pretty}</span>`;
+}function toggleDashInfra(ev) {
   const next = !dashShowInfra();
   try { localStorage.setItem(DASH_SHOW_INFRA_KEY, next ? '1' : '0'); } catch {}
   renderInfraToggle();
@@ -302,7 +333,7 @@ function renderWorkflowCard(wf, runs) {
               <span class="run-dot ${conclusionClass(r.conclusion || r.status)}"></span>
               <span class="run-name" data-tooltip="${titleEsc}" data-tooltip-truncate-only tabindex="0">${title}</span>
               <span class="run-meta">
-                <span class="run-event">${r.event}</span>
+                ${formatRunEvent(r.event)}
                 <a class="run-num" href="${r.html_url}" target="_blank" onclick="event.stopPropagation()">#${r.run_number}</a>
                 <span class="run-time">${timeAgo(r.created_at)}</span>
               </span>
@@ -769,7 +800,7 @@ async function refresh() {
           <span class="run-dot ${conclusionClass(r.conclusion || r.status)}"></span>
           <span class="run-name">${r._wf.icon} ${r._wf.name}</span>
           <span class="run-meta">
-            <span class="run-event">${r.event}</span>
+            ${formatRunEvent(r.event)}
             <a class="run-num" href="${r.html_url}" target="_blank" onclick="event.stopPropagation()">#${r.run_number}</a>
             <span class="run-time">${timeAgo(r.created_at)}</span>
           </span>
