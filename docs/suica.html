@@ -126,6 +126,25 @@
   }
   .combobox-trigger-sub { color: var(--muted-foreground); font-size: var(--fs-xs); font-weight: normal; }
   .combobox-empty { padding: 12px; text-align: center; color: var(--muted-foreground); font-size: var(--fs-xs); }
+
+  /* ─── Mobile (<=640px) responsive polish ─── */
+  @media (max-width: 640px) {
+    main { padding: 12px !important; }
+    /* Primary generate button + auto-suggest go full-width on small screens */
+    #planner-generate-pdf,
+    #planner-auto-suggest,
+    #planner-load-sample,
+    #planner-clear { width: 100%; justify-content: center; }
+    /* Drop the inline tip text; it's covered by the chevron tooltip */
+    .planner-tip-inline { display: none; }
+    /* Recent generations cards: stack badges below the title row */
+    #planner-recent-list .status-badge { font-size: 10px; padding: 2px 6px; }
+    /* Combobox triggers grow to full width when they wrap */
+    .combobox-trigger { min-width: 0; }
+    /* Card content gets less padding so it doesn't feel cramped */
+    #planner-recent-section .card-content,
+    .card-content { padding: 12px !important; }
+  }
 </style>
 </head>
 <body class="bg-background text-foreground font-sans text-sm antialiased min-h-dvh overflow-x-hidden">
@@ -215,7 +234,7 @@
         <div>
           <div class="text-xs text-muted-foreground font-medium mb-2 flex items-center gap-2 uppercase tracking-wide">
             <span data-icon="calendar" data-size="12"></span> Weekly pattern (commute)
-            <span class="ml-auto text-[10px] normal-case tracking-normal text-muted-foreground/70 italic">tip: click <kbd class="kbd-key">→</kbd> on a day to copy to other weekdays</span>
+            <span class="ml-auto text-[10px] normal-case tracking-normal text-muted-foreground/70 italic planner-tip-inline">tip: click <kbd class="kbd-key">→</kbd> on a day to copy to other weekdays</span>
           </div>
           <div id="planner-pattern" class="suica-grouped"></div>
         </div>
