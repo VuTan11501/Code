@@ -211,6 +211,18 @@
   body.suica-compact .space-y-5 > * + * { margin-top: 0.5rem !important; }
   body.suica-compact .gap-3  { gap: 0.5rem !important; }
   body.suica-compact .input  { padding-top: 0.25rem !important; padding-bottom: 0.25rem !important; }
+  /* When the PDF preview overlay is open it pins a close (×) button to the
+     top-right; move the keyboard-shortcuts FAB to the bottom-left so it
+     doesn't collide with the overlay's own action buttons. Uses :has()
+     which is supported on all currently-shipping evergreen browsers. */
+  body:has(#suicaPdfOverlay) #planner-kbd-fab,
+  body:has(#suicaLogModal) #planner-kbd-fab {
+    right: auto !important;
+    left: 16px !important;
+    opacity: 0.6;
+  }
+  body:has(#suicaPdfOverlay) #planner-kbd-fab:hover,
+  body:has(#suicaLogModal) #planner-kbd-fab:hover { opacity: 1; }
 </style>
 </head>
 <body class="bg-background text-foreground font-sans text-sm antialiased min-h-dvh overflow-x-hidden">
@@ -754,7 +766,7 @@
 <script src="js/suica-history.js?v=6" defer></script>
 <script src="js/log-viewer.js?v=1" defer></script>
 <script>window.SUICA_FARE_API='https://suica-fare-proxy.workflow-dashboard.workers.dev';</script>
-<script src="js/suica-planner.js?v=75" defer></script>
+<script src="js/suica-planner.js?v=76" defer></script>
 <script>
 // Theme toggle for suica.html (mirrors the dashboard's behavior; uses the same
 // localStorage key so the preference syncs across pages).
