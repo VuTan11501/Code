@@ -115,6 +115,35 @@
     saveRecent(list);
     renderRecent();
   }
+  function _renderSparkline(values) {
+    if (!values || values.length < 2) return '';
+    const w = 120, h = 28, pad = 2;
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const range = max - min || 1;
+    const stepX = (w - pad * 2) / (values.length - 1);
+    const pts = values.map((v, i) => {
+      const x = pad + i * stepX;
+      const y = h - pad - ((v - min) / range) * (h - pad * 2);
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    });
+    const last = values[values.length - 1];
+    const lastPrev = values[values.length - 2];
+    const trendCls = last >= lastPrev ? 'text-success' : 'text-warning';
+    const trendArrow = last >= lastPrev ? '▲' : '▼';
+    const tooltip = `Target ¥ trend (last ${values.length}): ${values.map((v) => '¥' + v.toLocaleString()).join(' → ')}`;
+    return `
+      <div class="flex items-center gap-2 mb-2 text-xs text-muted-foreground" data-tooltip="${tooltip}">
+        <span>Trend:</span>
+        <svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true" style="overflow:visible">
+          <polyline fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" points="${pts.join(' ')}" style="color:var(--primary,#3b82f6)"></polyline>
+          <circle cx="${pts[pts.length - 1].split(',')[0]}" cy="${pts[pts.length - 1].split(',')[1]}" r="2.5" fill="currentColor" style="color:var(--primary,#3b82f6)"></circle>
+        </svg>
+        <span class="${trendCls} font-mono">${trendArrow} ¥${last.toLocaleString()}</span>
+      </div>
+    `;
+  }
+
   function renderRecent() {
     const section = $('planner-recent-section');
     const wrap = $('planner-recent-list');
@@ -123,6 +152,14 @@
     if (!list.length) { section.classList.add('hidden'); return; }
     section.classList.remove('hidden');
     wrap.innerHTML = '';
+    // Sparkline of target ¥ from the most recent (oldest→newest in viz, so reverse)
+    const targets = list.slice(0, 6).map((r) => +r.target).filter((n) => isFinite(n)).reverse();
+    const sparkHtml = _renderSparkline(targets);
+    if (sparkHtml) {
+      const sparkWrap = document.createElement('div');
+      sparkWrap.innerHTML = sparkHtml;
+      wrap.appendChild(sparkWrap.firstElementChild);
+    }
     list.forEach((r) => {
       const row = document.createElement('div');
       row.className = 'flex items-center gap-3 py-2 border-b border-border last:border-b-0 flex-wrap';
