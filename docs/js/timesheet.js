@@ -290,18 +290,22 @@ function renderTimesheet() {
     const realSlip = window.OT_SALARY.findPayslipForWorkMonth(_tsState.payslips, key);
     const baseline = window.OT_SALARY.pickBaselineForWorkMonth(_tsState.payslips, key);
     const payDateStr = window.OT_SALARY.formatPayDate(key);
+    const eyeIcon = (window.ICON ? window.ICON('eye', 14) : '👁');
 
     let salaryVal, salaryTip;
     if (realSlip && realSlip.take_home != null) {
-      salaryVal = `${F(realSlip.take_home)} <span class="ts-chip-badge ts-chip-badge-actual">actual</span>`;
+      const eyeBtn = `<button class="ts-chip-eye ot-takehome-clickable" data-payslip-month="${key}" aria-label="View payslip detail">${eyeIcon}</button>`;
+      salaryVal = `${F(realSlip.take_home)} <span class="ts-chip-badge ts-chip-badge-actual">actual</span>${eyeBtn}`;
       salaryTip = `Actual take-home for work month ${key}\n`
                 + `(paid ${payDateStr} · payslip ${realSlip.month})\n`
                 + `• Gross: ${F(realSlip.gross || 0)}\n`
                 + `• Take-home: ${F(realSlip.take_home)}\n`
-                + `(All deductions applied: insurance, taxes, rent, fees)`;
+                + `(All deductions applied: insurance, taxes, rent, fees)\n`
+                + `Click 👁 for full breakdown.`;
     } else if (baseline) {
       const est = window.OT_SALARY.calcFullMonthEstimate(otGross, baseline, { basicSalaryIndex: 1.0 });
-      salaryVal = `${F(est.takeHome)} <span class="ts-chip-badge">est.</span>`;
+      const eyeBtn = `<button class="ts-chip-eye ot-takehome-clickable" data-payslip-month="${key}" data-payslip-estimate="1" aria-label="View payslip estimate">${eyeIcon}</button>`;
+      salaryVal = `${F(est.takeHome)} <span class="ts-chip-badge">est.</span>${eyeBtn}`;
       salaryTip = `Estimated take-home for work month ${key}\n`
                 + `(will be paid ${payDateStr} · baseline: payslip ${baseline.month})\n`
                 + `• Total gross: ${F(est.gross)}\n`

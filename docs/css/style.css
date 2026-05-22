@@ -3653,7 +3653,22 @@ body.ai-page-active .ai-dot-grid {
   font-variant-numeric: tabular-nums;
 }
 .ts-chip-salary { cursor: help; }
-.ts-chip-salary .ts-chip-value { color: var(--green, #16a34a); }
+.ts-chip-salary .ts-chip-value { color: var(--green, #16a34a); display: inline-flex; align-items: center; gap: 4px; }
+.ts-chip-eye {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 4px;
+  margin-left: 2px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.ts-chip-eye:hover { background: var(--muted, rgba(0,0,0,0.08)); color: var(--foreground); }
+.ts-chip-eye svg { display: block; }
 .ts-chip-badge {
   display: inline-block;
   margin-left: 6px;
