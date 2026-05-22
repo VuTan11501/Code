@@ -1609,15 +1609,26 @@
     const panel = $('planner-warnings');
     if (!panel) return;
     const allWarns = computeWarnings(ctx);
-    const warns = allWarns.filter((w) => !_dismissedWarnings.has(w.msg));
-    if (!warns.length) { panel.classList.add('hidden'); panel.innerHTML = ''; return; }
+    const visible = allWarns.filter((w) => !_dismissedWarnings.has(w.msg));
+    if (!visible.length) { panel.classList.add('hidden'); panel.innerHTML = ''; return; }
     panel.classList.remove('hidden');
+    const sevFilter = panel.dataset.sevFilter || 'all';
+    const warns = sevFilter === 'all' ? visible : visible.filter((w) => w.severity === sevFilter);
+    const counts = { error: 0, warn: 0, info: 0 };
+    visible.forEach((w) => { counts[w.severity] = (counts[w.severity] || 0) + 1; });
     const iconFor = (s) => s === 'error' ? 'alertTriangle' : s === 'warn' ? 'alert' : 'info';
     const toneFor = (s) => s === 'error' ? 'text-destructive' : s === 'warn' ? 'text-warning' : 'text-muted-foreground';
-    const hidden = allWarns.length - warns.length;
+    const hidden = allWarns.length - visible.length;
+    const chip = (key, label, n) => `<button type="button" data-warn-sev="${key}" class="btn xs ${sevFilter === key ? 'btn-default' : 'btn-ghost'} text-[10px]">${label}${n != null ? ` (${n})` : ''}</button>`;
     panel.innerHTML = `
-      <div class="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-2 uppercase tracking-wide">
+      <div class="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-2 uppercase tracking-wide flex-wrap">
         <span data-icon="alert" data-size="12"></span> Plan checks (${warns.length}${hidden ? ` · ${hidden} hidden` : ''})
+        <span class="ml-auto flex items-center gap-1 normal-case tracking-normal">
+          ${chip('all', 'All', visible.length)}
+          ${counts.error ? chip('error', '✕', counts.error) : ''}
+          ${counts.warn ? chip('warn', '!', counts.warn) : ''}
+          ${counts.info ? chip('info', 'i', counts.info) : ''}
+        </span>
       </div>
       <ul class="flex flex-col gap-1.5">
         ${warns.map((w, i) => `
@@ -1638,6 +1649,9 @@
         if (warns[i]) _dismissedWarnings.add(warns[i].msg);
         renderWarnings(ctx);
       });
+    });
+    panel.querySelectorAll('[data-warn-sev]').forEach((b) => {
+      b.addEventListener('click', () => { panel.dataset.sevFilter = b.dataset.warnSev; renderWarnings(ctx); });
     });
   }
 
