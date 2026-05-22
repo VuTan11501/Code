@@ -2470,6 +2470,15 @@
     renderSnapshots();
     if (window.Toast) window.Toast.info(s.pinned ? `Pinned "${s.name}" to top` : `Unpinned "${s.name}"`);
   }
+  function toggleFavoriteSnapshot(id) {
+    const list = loadSnapshots();
+    const s = list.find((x) => x.id === id);
+    if (!s) return;
+    s.favorite = !s.favorite;
+    saveSnapshots(list);
+    renderSnapshots();
+    if (window.Toast) window.Toast.info(s.favorite ? `⭐ Favorited "${s.name}"` : `Unfavorited "${s.name}"`);
+  }
   let _snapCompareA = null;
   function _diffRoutesArr(a, b) {
     const sa = new Set(a || []);
@@ -2687,6 +2696,7 @@
         <div class="flex flex-col gap-0.5 flex-1 min-w-[160px]">
           <div class="text-sm font-medium flex items-center gap-1.5">
             <button type="button" class="btn btn-ghost sm text-[12px] p-0.5 ${s.pinned ? 'text-primary' : 'opacity-40 hover:opacity-100'}" data-snap-pin="${s.id}" aria-label="${s.pinned ? 'Unpin snapshot' : 'Pin snapshot to top'}" data-tooltip="${s.pinned ? 'Unpin snapshot' : 'Pin to top of list'}">📌</button>
+            <button type="button" class="btn btn-ghost sm text-[12px] p-0.5 ${s.favorite ? '' : 'opacity-40 hover:opacity-100'}" data-snap-fav="${s.id}" aria-label="${s.favorite ? 'Unfavorite snapshot' : 'Favorite snapshot'}" data-tooltip="${s.favorite ? 'Remove from favorites' : 'Mark as favorite'}">${s.favorite ? '⭐' : '☆'}</button>
             <span data-snap-name>${s.name}</span>${isCompareA ? '<span class="status-badge status-info text-[10px]">A</span>' : ''}
             <button type="button" class="btn btn-ghost sm text-[10px] p-0.5 opacity-50 hover:opacity-100" data-snap-rename="${s.id}" aria-label="Rename snapshot" data-tooltip="Rename snapshot">
               <span data-icon="edit" data-size="11"></span>
@@ -2706,6 +2716,7 @@
       wrap.appendChild(row);
     });
     wrap.querySelectorAll('[data-snap-pin]').forEach((b) => b.addEventListener('click', (e) => togglePinSnapshot(e.currentTarget.getAttribute('data-snap-pin'))));
+    wrap.querySelectorAll('[data-snap-fav]').forEach((b) => b.addEventListener('click', (e) => toggleFavoriteSnapshot(e.currentTarget.getAttribute('data-snap-fav'))));
     wrap.querySelectorAll('[data-snap-restore]').forEach((b) => b.addEventListener('click', (e) => restoreSnapshot(e.currentTarget.getAttribute('data-snap-restore'))));
     wrap.querySelectorAll('[data-snap-delete]').forEach((b) => b.addEventListener('click', (e) => deleteSnapshot(e.currentTarget.getAttribute('data-snap-delete'))));
     wrap.querySelectorAll('[data-snap-compare]').forEach((b) => b.addEventListener('click', (e) => pickSnapshotForCompare(e.currentTarget.getAttribute('data-snap-compare'))));
