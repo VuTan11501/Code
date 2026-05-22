@@ -2545,6 +2545,53 @@
     } else { jsonBytes = bytes; }
     return JSON.parse(new TextDecoder().decode(jsonBytes));
   }
+  async function shareLinkAsQr() {
+    try {
+      const slim = planForShare();
+      const blob = await encodePlanToHash(slim);
+      const url = `${location.origin}${location.pathname}#p=${blob}`;
+      // QR codes top out around ~2.9 KB at L EC; we warn the user if the link
+      // exceeds 1500 chars since the resulting QR will be huge / unscannable.
+      const tooLong = url.length > 1500;
+      const overlay = document.createElement('div');
+      overlay.id = 'planner-qr-overlay';
+      overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:120;display:flex;align-items:center;justify-content:center;padding:1rem;';
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.style.cssText = 'max-width:400px;width:100%;padding:1rem;background:var(--card);color:var(--card-foreground);border:1px solid var(--border);border-radius:.5rem;';
+      const qrSize = 300;
+      const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=${qrSize}x${qrSize}&ecc=L&margin=4&data=${encodeURIComponent(url)}`;
+      card.innerHTML = `
+        <div class="flex items-center justify-between mb-2">
+          <div class="font-semibold text-sm">Share via QR</div>
+          <button type="button" class="btn btn-ghost sm" data-qr-close aria-label="Close">×</button>
+        </div>
+        ${tooLong ? `<div class="status-badge status-warning text-[10px] mb-2 block">⚠ Link is ${url.length} chars — QR may be hard to scan. Consider simplifying the plan first.</div>` : ''}
+        <div class="flex justify-center bg-white p-3 rounded mb-2" style="min-height:${qrSize + 24}px;">
+          <img alt="QR code for share link" width="${qrSize}" height="${qrSize}" src="${qrSrc}"
+               onerror="this.replaceWith(Object.assign(document.createElement('div'), {className:'text-xs text-destructive p-4 text-center', textContent:'QR service unreachable — copy the link instead.'}))">
+        </div>
+        <div class="text-[10px] text-muted-foreground break-all mb-2">${url}</div>
+        <div class="flex gap-2">
+          <button type="button" class="btn sm btn-outline flex-1" data-qr-copy>Copy link</button>
+          <a class="btn sm btn-outline flex-1 text-center" href="${qrSrc}" download="suica-plan-qr.png" target="_blank" rel="noopener">Download PNG</a>
+        </div>
+      `;
+      overlay.appendChild(card);
+      document.body.appendChild(overlay);
+      const close = () => overlay.remove();
+      overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+      card.querySelector('[data-qr-close]').addEventListener('click', close);
+      card.querySelector('[data-qr-copy]').addEventListener('click', async () => {
+        try { await navigator.clipboard.writeText(url); if (window.Toast) window.Toast.success('Link copied'); } catch (_) {}
+      });
+      document.addEventListener('keydown', function onEsc(e) {
+        if (e.key === 'Escape') { close(); document.removeEventListener('keydown', onEsc); }
+      });
+    } catch (e) {
+      if (window.Toast) window.Toast.error(e.message || 'Could not build QR', { title: 'QR failed' });
+    }
+  }
   async function copyShareLink() {
     try {
       const fullJsonBytes = new TextEncoder().encode(JSON.stringify({
@@ -3341,6 +3388,11 @@
     if (shareBtn) shareBtn.addEventListener('click', () => {
       copyShareLink();
       const det = shareBtn.closest('details'); if (det) det.removeAttribute('open');
+    });
+    const qrBtn = $('planner-share-qr');
+    if (qrBtn) qrBtn.addEventListener('click', () => {
+      shareLinkAsQr();
+      const det = qrBtn.closest('details'); if (det) det.removeAttribute('open');
     });
     const icsBtn = $('planner-export-ics');
     if (icsBtn) icsBtn.addEventListener('click', () => {

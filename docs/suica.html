@@ -501,6 +501,10 @@
                 <span data-icon="copy" data-size="14"></span>
                 <span class="btn-label">Copy share link</span>
               </button>
+              <button id="planner-share-qr" class="btn btn-ghost sm justify-start" type="button" data-tooltip="Generate a scannable QR code of the share link — useful for opening this plan on your phone">
+                <span data-icon="qr" data-size="14"></span>
+                <span class="btn-label">Share via QR…</span>
+              </button>
               <button id="planner-export-ics" class="btn btn-ghost sm justify-start" type="button" data-tooltip="Download an .ics calendar file with one event per scheduled trip — import into Google Calendar to preview the schedule">
                 <span data-icon="calendar" data-size="14"></span>
                 <span class="btn-label">Export .ics calendar</span>
@@ -766,7 +770,7 @@
 <script src="js/suica-history.js?v=6" defer></script>
 <script src="js/log-viewer.js?v=1" defer></script>
 <script>window.SUICA_FARE_API='https://suica-fare-proxy.workflow-dashboard.workers.dev';</script>
-<script src="js/suica-planner.js?v=76" defer></script>
+<script src="js/suica-planner.js?v=77" defer></script>
 <script>
 // Theme toggle for suica.html (mirrors the dashboard's behavior; uses the same
 // localStorage key so the preference syncs across pages).
