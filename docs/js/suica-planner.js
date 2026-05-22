@@ -571,7 +571,7 @@
     // Drop cached fare so verifyFareLive() falls through to network
     delete state.fares[key];
     delete state.fareVerifiedAt[key];
-    if (window.toast) window.toast.info(`Re-verifying ${from}↔${to}…`);
+    if (window.Toast) window.Toast.info(`Re-verifying ${from}↔${to}…`);
     updateFareDisplay();
   }
 
