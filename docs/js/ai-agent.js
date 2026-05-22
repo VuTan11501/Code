@@ -446,6 +446,13 @@ PHASE 3 MUTATION RULES:
 - KHÔNG propose delete cho entry có dispatched=true (sẽ bị refuse)
 - Tối đa 5 propose_* mỗi tin nhắn
 
+SUICA HISTORY GENERATOR (skill ngoài, gọi qua CLI):
+- Khi user yêu cầu tạo lịch sử Suica/PASMO (vd "tạo Suica tháng 5 25k Tokyo↔Shinjuku"), gọi suica_build_generate_command với các tham số đã parse.
+- Tool trả về CLI command — KHÔNG tự execute. Hướng dẫn user copy & chạy trong thư mục skill, rồi mở suica.html để xem.
+- Convert tên ga romaji → kanji nếu có thể (Tokyo→東京, Shinjuku→新宿, Shibuya→渋谷, Yokohama→横浜, Shinagawa→品川, Ueno→上野, Ikebukuro→池袋, Akihabara→秋葉原).
+- Format route: A↔B (dùng ký tự ↔).
+- Mặc định preset = data/presets/tokyo-commuter.json.
+
 Hôm nay (JST): ${today}.`;
   }
 

@@ -32,9 +32,10 @@ The skill resolves real station codes, real IC fares, and real route geometry fr
 - **Python 3.10+**
 - **Dependencies**: `pip install -r ./scripts/requirements.txt`
 - **odpt API key** (optional but recommended): register free at https://developer.odpt.org/users/sign_up
-  - Set env var `ODPT_API_KEY=<your-key>` or pass `--odpt-key`
-- **Google API key** (optional fallback): https://console.cloud.google.com/ → enable Directions API
-  - Set env var `GOOGLE_API_KEY=<your-key>` or pass `--google-key`
+  - Set env var `ODPT_API_KEY=<your-key>`. Responses are cached for 7 days in `data/odpt_cache.sqlite`.
+  - Without a key, the route resolver falls back to LocalFareTable + HeartRails + Yahoo!路線情報 (Kanto coverage still ~95%).
+- **Gemini API key** (optional, for `--llm` NL parsing): set env var `GEMINI_API_KEY=<your-key>`. Without it, `nl_parser.py` uses the offline heuristic parser.
+- **Pillow + NumPy** (optional, for `scripts/pdf_diff.py` pixel mode): `pip install Pillow numpy`. Without them, `pdf_diff` falls back to structural diff.
 - **MSGothic font** (for PDF output): inherited from `suica-pdf-editor`
 
 ## Architecture
@@ -108,11 +109,51 @@ python ./scripts/route_resolver.py compare "東京" "新宿"
 ### Import from Google Timeline
 
 ```powershell
-python ./scripts/generate.py `
-    --gps-import ~/Downloads/Takeout/Location-History/2026/05.json `
-    --target 25000 `
-    --output ./out/suica-2026-05.pdf
+# Detect train segments and snap to stations (HeartRails nearest lookup)
+python -m scripts.gps_import `
+    "$HOME/Downloads/Takeout/Location-History/Records.json" `
+    --month 2026-05 `
+    --out out/may-from-gps.json
+
+# Skip station snapping (fully offline, emits raw lat/lon)
+python -m scripts.gps_import trace.kml --no-snap --out out/raw.json
 ```
+
+### NL parsing (heuristic, no API key)
+
+```powershell
+python -m scripts.nl_parser `
+    "tháng 5 đi Tokyo↔Shinjuku hàng ngày + cuối tuần Tokyo↔Yokohama 2 lần, 25k" `
+    --as-cmd
+# Emits parsed JSON + the equivalent generate.py CLI command.
+# Add --llm to use Gemini 1.5 Flash (requires GEMINI_API_KEY).
+```
+
+### PDF diff vs reference
+
+```powershell
+python -m scripts.pdf_diff out/may.pdf reference-real.pdf --threshold 0.95
+# Pixel diff at 150 DPI; pass/fail based on average per-page similarity.
+# Add --text-only for a structural diff that doesn't need Pillow/numpy.
+```
+
+### Export trips for Rakuraku Seisan
+
+```powershell
+python -m scripts.generate `
+    --config data/presets/tokyo-commuter.json `
+    --month 2026-05 --target 25000 --seed 42 `
+    --out out/may.pdf --template real-suica.pdf `
+    --rakuraku-out out/may-trips.json
+# The trips.json can be consumed directly by rakuraku-suica-expense.
+```
+
+### Web viewer (CF Pages / gh-pages)
+
+After generation, open `docs/suica.html` in the fjp-workflow-dashboard to
+visualize the JSON output: daily-spend bars, top stations/routes, an
+entries table, and a "what-if" budget slider that builds an alternative
+CLI command. All processing is in-browser — no upload, no telemetry.
 
 ## Configuration (preset format)
 

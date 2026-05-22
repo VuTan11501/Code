@@ -37,6 +37,7 @@ from pathlib import Path
 from .apis._protocols import FareProvider, FareQuote, Route, Station, StationProvider
 from .apis.heartrails import HeartRailsClient
 from .apis.local_table import LocalFareTable
+from .apis.odpt import OdptClient
 from .apis.yahoo_transit import YahooTransitClient
 
 log = logging.getLogger(__name__)
@@ -65,9 +66,12 @@ class RouteResolver:
         cache_db: Path = CACHE_DB,
         disagreement_threshold_yen: int = 10,
     ):
-        # Default stack: HeartRails for stations; LocalFareTable + YahooTransit for fares
-        self._stations = station_providers or [HeartRailsClient()]
-        self._fares = fare_providers or [LocalFareTable(), YahooTransitClient()]
+        # Default stack: HeartRails + odpt for stations; LocalFareTable + YahooTransit + odpt for fares.
+        # odpt is only effective when ODPT_API_KEY env var is set; otherwise the client
+        # returns [] and the other providers cover.
+        odpt = OdptClient()
+        self._stations = station_providers or [HeartRailsClient(), odpt]
+        self._fares = fare_providers or [LocalFareTable(), YahooTransitClient(), odpt]
         self._threshold = disagreement_threshold_yen
         self._cache_db = cache_db
         self._init_cache()

@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Suica History Viewer · FJP Workflow Dashboard</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="favicon/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="css/tailwind.css">
+<style>
+  body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", "Hiragino Sans", "Yu Gothic", sans-serif; }
+  .stat-card { transition: transform 0.15s; }
+  .stat-card:hover { transform: translateY(-2px); }
+  .bar { transition: height 0.4s ease-out; }
+  .drop-active { outline: 2px dashed rgb(59, 130, 246); background: rgba(59,130,246,0.05); }
+</style>
+</head>
+<body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 min-h-screen">
+
+<div class="max-w-6xl mx-auto p-6 space-y-6">
+
+  <header class="flex items-baseline justify-between flex-wrap gap-3">
+    <h1 class="text-2xl font-bold">Suica History Viewer</h1>
+    <div class="text-sm text-slate-500">Companion to <code>suica-history-generator</code> skill</div>
+  </header>
+
+  <!-- File loader -->
+  <section id="loader" class="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6">
+    <h2 class="font-semibold mb-2">Load a generated history</h2>
+    <p class="text-sm text-slate-500 mb-3">Drag &amp; drop a <code>.json</code> file produced by <code>scripts/generate.py --out *.json</code>, or click to browse. Files never leave your browser.</p>
+    <label class="block">
+      <input id="file-input" type="file" accept=".json" class="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+    </label>
+    <div class="mt-3 flex gap-3 text-sm">
+      <button id="load-sample" class="text-blue-600 hover:underline">Load sample (synthetic)</button>
+      <button id="load-from-url" class="text-blue-600 hover:underline">Load from URL…</button>
+    </div>
+    <div id="loader-error" class="mt-2 text-sm text-red-600 hidden"></div>
+  </section>
+
+  <main id="report" class="hidden space-y-6">
+
+    <!-- KPIs -->
+    <section class="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div class="stat-card rounded-lg p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+        <div class="text-xs text-slate-500">Month</div>
+        <div id="kpi-month" class="text-xl font-bold">—</div>
+      </div>
+      <div class="stat-card rounded-lg p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+        <div class="text-xs text-slate-500">Total spent</div>
+        <div id="kpi-spent" class="text-xl font-bold">¥—</div>
+      </div>
+      <div class="stat-card rounded-lg p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+        <div class="text-xs text-slate-500">Trips (in/out pairs)</div>
+        <div id="kpi-trips" class="text-xl font-bold">—</div>
+      </div>
+      <div class="stat-card rounded-lg p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+        <div class="text-xs text-slate-500">Avg / weekday</div>
+        <div id="kpi-avg" class="text-xl font-bold">¥—</div>
+      </div>
+    </section>
+
+    <!-- What-if slider -->
+    <section class="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
+      <h3 class="font-semibold mb-2">What-if: re-target this month</h3>
+      <p class="text-xs text-slate-500 mb-3">Linearly scales every fare to see how a different total budget would land. Useful for forecasting.</p>
+      <div class="flex items-center gap-3 flex-wrap">
+        <input id="whatif-slider" type="range" min="0.4" max="2.0" step="0.05" value="1.0" class="flex-1 min-w-[200px]">
+        <div class="text-sm">scale = <span id="whatif-scale" class="font-mono">1.00x</span></div>
+        <div class="text-sm">new target = <span id="whatif-target" class="font-bold">¥—</span></div>
+        <button id="whatif-copy" class="text-xs px-2 py-1 rounded bg-blue-50 text-blue-700 hover:bg-blue-100">Copy CLI command</button>
+      </div>
+    </section>
+
+    <!-- Daily spend chart -->
+    <section class="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
+      <h3 class="font-semibold mb-3">Daily spend</h3>
+      <div id="daily-chart" class="flex items-end gap-[2px] h-40 border-b border-slate-200 dark:border-slate-700"></div>
+      <div class="flex justify-between text-xs text-slate-400 mt-1"><span>day 1</span><span>day 31</span></div>
+    </section>
+
+    <!-- Top routes -->
+    <section class="grid md:grid-cols-2 gap-3">
+      <div class="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
+        <h3 class="font-semibold mb-3">Top stations</h3>
+        <ol id="top-stations" class="space-y-1 text-sm"></ol>
+      </div>
+      <div class="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
+        <h3 class="font-semibold mb-3">Top routes (IN → OUT)</h3>
+        <ol id="top-routes" class="space-y-1 text-sm"></ol>
+      </div>
+    </section>
+
+    <!-- Entries table -->
+    <section class="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
+      <h3 class="font-semibold mb-3">All entries</h3>
+      <div class="overflow-x-auto max-h-[400px]">
+        <table class="w-full text-xs">
+          <thead class="text-left text-slate-500 sticky top-0 bg-white dark:bg-slate-900">
+            <tr><th class="py-1">#</th><th>When (JST)</th><th>Kind</th><th>Station</th><th class="text-right">Fare</th><th class="text-right">Balance</th></tr>
+          </thead>
+          <tbody id="entries-tbody" class="font-mono"></tbody>
+        </table>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="text-xs text-slate-400 text-center py-6">
+    Read-only viewer. All processing is in-browser. Files never uploaded.
+  </footer>
+
+</div>
+
+<script src="js/suica-history.js" defer></script>
+</body>
+</html>

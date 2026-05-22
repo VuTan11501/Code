@@ -777,6 +777,87 @@
       },
       exec: exec_propose_add_skip_date,
     },
+    {
+      schema: {
+        type: 'function',
+        function: {
+          name: 'suica_build_generate_command',
+          description: 'Build the CLI command for the suica-history-generator skill from parsed parameters. Use this when the user asks to generate a Suica/PASMO transit history for a month. The command is read-only (does not execute) — the user copies and runs it locally. Open the Suica viewer at /suica.html to visualize the JSON output afterwards.',
+          parameters: {
+            type: 'object',
+            properties: {
+              month: { type: 'string', description: 'YYYY-MM (e.g. 2026-05)' },
+              target_yen: { type: 'integer', description: 'Target monthly spend in JPY (e.g. 25000)' },
+              routes: {
+                type: 'array',
+                description: 'Weekday/commute routes. Each route uses A↔B format with kanji station names when possible.',
+                items: {
+                  type: 'object',
+                  properties: {
+                    route: { type: 'string', description: 'A↔B (e.g. 東京↔新宿)' },
+                    type: { type: 'string', enum: ['commute', 'business'], description: 'Trip type' },
+                  },
+                  required: ['route'],
+                },
+              },
+              leisure: {
+                type: 'array',
+                description: 'Optional weekend/leisure routes.',
+                items: {
+                  type: 'object',
+                  properties: {
+                    route: { type: 'string', description: 'A↔B' },
+                    count: { type: 'integer', description: 'Approximate number of round trips that month', default: 1 },
+                  },
+                  required: ['route'],
+                },
+              },
+              seed: { type: 'integer', description: 'Optional reproducibility seed' },
+              preset: { type: 'string', description: 'Preset config path (default: data/presets/tokyo-commuter.json)' },
+              rakuraku_out: { type: 'boolean', description: 'Also emit a trips.json for the rakuraku-suica-expense skill', default: false },
+            },
+            required: ['month', 'target_yen'],
+          },
+        },
+      },
+      exec: async (args) => {
+        const preset = args.preset || 'data/presets/tokyo-commuter.json';
+        const out = `out/${args.month}.json`;
+        const lines = [
+          'python -m scripts.generate',
+          `    --config ${preset}`,
+          `    --month ${args.month}`,
+          `    --target ${args.target_yen}`,
+        ];
+        if (args.seed != null) lines.push(`    --seed ${args.seed}`);
+        lines.push(`    --out ${out}`);
+        if (args.rakuraku_out) lines.push(`    --rakuraku-out out/${args.month}-trips.json`);
+        const cmd = lines.join(' \\\n');
+
+        // Build an inline preset override the user can save as a preset JSON.
+        const preset_override = {
+          _meta: 'Override fragment generated from NL request. Merge into tokyo-commuter.json or use as standalone.',
+        };
+        if (Array.isArray(args.routes) && args.routes.length) {
+          preset_override.weekly = args.routes.map(r => ({
+            route: r.route, type: r.type || 'commute',
+          }));
+        }
+        if (Array.isArray(args.leisure) && args.leisure.length) {
+          preset_override.leisure_pool = args.leisure.map(r => ({
+            route: r.route, weight: Math.max(1, Number(r.count || 1)),
+          }));
+        }
+
+        return {
+          ok: true,
+          tip: 'Run the command below in the suica-history-generator skill directory (Code/.github/skills/suica-history-generator). Then open suica.html in this dashboard to visualize.',
+          cli_command: cmd,
+          preset_override,
+          viewer_url: 'suica.html',
+        };
+      },
+    },
   );
 
   window.AITools = { executeTool, getToolSchemas, TOOLS };
