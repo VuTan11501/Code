@@ -3816,7 +3816,13 @@ body.ai-page-active .ai-dot-grid {
 
 /* ─── DRAG-AND-DROP CARD REORDERING ─── */
 .workflow-card { position: relative; cursor: default; user-select: none; }
-.workflow-card.dragging { opacity: 0.4; cursor: grabbing; }
+.workflow-card.dragging {
+  opacity: 0.85;
+  cursor: grabbing;
+  transform: rotate(1.5deg) scale(0.98);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35), 0 0 0 2px var(--primary);
+  z-index: 10;
+}
 .workflow-card.drag-over { outline: 2px dashed var(--primary); outline-offset: -2px; }
 .workflow-drag-handle { position: absolute; top: 6px; left: 6px; opacity: 0.35; cursor: grab; padding: 2px; color: var(--muted-foreground); pointer-events: auto; z-index: 2; }
 .workflow-card:hover .workflow-drag-handle { opacity: 0.85; }
