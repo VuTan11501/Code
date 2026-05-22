@@ -35,3 +35,8 @@ playwright/.cache/
 worker/.dev.vars
 worker/.wrangler/
 worker/node_modules/
+
+# autopilot scratch
+todos.md
+msg.tmp
+git_msg.tmp
