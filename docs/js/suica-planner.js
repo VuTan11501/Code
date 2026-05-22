@@ -1751,6 +1751,88 @@
     if (window.refreshIcons) window.refreshIcons(wrap);
   }
 
+  // ────── Share via URL hash ──────
+  // Encodes the user's plan (pattern, leisure, settings, currentRoute) into a
+  // base64-url-safe blob in the URL fragment. We use CompressionStream where
+  // available; otherwise plain base64 of JSON. On load, init() inspects the
+  // hash and, if present, offers to import.
+  function planForShare() {
+    return {
+      v: 1,
+      pattern: state.pattern,
+      leisure: state.leisure,
+      settings: state.settings,
+      route: currentRoute(),
+    };
+  }
+  async function encodePlanToHash(obj) {
+    const json = JSON.stringify(obj);
+    const bytes = new TextEncoder().encode(json);
+    let out;
+    if (typeof CompressionStream === 'function') {
+      const stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream('deflate-raw'));
+      const buf = await new Response(stream).arrayBuffer();
+      out = new Uint8Array(buf);
+    } else {
+      out = bytes;
+    }
+    let s = '';
+    for (let i = 0; i < out.length; i++) s += String.fromCharCode(out[i]);
+    return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+  async function decodeHashToPlan(b64url) {
+    const b64 = b64url.replace(/-/g, '+').replace(/_/g, '/');
+    const bin = atob(b64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    let jsonBytes;
+    if (typeof DecompressionStream === 'function') {
+      try {
+        const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+        const buf = await new Response(stream).arrayBuffer();
+        jsonBytes = new Uint8Array(buf);
+      } catch (_) { jsonBytes = bytes; }
+    } else { jsonBytes = bytes; }
+    return JSON.parse(new TextDecoder().decode(jsonBytes));
+  }
+  async function copyShareLink() {
+    try {
+      const blob = await encodePlanToHash(planForShare());
+      const url = `${location.origin}${location.pathname}#p=${blob}`;
+      await navigator.clipboard.writeText(url);
+      if (window.Toast) window.Toast.success(`${(url.length/1024).toFixed(1)} KB link copied`, { title: 'Share link copied' });
+    } catch (e) {
+      if (window.Toast) window.Toast.error(e.message || 'Could not encode plan', { title: 'Share failed' });
+    }
+  }
+  async function maybeImportFromHash() {
+    const m = (location.hash || '').match(/[#&]p=([A-Za-z0-9_\-]+)/);
+    if (!m) return;
+    try {
+      const obj = await decodeHashToPlan(m[1]);
+      if (!obj || obj.v !== 1) return;
+      const ok = confirm('A shared plan is in this link. Import it now? Your current plan will be replaced.');
+      if (!ok) return;
+      if (obj.pattern) state.pattern = obj.pattern;
+      if (obj.leisure) state.leisure = obj.leisure;
+      if (obj.settings) state.settings = Object.assign(state.settings, obj.settings);
+      if (obj.route && cbFrom && cbTo) {
+        const [a, b] = obj.route.split('↔');
+        if (a && b) { cbFrom.setValue(a); cbTo.setValue(b); }
+      }
+      ['month', 'target', 'seed', 'initial', 'topup-threshold', 'topup-amount', 'leisure-min', 'leisure-max'].forEach((k) => {
+        const stateKey = k === 'initial' ? 'initial_balance' : k.replace(/-/g, '_');
+        const el = $('planner-' + k); if (el && state.settings[stateKey] != null) el.value = state.settings[stateKey];
+      });
+      renderPattern(); renderLeisure(); renderEstimate(); updateFareDisplay(); saveState();
+      if (window.Toast) window.Toast.success('Plan imported from share link', { title: 'Imported' });
+      // Strip hash so reload doesn't re-prompt
+      history.replaceState(null, '', location.pathname + location.search);
+    } catch (e) {
+      console.warn('[share-link] decode failed:', e);
+    }
+  }
+
   function loadSamplePlan() {
     state.pattern = {
       monday: [{ route: '東京↔新宿', type: 'commute' }],
@@ -2130,10 +2212,16 @@
       const name = prompt('Name this snapshot:', `Plan ${new Date().toLocaleDateString()}`);
       if (name === null) return;
       captureSnapshot(name.trim() || null);
-      // Close the parent details menu
       const det = snapSave.closest('details'); if (det) det.removeAttribute('open');
     });
+    const shareBtn = $('planner-share-link');
+    if (shareBtn) shareBtn.addEventListener('click', () => {
+      copyShareLink();
+      const det = shareBtn.closest('details'); if (det) det.removeAttribute('open');
+    });
     renderSnapshots();
+    // Offer to import a plan if the URL hash contains one
+    maybeImportFromHash();
     const recentClearBtn = $('planner-recent-clear');
     if (recentClearBtn) recentClearBtn.addEventListener('click', () => {
       saveRecent([]); renderRecent();
