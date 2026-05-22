@@ -1573,7 +1573,32 @@
       console.error('[suica-planner] generatePDF failed:', err);
       setStatus(`Failed: ${err.message}`, 'text-destructive');
       if (progressToast) { progressToast.dismiss(); progressToast = null; }
-      if (window.Toast) window.Toast.error(err.message, { title: 'PDF generation failed' });
+      if (window.Toast) {
+        // Pair the error toast with a one-tap retry of the same dispatch.
+        // Default retries use the same seed; a follow-up "seed +1" toast
+        // (shown when the user picks Retry) lets them dodge a flaky seed.
+        const retrySame = () => { try { generatePDF(btn); } catch (_) {} };
+        const retryNewSeed = () => {
+          const seedEl = $('planner-seed');
+          if (seedEl) { seedEl.value = String((+seedEl.value || 0) + 1); state.settings.seed = +seedEl.value; saveState(); }
+          try { generatePDF(btn); } catch (_) {}
+        };
+        window.Toast.error(err.message, {
+          title: 'PDF generation failed',
+          duration: 12000,
+          actionLabel: 'Retry',
+          onAction: () => {
+            // Offer a follow-up choice once the user opts in to a retry
+            if (window.Toast) window.Toast.info('Same seed retry started — if it fails again, try the next seed.', {
+              title: 'Retrying…',
+              actionLabel: 'Use seed +1 instead',
+              onAction: retryNewSeed,
+              duration: 8000,
+            });
+            retrySame();
+          },
+        });
+      }
       btn.innerHTML = '<span data-icon="download" data-size="14"></span><span class="btn-label">Generate Suica PDF</span>';
       if (window.refreshIcons) window.refreshIcons(btn);
     } finally {
