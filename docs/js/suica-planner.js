@@ -216,6 +216,7 @@
     let list = loadRecent();
     if (!list.length) { section.classList.add('hidden'); return; }
     section.classList.remove('hidden');
+    fetchWorkflowHealth();
     wrap.innerHTML = '';
     // Filter chip row (All / 7d / 30d). Filter state is held on the wrap element.
     const filter = wrap.dataset.recentFilter || 'all';
@@ -1383,6 +1384,32 @@
         renderLeisure(); renderEstimate(); saveState();
       });
     });
+  }
+
+  let _wfHealthFetched = false;
+  async function fetchWorkflowHealth() {
+    if (_wfHealthFetched) return;
+    _wfHealthFetched = true;
+    const el = document.getElementById('planner-wf-health');
+    if (!el) return;
+    try {
+      const url = `https://api.github.com/repos/VuTan11501/Code/actions/workflows/suica-pdf-generate.yml/runs?per_page=10`;
+      const res = await fetch(url, { headers: { 'Accept': 'application/vnd.github+json' } });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      const runs = (data.workflow_runs || []).filter((r) => r.conclusion);
+      if (!runs.length) return;
+      const total = runs.length;
+      const ok = runs.filter((r) => r.conclusion === 'success').length;
+      const pct = Math.round((ok / total) * 100);
+      const variant = pct >= 90 ? 'status-success' : pct >= 60 ? 'status-pending' : 'status-warning';
+      el.className = `status-badge ${variant} text-[10px] ml-1`;
+      el.textContent = `${pct}% · ${ok}/${total} ok`;
+      el.setAttribute('data-tooltip', `Last ${total} workflow runs: ${ok} success, ${total - ok} failed/cancelled. Newest: ${new Date(runs[0].created_at).toLocaleString()}`);
+      el.classList.remove('hidden');
+    } catch (e) {
+      // silently swallow — unauthenticated rate limit can hit easily
+    }
   }
 
   // ────── Estimate monthly spend ──────
