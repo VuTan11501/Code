@@ -124,6 +124,20 @@ def _i(v, default=0):
     return int(round(_f(v, default)))
 
 
+def _get(slip: dict, *names, default=None):
+    """Case-insensitive key lookup. Tries each name in order, then
+    matches case-insensitively against slip keys. Returns first hit."""
+    for n in names:
+        if n in slip:
+            return slip[n]
+    lower_map = {k.lower(): k for k in slip.keys()}
+    for n in names:
+        k = lower_map.get(n.lower())
+        if k is not None:
+            return slip[k]
+    return default
+
+
 def slip_to_record(slip: dict, year: int, month: int) -> dict:
     """Convert FJP CalculateViewModel → schema used in payslip-history.json.
 
@@ -131,35 +145,31 @@ def slip_to_record(slip: dict, year: int, month: int) -> dict:
     keeps working with no further changes.
     """
     receivable_items = []
-    for item in (slip.get("CompanyReceivableList") or []):
+    for item in (_get(slip, "CompanyReceivableList", "companyReceivableList") or []):
         if not isinstance(item, dict):
             continue
-        # SubItem may be int or string; preserve sort-friendly numeric if possible.
-        sub = item.get("SubItem") if "SubItem" in item else item.get("sub")
+        sub = _get(item, "SubItem", "subItem", "sub")
         try:
             sub_val = int(sub) if sub is not None else None
         except Exception:
             sub_val = sub
         receivable_items.append({
             "sub": sub_val,
-            "label": item.get("Description") or item.get("description") or "",
-            "value": _i(item.get("Amount") if "Amount" in item else item.get("amount")),
+            "label": _get(item, "Description", "description") or "",
+            "value": _i(_get(item, "Amount", "amount")),
         })
 
     # Hourly wage. Prefer AverageHourlyWage from API; else compute from contract.
-    hourly = _i(slip.get("AverageHourlyWage"))
-    basic_a = _i(slip.get("BasicSalary"))
-    basic_b = _i(slip.get("LifeDesignAllowance"))
-    fixed_allow = _i(slip.get("OvertimeAllowance")) if slip.get("IsDisplayOnlyFixedOT") else _i(slip.get("ManagerialAllowance"))
-    # The contract's "fixed_allowance" in existing data is the OT-irrelevant
-    # ¥20k DC line; in API this is typically "ManagerialAllowance" or similar.
-    # If user's payslip uses InputManagerialAllowance for the fixed ¥20k,
-    # this catches it; otherwise default to 20000 for FJP standard contracts.
+    hourly = _i(_get(slip, "AverageHourlyWage"))
+    basic_a = _i(_get(slip, "BasicSalary"))
+    basic_b = _i(_get(slip, "LifeDesignAllowance"))
+    is_fixed_ot = bool(_get(slip, "IsDisplayOnlyFixedOT", default=False))
+    fixed_allow = _i(_get(slip, "OvertimeAllowance")) if is_fixed_ot else _i(_get(slip, "ManagerialAllowance"))
     if fixed_allow == 0:
         fixed_allow = 20000
 
     if hourly == 0 and (basic_a + basic_b + fixed_allow) > 0:
-        std_hours = _f(slip.get("StandardWorkingHour"), 160) or 160
+        std_hours = _f(_get(slip, "StandardWorkingHour"), 160) or 160
         hourly = int((basic_a + basic_b + fixed_allow) / std_hours)
 
     return {
@@ -169,52 +179,52 @@ def slip_to_record(slip: dict, year: int, month: int) -> dict:
             "basic_a": basic_a,
             "basic_b": basic_b,
             "fixed_allowance": fixed_allow,
-            "housing_allowance": _i(slip.get("HousingAllowance")),
-            "family_allowance":  _i(slip.get("FamilyAllowance")),
-            "other_allowance":   _i(slip.get("OtherAllowance")),
-            "travel_allowance":  _i(slip.get("TravelAllowance")),
-            "standard_insurance": _i(slip.get("StandardAmountForIns")),
+            "housing_allowance": _i(_get(slip, "HousingAllowance")),
+            "family_allowance":  _i(_get(slip, "FamilyAllowance")),
+            "other_allowance":   _i(_get(slip, "OtherAllowance")),
+            "travel_allowance":  _i(_get(slip, "TravelAllowance")),
+            "standard_insurance": _i(_get(slip, "StandardAmountForIns")),
             "hourly_wage": hourly,
         },
         "work": {
-            "standard_hours":    _f(slip.get("StandardWorkingHour")),
-            "month_hours":       _f(slip.get("WorkingHoursOfThisMonth")),
-            "basic_index":       _f(slip.get("BasicSalaryIndex"), 1.0),
-            "ot_hours":          _f(slip.get("OvertimeHours")),
-            "sunday_hours":      _f(slip.get("SundayOvertime")),
-            "night_hours":       _f(slip.get("NightWorkingHours")),
-            "other_ot_hours":    _f(slip.get("OtherOvertime")),
+            "standard_hours":    _f(_get(slip, "StandardWorkingHour")),
+            "month_hours":       _f(_get(slip, "WorkingHoursOfThisMonth")),
+            "basic_index":       _f(_get(slip, "BasicSalaryIndex"), 1.0),
+            "ot_hours":          _f(_get(slip, "OvertimeHours")),
+            "sunday_hours":      _f(_get(slip, "SundayOvertime")),
+            "night_hours":       _f(_get(slip, "NightWorkingHours")),
+            "other_ot_hours":    _f(_get(slip, "OtherOvertime")),
         },
-        "gross": _i(slip.get("GrossIncome")),
+        "gross": _i(_get(slip, "GrossIncome")),
         "gross_breakdown": {
-            "basic_a_paid":          _i(slip.get("BasicSalary")),
-            "basic_b_paid":          _i(slip.get("LifeDesignAllowance")),
+            "basic_a_paid":          _i(_get(slip, "BasicSalary")),
+            "basic_b_paid":          _i(_get(slip, "LifeDesignAllowance")),
             "fixed_allowance_paid":  fixed_allow,
-            "ot_allowance":          _i(slip.get("OvertimeAllowance")),
-            "sunday_ot_allowance":   _i(slip.get("SundayOvertimeAllowance")),
-            "night_allowance":       _i(slip.get("NightWorkingAllowance")),
-            "other_ot_allowance":    _i(slip.get("OtherOvertimeAllowance")),
-            "other_income":          _i(slip.get("OtherIncome")),
+            "ot_allowance":          _i(_get(slip, "OvertimeAllowance")),
+            "sunday_ot_allowance":   _i(_get(slip, "SundayOvertimeAllowance")),
+            "night_allowance":       _i(_get(slip, "NightWorkingAllowance")),
+            "other_ot_allowance":    _i(_get(slip, "OtherOvertimeAllowance")),
+            "other_income":          _i(_get(slip, "OtherIncome")),
         },
         "deductions": {
-            "health_insurance":       _i(slip.get("HealthInsurance")),
-            "welfare_insurance":      _i(slip.get("WelfareInsurance")),
-            "unemployment_insurance": _i(slip.get("UnemploymentInsurance")),
-            "insurance_total":        _i(slip.get("InsuranceTotal")),
-            "taxable_income":         _i(slip.get("TaxableIncome")),
-            "income_tax":             _i(slip.get("IncomeTax")),
-            "resident_tax":           _i(slip.get("ResidentTax")),
-            "total_payable_to_gov":   _i(slip.get("InsuranceTotal"))
-                                      + _i(slip.get("IncomeTax"))
-                                      + _i(slip.get("ResidentTax")),
+            "health_insurance":       _i(_get(slip, "HealthInsurance")),
+            "welfare_insurance":      _i(_get(slip, "WelfareInsurance")),
+            "unemployment_insurance": _i(_get(slip, "UnemploymentInsurance")),
+            "insurance_total":        _i(_get(slip, "InsuranceTotal")),
+            "taxable_income":         _i(_get(slip, "TaxableIncome")),
+            "income_tax":             _i(_get(slip, "IncomeTax")),
+            "resident_tax":           _i(_get(slip, "ResidentTax")),
+            "total_payable_to_gov":   _i(_get(slip, "InsuranceTotal"))
+                                      + _i(_get(slip, "IncomeTax"))
+                                      + _i(_get(slip, "ResidentTax")),
         },
         "company_receivables": {
-            "total": _i(slip.get("CompanyReceivableTotal")),
+            "total": _i(_get(slip, "CompanyReceivableTotal")),
             "items": receivable_items,
         },
-        "company_payable":  _i(slip.get("CompanyPayableTotal")),
-        "net_after_tax":    _i(slip.get("NetIncomeAfterInsTax")),
-        "take_home":        _i(slip.get("AmountPaidThisMonth")),
+        "company_payable":  _i(_get(slip, "CompanyPayableTotal")),
+        "net_after_tax":    _i(_get(slip, "NetIncomeAfterInsTax")),
+        "take_home":        _i(_get(slip, "AmountPaidThisMonth")),
         "fetched_at":       datetime.now(JST).isoformat(timespec="seconds"),
     }
 
@@ -229,7 +239,10 @@ def upsert_payslips(new_records: list[dict], force: bool) -> int:
         log("Nothing to write.")
         return 0
     pat = os.environ.get("GH_PAT")
-    existing, etag = read_gist_file(GIST_ID, PAYSLIP_GIST_FILE, pat)
+    if not pat:
+        raise RuntimeError("GH_PAT not set (needed to PATCH Gist)")
+    snapshot = read_gist_file(pat, GIST_ID, PAYSLIP_GIST_FILE, log=log)
+    existing = snapshot.get("parsed")
     if not isinstance(existing, dict):
         existing = {"payslips": []}
     payslips = existing.get("payslips") or []
@@ -254,16 +267,24 @@ def upsert_payslips(new_records: list[dict], force: bool) -> int:
     payslips.sort(key=lambda p: (p.get("month") or "", 1 if p.get("bonus") else 0))
     existing["payslips"] = payslips
     existing["updated_at"] = datetime.now(JST).isoformat(timespec="seconds")
+    new_content = json.dumps(existing, ensure_ascii=False, indent=2)
+
+    def _shape_ok(parsed):
+        if not isinstance(parsed, dict) or "payslips" not in parsed:
+            raise ValueError("missing 'payslips' key")
+
     try:
-        safe_patch_gist_file(
-            GIST_ID, PAYSLIP_GIST_FILE,
-            json.dumps(existing, ensure_ascii=False, indent=2),
-            pat, etag=etag,
+        st = safe_patch_gist_file(
+            pat, GIST_ID, PAYSLIP_GIST_FILE,
+            new_content=new_content,
+            snapshot=snapshot,
+            shape_validator=_shape_ok,
+            log=log,
         )
+        log(f"✅ Gist PATCH HTTP {st} ({changed} record(s))")
     except RaceDetected as e:
         log(f"⚠ Race on gist write: {e} — please re-run.")
         raise
-    log(f"✅ Gist updated ({changed} record(s))")
     return changed
 
 
@@ -333,6 +354,7 @@ def main():
         _emit_token_rotation(new_refresh)
 
     records = []
+    debug = (os.environ.get("DEBUG_DUMP") or "").lower() in ("1", "true", "yes")
     for (y, m) in targets:
         log(f"Fetching {y}-{m:02d}…")
         slips = fetch_payslip(fes, passcode, y, m)
@@ -340,9 +362,17 @@ def main():
             continue
         # Use the latest (highest index) slip if multiple — corrections supersede.
         primary = slips[-1]
+        if debug:
+            log(f"  🔍 RAW KEYS ({y}-{m:02d}): {sorted(primary.keys())}")
+            log(f"  🔍 RAW JSON ({y}-{m:02d}): {json.dumps(primary, ensure_ascii=False)[:2000]}")
         try:
-            records.append(slip_to_record(primary, y, m))
-            log(f"  ✓ {y}-{m:02d} mapped (take_home=¥{records[-1]['take_home']:,})")
+            rec = slip_to_record(primary, y, m)
+            records.append(rec)
+            log(f"  ✓ {y}-{m:02d} mapped (take_home=¥{rec['take_home']:,})")
+            if rec["take_home"] == 0 and not debug:
+                # Mapping returned zero — likely field-name mismatch. Dump keys to help diagnose.
+                log(f"  ⚠ take_home=0 — RAW KEYS: {sorted(primary.keys())}")
+                log(f"  ⚠ RAW JSON SAMPLE: {json.dumps(primary, ensure_ascii=False)[:1500]}")
         except Exception as e:
             log(f"  ⚠ {y}-{m:02d} map failed: {e}\n{traceback.format_exc()}")
 
