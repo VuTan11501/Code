@@ -676,7 +676,13 @@ function _apiRetryDelay(resp, attempt) {
 
 async function apiFetch(path, opts = {}) {
   const headers = { 'Accept': 'application/vnd.github+json' };
-  if (sessionToken) headers['Authorization'] = `Bearer ${sessionToken}`;
+
+  // Route through Cloudflare Worker proxy if configured (PAT stays server-side).
+  // Falls back to direct api.github.com call with Bearer token when not set.
+  const proxyUrl = (window.CloudSync && window.CloudSync.getProxyUrl)
+    ? window.CloudSync.getProxyUrl() : '';
+  const fullUrl = proxyUrl ? `${proxyUrl}${path}` : `${API}${path}`;
+  if (!proxyUrl && sessionToken) headers['Authorization'] = `Bearer ${sessionToken}`;
 
   // Use ETag for conditional request if available
   const cached = etagCache.get(path);
@@ -690,7 +696,7 @@ async function apiFetch(path, opts = {}) {
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
-      res = await fetch(`${API}${path}`, { headers });
+      res = await fetch(fullUrl, { headers });
     } catch (e) {
       // Network error — retry (offline blip, DNS hiccup)
       lastErr = e;

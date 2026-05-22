@@ -13,9 +13,76 @@
 //   CloudSync.markDirty()                  — schedule a 3s-debounced push
 //   CloudSync.lastSyncedAt()               — Date | null (last successful pull)
 //   CloudSync.deviceId()                   — device fingerprint string
+//   CloudSync.getProxyUrl() / setProxyUrl() — Cloudflare Worker proxy URL
 //
 // Safety: rolling backup `user-settings.json.bak` saved atomically in same PATCH.
 // Re-entrancy: push() is mutex-locked; concurrent markDirty calls collapse into 1.
+
+// ═══════════════════════════════════════════════════════════════════
+// GitHub API Worker proxy — fetch() monkey-patch
+// ───────────────────────────────────────────────────────────────────
+// When the user configures a Cloudflare Worker URL in Settings, ALL outgoing
+// `https://api.github.com/*` requests are transparently rewritten to go
+// through the Worker. The Worker holds the PAT as a server-side secret and
+// injects the Authorization header, so DevTools Network never shows the PAT.
+//
+// We monkey-patch fetch (instead of refactoring 30+ call sites) because:
+//   - There are 30+ direct `fetch(`${API}...`)` callers across page modules.
+//   - All such calls share the same rewrite rule (api.github.com → proxy).
+//   - Touching every callsite is risky; monkey-patching is one localized change.
+//
+// Safety: rewrite ONLY fires when (a) URL starts with https://api.github.com/
+// AND (b) proxy URL is set. Other fetch calls (Gist raw, fonts, etc.) are
+// untouched. We also strip the Authorization header on rewritten requests so
+// the PAT is never sent client-side (the Worker injects it).
+// ═══════════════════════════════════════════════════════════════════
+(function patchFetch() {
+  if (window.__ghFetchPatched) return;
+  window.__ghFetchPatched = true;
+  const PROXY_KEY = 'wf_dash_gh_proxy_url';
+  const GH_API = 'https://api.github.com';
+  const origFetch = window.fetch.bind(window);
+
+  function proxyUrl() {
+    try { return (localStorage.getItem(PROXY_KEY) || '').trim().replace(/\/+$/, ''); }
+    catch { return ''; }
+  }
+
+  window.fetch = function ghFetchProxy(input, init) {
+    const proxy = proxyUrl();
+    if (!proxy) return origFetch(input, init);
+
+    // Extract URL string regardless of input type (string | URL | Request)
+    let urlStr;
+    if (typeof input === 'string') urlStr = input;
+    else if (input instanceof URL) urlStr = input.toString();
+    else if (input instanceof Request) urlStr = input.url;
+    else return origFetch(input, init);
+
+    if (!urlStr.startsWith(GH_API + '/')) return origFetch(input, init);
+
+    const newUrl = proxy + urlStr.slice(GH_API.length);
+    // Strip Authorization header — Worker injects the PAT server-side.
+    const newInit = { ...(init || {}) };
+    if (newInit.headers) {
+      // Normalize to a plain object copy so we can delete cleanly
+      const h = newInit.headers instanceof Headers
+        ? Object.fromEntries(newInit.headers.entries())
+        : Array.isArray(newInit.headers)
+          ? Object.fromEntries(newInit.headers)
+          : { ...newInit.headers };
+      delete h['Authorization']; delete h['authorization'];
+      newInit.headers = h;
+    }
+    // If input was a Request object, we lose its body unless we re-wrap.
+    // For our codebase, callers pass strings; Request-object callers are rare.
+    if (input instanceof Request) {
+      // Re-derive method/body from the Request
+      return origFetch(new Request(newUrl, input));
+    }
+    return origFetch(newUrl, newInit);
+  };
+})();
 
 window.CloudSync = (function () {
   const GIST_ID = 'abc2a47c0a396025a72a6580227ff493';
@@ -70,14 +137,39 @@ window.CloudSync = (function () {
     REGISTERED.push({ key, label: label || sk, shortKey: sk });
   }
 
+  // ─── GitHub API proxy support ─────────────────────────
+  // If the user configured a Cloudflare Worker proxy URL in Settings, all
+  // GitHub API requests are routed through it. The proxy injects the PAT
+  // server-side so the browser never sends Authorization in DevTools.
+  // Falls back to direct api.github.com when no proxy is configured.
+  const PROXY_KEY = 'wf_dash_gh_proxy_url';
+  function _proxyUrl() {
+    try { return (localStorage.getItem(PROXY_KEY) || '').trim().replace(/\/+$/, ''); }
+    catch { return ''; }
+  }
+  // Rewrite https://api.github.com/X → <proxy>/X. Worker also accepts /gh/X prefix.
+  function _rewriteUrl(url) {
+    const proxy = _proxyUrl();
+    if (!proxy) return url;
+    if (url.startsWith('https://api.github.com/')) {
+      return proxy + url.slice('https://api.github.com'.length);
+    }
+    return url;
+  }
+
   async function _ghFetch(url, options = {}) {
-    const token = typeof _getToken === 'function' ? _getToken() : _getToken;
-    if (!token) throw new Error('no token');
+    const proxied = _rewriteUrl(url);
+    const usingProxy = proxied !== url;
     const headers = {
-      'Authorization': 'Bearer ' + token,
       'Accept': 'application/vnd.github+json',
       ...(options.headers || {}),
     };
+    // Only attach Authorization when going DIRECT — proxy injects it server-side.
+    if (!usingProxy) {
+      const token = typeof _getToken === 'function' ? _getToken() : _getToken;
+      if (!token) throw new Error('no token');
+      headers['Authorization'] = 'Bearer ' + token;
+    }
     // Retry on transient errors (429, 5xx, network blip). Idempotent ops
     // (GET, HEAD) get up to 3 attempts; mutations (PATCH/POST/PUT/DELETE) only
     // retry on connection errors (NEVER on 5xx — server may have committed).
@@ -88,7 +180,7 @@ window.CloudSync = (function () {
     let res = null;
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       try {
-        res = await fetch(url, { ...options, headers });
+        res = await fetch(proxied, { ...options, headers });
       } catch (e) {
         lastErr = e;
         if (attempt < maxAttempts - 1) {
@@ -302,6 +394,16 @@ window.CloudSync = (function () {
   return {
     init, register, pull, push, markDirty,
     fetchGist, getCachedGist, getTokenExpiry, invalidateGist,
+    // Proxy helpers — also used by app.js apiFetch and Settings UI
+    getProxyUrl: _proxyUrl,
+    setProxyUrl: (url) => {
+      try {
+        const clean = (url || '').trim().replace(/\/+$/, '');
+        if (clean) localStorage.setItem(PROXY_KEY, clean);
+        else localStorage.removeItem(PROXY_KEY);
+      } catch {}
+    },
+    rewriteUrl: _rewriteUrl,
     lastSyncedAt: () => _lastPulled,
     lastPushedAt: () => _lastPushedAt,
     deviceId: _deviceId,

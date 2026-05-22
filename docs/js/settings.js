@@ -13,6 +13,78 @@ function initSettingsPage() {
   renderBiometricStatus();
   renderThemeStatus();
   renderAiAuditStatus();
+  renderProxyStatus();
+}
+
+// ─────────────────────────────────────────────────────────────
+// GitHub API Worker proxy — settings UI handlers
+// ─────────────────────────────────────────────────────────────
+const PROXY_URL_KEY = 'wf_dash_gh_proxy_url';
+
+function _getProxyUrl() {
+  try { return (localStorage.getItem(PROXY_URL_KEY) || '').trim(); } catch { return ''; }
+}
+
+function renderProxyStatus() {
+  const host = document.getElementById('proxyStatus');
+  const input = document.getElementById('proxyUrlInput');
+  if (!host) return;
+  const url = _getProxyUrl();
+  if (input && !input.value) input.value = url;
+  if (url) {
+    host.innerHTML = `<div>✅ <strong>Active</strong> — using proxy at <code>${escapeHtml(url)}</code></div>
+      <div style="margin-top:4px;opacity:0.8">PAT is server-side. Authorization header is stripped from outgoing requests.</div>`;
+  } else {
+    host.innerHTML = `<div>⚪ <strong>Direct API</strong> — calls go straight to <code>api.github.com</code> with your PAT in headers.</div>
+      <div style="margin-top:4px;opacity:0.8">Paste a Worker URL below to harden security.</div>`;
+  }
+}
+
+async function testProxy() {
+  const input = document.getElementById('proxyUrlInput');
+  const btn = document.getElementById('proxyTestBtn');
+  const url = (input?.value || '').trim().replace(/\/+$/, '');
+  if (!url) { toast('⚠️ Nhập Worker URL trước', 'warning'); return; }
+  if (!/^https:\/\//.test(url)) { toast('⚠️ URL phải bắt đầu bằng https://', 'warning'); return; }
+  if (btn) { btn.disabled = true; btn.textContent = 'Testing...'; }
+  try {
+    // 1. /__health — no auth, just reachability + CORS
+    const h = await fetch(`${url}/__health`, { method: 'GET' });
+    if (!h.ok) throw new Error(`/__health → ${h.status}`);
+    const htxt = (await h.text()).trim();
+    if (htxt !== 'ok') throw new Error(`/__health body unexpected: ${htxt.slice(0, 40)}`);
+    // 2. /user — exercises PAT injection
+    const u = await fetch(`${url}/user`, { method: 'GET' });
+    if (!u.ok) throw new Error(`/user → ${u.status} (PAT secret missing on Worker?)`);
+    const me = await u.json();
+    toast(`✅ OK — Worker reachable, PAT valid (login: ${me.login})`, 'success');
+  } catch (e) {
+    toast(`❌ Test failed: ${e.message}`, 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = '<span data-icon="activity" data-size="14"></span> Test'; if (window.refreshIcons) window.refreshIcons(); }
+  }
+}
+
+function saveProxyUrl() {
+  const input = document.getElementById('proxyUrlInput');
+  const url = (input?.value || '').trim().replace(/\/+$/, '');
+  if (url && !/^https:\/\//.test(url)) { toast('⚠️ URL phải bắt đầu bằng https://', 'warning'); return; }
+  try {
+    if (url) localStorage.setItem(PROXY_URL_KEY, url);
+    else localStorage.removeItem(PROXY_URL_KEY);
+  } catch (e) {
+    toast('⚠️ Không lưu được: ' + e.message, 'error'); return;
+  }
+  renderProxyStatus();
+  toast('✅ Saved. Reload page (F5) để áp dụng cho tất cả tab.', 'success');
+}
+
+function clearProxyUrl() {
+  const input = document.getElementById('proxyUrlInput');
+  if (input) input.value = '';
+  try { localStorage.removeItem(PROXY_URL_KEY); } catch {}
+  renderProxyStatus();
+  toast('Proxy disabled. Reload to apply.', 'info');
 }
 
 function renderAiAuditStatus() {

@@ -1,0 +1,25 @@
+name = "fjp-dashboard-proxy"
+main = "src/index.js"
+compatibility_date = "2024-09-01"
+
+# ──────────────────────────────────────────────────────────────────
+# Non-secret config — edit these BEFORE first deploy.
+# ──────────────────────────────────────────────────────────────────
+[vars]
+# Comma-separated list of allowed Origin headers. Use the GH Pages site
+# in prod, plus localhost during local dev.
+ALLOWED_ORIGIN = "https://vutan11501.github.io,http://localhost:4173,http://127.0.0.1:4173,http://localhost:8000"
+
+# Limit repo-scoped routes to YOUR repo only. Worker will refuse any
+# /repos/{other-owner}/* even if the route shape matches.
+REPO_OWNER = "VuTan11501"
+REPO_NAME = "Code"
+
+# Limit /gists/* to this single Gist (the one used by Dashboard for state sync).
+# Worker will refuse any /gists/{other-id}/* even if route shape matches.
+GIST_ID = "abc2a47c0a396025a72a6580227ff493"
+
+# ──────────────────────────────────────────────────────────────────
+# Secrets — set via `wrangler secret put GITHUB_PAT` (NEVER commit).
+# ──────────────────────────────────────────────────────────────────
+# Required: GITHUB_PAT — the fine-grained PAT with repo + gist scopes.

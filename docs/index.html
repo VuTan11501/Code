@@ -883,6 +883,30 @@
           </div>
         </div>
 
+        <!-- GitHub API Proxy (optional, security hardening) -->
+        <div class="card settings-card">
+          <div class="card-header">
+            <div class="card-title"><span data-icon="shield" data-size="16"></span> GitHub API Proxy <span class="badge badge-info" style="margin-left:6px">optional</span></div>
+            <div class="card-description">Route all GitHub API calls through a Cloudflare Worker so the PAT never reaches the browser. See <code>worker/README.md</code> for the 5-step deploy.</div>
+          </div>
+          <div class="card-content">
+            <div id="proxyStatus" class="text-xs text-muted-foreground" style="line-height:1.6;margin-bottom:12px">
+              <!-- populated by renderProxyStatus() -->
+              Loading...
+            </div>
+            <label class="text-xs font-semibold" for="proxyUrlInput" style="display:block;margin-bottom:4px">Worker URL</label>
+            <input type="url" id="proxyUrlInput" class="input" style="width:100%;margin-bottom:8px" placeholder="https://fjp-dashboard-proxy.xxx.workers.dev" autocomplete="off" spellcheck="false">
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn btn-secondary" id="proxyTestBtn" onclick="testProxy()" data-tooltip="Call /__health then /user to verify the Worker is reachable and the PAT is valid"><span data-icon="activity" data-size="14"></span> Test</button>
+              <button class="btn btn-secondary" onclick="saveProxyUrl()" data-tooltip="Save URL and apply on next reload"><span data-icon="save" data-size="14"></span> Save</button>
+              <button class="btn btn-ghost" onclick="clearProxyUrl()" data-tooltip="Remove proxy → fall back to direct api.github.com calls (PAT visible in DevTools)"><span data-icon="trash" data-size="14"></span> Disable</button>
+            </div>
+            <p class="text-xs text-muted-foreground mt-3 leading-relaxed opacity-70">
+              When enabled, <code>fetch()</code> calls to <code>api.github.com</code> are transparently rewritten to <code>&lt;worker&gt;/…</code>. The PAT lives only as a Cloudflare-encrypted secret. <strong>Reload</strong> after saving for the change to take effect everywhere.
+            </p>
+          </div>
+        </div>
+
         <!-- About -->
         <div class="card settings-card">
           <div class="card-header">
@@ -1288,7 +1312,7 @@
      Source files live in docs/js/* for development; the bundle is what ships.
      To work on the raw source instead, comment the line below and re-enable
      the individual <script defer src="js/X.js"> tags (see git history). -->
-<script defer src="dist/app.bundle.min.js?v=8"></script>
+<script defer src="dist/app.bundle.min.js?v=9"></script>
 <!-- AI Proposal confirmation modal (Phase 3) -->
 <div id="aiProposalModal" class="proposal-modal" role="dialog" aria-modal="true" aria-labelledby="aiProposalTitle" hidden aria-hidden="true">
   <div class="proposal-modal-backdrop" onclick="AIProposals.closeModal()"></div>

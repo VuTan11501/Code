@@ -30,3 +30,8 @@ cloudflare-worker/.wrangler/
 test-results/
 playwright-report/
 playwright/.cache/
+
+# Cloudflare Worker secrets
+worker/.dev.vars
+worker/.wrangler/
+worker/node_modules/

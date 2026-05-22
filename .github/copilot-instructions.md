@@ -955,6 +955,55 @@ const calls = [
 
 ---
 
+## 11.5. 🛡️ GitHub API Worker Proxy (optional PAT hiding)
+
+**Files**: `worker/src/index.js`, `worker/wrangler.toml`, `worker/README.md`. Shipped May 23 2026.
+
+**Why**: Browser previously sent `Authorization: Bearer ghp_*` to `api.github.com` on every fetch → PAT visible in DevTools Network, leakable via screenshare/extensions. Worker holds PAT server-side as Cloudflare-encrypted secret, browser only knows the Worker URL.
+
+### Flow
+```
+Browser ──fetch(<worker>/repos/...)──▶ Cloudflare Worker
+                                         │ verify Origin (CORS allowlist)
+                                         │ verify route (regex allowlist)
+                                         │ verify method (GET/PATCH only)
+                                         │ inject Authorization: Bearer <PAT>
+                                         ▼
+                                       api.github.com
+```
+
+### Defense layers (single-user app, no shared secret needed)
+1. **Origin allowlist** (CORS) — `ALLOWED_ORIGIN` var; non-matching origins get 403 (browser-only check, curl-bypassable but limits XSS damage)
+2. **Route allowlist** — only `/repos/{OWNER}/{REPO}/*`, `/gists/{specific GIST_ID}`, `/user`, `/rate_limit`
+3. **Method allowlist** — gists: PATCH only (no DELETE); repos actions: GET + POST (dispatch/cancel)
+4. **GIST_ID hardcoded** — even if Worker URL leaks, only OUR gist is touchable
+5. **Health endpoint** `/__health` returns `ok` (no auth) for Settings "Test" button
+
+### Client wiring — fetch monkey-patch
+**File**: `docs/js/cloud-sync.js` top (runs BEFORE app.js + all page modules). Monkey-patches `window.fetch`:
+- If `localStorage.wf_dash_gh_proxy_url` is set AND URL starts with `https://api.github.com/`
+- → rewrite URL to `<proxy>/...` + strip `Authorization` header (Worker injects)
+- Otherwise pass through unchanged (backward-compat — works without Worker)
+
+**Why monkey-patch**: 30+ direct `fetch(\`${API}...\`)` callers across page modules (dashboard.js, schedule.js, ot-planner.js, timesheet.js, settings.js, ai-*.js). Monkey-patch = 1 localized change vs 30+ refactors. Side-effect surface bounded by URL prefix check.
+
+### Settings UI
+**File**: `docs/js/settings.js` — `renderProxyStatus()`, `testProxy()`, `saveProxyUrl()`, `clearProxyUrl()`.
+Card in `index.html` (between Cross-device Sync and About) has URL input + Test/Save/Disable buttons. **Test** calls `/__health` (reachability) then `/user` (PAT validation). User must reload after Save.
+
+### Deploy
+See `worker/README.md` 5-step guide. Requires Cloudflare account (free), `wrangler` CLI, ~10 min. Set GITHUB_PAT via `wrangler secret put GITHUB_PAT` (never in wrangler.toml).
+
+### Gotchas
+1. ⛔ **Don't put GITHUB_PAT in wrangler.toml** — only in secrets
+2. ⛔ **Don't allow `*` origin** — defeats CORS check
+3. ⚠️ Worker free tier = 100k req/day; current usage ~1-2k/day — plenty of headroom
+4. ⚠️ When adding new GitHub API routes the dashboard hits → add to `buildRouteRules(env)` in worker/src/index.js
+5. ⚠️ Suica fare proxy (`cloudflare-worker-fare/`) is a SEPARATE Worker for a different upstream — don't conflate
+6. ✅ Backward-compat: empty proxy URL = direct API (current behavior). Migration is opt-in per user.
+
+---
+
 ## 12. 🔐 Biometric Auto-Unlock (Face ID / Touch ID / Windows Hello)
 
 **File**: `docs/js/biometric.js`. Shipped May 19 2026. **PWA-only**.
