@@ -110,6 +110,45 @@ jobs:
           # Copy back to workspace root so upload-artifact can find it cleanly
           cp out.pdf "${GITHUB_WORKSPACE}/suica-${MONTH}.pdf"
 
+      - name: Verify generated PDF (forensic + structural)
+        env:
+          MONTH: ${{ inputs.month }}
+        continue-on-error: true
+        run: |
+          PDF="${GITHUB_WORKSPACE}/suica-${MONTH}.pdf"
+          TEMPLATE="${SKILL_ROOT}/fixtures/template.pdf"
+          MONTH_START="${MONTH}-01"
+          # Compute last day of the month portably
+          MONTH_END=$(python -c "import calendar,sys; y,m=map(int,sys.argv[1].split('-')); print(f'{y:04d}-{m:02d}-{calendar.monthrange(y,m)[1]:02d}')" "$MONTH")
+          echo "### Suica PDF verification" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          python .github/skills/suica-pdf-editor/scripts/suica_update.py verify \
+            "$PDF" \
+            --original "$TEMPLATE" \
+            --date-start "$MONTH_START" \
+            --date-end   "$MONTH_END" \
+            --skip-sun true \
+            --skip-holidays true 2>&1 | tee verify.log
+          VERIFY_EXIT=${PIPESTATUS[0]}
+          cat verify.log >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          if [ "$VERIFY_EXIT" -ne 0 ]; then
+            echo "::warning::Forensic verify reported issues (exit=$VERIFY_EXIT). PDF is still uploaded; see summary."
+          fi
+
+      - name: Pixel diff vs template (informational)
+        continue-on-error: true
+        env:
+          MONTH: ${{ inputs.month }}
+        run: |
+          PDF="${GITHUB_WORKSPACE}/suica-${MONTH}.pdf"
+          TEMPLATE="${SKILL_ROOT}/fixtures/template.pdf"
+          cd "${SKILL_ROOT}"
+          echo "### Pixel similarity vs template" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          python -m scripts.pdf_diff "$PDF" "$TEMPLATE" --threshold 0.0 --text-only 2>&1 | tee -a "$GITHUB_STEP_SUMMARY" || true
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
       - name: Upload PDF artifact
         uses: actions/upload-artifact@v4
         with:

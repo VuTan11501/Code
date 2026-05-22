@@ -255,27 +255,6 @@
     };
     slider.oninput = update;
     update();
-    $('whatif-copy').onclick = () => {
-      const s = Number(slider.value);
-      const newTarget = Math.round(baseSpent * s);
-      const cmd =
-        `python -m scripts.generate \\\n` +
-        `    --config data/presets/tokyo-commuter.json \\\n` +
-        `    --month ${data.month} \\\n` +
-        `    --target ${newTarget} \\\n` +
-        `    --seed 42 \\\n` +
-        `    --out out/${data.month}-whatif.json`;
-      navigator.clipboard.writeText(cmd).then(() => {
-        const btn = $('whatif-copy');
-        const orig = btn.innerHTML;
-        btn.innerHTML = '<span data-icon="check" data-size="14"></span><span class="btn-label">Copied!</span>';
-        if (window.refreshIcons) window.refreshIcons(btn);
-        setTimeout(() => {
-          btn.innerHTML = orig;
-          if (window.refreshIcons) window.refreshIcons(btn);
-        }, 1500);
-      });
-    };
   }
 
   function escapeHtml(s) {

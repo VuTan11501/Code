@@ -1037,10 +1037,13 @@
     const pdfBtn = $('planner-generate-pdf');
     if (pdfBtn) pdfBtn.addEventListener('click', (e) => generatePDF(e.currentTarget));
 
-    // Secondary export menu
-    $('planner-copy-preset').addEventListener('click', (e) => copy(JSON.stringify(buildPreset(), null, 2), e.currentTarget));
-    $('planner-copy-cli').addEventListener('click', (e) => copy(buildCli(), e.currentTarget));
-    $('planner-download').addEventListener('click', () => download(JSON.stringify(buildPreset(), null, 2), 'preset.json', 'application/json'));
+    // Backup menu (preset + history JSON download)
+    const cpPreset = $('planner-copy-preset');
+    if (cpPreset) cpPreset.addEventListener('click', (e) => copy(JSON.stringify(buildPreset(), null, 2), e.currentTarget));
+    const cpCli = $('planner-copy-cli');
+    if (cpCli) cpCli.addEventListener('click', (e) => copy(buildCli(), e.currentTarget));
+    const dlPreset = $('planner-download');
+    if (dlPreset) dlPreset.addEventListener('click', () => download(JSON.stringify(buildPreset(), null, 2), 'preset.json', 'application/json'));
     const dlJson = $('planner-download-json');
     if (dlJson) dlJson.addEventListener('click', () => {
       try {

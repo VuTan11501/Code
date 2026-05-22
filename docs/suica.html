@@ -154,7 +154,7 @@
           <span data-icon="target" data-size="16"></span> Design a Suica history
         </div>
         <div class="card-description">
-          Pick stations, build a weekly commute + leisure pool, then copy the matching CLI command or download a preset JSON.
+          Pick stations, build a weekly commute and a weekend trip pool, then click <strong>Generate Suica PDF</strong> &mdash; a GitHub Actions workflow renders a byte-faithful Mobile Suica PDF and the dashboard downloads it for you (~30&ndash;60s).
         </div>
       </div>
       <div class="card-content space-y-5">
@@ -194,7 +194,7 @@
             </button>
             <button id="planner-add-leisure" class="btn btn-outline sm" type="button" data-planner-add disabled>
               <span data-icon="plus" data-size="14"></span>
-              <span class="btn-label">Add to leisure pool</span>
+              <span class="btn-label">Add to weekend trip pool</span>
             </button>
           </div>
           <div id="planner-load-status" class="suica-info-box mt-3">
@@ -213,17 +213,17 @@
           <div id="planner-pattern" class="suica-grouped"></div>
         </div>
 
-        <!-- Leisure pool -->
+        <!-- Weekend trip pool -->
         <div>
           <div class="text-xs text-muted-foreground font-medium mb-2 flex items-center gap-2 uppercase tracking-wide">
-            <span data-icon="sparkles" data-size="12"></span> Leisure pool (weekend random trips)
+            <span data-icon="sparkles" data-size="12"></span> Weekend trip pool (random picks on Sat/Sun)
           </div>
           <div id="planner-leisure" class="suica-grouped"></div>
           <div class="flex items-center gap-3 mt-3 flex-wrap text-xs">
-            <span class="text-muted-foreground">Monthly outings:</span>
-            <input id="planner-leisure-min" type="number" min="0" max="20" class="input input-sm w-16 font-mono" aria-label="Minimum leisure outings per month">
+            <span class="text-muted-foreground">Weekend trips per month:</span>
+            <input id="planner-leisure-min" type="number" min="0" max="20" class="input input-sm w-16 font-mono" aria-label="Minimum weekend trips per month">
             <span class="text-muted-foreground">to</span>
-            <input id="planner-leisure-max" type="number" min="0" max="20" class="input input-sm w-16 font-mono" aria-label="Maximum leisure outings per month">
+            <input id="planner-leisure-max" type="number" min="0" max="20" class="input input-sm w-16 font-mono" aria-label="Maximum weekend trips per month">
           </div>
         </div>
 
@@ -246,8 +246,8 @@
               <input id="planner-target" type="number" min="0" step="500" class="input font-mono">
             </div>
             <div class="field">
-              <label class="field-label text-xs text-muted-foreground font-medium block mb-1" for="planner-seed">Seed</label>
-              <input id="planner-seed" type="number" min="0" class="input font-mono">
+              <label class="field-label text-xs text-muted-foreground font-medium block mb-1" for="planner-seed" data-tooltip="Random seed. Same seed + same plan = byte-identical PDF every time. Change it to roll a different schedule.">Random seed</label>
+              <input id="planner-seed" type="number" min="0" class="input font-mono" data-tooltip="Same seed + same plan = byte-identical PDF every time.">
             </div>
             <div class="field">
               <label class="field-label text-xs text-muted-foreground font-medium block mb-1" for="planner-initial">Initial balance (¥)</label>
@@ -279,7 +279,7 @@
               <div id="planner-estimate-commute" class="text-sm font-mono font-semibold text-foreground">¥—</div>
             </div>
             <div>
-              <div class="text-xs text-muted-foreground">Leisure (avg)</div>
+              <div class="text-xs text-muted-foreground">Weekend (avg)</div>
               <div id="planner-estimate-leisure" class="text-sm font-mono font-semibold text-foreground">¥—</div>
             </div>
             <div>
@@ -298,24 +298,16 @@
           <span id="planner-pdf-status" class="text-xs text-muted-foreground"></span>
           <div class="flex-1"></div>
           <details class="relative">
-            <summary class="btn sm btn-outline cursor-pointer list-none">
+            <summary class="btn sm btn-outline cursor-pointer list-none" data-tooltip="Backup or share the raw plan / generated history">
               <span data-icon="moreVertical" data-size="14"></span>
-              <span class="btn-label">Export CLI / preset</span>
+              <span class="btn-label">Backup</span>
             </summary>
             <div class="absolute right-0 top-full mt-1 bg-card border border-border rounded-md shadow-lg p-1 z-20 min-w-[220px] flex flex-col gap-1">
-              <button id="planner-copy-cli" class="btn btn-ghost sm justify-start" type="button">
-                <span data-icon="copy" data-size="14"></span>
-                <span class="btn-label">Copy CLI command</span>
-              </button>
-              <button id="planner-copy-preset" class="btn btn-ghost sm justify-start" type="button">
-                <span data-icon="copy" data-size="14"></span>
-                <span class="btn-label">Copy preset JSON</span>
-              </button>
-              <button id="planner-download" class="btn btn-ghost sm justify-start" type="button">
+              <button id="planner-download" class="btn btn-ghost sm justify-start" type="button" data-tooltip="Save the trip plan so you can reload it later">
                 <span data-icon="download" data-size="14"></span>
                 <span class="btn-label">Download preset.json</span>
               </button>
-              <button id="planner-download-json" class="btn btn-ghost sm justify-start" type="button">
+              <button id="planner-download-json" class="btn btn-ghost sm justify-start" type="button" data-tooltip="Save the in-browser preview as JSON (useful for analysis)">
                 <span data-icon="download" data-size="14"></span>
                 <span class="btn-label">Download history.json</span>
               </button>
@@ -413,7 +405,7 @@
             <span data-icon="wand" data-size="16"></span> Linear rescale
           </div>
           <div class="card-description">
-            Scales the observed spend. Useful to forecast how a different budget would land — then copy the equivalent CLI command.
+            Scales the observed spend to preview what a different budget would look like. Drag the slider, then jump back to the planner above and re-generate with the new target.
           </div>
         </div>
         <div class="card-content">
@@ -423,10 +415,6 @@
             <div class="separator h-6 w-px bg-border mx-1"></div>
             <div class="text-xs text-muted-foreground">new target</div>
             <div class="text-base font-mono font-bold text-primary"><span id="whatif-target">¥—</span></div>
-            <button id="whatif-copy" class="btn sm primary ml-auto">
-              <span data-icon="copy" data-size="14"></span>
-              <span class="btn-label">Copy CLI command</span>
-            </button>
           </div>
         </div>
       </div>
@@ -517,7 +505,7 @@
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js" defer></script>
 <script src="js/icons.js?v=1" defer></script>
 <script src="js/theme.js?v=1" defer></script>
-<script src="js/suica-history.js?v=5" defer></script>
-<script src="js/suica-planner.js?v=7" defer></script>
+<script src="js/suica-history.js?v=6" defer></script>
+<script src="js/suica-planner.js?v=8" defer></script>
 </body>
 </html>
