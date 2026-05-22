@@ -2344,6 +2344,33 @@
         _logCtx.completed = false;
         if (_logCtx.pollTimer) { clearInterval(_logCtx.pollTimer); _logCtx.pollTimer = null; }
         setStatus(`Dispatching workflow${tag}…`, 'text-muted-foreground');
+        // Auto-snapshot the current plan right before dispatch so the user can
+        // always recover the exact inputs that produced a given PDF. Skipped if
+        // an identical-named snapshot already exists from the last few seconds
+        // (prevents duplicates when generating multiple presets in quick fire).
+        try {
+          if (state.settings && state.settings.autoSnapshot !== false) {
+            const stamp = new Date();
+            const autoName = `Auto · ${stamp.toISOString().slice(0, 16).replace('T', ' ')}${tag ? ' ' + tag.trim() : ''}`;
+            const existing = loadSnapshots();
+            const tooRecent = existing.some((s) => s.name === autoName);
+            if (!tooRecent) {
+              existing.push({
+                id: 'snap-auto-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+                name: autoName,
+                created_at: stamp.toISOString(),
+                pattern: JSON.parse(JSON.stringify(state.pattern)),
+                leisure: JSON.parse(JSON.stringify(state.leisure)),
+                settings: JSON.parse(JSON.stringify(state.settings)),
+                route: currentRoute(),
+                auto: true,
+                tags: ['auto'],
+              });
+              saveSnapshots(existing);
+              renderSnapshots();
+            }
+          }
+        } catch (_) {}
         const dispatchedAt = Date.now();
         await _dispatchWorkflow(token, preset);
         setStatus(`Workflow dispatched${tag} — waiting for run…`, 'text-muted-foreground');
