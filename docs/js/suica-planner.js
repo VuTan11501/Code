@@ -3450,37 +3450,64 @@
   function showShortcutsHelp() {
     const wrap = $('planner-shortcuts-help');
     if (!wrap) return;
-    if (!wrap.dataset.built) {
-      wrap.innerHTML = `
+    const SHORTCUTS = [
+      { keys: ['G'], desc: 'Generate PDF' },
+      { keys: ['A'], desc: 'Auto-suggest from target' },
+      { keys: ['C'], desc: 'Compare 3 options' },
+      { keys: ['R'], desc: 'Re-roll seed' },
+      { keys: ['S'], desc: 'Save snapshot' },
+      { keys: ['Ctrl', 'Z'], desc: 'Undo' },
+      { keys: ['Ctrl', 'Shift', 'Z'], desc: 'Redo' },
+      { keys: ['T'], desc: 'Toggle light/dark theme' },
+      { keys: ['?'], desc: 'Show this help' },
+      { keys: ['Esc'], desc: 'Close popovers' },
+    ];
+    const lastFocus = document.activeElement;
+    function build(query) {
+      const q = (query || '').trim().toLowerCase();
+      const matches = q ? SHORTCUTS.filter((s) => s.desc.toLowerCase().indexOf(q) >= 0 || s.keys.join(' ').toLowerCase().indexOf(q) >= 0) : SHORTCUTS;
+      return `
         <div class="card">
           <div class="card-header pb-2">
             <div class="card-title flex items-center gap-2 text-sm">
               <span data-icon="key" data-size="14"></span> Keyboard shortcuts
+              <input id="planner-shortcuts-search" type="search" placeholder="Filter…" class="input input-sm w-32 ml-2 text-xs" autocomplete="off" value="${(query || '').replace(/"/g, '&quot;')}">
               <button type="button" class="ml-auto btn sm btn-ghost" id="planner-shortcuts-close" aria-label="Close">
                 <span data-icon="x" data-size="12"></span>
               </button>
             </div>
           </div>
           <div class="card-content">
-            <dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
-              <dt><kbd class="kbd-key">G</kbd></dt><dd>Generate PDF</dd>
-              <dt><kbd class="kbd-key">A</kbd></dt><dd>Auto-suggest from target</dd>
-              <dt><kbd class="kbd-key">C</kbd></dt><dd>Compare 3 options</dd>
-              <dt><kbd class="kbd-key">R</kbd></dt><dd>Re-roll seed</dd>
-              <dt><kbd class="kbd-key">S</kbd></dt><dd>Save snapshot</dd>
-              <dt><kbd class="kbd-key">Ctrl</kbd>+<kbd class="kbd-key">Z</kbd></dt><dd>Undo</dd>
-              <dt><kbd class="kbd-key">Ctrl</kbd>+<kbd class="kbd-key">Shift</kbd>+<kbd class="kbd-key">Z</kbd></dt><dd>Redo</dd>
-              <dt><kbd class="kbd-key">?</kbd></dt><dd>Show this help</dd>
-              <dt><kbd class="kbd-key">Esc</kbd></dt><dd>Close popovers</dd>
+            <dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm" tabindex="-1">
+              ${matches.map((s) => `<dt>${s.keys.map((k) => `<kbd class="kbd-key">${k}</kbd>`).join('+')}</dt><dd>${s.desc}</dd>`).join('')}
+              ${!matches.length ? '<dd class="col-span-2 text-xs italic text-muted-foreground py-2">No shortcuts match.</dd>' : ''}
             </dl>
           </div>
         </div>`;
-      wrap.dataset.built = '1';
-      wrap.querySelector('#planner-shortcuts-close').addEventListener('click', () => wrap.classList.add('hidden'));
+    }
+    function render(query) {
+      wrap.innerHTML = build(query);
+      const search = wrap.querySelector('#planner-shortcuts-search');
+      const close = wrap.querySelector('#planner-shortcuts-close');
+      if (close) close.addEventListener('click', () => {
+        wrap.classList.add('hidden');
+        if (lastFocus && lastFocus.focus) try { lastFocus.focus(); } catch (_) {}
+      });
+      if (search) {
+        search.addEventListener('input', () => {
+          const v = search.value, pos = search.selectionStart;
+          render(v);
+          const fresh = wrap.querySelector('#planner-shortcuts-search');
+          if (fresh) { fresh.focus(); try { fresh.setSelectionRange(pos, pos); } catch (_) {} }
+        });
+      }
       if (window.refreshIcons) window.refreshIcons(wrap);
     }
+    render('');
     wrap.classList.remove('hidden');
     wrap.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    const s = wrap.querySelector('#planner-shortcuts-search');
+    if (s) setTimeout(() => s.focus(), 50);
   }
 
   // ────── Init ──────
