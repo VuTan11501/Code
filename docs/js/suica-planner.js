@@ -44,6 +44,11 @@
 
   // ────── Load fare data ──────
   async function loadFares() {
+    const setStatus = (html, variant) => {
+      const box = $('planner-load-status');
+      box.innerHTML = `<span data-icon="${variant === 'error' ? 'alert' : 'info'}" data-size="14"></span><div class="flex-1">${html}</div>`;
+      if (window.refreshIcons) window.refreshIcons(box);
+    };
     try {
       const res = await fetch('data/kanto_fares.json', { cache: 'no-cache' });
       if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -56,11 +61,12 @@
       });
       state.stations = Array.from(set).sort((x, y) => x.localeCompare(y, 'ja'));
       populateDatalist();
-      $('planner-load-status').textContent =
-        `Loaded ${state.stations.length} stations · ${Object.keys(state.fares).length} known fares`;
+      setStatus(
+        `<strong>${state.stations.length}</strong> Kanto stations · <strong>${Object.keys(state.fares).length}</strong> known IC fares loaded. Pick a route above to add it to your plan.`,
+        'info'
+      );
     } catch (err) {
-      $('planner-load-status').innerHTML =
-        `<span class="status-badge status-failure">Failed to load fare data: ${err.message}</span>`;
+      setStatus(`Failed to load fare data: ${err.message}`, 'error');
     }
   }
 
@@ -72,7 +78,6 @@
   }
 
   // ────── Import stations from a loaded history ──────
-  // suica-history.js dispatches 'suica:loaded' with detail = MonthlyHistory
   window.addEventListener('suica:loaded', (ev) => {
     const h = ev.detail; if (!h || !h.entries) return;
     const fresh = new Set(state.stations);
@@ -80,8 +85,9 @@
     if (fresh.size !== state.stations.length) {
       state.stations = Array.from(fresh).sort((x, y) => x.localeCompare(y, 'ja'));
       populateDatalist();
-      $('planner-load-status').textContent =
-        `Loaded ${state.stations.length} stations (incl. from history) · ${Object.keys(state.fares).length} known fares`;
+      const box = $('planner-load-status');
+      box.innerHTML = `<span data-icon="check" data-size="14"></span><div class="flex-1"><strong>${state.stations.length}</strong> stations (including from your loaded history) · <strong>${Object.keys(state.fares).length}</strong> known IC fares.</div>`;
+      if (window.refreshIcons) window.refreshIcons(box);
     }
   });
 
@@ -103,12 +109,19 @@
     const to = $('planner-to').value.trim();
     const out = $('planner-fare-out');
     const addBtns = document.querySelectorAll('[data-planner-add]');
-    if (!from || !to) { out.textContent = '—'; out.className = 'text-sm text-muted-foreground font-mono'; addBtns.forEach((b) => b.setAttribute('disabled', '')); return; }
-    if (from === to) { out.textContent = 'pick different stations'; out.className = 'text-sm text-muted-foreground font-mono'; addBtns.forEach((b) => b.setAttribute('disabled', '')); return; }
+    const setBadge = (text, variant) => {
+      out.className = 'status-badge ' + variant;
+      out.textContent = text;
+    };
+    if (!from || !to) { setBadge('Pick from & to', 'status-skipped'); addBtns.forEach((b) => b.setAttribute('disabled', '')); return; }
+    if (from === to) { setBadge('Pick different stations', 'status-failure'); addBtns.forEach((b) => b.setAttribute('disabled', '')); return; }
     const r = lookupFare(from, to);
-    if (!r) { out.textContent = '—'; addBtns.forEach((b) => b.setAttribute('disabled', '')); return; }
-    out.innerHTML = `${fmtYen(r.fare)} <span class="text-xs text-muted-foreground">(${r.source === 'known' ? 'known IC' : 'estimate · will resolve via API'})</span>`;
-    out.className = 'text-sm font-mono ' + (r.source === 'known' ? 'text-foreground' : 'text-muted-foreground');
+    if (!r) { setBadge('No data', 'status-skipped'); addBtns.forEach((b) => b.setAttribute('disabled', '')); return; }
+    if (r.source === 'known') {
+      setBadge(`${fmtYen(r.fare)} · known IC`, 'status-success');
+    } else {
+      setBadge(`${fmtYen(r.fare)} · estimate (will resolve via API)`, 'status-pending');
+    }
     addBtns.forEach((b) => b.removeAttribute('disabled'));
   }
 
