@@ -119,6 +119,12 @@
     background: var(--accent); color: var(--foreground);
   }
   .combobox-item.is-selected::before { content: '✓ '; color: var(--primary); margin-right: 4px; }
+  .combobox-item-name { flex: 0 0 auto; }
+  .combobox-item-sub {
+    margin-left: auto; font-size: var(--fs-xs); color: var(--muted-foreground);
+    font-family: var(--font-mono, monospace); letter-spacing: 0.02em;
+  }
+  .combobox-trigger-sub { color: var(--muted-foreground); font-size: var(--fs-xs); font-weight: normal; }
   .combobox-empty { padding: 12px; text-align: center; color: var(--muted-foreground); font-size: var(--fs-xs); }
 </style>
 </head>
@@ -506,6 +512,6 @@
 <script src="js/icons.js?v=1" defer></script>
 <script src="js/theme.js?v=1" defer></script>
 <script src="js/suica-history.js?v=6" defer></script>
-<script src="js/suica-planner.js?v=8" defer></script>
+<script src="js/suica-planner.js?v=9" defer></script>
 </body>
 </html>

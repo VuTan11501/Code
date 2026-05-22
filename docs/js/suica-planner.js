@@ -21,7 +21,8 @@
   // ────── State ──────
   const state = {
     fares: {},                    // "東京↔新宿" → 210
-    stations: [],                 // ["東京", "新宿", …] unique, sorted
+    stations: [],                 // ["東京", "新宿", …] unique, sorted (canonical kanji names)
+    stationMeta: {},              // "東京" → { kana, romaji, alt:[] } — for combobox search & display
     pattern: { monday: [], tuesday: [], wednesday: [], thursday: [], friday: [], saturday: [], sunday: [] },
     leisure: [],                  // [{ route: "新宿↔横浜", weight: 3 }]
     settings: {
@@ -42,7 +43,7 @@
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
   }
 
-  // ────── Load fare data ──────
+  // ────── Load fare data + station catalogue ──────
   async function loadFares() {
     const setStatus = (html, variant) => {
       const box = $('planner-load-status');
@@ -50,20 +51,43 @@
       if (window.refreshIcons) window.refreshIcons(box);
     };
     try {
-      const res = await fetch('data/kanto_fares.json', { cache: 'no-cache' });
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      const data = await res.json();
+      // Fetch both files in parallel. Stations is optional (degrades gracefully).
+      const [faresRes, stationsRes] = await Promise.all([
+        fetch('data/kanto_fares.json', { cache: 'no-cache' }),
+        fetch('data/kanto_stations.json', { cache: 'no-cache' }).catch(() => null),
+      ]);
+      if (!faresRes.ok) throw new Error('HTTP ' + faresRes.status);
+      const data = await faresRes.json();
       state.fares = data.fares || {};
+
       const set = new Set();
       Object.keys(state.fares).forEach((k) => {
         const [a, b] = k.split('↔');
         if (a) set.add(a); if (b) set.add(b);
       });
+
+      // Merge in the wider station catalogue (kanji + kana + romaji)
+      state.stationMeta = {};
+      if (stationsRes && stationsRes.ok) {
+        try {
+          const sdata = await stationsRes.json();
+          (sdata.stations || []).forEach((s) => {
+            if (!s || !s.name) return;
+            set.add(s.name);
+            state.stationMeta[s.name] = {
+              kana: s.kana || '',
+              romaji: (s.romaji || '').toLowerCase(),
+              alt: (s.alt || []).map((x) => String(x).toLowerCase()),
+            };
+          });
+        } catch (e) { console.warn('stations.json parse failed:', e); }
+      }
       state.stations = Array.from(set).sort((x, y) => x.localeCompare(y, 'ja'));
       buildFareGraph();
       populateComboboxes();
+      const withRomaji = Object.keys(state.stationMeta).length;
       setStatus(
-        `<strong>${state.stations.length}</strong> Kanto stations · <strong>${Object.keys(state.fares).length}</strong> known IC fares loaded. Pick a route above to add it to your plan.`,
+        `<strong>${state.stations.length}</strong> Kanto stations (${withRomaji} searchable by romaji) · <strong>${Object.keys(state.fares).length}</strong> known IC fares. Pick a route above to add it to your plan.`,
         'info'
       );
     } catch (err) {
@@ -72,6 +96,20 @@
   }
 
   // ────── Combobox component (shadcn-style) ──────
+  // Options are canonical kanji station names (strings). For each option we
+  // optionally look up state.stationMeta[name] to enable kana/romaji search
+  // and render a secondary romaji label.
+  function _searchHaystack(name) {
+    const m = state.stationMeta && state.stationMeta[name];
+    if (!m) return name.toLowerCase();
+    // Build a single lowercase haystack: kanji + kana + romaji + alts
+    return (name + ' ' + (m.kana || '') + ' ' + (m.romaji || '') + ' ' + (m.alt || []).join(' ')).toLowerCase();
+  }
+  function _renderOption(name) {
+    const m = state.stationMeta && state.stationMeta[name];
+    if (!m || !m.romaji) return `<span class="combobox-item-name">${name}</span>`;
+    return `<span class="combobox-item-name">${name}</span><span class="combobox-item-sub">${m.romaji}</span>`;
+  }
   function createCombobox(wrapper, opts) {
     const trigger = wrapper.querySelector('.combobox-trigger');
     const placeholderText = (opts && opts.placeholder) || 'Pick…';
@@ -85,7 +123,9 @@
 
     function render() {
       if (value) {
-        trigger.innerHTML = `<span>${value}</span>`;
+        const m = state.stationMeta && state.stationMeta[value];
+        const sub = m && m.romaji ? ` <span class="combobox-trigger-sub">· ${m.romaji}</span>` : '';
+        trigger.innerHTML = `<span>${value}${sub}</span>`;
       } else {
         trigger.innerHTML = `<span class="combobox-placeholder">${placeholderText}</span>`;
       }
@@ -95,7 +135,7 @@
       panel = document.createElement('div');
       panel.className = 'combobox-panel';
       panel.innerHTML = `
-        <input type="text" class="input input-sm combobox-search" placeholder="Search station…" autocomplete="off">
+        <input type="text" class="input input-sm combobox-search" placeholder="Search by kanji, kana, or romaji…" autocomplete="off">
         <div class="combobox-list" role="listbox"></div>
       `;
       wrapper.appendChild(panel);
@@ -108,7 +148,22 @@
       renderList();
       searchEl.addEventListener('input', () => {
         const q = searchEl.value.trim().toLowerCase();
-        filtered = !q ? options.slice() : options.filter((o) => o.toLowerCase().includes(q));
+        if (!q) {
+          filtered = options.slice();
+        } else {
+          // Rank: prefix-match on any field beats substring match
+          const scored = [];
+          for (const o of options) {
+            const hay = _searchHaystack(o);
+            const idx = hay.indexOf(q);
+            if (idx < 0) continue;
+            // Prefer matches at word boundaries (start of haystack or after space)
+            const boundary = idx === 0 || hay[idx - 1] === ' ';
+            scored.push({ o, score: (boundary ? 0 : 100) + idx });
+          }
+          scored.sort((a, b) => a.score - b.score);
+          filtered = scored.map((s) => s.o);
+        }
         activeIdx = 0;
         renderList();
       });
@@ -125,7 +180,7 @@
         const cls = ['combobox-item'];
         if (o === value) cls.push('is-selected');
         if (i === activeIdx) cls.push('is-active');
-        return `<div class="${cls.join(' ')}" data-i="${i}" role="option">${o}</div>`;
+        return `<div class="${cls.join(' ')}" data-i="${i}" role="option">${_renderOption(o)}</div>`;
       }).join('');
       listEl.querySelectorAll('.combobox-item').forEach((el) => {
         el.addEventListener('click', () => choose(filtered[+el.dataset.i]));
@@ -163,7 +218,11 @@
 
     render();
     return {
-      setOptions(newOpts) { options = newOpts.slice(); },
+      setOptions(newOpts) {
+        options = newOpts.slice();
+        if (panel) { filtered = options.slice(); activeIdx = Math.max(0, options.indexOf(value)); renderList(); }
+        else render();
+      },
       setValue(v) { value = v || ''; render(); },
       getValue() { return value; },
     };
