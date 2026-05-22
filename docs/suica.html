@@ -175,6 +175,28 @@
     .status-badge { border: 1px solid CanvasText; }
     .btn { border: 1px solid CanvasText; }
   }
+
+  /* ─── Print: hide controls, force light theme, expand content ─── */
+  @media print {
+    :root, html, html[data-theme="dark"], html[data-theme="light"] {
+      color-scheme: light !important;
+      background: #ffffff !important;
+    }
+    body {
+      background: #ffffff !important;
+      color: #111111 !important;
+    }
+    /* Hide interactive chrome that doesn't print well */
+    header, .planner-multi-suggest-panel, .planner-shortcuts-help,
+    .planner-snapshots-section, .planner-recent-section,
+    #planner-fare-range-row, #planner-load-status,
+    #suicaPdfOverlay, #suicaLogModal, #app-toast-host,
+    .btn, .combobox-panel, button { display: none !important; }
+    /* Keep the at-a-glance estimate readable on paper */
+    main { max-width: none !important; padding: 0 !important; }
+    .card { box-shadow: none !important; border: 1px solid #ccc !important; page-break-inside: avoid; }
+    a { color: inherit !important; text-decoration: none !important; }
+  }
 </style>
 </head>
 <body class="bg-background text-foreground font-sans text-sm antialiased min-h-dvh overflow-x-hidden">
@@ -671,6 +693,6 @@
 <script src="js/suica-history.js?v=6" defer></script>
 <script src="js/log-viewer.js?v=1" defer></script>
 <script>window.SUICA_FARE_API='https://suica-fare-proxy.workflow-dashboard.workers.dev';</script>
-<script src="js/suica-planner.js?v=37" defer></script>
+<script src="js/suica-planner.js?v=38" defer></script>
 </body>
 </html>
