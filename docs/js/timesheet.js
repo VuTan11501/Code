@@ -148,6 +148,12 @@ function _minToHhmm(min) {
 function _calcLostForDay(d) {
   const req = _hhmmToMin(d.otRequest);
   if (req <= 0) return { lostMin: 0, sundayLostMin: 0, nightLostMin: 0 };
+  // Skip future dates: OT for days that haven't happened yet can't be "lost".
+  if (d.date) {
+    const today = new Date();
+    const todayKey = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+    if (d.date > todayKey) return { lostMin: 0, sundayLostMin: 0, nightLostMin: 0 };
+  }
   const actual = _hhmmToMin(d.otNormal) + _hhmmToMin(d.otSat) + _hhmmToMin(d.otSun);
   const gap = req - actual;
   if (gap <= LOST_OT_TOLERANCE_MIN) {
