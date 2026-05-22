@@ -2770,7 +2770,19 @@
         override: overrides[k] != null ? overrides[k] : null,
       }));
       const q = search.trim().toLowerCase();
-      const filtered = q ? all.filter((r) => r.route.toLowerCase().indexOf(q) >= 0) : all;
+      const meta = state.stationMeta || {};
+      function haystack(routeKey) {
+        // Route keys look like "東京↔新宿"; build a haystack that includes both
+        // endpoints' romaji + kana so search works in any of the three scripts.
+        const parts = routeKey.split(/[↔→\->]/).map((p) => p.trim()).filter(Boolean);
+        let s = routeKey;
+        parts.forEach((p) => {
+          const m = meta[p];
+          if (m) s += ' ' + (m.kana || '') + ' ' + (m.romaji || '');
+        });
+        return s.toLowerCase();
+      }
+      const filtered = q ? all.filter((r) => haystack(r.route).indexOf(q) >= 0) : all;
       filtered.sort((a, b) => {
         let av, bv;
         if (sortBy === 'route') { av = a.route; bv = b.route; return sortDir * av.localeCompare(bv, 'ja'); }
@@ -2794,7 +2806,7 @@
           <h3 class="font-semibold text-sm flex-1">Fare table · ${all.length} routes · ${overrideCount} overridden</h3>
           <button type="button" class="btn btn-ghost sm" data-close>×</button>
         </div>
-        <input type="search" id="fare-table-search" placeholder="Filter by route (kanji)…" class="input input-sm w-full mb-2" value="${search.replace(/"/g, '&quot;')}" autocomplete="off">
+        <input type="search" id="fare-table-search" placeholder="Filter by kanji, kana, or romaji…" class="input input-sm w-full mb-2" value="${search.replace(/"/g, '&quot;')}" autocomplete="off">
         <div class="text-[10px] text-muted-foreground mb-1">Click headers to sort. Showing first 500 rows; refine the search to see more.</div>
         <table class="w-full text-xs">
           <thead><tr class="text-muted-foreground border-b border-border">
