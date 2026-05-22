@@ -3638,6 +3638,20 @@ body.ai-page-active .ai-dot-grid {
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
+.ts-chip-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 0;
+}
+.ts-chip-label-extras {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.ts-chip-label-extras .ts-chip-badge { margin-left: 0; }
 .ts-chip-value {
   font-size: 13px;
   font-weight: 600;
@@ -3653,7 +3667,7 @@ body.ai-page-active .ai-dot-grid {
   font-variant-numeric: tabular-nums;
 }
 .ts-chip-salary { cursor: help; }
-.ts-chip-salary .ts-chip-value { color: var(--green, #16a34a); display: inline-flex; align-items: center; gap: 4px; }
+.ts-chip-salary .ts-chip-value { color: var(--green, #16a34a); }
 .ts-chip-eye {
   display: inline-flex;
   align-items: center;

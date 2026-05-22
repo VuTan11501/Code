@@ -293,10 +293,11 @@ function renderTimesheet() {
     const payDateStr = window.OT_SALARY.formatPayDate(key);
     const eyeIcon = (window.ICON ? window.ICON('eye', 14) : '👁');
 
-    let salaryVal, salaryTip;
+    let salaryVal, salaryTip, salaryExtras = '';
     if (realSlip && realSlip.take_home != null) {
       const eyeBtn = `<button class="ts-chip-eye ot-takehome-clickable" data-payslip-month="${key}" aria-label="View payslip detail">${eyeIcon}</button>`;
-      salaryVal = `${F(realSlip.take_home)} <span class="ts-chip-badge ts-chip-badge-actual">actual</span>${eyeBtn}`;
+      salaryVal = F(realSlip.take_home);
+      salaryExtras = `<span class="ts-chip-badge ts-chip-badge-actual">actual</span>${eyeBtn}`;
       salaryTip = `Actual take-home for work month ${key}\n`
                 + `(paid ${payDateStr} · payslip ${realSlip.month})\n`
                 + `• Gross: ${F(realSlip.gross || 0)}\n`
@@ -306,7 +307,8 @@ function renderTimesheet() {
     } else if (baseline) {
       const est = window.OT_SALARY.calcFullMonthEstimate(otGross, baseline, { basicSalaryIndex: 1.0 });
       const eyeBtn = `<button class="ts-chip-eye ot-takehome-clickable" data-payslip-month="${key}" data-payslip-estimate="1" aria-label="View payslip estimate">${eyeIcon}</button>`;
-      salaryVal = `${F(est.takeHome)} <span class="ts-chip-badge">est.</span>${eyeBtn}`;
+      salaryVal = F(est.takeHome);
+      salaryExtras = `<span class="ts-chip-badge">est.</span>${eyeBtn}`;
       salaryTip = `Estimated take-home for work month ${key}\n`
                 + `(will be paid ${payDateStr} · baseline: payslip ${baseline.month})\n`
                 + `• Total gross: ${F(est.gross)}\n`
@@ -318,7 +320,8 @@ function renderTimesheet() {
                 + `• − Company receivables: ${F(est.companyReceivables)}\n`
                 + `= ${F(est.takeHome)}`;
     } else {
-      salaryVal = `${F(otGross)} <span class="ts-chip-badge">OT gross</span>`;
+      salaryVal = F(otGross);
+      salaryExtras = `<span class="ts-chip-badge">OT gross</span>`;
       salaryTip = `OT gross only (no payslip baseline available — add a payslip in OT Planner first):\n`
                 + `• Base 125% × ${totalH.toFixed(2)}h: ${F(baseOTLine)}\n`
                 + (sundayLine ? `• Sunday +10% × ${sundayH.toFixed(2)}h: ${F(sundayLine)}\n` : '')
@@ -326,7 +329,7 @@ function renderTimesheet() {
                 + `• Fixed allowance: ${F(SAL.FIXED_ALLOWANCE_YEN)}\n`
                 + `= ${F(otGross)} (gross, pre-tax)`;
     }
-    chips.push(['Salary', { html: salaryVal, tip: salaryTip, cls: 'ts-chip-salary' }]);
+    chips.push(['Salary', { html: salaryVal, tip: salaryTip, cls: 'ts-chip-salary', extras: salaryExtras }]);
   }
 
   let chipsHtml = '';
@@ -336,9 +339,13 @@ function renderTimesheet() {
     const aux = c[2] || '';
     if (val && typeof val === 'object') {
       const tip = (val.tip || '').replace(/"/g, '&quot;');
+      const extras = val.extras ? `<div class="ts-chip-label-extras">${val.extras}</div>` : '';
       chipsHtml += `
         <div class="ts-chip ${val.cls || ''} tooltip-trigger" data-tooltip="${tip}">
-          <div class="ts-chip-label">${label}</div>
+          <div class="ts-chip-label-row">
+            <div class="ts-chip-label">${label}</div>
+            ${extras}
+          </div>
           <div class="ts-chip-value">${val.html}</div>
         </div>`;
     } else {
