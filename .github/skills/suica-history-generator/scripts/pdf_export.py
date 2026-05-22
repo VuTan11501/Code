@@ -272,6 +272,15 @@ class PdfExporter:
                         self._insert_row_text(page, tr, new)
                     flat_idx2 += 1
 
+            # Subset embedded fonts to only glyphs actually used. Without this,
+            # PyMuPDF embeds the full IPA Gothic (~5 MB) into the PDF on every
+            # `insert_text` call, ballooning the output from ~150 KB to 4-5 MB.
+            # Real Mobile Suica PDFs ship with subsetted fonts so the user
+            # noticed the size mismatch immediately.
+            try:
+                doc.subset_fonts()
+            except Exception as e:
+                log.warning("subset_fonts() failed (continuing without subset): %s", e)
             doc.save(output_pdf, deflate=True, garbage=4)
         finally:
             doc.close()
