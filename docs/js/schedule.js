@@ -182,7 +182,12 @@ async function checkAndDispatchOverdue() {
       scheduleNextDispatch([]);
       return;
     }
-    const entries = JSON.parse(file.content);
+    const fileContent = window.readGistFile ? await window.readGistFile(file) : file.content || '';
+    if (!fileContent) {
+      scheduleNextDispatch([]);
+      return;
+    }
+    const entries = JSON.parse(fileContent);
     const hadDispatches = await clientSideDispatchOverdue(entries);
     if (hadDispatches) {
       renderScheduleCalendar(entries);
@@ -1134,7 +1139,8 @@ async function getPendingCheckoutAhead() {
   try {
     const gist = await apiFetch(`/gists/${GIST_ID}`);
     const file = gist.files['scheduled-runs.json'];
-    const entries = file ? JSON.parse(file.content) : [];
+    const fileContent = file ? (window.readGistFile ? await window.readGistFile(file) : file.content || '') : '';
+    const entries = fileContent ? JSON.parse(fileContent) : [];
     const now = new Date();
     // Look ahead up to 18h — covers any same-day or next-morning CO
     const horizon = new Date(now.getTime() + 18 * 60 * 60 * 1000);
@@ -1183,7 +1189,8 @@ async function loadScheduledRuns() {
   try {
     const gist = await apiFetch(`/gists/${GIST_ID}`);
     const file = gist.files['scheduled-runs.json'];
-    const entries = file ? JSON.parse(file.content) : [];
+    const fileContent = file ? (window.readGistFile ? await window.readGistFile(file) : file.content || '') : '';
+    const entries = fileContent ? JSON.parse(fileContent) : [];
     // Client-side fallback: dispatch overdue runs directly
     await clientSideDispatchOverdue(entries);
     // Update calendar visualization with live data
@@ -1455,7 +1462,8 @@ async function saveToGist(entries) {
 async function loadEntriesFromGist() {
   const gist = await apiFetch(`/gists/${GIST_ID}`);
   const file = gist.files['scheduled-runs.json'];
-  return file ? JSON.parse(file.content) : [];
+  const fileContent = file ? (window.readGistFile ? await window.readGistFile(file) : file.content || '') : '';
+  return fileContent ? JSON.parse(fileContent) : [];
 }
 
 async function addScheduledRun() {

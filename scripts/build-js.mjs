@@ -33,6 +33,7 @@ const SCRIPT_ORDER = [
   'icons.js',
   'no-autofill.js',
   'theme.js',
+  'ui-toast.js',
   'locations.js',
   'biometric.js',
   'cloud-sync.js',

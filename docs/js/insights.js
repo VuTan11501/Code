@@ -63,8 +63,9 @@
         gist = await r.json();
       }
       const f = gist.files && gist.files[GIST_FILE];
-      if (!f || !f.content) return null;
-      const data = JSON.parse(f.content);
+      const content = window.readGistFile ? await window.readGistFile(f) : (f && f.content) || '';
+      if (!content) return null;
+      const data = JSON.parse(content);
       _cache = Array.isArray(data) ? data : (data.insights || data.months || []);
       _lastFetched = Date.now();
       return _cache;

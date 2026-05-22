@@ -27,10 +27,11 @@
     }
     return apiFetch(`/gists/${GIST_ID}`);
   }
-  function _parseFile(gist, fname) {
+  async function _parseFile(gist, fname) {
     const f = gist.files && gist.files[fname];
-    if (!f || !f.content) return null;
-    try { return JSON.parse(f.content); } catch { return null; }
+    const content = window.readGistFile ? await window.readGistFile(f) : (f && f.content) || '';
+    if (!content) return null;
+    try { return JSON.parse(content); } catch { return null; }
   }
 
   // ─── 1. get_today_status ────────────────────────────
@@ -73,7 +74,7 @@
   async function exec_list_schedule(args) {
     const { from, to, workflow } = args || {};
     const gist = await _loadGist();
-    const parsed = _parseFile(gist, SCHED_FILE);
+    const parsed = await _parseFile(gist, SCHED_FILE);
     let entries = Array.isArray(parsed) ? parsed : (Array.isArray(parsed?.entries) ? parsed.entries : []);
     if (workflow) entries = entries.filter(e => e.workflow === workflow);
     if (from) entries = entries.filter(e => (e.run_at || '').slice(0, 10) >= from || e.type === 'recurring');
@@ -99,7 +100,7 @@
   async function exec_list_ot_requests(args) {
     const month = (args && args.month) || currentMonthJST();
     const gist = await _loadGist();
-    const raw = _parseFile(gist, OT_FILE);
+    const raw = await _parseFile(gist, OT_FILE);
     const all = Array.isArray(raw) ? raw : (Array.isArray(raw?.requests) ? raw.requests : []);
     const filtered = all.filter(r => inMonth(r.date, month));
     const totalHours = filtered.reduce((s, r) => s + (Number(r.hours) || 0), 0);
@@ -488,9 +489,9 @@
     let existingOts = [], schedEntries = [];
     try {
       const gist = await _loadGist();
-      const otRaw = _parseFile(gist, OT_FILE);
+      const otRaw = await _parseFile(gist, OT_FILE);
       existingOts = Array.isArray(otRaw) ? otRaw : (Array.isArray(otRaw?.requests) ? otRaw.requests : []);
-      const schedRaw = _parseFile(gist, SCHED_FILE);
+      const schedRaw = await _parseFile(gist, SCHED_FILE);
       schedEntries = Array.isArray(schedRaw) ? schedRaw : (Array.isArray(schedRaw?.entries) ? schedRaw.entries : []);
     } catch (e) {
       return { error: `Failed to load Gist: ${e.message}` };
@@ -557,7 +558,7 @@
     let schedEntries = [];
     try {
       const gist = await _loadGist();
-      const raw = _parseFile(gist, SCHED_FILE);
+      const raw = await _parseFile(gist, SCHED_FILE);
       schedEntries = Array.isArray(raw) ? raw : (Array.isArray(raw?.entries) ? raw.entries : []);
     } catch (e) { return { error: `Failed to load Gist: ${e.message}` }; }
 
@@ -593,7 +594,7 @@
     let schedEntries = [];
     try {
       const gist = await _loadGist();
-      const raw = _parseFile(gist, SCHED_FILE);
+      const raw = await _parseFile(gist, SCHED_FILE);
       schedEntries = Array.isArray(raw) ? raw : (Array.isArray(raw?.entries) ? raw.entries : []);
     } catch (e) { return { error: `Failed to load Gist: ${e.message}` }; }
 
@@ -626,7 +627,7 @@
     let schedEntries = [];
     try {
       const gist = await _loadGist();
-      const raw = _parseFile(gist, SCHED_FILE);
+      const raw = await _parseFile(gist, SCHED_FILE);
       schedEntries = Array.isArray(raw) ? raw : (Array.isArray(raw?.entries) ? raw.entries : []);
     } catch (e) { return { error: `Failed to load Gist: ${e.message}` }; }
 

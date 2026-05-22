@@ -1258,6 +1258,11 @@
       const zipBuf = await _downloadArtifact(token, run.id);
       const filename = await _extractAndSavePdf(zipBuf, `suica-${state.settings.month}.pdf`);
       setStatus(`✓ Downloaded ${filename}`, 'text-primary');
+      if (window.toast) window.toast.success(`Saved ${filename}`, {
+        title: 'Suica PDF ready',
+        actionLabel: run && run.html_url ? 'View run' : null,
+        onAction: run && run.html_url ? () => window.open(run.html_url, '_blank') : null,
+      });
 
       // Record this generation for the "Recent" panel
       try {
@@ -1282,6 +1287,7 @@
     } catch (err) {
       console.error('[suica-planner] generatePDF failed:', err);
       setStatus(`Failed: ${err.message}`, 'text-destructive');
+      if (window.toast) window.toast.error(err.message, { title: 'PDF generation failed' });
       btn.innerHTML = '<span data-icon="download" data-size="14"></span><span class="btn-label">Generate Suica PDF</span>';
       if (window.refreshIcons) window.refreshIcons(btn);
     } finally {
@@ -1418,7 +1424,10 @@
 
     renderPattern(); renderLeisure(); renderEstimate(); saveState();
     const projected = commuteSpend + (avgLeisureFare * outings * 2);
-    note(`Auto-filled: ${route} weekdays + ${leisureCandidates.length} leisure route(s), ~${outings} outings/mo → ${fmtYen(projected)} vs target ${fmtYen(target)}`, 'text-primary');
+    const msg = `Auto-filled: ${route} weekdays + ${leisureCandidates.length} leisure route(s), ~${outings} outings/mo`;
+    const detail = `Projected ${fmtYen(projected)} vs target ${fmtYen(target)}`;
+    note(`${msg} → ${detail}`, 'text-primary');
+    if (window.toast) window.toast.success(detail, { title: 'Auto-suggest applied' });
   }
 
   // ────── Init ──────

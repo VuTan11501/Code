@@ -73,8 +73,9 @@ async function loadOtData(opts) {
     // OT requests file — Phase 3 wrapper {requests, templates} OR legacy array.
     const otFile = gist.files && gist.files[OT_FILE];
     let raw = null;
-    if (otFile && otFile.content) {
-      try { raw = JSON.parse(otFile.content); }
+    const otContent = window.readGistFile ? await window.readGistFile(otFile) : (otFile && otFile.content) || '';
+    if (otContent) {
+      try { raw = JSON.parse(otContent); }
       catch { raw = null; }
     }
     if (Array.isArray(raw)) {
@@ -89,9 +90,10 @@ async function loadOtData(opts) {
     }
     // Scheduled entries (for conflict detection)
     const schedFile = gist.files && gist.files['scheduled-runs.json'];
-    if (schedFile && schedFile.content) {
+    const schedContent = window.readGistFile ? await window.readGistFile(schedFile) : (schedFile && schedFile.content) || '';
+    if (schedContent) {
       try {
-        const parsed = JSON.parse(schedFile.content) || [];
+        const parsed = JSON.parse(schedContent) || [];
         // Defensive: accept both bare array (current) and {entries:[...]} wrapper
         _otState.scheduleEntries = Array.isArray(parsed) ? parsed : (Array.isArray(parsed.entries) ? parsed.entries : []);
       }
@@ -101,9 +103,10 @@ async function loadOtData(opts) {
     }
     // Payslip history (for real net take-home display)
     const payFile = gist.files && gist.files[PAYSLIP_FILE];
-    if (payFile && payFile.content) {
+    const payContent = window.readGistFile ? await window.readGistFile(payFile) : (payFile && payFile.content) || '';
+    if (payContent) {
       try {
-        const parsed = JSON.parse(payFile.content) || {};
+        const parsed = JSON.parse(payContent) || {};
         _otState.payslips = Array.isArray(parsed.payslips) ? parsed.payslips : [];
       }
       catch { _otState.payslips = []; }

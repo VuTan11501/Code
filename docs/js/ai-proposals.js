@@ -245,9 +245,10 @@
     const gist = await apiFetch(`/gists/${GIST_ID}`);
     const gistFile = gist.files && gist.files[file];
     let currentData = [];
-    if (gistFile && gistFile.content) {
+    const gfContent = window.readGistFile ? await window.readGistFile(gistFile) : (gistFile && gistFile.content) || '';
+    if (gfContent) {
       try {
-        const parsed = JSON.parse(gistFile.content);
+        const parsed = JSON.parse(gfContent);
         currentData = Array.isArray(parsed) ? parsed : (Array.isArray(parsed.entries) ? parsed.entries : (Array.isArray(parsed.requests) ? parsed.requests : []));
       } catch { currentData = []; }
     }

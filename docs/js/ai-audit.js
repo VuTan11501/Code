@@ -135,7 +135,8 @@
       if (r.ok) {
         const g = await r.json();
         const f = g.files && g.files[GIST_FILE];
-        if (f && f.content) { try { cloud = JSON.parse(f.content); } catch {} }
+        const content = window.readGistFile ? await window.readGistFile(f) : (f && f.content) || '';
+        if (content) { try { cloud = JSON.parse(content); } catch {} }
       }
     } catch {}
     if (!Array.isArray(cloud)) cloud = [];
