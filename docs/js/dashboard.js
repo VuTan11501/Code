@@ -92,7 +92,8 @@ function getDashboardWorkflows() {
 
 function toggleCardVisibility(file) {
   const set = getVisibleCardSet();
-  if (set.has(file)) {
+  const wasHiding = set.has(file);
+  if (wasHiding) {
     if (set.size <= 1) {
       if (typeof toast === 'function') toast('At least one workflow must remain visible', 'warning');
       return;
@@ -107,9 +108,26 @@ function toggleCardVisibility(file) {
   const grid = document.getElementById('workflowGrid');
   if (grid) grid.innerHTML = '<div class="skeleton skeleton-card"></div><div class="skeleton skeleton-card"></div><div class="skeleton skeleton-card"></div>';
   if (typeof refresh === 'function') refresh();
+  // Only offer undo when HIDING — adding back is trivial via the same picker.
+  if (wasHiding && typeof undoableToast === 'function') {
+    const wf = (typeof WORKFLOWS_ALL !== 'undefined') && WORKFLOWS_ALL.find(w => w.file === file);
+    const label = wf ? (wf.name || wf.file) : file;
+    undoableToast(`Hid "${label}"`, () => {
+      const s2 = getVisibleCardSet();
+      s2.add(file);
+      saveVisibleCardSet(s2);
+      renderInfraToggle();
+      renderCardPicker();
+      if (typeof refresh === 'function') refresh();
+    });
+  }
 }
 
 function resetCardVisibility() {
+  // Snapshot for undo
+  const prevVisible = (() => { try { return localStorage.getItem(DASH_VISIBLE_CARDS_KEY); } catch { return null; } })();
+  const prevInfra = (() => { try { return localStorage.getItem(DASH_SHOW_INFRA_KEY); } catch { return null; } })();
+  const prevOrder = (() => { try { return localStorage.getItem(CARD_ORDER_KEY); } catch { return null; } })();
   try { localStorage.removeItem(DASH_VISIBLE_CARDS_KEY); localStorage.removeItem(DASH_SHOW_INFRA_KEY); } catch {}
   if (window.CloudSync) window.CloudSync.markDirty();
   renderInfraToggle();
@@ -117,6 +135,19 @@ function resetCardVisibility() {
   const grid = document.getElementById('workflowGrid');
   if (grid) grid.innerHTML = '<div class="skeleton skeleton-card"></div><div class="skeleton skeleton-card"></div><div class="skeleton skeleton-card"></div>';
   if (typeof refresh === 'function') refresh();
+  if (typeof undoableToast === 'function') {
+    undoableToast('Dashboard layout reset', () => {
+      try {
+        if (prevVisible != null) localStorage.setItem(DASH_VISIBLE_CARDS_KEY, prevVisible);
+        if (prevInfra != null) localStorage.setItem(DASH_SHOW_INFRA_KEY, prevInfra);
+        if (prevOrder != null) localStorage.setItem(CARD_ORDER_KEY, prevOrder);
+      } catch {}
+      if (window.CloudSync) window.CloudSync.markDirty();
+      renderInfraToggle();
+      renderCardPicker();
+      if (typeof refresh === 'function') refresh();
+    });
+  }
 }
 
 let _cardPickerOpen = false;

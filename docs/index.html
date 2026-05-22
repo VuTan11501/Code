@@ -3,6 +3,22 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-visual">
+<!--
+  Content-Security-Policy — defense-in-depth.
+  - default-src 'self'    : block all external resources by default
+  - connect-src           : ONLY same-origin + GitHub API allowed for fetch/XHR
+  - script-src            : 'unsafe-inline' kept because index.html has the
+                            theme-init <script> and many onclick= handlers.
+                            Removing it would require a full inline-handler
+                            refactor — tracked in P3 backlog.
+  - style-src/font-src    : Google Fonts CDN allowed (we preconnect there).
+  - img-src               : data: for inline icons, https: for GitHub avatars.
+  - base-uri 'self'       : prevent <base> injection from changing relative URLs.
+  Note: frame-ancestors / X-Frame-Options cannot be set via meta (HTTP header
+  only). On GH Pages we can't customize headers, so clickjacking protection
+  for now relies on the SOP + the app not being embedded anywhere.
+-->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://api.github.com https://gist.githubusercontent.com; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' https: data: blob:; manifest-src 'self'; worker-src 'self'; base-uri 'self';">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#09090b" id="themeColorMeta">
@@ -81,6 +97,12 @@
         <p class="text-xs text-muted-foreground mt-4 leading-relaxed opacity-70">
           PAT is encrypted with AES-256-GCM using your passphrase.<br>
           Never stored in plaintext. Session expires on tab close.
+        </p>
+        <p class="text-xs mt-3 leading-relaxed" style="opacity:0.75">
+          <strong>Recommended:</strong> use a
+          <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener" style="color:var(--primary);text-decoration:underline">fine-grained PAT</a>
+          scoped to <code>Gists: Read &amp; Write</code> + <code>Actions: Read</code> on this repo only.
+          Set expiry ≤ 90 days. <em>Classic <code>ghp_</code> tokens grant access to your whole account — avoid if possible.</em>
         </p>
       </form>
     </div>
@@ -1241,7 +1263,13 @@
 
 <!-- Toast -->
 <div class="toast-container">
-  <div class="toast" id="toast" role="alert" aria-live="assertive"></div>
+<!--
+  Toast container (stack). Toasts are appended as children; each is its
+  own .toast element with its own timer + dismiss button. Max 3 visible
+  at once — older ones fade out when the cap is hit.
+-->
+<div class="toast-stack" id="toastStack" aria-live="polite" aria-atomic="false"></div>
+<div class="toast" id="toast" role="alert" aria-live="assertive" hidden></div>
 </div>
 
 <!-- Dashboard Customize Modal -->
@@ -1260,7 +1288,7 @@
      Source files live in docs/js/* for development; the bundle is what ships.
      To work on the raw source instead, comment the line below and re-enable
      the individual <script defer src="js/X.js"> tags (see git history). -->
-<script defer src="dist/app.bundle.min.js?v=2"></script>
+<script defer src="dist/app.bundle.min.js?v=3"></script>
 <!-- AI Proposal confirmation modal (Phase 3) -->
 <div id="aiProposalModal" class="proposal-modal" role="dialog" aria-modal="true" aria-labelledby="aiProposalTitle" hidden aria-hidden="true">
   <div class="proposal-modal-backdrop" onclick="AIProposals.closeModal()"></div>

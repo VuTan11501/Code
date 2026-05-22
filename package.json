@@ -8,9 +8,12 @@
     "watch:css": "tailwindcss -i src/tailwind-input.css -o docs/css/tailwind.css --watch",
     "build:js": "node scripts/build-js.mjs --obfuscate",
     "build:js:fast": "node scripts/build-js.mjs",
-    "build": "npm run build:css && npm run build:js"
+    "build": "npm run build:css && npm run build:js",
+    "test:smoke": "playwright test",
+    "test:smoke:install": "playwright install --with-deps chromium"
   },
   "devDependencies": {
+    "@playwright/test": "^1.60.0",
     "esbuild": "^0.28.0",
     "javascript-obfuscator": "^5.4.3",
     "tailwindcss": "^3.4.13"

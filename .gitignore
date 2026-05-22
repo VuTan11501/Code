@@ -25,3 +25,8 @@ AGENTS.md
 
 
 cloudflare-worker/.wrangler/
+
+# Playwright
+test-results/
+playwright-report/
+playwright/.cache/

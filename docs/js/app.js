@@ -448,15 +448,78 @@ window.addEventListener('hashchange', () => {
 // ═══════════════════════════════════════════════════
 //  TOAST
 // ═══════════════════════════════════════════════════
-let toastTimer = null;
-function toast(msg, cls) {
-  const el = document.getElementById('toast');
-  el.textContent = msg;
-  el.className = 'toast show' + (cls ? ' ' + cls : '');
-  clearTimeout(toastTimer);
-  // Errors persist longer
-  const duration = cls === 'error' ? 8000 : cls === 'warning' ? 6000 : 4000;
-  toastTimer = setTimeout(() => el.classList.remove('show'), duration);
+// ═══════════════════════════════════════════════════
+//  TOAST (stack of up to 3 visible)
+// ═══════════════════════════════════════════════════
+// Replaces the legacy single-slot toast. Each call appends a new
+// .toast-item child; older ones are pushed up. When the stack exceeds
+// MAX_VISIBLE, the oldest fades out early. Returns the toast element so
+// callers can dismiss programmatically (e.g. for undoableToast).
+const TOAST_MAX_VISIBLE = 3;
+function toast(msg, cls, opts = {}) {
+  const stack = document.getElementById('toastStack');
+  if (!stack) return null;
+  const duration = opts.duration ?? (cls === 'error' ? 8000 : cls === 'warning' ? 6000 : 4000);
+  const item = document.createElement('div');
+  item.className = 'toast-item' + (cls ? ' ' + cls : '');
+  item.setAttribute('role', cls === 'error' ? 'alert' : 'status');
+  const msgEl = document.createElement('div');
+  msgEl.className = 'toast-msg';
+  msgEl.textContent = msg;
+  item.appendChild(msgEl);
+  const actions = document.createElement('div');
+  actions.className = 'toast-actions';
+  if (typeof opts.onUndo === 'function') {
+    const undoBtn = document.createElement('button');
+    undoBtn.type = 'button';
+    undoBtn.className = 'toast-undo';
+    undoBtn.textContent = opts.undoLabel || 'Undo';
+    undoBtn.addEventListener('click', () => {
+      try { opts.onUndo(); } catch (e) { console.warn('[toast] undo handler failed', e); }
+      dismiss();
+    });
+    actions.appendChild(undoBtn);
+  }
+  const closeBtn = document.createElement('button');
+  closeBtn.type = 'button';
+  closeBtn.className = 'toast-close';
+  closeBtn.setAttribute('aria-label', 'Dismiss');
+  closeBtn.textContent = '×';
+  closeBtn.addEventListener('click', () => dismiss());
+  actions.appendChild(closeBtn);
+  item.appendChild(actions);
+  stack.appendChild(item);
+
+  // Trigger CSS transition
+  requestAnimationFrame(() => item.classList.add('show'));
+
+  // Evict oldest if over cap
+  const items = stack.querySelectorAll('.toast-item');
+  if (items.length > TOAST_MAX_VISIBLE) {
+    items[0]._dismiss && items[0]._dismiss();
+  }
+
+  let dismissed = false;
+  function dismiss() {
+    if (dismissed) return;
+    dismissed = true;
+    clearTimeout(timer);
+    item.classList.remove('show');
+    setTimeout(() => { try { item.remove(); } catch {} }, 250);
+  }
+  item._dismiss = dismiss;
+  const timer = setTimeout(dismiss, duration);
+  return { dismiss };
+}
+
+// Convenience: toast with undo button. Pattern:
+//   undoableToast('Card hidden', () => restoreCard(id))
+function undoableToast(msg, onUndo, opts = {}) {
+  return toast(msg, opts.cls || 'success', {
+    duration: opts.duration || 6000,
+    undoLabel: opts.undoLabel || 'Undo',
+    onUndo,
+  });
 }
 
 // ═══════════════════════════════════════════════════
@@ -1092,7 +1155,29 @@ function checkForNewFailures(allRuns) {
 
 if ('serviceWorker' in navigator) {
   // Bump query string to force update of stale SW on existing PWA installs
-  navigator.serviceWorker.register('sw.js?v=24').catch(() => {});
+  navigator.serviceWorker.register('sw.js?v=25').then((reg) => {
+    // Listen for the SW telling us a new version is active.
+    navigator.serviceWorker.addEventListener('message', (ev) => {
+      const data = ev.data || {};
+      if (data.type === 'sw-updated') {
+        // Only show the reload toast if we already had a controller before
+        // (i.e. this is an UPDATE, not the very first install).
+        if (window._swSeenController) {
+          if (typeof toast === 'function') {
+            toast('🔄 New version available', 'success', {
+              duration: 15000,
+              undoLabel: 'Reload',
+              onUndo: () => window.location.reload(),
+            });
+          }
+        }
+        window._swSeenController = true;
+      }
+    });
+    // Track whether we boot with a controller (so the first sw-updated
+    // message after install doesn't trigger a toast on the very first load).
+    window._swSeenController = !!navigator.serviceWorker.controller;
+  }).catch(() => {});
 }
 
 // ═══════════════════════════════════════════════════
