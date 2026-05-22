@@ -37,7 +37,7 @@ from datetime import datetime
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from gh_ot_creator import (  # type: ignore
     JST, API_BASE, GIST_ID, ACCOUNT as DEFAULT_ACCOUNT,
-    log, refresh_azure_token, get_kintai_token, api_headers,
+    log, refresh_azure_token, get_kintai_token, api_headers, http_post,
 )
 from gist_safety import (  # type: ignore
     read_gist_file, safe_patch_gist_file,
@@ -45,6 +45,30 @@ from gist_safety import (  # type: ignore
 )
 
 PAYSLIP_GIST_FILE = "payslip-history.json"
+
+
+def get_fjp_token(azure_token: str, module: str = "FES") -> str:
+    """Exchange Azure AD id_token for an FJP JWT scoped to `module`.
+
+    The web client (FJP.Web) uses module='FES' for /api/payroll endpoints,
+    while our /api/timesheet calls use 'KINTAI'. Without the right module
+    the payroll endpoint returns 401.
+    """
+    status, data = http_post(
+        API_BASE + "token",
+        data={"module": module, "grant_type": "azure_ad_token", "token": azure_token},
+    )
+    if status != 200 or not data.get("access_token"):
+        raise RuntimeError(f"{module} token exchange failed ({status}): {data}")
+    return data["access_token"]
+
+
+def fjp_headers(token: str, module: str = "FES") -> dict:
+    return {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+        "Module": module,
+    }
 
 
 # ═══════════════════════════════════════════════════════════
@@ -60,7 +84,7 @@ def fetch_payslip(token: str, passcode: str, year: int, month: int):
     url = f"{API_BASE}payroll/salary/{year}/{month}"
     body = json.dumps(passcode).encode()  # raw JSON string e.g. b'"mypasscode"'
     req = urllib.request.Request(
-        url, data=body, headers=api_headers(token), method="POST",
+        url, data=body, headers=fjp_headers(token, "FES"), method="POST",
     )
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
@@ -301,9 +325,9 @@ def main():
     log(f"Payslip Fetch — account={account}, target={target_y}-{target_m:02d}, "
         f"months_back={months_back}, force={force}")
 
-    log("Refreshing Azure → KINTAI token…")
+    log("Refreshing Azure → FES token…")
     az_tok, new_refresh = refresh_azure_token(refresh_token)
-    kt = get_kintai_token(az_tok)
+    fes = get_fjp_token(az_tok, module="FES")
     log("Token OK ✓")
     if new_refresh and new_refresh != refresh_token:
         _emit_token_rotation(new_refresh)
@@ -311,7 +335,7 @@ def main():
     records = []
     for (y, m) in targets:
         log(f"Fetching {y}-{m:02d}…")
-        slips = fetch_payslip(kt, passcode, y, m)
+        slips = fetch_payslip(fes, passcode, y, m)
         if not slips:
             continue
         # Use the latest (highest index) slip if multiple — corrections supersede.
