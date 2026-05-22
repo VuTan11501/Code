@@ -727,6 +727,7 @@
   // ────── Add / remove routes ──────
   function addCommute() {
     const r = currentRoute(); if (!r) return;
+    pushHistory();
     const days = DAYS.slice(0, 5); // Mon-Fri default
     days.forEach((day) => {
       if (!state.pattern[day].some((x) => x.route === r)) {
@@ -741,6 +742,7 @@
   function addLeisure() {
     const r = currentRoute(); if (!r) return;
     if (state.leisure.some((x) => x.route === r)) return;
+    pushHistory();
     state.leisure.push({ route: r, weight: 1 });
     renderLeisure();
     renderEstimate();
@@ -1634,6 +1636,7 @@
 
   function applyPreset(preset) {
     if (!preset) return;
+    pushHistory();
     const isKnown = (r) => r && state.fares && state.fares[r] != null;
     let appliedCommute = 0, skippedCommute = 0;
     DAYS.forEach((d, idx) => {
@@ -1833,7 +1836,62 @@
     }
   }
 
+  // ────── Undo/redo stack ──────
+  // Snapshots only the user-mutable pieces: pattern, leisure, settings.
+  // Capped at 20 entries each direction. Ctrl+Z / Cmd+Z = undo,
+  // Ctrl+Shift+Z / Cmd+Shift+Z (or Ctrl+Y) = redo.
+  const _hist = { stack: [], redo: [], suppress: false, max: 20 };
+  function _snapshotState() {
+    return {
+      pattern: JSON.parse(JSON.stringify(state.pattern)),
+      leisure: JSON.parse(JSON.stringify(state.leisure)),
+      settings: JSON.parse(JSON.stringify(state.settings)),
+    };
+  }
+  function pushHistory() {
+    if (_hist.suppress) return;
+    _hist.stack.push(_snapshotState());
+    if (_hist.stack.length > _hist.max) _hist.stack.shift();
+    _hist.redo.length = 0;
+  }
+  function applyHistorySnap(snap) {
+    _hist.suppress = true;
+    try {
+      state.pattern = snap.pattern;
+      state.leisure = snap.leisure;
+      state.settings = snap.settings;
+      // Mirror into inputs
+      const ids = { 'planner-month': 'month', 'planner-target': 'target', 'planner-seed': 'seed',
+        'planner-initial': 'initial_balance', 'planner-topup-threshold': 'topup_threshold',
+        'planner-topup-amount': 'topup_amount', 'planner-leisure-min': 'leisure_min',
+        'planner-leisure-max': 'leisure_max' };
+      Object.entries(ids).forEach(([id, k]) => { const el = $(id); if (el && state.settings[k] != null) el.value = state.settings[k]; });
+      renderPattern(); renderLeisure(); renderEstimate(); saveState();
+    } finally { _hist.suppress = false; }
+  }
+  function undo() {
+    if (!_hist.stack.length) {
+      if (window.Toast) window.Toast.info('Nothing to undo');
+      return;
+    }
+    const prev = _hist.stack.pop();
+    _hist.redo.push(_snapshotState());
+    applyHistorySnap(prev);
+    if (window.Toast) window.Toast.info(`Undone (${_hist.stack.length} left)`);
+  }
+  function redo() {
+    if (!_hist.redo.length) {
+      if (window.Toast) window.Toast.info('Nothing to redo');
+      return;
+    }
+    const next = _hist.redo.pop();
+    _hist.stack.push(_snapshotState());
+    applyHistorySnap(next);
+    if (window.Toast) window.Toast.info(`Redone (${_hist.redo.length} left)`);
+  }
+
   function loadSamplePlan() {
+    pushHistory();
     state.pattern = {
       monday: [{ route: '東京↔新宿', type: 'commute' }],
       tuesday: [{ route: '東京↔新宿', type: 'commute' }],
@@ -1852,6 +1910,7 @@
   }
 
   function clearPlan() {
+    pushHistory();
     DAYS.forEach((d) => { state.pattern[d] = []; });
     state.leisure = [];
     renderPattern(); renderLeisure(); renderEstimate(); saveState();
@@ -1923,6 +1982,7 @@
   // Apply a suggestion (returned by buildSuggestion) into state + DOM.
   function applySuggestion(s) {
     if (!s) return;
+    pushHistory();
     DAYS.forEach((d) => { state.pattern[d] = s.pattern[d] ? s.pattern[d].map((t) => ({ ...t })) : []; });
     state.leisure = s.leisure.map((l) => ({ ...l }));
     state.settings.leisure_min = s.settings.leisure_min;
@@ -2053,6 +2113,15 @@
     };
     const triggerClick = (id) => { const el = $(id); if (el && !el.hasAttribute('disabled')) el.click(); };
     document.addEventListener('keydown', (e) => {
+      // Ctrl/Cmd+Z = undo, Ctrl/Cmd+Shift+Z or Ctrl+Y = redo. Allowed even
+      // while focus is in an input — most apps do this.
+      const meta = e.ctrlKey || e.metaKey;
+      if (meta && (e.key === 'z' || e.key === 'Z')) {
+        if (e.shiftKey) { redo(); } else { undo(); }
+        e.preventDefault();
+        return;
+      }
+      if (meta && (e.key === 'y' || e.key === 'Y')) { redo(); e.preventDefault(); return; }
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       if (isTyping(e)) return;
       // Single-key shortcuts (lowercase)
@@ -2094,6 +2163,8 @@
               <dt><kbd class="kbd-key">C</kbd></dt><dd>Compare 3 options</dd>
               <dt><kbd class="kbd-key">R</kbd></dt><dd>Re-roll seed</dd>
               <dt><kbd class="kbd-key">S</kbd></dt><dd>Save snapshot</dd>
+              <dt><kbd class="kbd-key">Ctrl</kbd>+<kbd class="kbd-key">Z</kbd></dt><dd>Undo</dd>
+              <dt><kbd class="kbd-key">Ctrl</kbd>+<kbd class="kbd-key">Shift</kbd>+<kbd class="kbd-key">Z</kbd></dt><dd>Redo</dd>
               <dt><kbd class="kbd-key">?</kbd></dt><dd>Show this help</dd>
               <dt><kbd class="kbd-key">Esc</kbd></dt><dd>Close popovers</dd>
             </dl>
