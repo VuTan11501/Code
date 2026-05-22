@@ -1,0 +1,80 @@
+name: Payslip Fetch
+
+# Pulls the user's monthly payslip from FJP Payroll API and stores it
+# in the Gist file `payslip-history.json`. The PWA uses this for:
+#   • Salary chip in Timesheet tab (real take-home for past months)
+#   • Net take-home estimator in OT Planner tab (baseline payslip)
+#
+# Salary cycle:
+#   Work done in month X (incl. all OT) is paid on day 22 of month X+1.
+#   Schedule runs on day 22-25 each month at JST 12:00 to fetch the
+#   payslip that was just published. The script is idempotent — already
+#   fetched months are skipped unless FORCE=1.
+
+on:
+  workflow_dispatch:
+    inputs:
+      year_month:
+        description: 'Target month "YYYY-MM" (default: current JST month)'
+        required: false
+        default: ""
+      months_back:
+        description: "Also backfill this many earlier months (0 = just target)"
+        required: false
+        default: "0"
+      force:
+        description: "Overwrite existing entries"
+        required: false
+        type: boolean
+        default: false
+  schedule:
+    # 03:00 UTC = 12:00 JST on days 22..28 of each month.
+    # Day 22 = pay date. Subsequent days are safety retries in case the
+    # payslip wasn't published exactly at 09:00 on the 22nd.
+    - cron: "0 3 22-28 * *"
+
+permissions:
+  contents: read
+
+env:
+  TZ: Asia/Tokyo
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            .github/scripts
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run payslip fetch
+        id: fetch
+        env:
+          AZURE_REFRESH_TOKEN: ${{ secrets.AZURE_REFRESH_TOKEN }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+          FJP_PAYROLL_PASSCODE: ${{ secrets.FJP_PAYROLL_PASSCODE }}
+          ACCOUNT: tanvc
+          YEAR_MONTH: ${{ inputs.year_month || '' }}
+          MONTHS_BACK: ${{ inputs.months_back || '0' }}
+          FORCE: ${{ inputs.force && '1' || '' }}
+        run: python .github/scripts/gh_payslip_fetch.py
+
+      - name: Update secret if token rotated
+        if: always() && steps.fetch.outputs.token_rotated == 'true'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+          NEW_REFRESH_TOKEN: ${{ steps.fetch.outputs.new_refresh_token }}
+        run: |
+          if [ -n "$NEW_REFRESH_TOKEN" ] && [ -n "$GH_TOKEN" ]; then
+            gh secret set AZURE_REFRESH_TOKEN --body "$NEW_REFRESH_TOKEN" --repo "$GITHUB_REPOSITORY"
+            echo "✅ Secret updated with rotated token"
+          fi
