@@ -36,6 +36,13 @@ window.CloudSync = (function () {
   let _pushTimer = null;
   let _pushing = false;
   let _pullPromise = null;
+  // Shared gist cache — any caller (CloudSync.pull, insights.js,
+  // checkTokenScopes, etc.) can reuse the same fetched body instead of
+  // hitting GitHub API in parallel for the same gist on page load.
+  let _gistBody = null;        // last parsed JSON of /gists/{id}
+  let _gistScopes = '';        // value of X-OAuth-Scopes from same response
+  let _gistFetchedAt = 0;      // Date.now() of last successful body fetch
+  let _gistInflight = null;    // Promise dedupe — concurrent callers share this
 
   function _deviceId() {
     let id = localStorage.getItem(DEV_KEY);
@@ -103,17 +110,53 @@ window.CloudSync = (function () {
     return applied;
   }
 
+  // Internal GET /gists/{id} with ETag + in-flight dedupe.
+  // Concurrent callers all await the same promise. On 304 the previously
+  // cached body is reused. On 200 the body + scopes header are stored.
+  // Returns { body, scopes, status, fromCache }.
+  async function _loadGistRaw(opts = {}) {
+    const maxAge = (typeof opts.maxAgeMs === 'number') ? opts.maxAgeMs : 0;
+    if (!opts.force && _gistBody && maxAge > 0 && (Date.now() - _gistFetchedAt) < maxAge) {
+      return { body: _gistBody, scopes: _gistScopes, status: 200, fromCache: true };
+    }
+    if (_gistInflight) return _gistInflight;
+    if (!_getToken || !_getToken()) return { body: null, scopes: '', status: 0, error: 'no_token' };
+    _gistInflight = (async () => {
+      try {
+        const headers = (_etag && !opts.force) ? { 'If-None-Match': _etag } : {};
+        const resp = await _ghFetch(`https://api.github.com/gists/${GIST_ID}`, { headers });
+        const scopes = resp.headers.get('X-OAuth-Scopes') || _gistScopes;
+        _gistScopes = scopes;
+        if (resp.status === 304) {
+          _gistFetchedAt = Date.now();
+          return { body: _gistBody, scopes, status: 304, fromCache: true };
+        }
+        if (!resp.ok) {
+          return { body: null, scopes, status: resp.status, error: 'http_' + resp.status };
+        }
+        _etag = resp.headers.get('ETag') || _etag;
+        const data = await resp.json();
+        _gistBody = data;
+        _gistFetchedAt = Date.now();
+        return { body: data, scopes, status: 200, fromCache: false };
+      } catch (e) {
+        return { body: null, scopes: _gistScopes, status: 0, error: String(e.message || e) };
+      } finally {
+        _gistInflight = null;
+      }
+    })();
+    return _gistInflight;
+  }
+
   async function pull(opts = {}) {
     if (_pullPromise) return _pullPromise;
     if (!_getToken || !_getToken()) return { skipped: 'no_token' };
     _pullPromise = (async () => {
       try {
-        const headers = (_etag && !opts.force) ? { 'If-None-Match': _etag } : {};
-        const resp = await _ghFetch(`https://api.github.com/gists/${GIST_ID}`, { headers });
-        if (resp.status === 304) return { changed: false, cached: true };
-        if (!resp.ok) throw new Error('GET gist HTTP ' + resp.status);
-        _etag = resp.headers.get('ETag');
-        const data = await resp.json();
+        const res = await _loadGistRaw({ force: opts.force });
+        if (res.status === 304) return { changed: false, cached: true };
+        if (res.error || !res.body) throw new Error('GET gist ' + (res.error || 'no_body'));
+        const data = res.body;
         const file = data.files && data.files[FILE];
         if (!file || !file.content) return { changed: false, empty: true };
         let remote;
@@ -205,8 +248,20 @@ window.CloudSync = (function () {
     }
   }
 
+  // Public shared-cache API — used by insights.js, checkTokenScopes(),
+  // and any future caller that needs the raw gist body to avoid duplicate
+  // /gists/{id} requests on page load.
+  async function fetchGist(opts = {}) { return _loadGistRaw(opts); }
+  function getCachedGist() {
+    return { body: _gistBody, scopes: _gistScopes, fetchedAt: _gistFetchedAt };
+  }
+  function invalidateGist() {
+    _gistBody = null; _gistFetchedAt = 0; _etag = null;
+  }
+
   return {
     init, register, pull, push, markDirty,
+    fetchGist, getCachedGist, invalidateGist,
     lastSyncedAt: () => _lastPulled,
     lastPushedAt: () => _lastPushedAt,
     deviceId: _deviceId,

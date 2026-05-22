@@ -48,12 +48,21 @@
     const token = (typeof sessionToken !== 'undefined' && sessionToken) ? sessionToken : null;
     if (!token) return null;
     try {
-      const r = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
-        headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/vnd.github+json' },
-      });
-      if (!r.ok) return null;
-      const g = await r.json();
-      const f = g.files && g.files[GIST_FILE];
+      // Prefer the shared cache so we don't double-fetch /gists/{id} on
+      // dashboard load (CloudSync.pull() already grabs the full body).
+      let gist = null;
+      if (window.CloudSync && typeof window.CloudSync.fetchGist === 'function') {
+        const res = await window.CloudSync.fetchGist({ maxAgeMs: 60_000 });
+        gist = res && res.body;
+      }
+      if (!gist) {
+        const r = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
+          headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/vnd.github+json' },
+        });
+        if (!r.ok) return null;
+        gist = await r.json();
+      }
+      const f = gist.files && gist.files[GIST_FILE];
       if (!f || !f.content) return null;
       const data = JSON.parse(f.content);
       _cache = Array.isArray(data) ? data : (data.insights || data.months || []);

@@ -231,6 +231,18 @@ function showDashboard() {
 async function checkTokenScopes() {
   if (!sessionToken) return;
   try {
+    // Reuse the shared gist fetch (CloudSync.pull fires moments after) so
+    // we don't fire an extra HEAD just to read X-OAuth-Scopes. fetchGist
+    // returns the scopes header from the same response.
+    if (window.CloudSync && typeof window.CloudSync.fetchGist === 'function') {
+      const res = await window.CloudSync.fetchGist({ maxAgeMs: 60_000 });
+      const scopes = (res && res.scopes) || '';
+      if (scopes && !scopes.includes('gist')) {
+        toast('⚠️ PAT thiếu scope "gist" — Schedule sẽ không tạo được. Cập nhật token tại Settings.', 'warning');
+      }
+      return;
+    }
+    // Fallback (CloudSync not loaded for some reason)
     const res = await fetch(`${API}/gists/${GIST_ID}`, {
       method: 'HEAD',
       headers: { 'Authorization': `Bearer ${sessionToken}`, 'Accept': 'application/vnd.github+json' },
