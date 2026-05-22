@@ -1514,6 +1514,19 @@ input[type="time"], input[type="date"], input[type="datetime-local"] {
     -webkit-backdrop-filter: saturate(180%) blur(20px);
     display: flex; gap: 4px;
     align-items: center;
+    /* Respect iPhone home-indicator safe-area so the nav doesn't slip
+       behind it (otherwise the bottom edge looks like it "drifts" when
+       iOS Safari toggles its toolbar during scroll). */
+    padding-bottom: env(safe-area-inset-bottom);
+    /* Force the nav onto its own compositor layer. Fixes the iOS Safari
+       jitter where `position:fixed; bottom:0` elements briefly slide up
+       (or leave a gap below) while the URL bar is animating in/out on
+       scroll. translate3d + backface-visibility are the canonical pair. */
+    transform: translate3d(0, 0, 0);
+    -webkit-transform: translate3d(0, 0, 0);
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+    will-change: transform;
   }
   .nav-item, .tabs-trigger {
     display: flex; align-items: center; justify-content: center;
