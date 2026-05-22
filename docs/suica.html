@@ -63,6 +63,156 @@
     </a>
   </header>
 
+  <!-- Trip Planner -->
+  <section aria-label="Trip planner">
+    <div class="section-title text-sm font-medium text-muted-foreground mb-3 flex items-center gap-2">
+      <span data-icon="mapPin" data-size="16"></span> Trip Planner
+      <span class="text-xs text-muted-foreground/70 font-normal ml-2">— pick stations, build a weekly pattern, then copy the matching CLI command</span>
+    </div>
+    <div class="card bg-card border border-border rounded-lg p-5 space-y-5">
+
+      <!-- Route picker -->
+      <div>
+        <div class="text-xs text-muted-foreground font-medium mb-2 flex items-center gap-2">
+          <span data-icon="chevronRight" data-size="12"></span> Route
+        </div>
+        <div class="flex items-end gap-2 flex-wrap">
+          <div class="field flex-1 min-w-[160px]">
+            <label class="field-label text-xs text-muted-foreground font-medium block mb-1" for="planner-from">From station</label>
+            <input id="planner-from" list="planner-stations-dl" class="input w-full font-mono" placeholder="東京 / Tokyo" autocomplete="off">
+          </div>
+          <button id="planner-swap" class="btn sm btn-ghost mb-[2px]" type="button" aria-label="swap from/to" title="Swap">
+            <span data-icon="refresh" data-size="14"></span>
+          </button>
+          <div class="field flex-1 min-w-[160px]">
+            <label class="field-label text-xs text-muted-foreground font-medium block mb-1" for="planner-to">To station</label>
+            <input id="planner-to" list="planner-stations-dl" class="input w-full font-mono" placeholder="新宿 / Shinjuku" autocomplete="off">
+          </div>
+          <datalist id="planner-stations-dl"></datalist>
+        </div>
+        <div class="flex items-center gap-3 mt-3 flex-wrap">
+          <div class="text-xs text-muted-foreground">Fare:</div>
+          <div id="planner-fare-out" class="text-sm font-mono text-muted-foreground">—</div>
+          <div class="separator h-5 w-px bg-border mx-1"></div>
+          <button id="planner-add-commute" class="btn sm primary" type="button" data-planner-add disabled>
+            <span data-icon="plus" data-size="14"></span>
+            <span class="btn-label">Add as weekday commute</span>
+          </button>
+          <button id="planner-add-leisure" class="btn sm" type="button" data-planner-add disabled>
+            <span data-icon="plus" data-size="14"></span>
+            <span class="btn-label">Add to leisure pool</span>
+          </button>
+        </div>
+        <div id="planner-load-status" class="text-xs text-muted-foreground mt-2">Loading fare data…</div>
+      </div>
+
+      <div class="separator h-px w-full bg-border"></div>
+
+      <!-- Weekly pattern -->
+      <div>
+        <div class="text-xs text-muted-foreground font-medium mb-2 flex items-center gap-2">
+          <span data-icon="calendar" data-size="12"></span> Weekly pattern (commute)
+        </div>
+        <div id="planner-pattern" class="rounded-md border border-border bg-background/40 px-3 py-1"></div>
+      </div>
+
+      <!-- Leisure pool -->
+      <div>
+        <div class="text-xs text-muted-foreground font-medium mb-2 flex items-center gap-2">
+          <span data-icon="sparkles" data-size="12"></span> Leisure pool (random weekend trips)
+        </div>
+        <div id="planner-leisure" class="rounded-md border border-border bg-background/40 px-3 py-1"></div>
+        <div class="flex items-center gap-3 mt-3 flex-wrap text-xs">
+          <span class="text-muted-foreground">Monthly outings:</span>
+          <input id="planner-leisure-min" type="number" min="0" max="20" class="input w-16">
+          <span class="text-muted-foreground">to</span>
+          <input id="planner-leisure-max" type="number" min="0" max="20" class="input w-16">
+        </div>
+      </div>
+
+      <div class="separator h-px w-full bg-border"></div>
+
+      <!-- Settings -->
+      <div>
+        <div class="text-xs text-muted-foreground font-medium mb-2 flex items-center gap-2">
+          <span data-icon="target" data-size="12"></span> Generate settings
+        </div>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div class="field">
+            <label class="field-label text-xs text-muted-foreground font-medium block mb-1" for="planner-month">Month</label>
+            <input id="planner-month" type="text" pattern="\d{4}-\d{2}" class="input w-full font-mono" placeholder="2026-06">
+          </div>
+          <div class="field">
+            <label class="field-label text-xs text-muted-foreground font-medium block mb-1" for="planner-target">Target (¥)</label>
+            <input id="planner-target" type="number" min="0" step="500" class="input w-full font-mono">
+          </div>
+          <div class="field">
+            <label class="field-label text-xs text-muted-foreground font-medium block mb-1" for="planner-seed">Seed</label>
+            <input id="planner-seed" type="number" min="0" class="input w-full font-mono">
+          </div>
+          <div class="field">
+            <label class="field-label text-xs text-muted-foreground font-medium block mb-1" for="planner-initial">Initial balance (¥)</label>
+            <input id="planner-initial" type="number" min="0" step="500" class="input w-full font-mono">
+          </div>
+          <div class="field">
+            <label class="field-label text-xs text-muted-foreground font-medium block mb-1" for="planner-topup-threshold">Auto-topup &lt; (¥)</label>
+            <input id="planner-topup-threshold" type="number" min="0" step="500" class="input w-full font-mono">
+          </div>
+          <div class="field">
+            <label class="field-label text-xs text-muted-foreground font-medium block mb-1" for="planner-topup-amount">Topup amount (¥)</label>
+            <input id="planner-topup-amount" type="number" min="0" step="500" class="input w-full font-mono">
+          </div>
+        </div>
+      </div>
+
+      <!-- Estimate -->
+      <div class="rounded-md border border-border bg-background/40 p-4">
+        <div class="text-xs text-muted-foreground font-medium mb-2">Estimated monthly spend</div>
+        <div class="flex items-end gap-6 flex-wrap">
+          <div>
+            <div class="text-xs text-muted-foreground">Commute</div>
+            <div id="planner-estimate-commute" class="text-sm font-mono font-semibold">¥—</div>
+          </div>
+          <div>
+            <div class="text-xs text-muted-foreground">Leisure (avg)</div>
+            <div id="planner-estimate-leisure" class="text-sm font-mono font-semibold">¥—</div>
+          </div>
+          <div>
+            <div class="text-xs text-muted-foreground">Total</div>
+            <div id="planner-estimate-total" class="text-base font-mono font-bold text-primary">¥—</div>
+          </div>
+          <div id="planner-estimate" class="hidden"></div>
+        </div>
+        <div id="planner-estimate-diff" class="text-xs font-mono mt-1"></div>
+      </div>
+
+      <!-- Output actions -->
+      <div class="flex flex-wrap gap-2">
+        <button id="planner-copy-cli" class="btn sm primary" type="button">
+          <span data-icon="copy" data-size="14"></span>
+          <span class="btn-label">Copy CLI command</span>
+        </button>
+        <button id="planner-copy-preset" class="btn sm" type="button">
+          <span data-icon="copy" data-size="14"></span>
+          <span class="btn-label">Copy preset JSON</span>
+        </button>
+        <button id="planner-download" class="btn sm" type="button">
+          <span data-icon="download" data-size="14"></span>
+          <span class="btn-label">Download preset.json</span>
+        </button>
+        <div class="flex-1"></div>
+        <button id="planner-load-sample" class="btn sm btn-ghost" type="button">
+          <span data-icon="sparkles" data-size="14"></span>
+          <span class="btn-label">Load sample plan</span>
+        </button>
+        <button id="planner-clear" class="btn sm btn-ghost" type="button">
+          <span data-icon="trash" data-size="14"></span>
+          <span class="btn-label">Clear</span>
+        </button>
+      </div>
+    </div>
+  </section>
+
   <!-- Loader card -->
   <section aria-label="Load history">
     <div class="section-title text-sm font-medium text-muted-foreground mb-3 flex items-center gap-2">
@@ -229,6 +379,7 @@
 
 <script src="js/icons.js?v=1" defer></script>
 <script src="js/theme.js?v=1" defer></script>
-<script src="js/suica-history.js?v=1" defer></script>
+<script src="js/suica-history.js?v=2" defer></script>
+<script src="js/suica-planner.js?v=1" defer></script>
 </body>
 </html>

@@ -96,6 +96,8 @@
       return;
     }
     $('report').classList.remove('hidden');
+    // Let the planner (and any other listener) pick up stations from this history
+    try { window.dispatchEvent(new CustomEvent('suica:loaded', { detail: data })); } catch (e) {}
 
     $('kpi-month').textContent = data.month || '—';
     $('kpi-spent').textContent = fmt(data.total_spent);
