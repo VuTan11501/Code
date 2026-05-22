@@ -894,6 +894,40 @@
               <!-- populated by renderProxyStatus() -->
               Loading...
             </div>
+
+            <details style="margin-bottom:12px;border:1px solid var(--border);border-radius:6px;padding:8px 10px">
+              <summary style="cursor:pointer;font-weight:600;font-size:12px;user-select:none">📖 Hướng dẫn setup (5 phút, lần đầu)</summary>
+              <div class="text-xs text-muted-foreground" style="margin-top:10px;line-height:1.7">
+                <strong>Yêu cầu</strong>: tài khoản Cloudflare (free) + Node 18+ (cho <code>wrangler</code> CLI).
+                <ol style="margin:8px 0 8px 18px;padding:0">
+                  <li><strong>Cài Wrangler &amp; login Cloudflare</strong>
+                    <pre style="background:var(--muted);padding:6px 8px;border-radius:4px;margin:4px 0;font-size:11px;overflow-x:auto">npm install -g wrangler
+wrangler login</pre>
+                  </li>
+                  <li><strong>Mở thư mục worker trong repo</strong>
+                    <pre style="background:var(--muted);padding:6px 8px;border-radius:4px;margin:4px 0;font-size:11px;overflow-x:auto">cd worker</pre>
+                    Kiểm tra <code>wrangler.toml</code> — các vars <code>ALLOWED_ORIGIN</code>, <code>REPO_OWNER</code>, <code>REPO_NAME</code>, <code>GIST_ID</code> đã có sẵn default đúng cho repo này; chỉ sửa nếu fork.
+                  </li>
+                  <li><strong>Lưu PAT làm Worker Secret</strong> (encrypted-at-rest, không export được lại):
+                    <pre style="background:var(--muted);padding:6px 8px;border-radius:4px;margin:4px 0;font-size:11px;overflow-x:auto">wrangler secret put GITHUB_PAT
+# paste fine-grained PAT: scope repo + gist + workflow</pre>
+                  </li>
+                  <li><strong>Deploy</strong>:
+                    <pre style="background:var(--muted);padding:6px 8px;border-radius:4px;margin:4px 0;font-size:11px;overflow-x:auto">wrangler deploy</pre>
+                    Output sẽ in URL kiểu <code>https://fjp-dashboard-proxy.&lt;account&gt;.workers.dev</code> — <strong>copy URL này</strong>.
+                  </li>
+                  <li><strong>Paste URL vào ô bên dưới</strong> → bấm <strong>Test</strong> (phải hiện ✅ với <code>login</code> name) → bấm <strong>Save</strong>.</li>
+                  <li><strong>Reload (F5)</strong> để monkey-patch fetch áp dụng cho tất cả tab. Từ giờ DevTools Network sẽ không còn thấy <code>Authorization: Bearer ghp_*</code> nữa.</li>
+                </ol>
+                <div style="margin-top:8px;padding:6px 10px;border-left:3px solid var(--warning,#f59e0b);background:rgba(245,158,11,0.08);border-radius:4px">
+                  <strong>⚠️ Update PAT khi rotate</strong>: chạy <code>wrangler secret put GITHUB_PAT</code> lần nữa rồi <code>wrangler deploy</code>. Không cần đổi gì ở browser.
+                </div>
+                <div style="margin-top:6px;opacity:0.75">
+                  Full guide + troubleshooting: xem <code>worker/README.md</code> trong repo.
+                </div>
+              </div>
+            </details>
+
             <label class="text-xs font-semibold" for="proxyUrlInput" style="display:block;margin-bottom:4px">Worker URL</label>
             <input type="url" id="proxyUrlInput" class="input" style="width:100%;margin-bottom:8px" placeholder="https://fjp-dashboard-proxy.xxx.workers.dev" autocomplete="off" spellcheck="false">
             <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -1312,7 +1346,7 @@
      Source files live in docs/js/* for development; the bundle is what ships.
      To work on the raw source instead, comment the line below and re-enable
      the individual <script defer src="js/X.js"> tags (see git history). -->
-<script defer src="dist/app.bundle.min.js?v=9"></script>
+<script defer src="dist/app.bundle.min.js?v=10"></script>
 <!-- AI Proposal confirmation modal (Phase 3) -->
 <div id="aiProposalModal" class="proposal-modal" role="dialog" aria-modal="true" aria-labelledby="aiProposalTitle" hidden aria-hidden="true">
   <div class="proposal-modal-backdrop" onclick="AIProposals.closeModal()"></div>
