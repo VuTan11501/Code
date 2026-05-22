@@ -1,4 +1,4 @@
-name: Playwright smoke tests
+name: CI — unit + smoke tests
 
 on:
   push:
@@ -31,6 +31,9 @@ jobs:
 
       - name: Build CSS + JS bundle
         run: npm run build
+
+      - name: Run unit tests (vitest)
+        run: npx vitest run
 
       - name: Install Playwright browser
         run: npx playwright install --with-deps chromium

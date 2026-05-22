@@ -528,7 +528,16 @@ function renderOtList() {
   }
 
   if (!all.length) {
-    tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted-foreground py-8">No OT requests in ${monthName}. Tap "+ Add OT" or click a date on the calendar.</td></tr>`;
+    tbody.innerHTML = `
+      <tr><td colspan="8" class="text-center text-muted-foreground py-10">
+        <div class="text-base font-semibold mb-1" style="color:var(--foreground)">No OT requests in ${monthName}</div>
+        <div class="text-sm mb-4">Plan a new OT block or pull existing ones from DokoKin.</div>
+        <div class="flex gap-2 justify-center flex-wrap">
+          <button class="btn primary sm" onclick="openOtForm && openOtForm()"><span data-icon="plus" data-size="14"></span> Add OT</button>
+          <button class="btn sm" onclick="syncOtWithDokoKin && syncOtWithDokoKin()"><span data-icon="sparkles" data-size="14"></span> Sync DokoKin</button>
+        </div>
+      </td></tr>`;
+    if (typeof renderIcons === 'function') renderIcons();
     return;
   }
 

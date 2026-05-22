@@ -41,6 +41,7 @@ window.CloudSync = (function () {
   // hitting GitHub API in parallel for the same gist on page load.
   let _gistBody = null;        // last parsed JSON of /gists/{id}
   let _gistScopes = '';        // value of X-OAuth-Scopes from same response
+  let _gistTokenExpiry = '';   // value of github-authentication-token-expiration
   let _gistFetchedAt = 0;      // Date.now() of last successful body fetch
   let _gistInflight = null;    // Promise dedupe — concurrent callers share this
 
@@ -77,7 +78,40 @@ window.CloudSync = (function () {
       'Accept': 'application/vnd.github+json',
       ...(options.headers || {}),
     };
-    return fetch(url, { ...options, headers });
+    // Retry on transient errors (429, 5xx, network blip). Idempotent ops
+    // (GET, HEAD) get up to 3 attempts; mutations (PATCH/POST/PUT/DELETE) only
+    // retry on connection errors (NEVER on 5xx — server may have committed).
+    const method = (options.method || 'GET').toUpperCase();
+    const isIdempotent = method === 'GET' || method === 'HEAD';
+    const maxAttempts = options.maxAttempts ?? (isIdempotent ? 3 : 1);
+    let lastErr = null;
+    let res = null;
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      try {
+        res = await fetch(url, { ...options, headers });
+      } catch (e) {
+        lastErr = e;
+        if (attempt < maxAttempts - 1) {
+          await new Promise(r => setTimeout(r, 500 * Math.pow(2, attempt) + Math.floor(Math.random() * 250)));
+          continue;
+        }
+        throw e;
+      }
+      if (isIdempotent && (res.status === 429 || (res.status >= 500 && res.status < 600))) {
+        if (attempt < maxAttempts - 1) {
+          const ra = res.headers.get('Retry-After');
+          const reset = res.headers.get('X-RateLimit-Reset');
+          let delay = 500 * Math.pow(2, attempt) + Math.floor(Math.random() * 250);
+          if (ra && !isNaN(Number(ra))) delay = Math.min(8000, Number(ra) * 1000);
+          else if (reset) delay = Math.min(8000, Math.max(0, parseInt(reset, 10) * 1000 - Date.now()));
+          await new Promise(r => setTimeout(r, delay));
+          continue;
+        }
+      }
+      break;
+    }
+    if (!res) throw lastErr || new Error('_ghFetch: no response');
+    return res;
   }
 
   function _localTs() { return localStorage.getItem(TS_KEY) || ''; }
@@ -127,20 +161,25 @@ window.CloudSync = (function () {
         const resp = await _ghFetch(`https://api.github.com/gists/${GIST_ID}`, { headers });
         const scopes = resp.headers.get('X-OAuth-Scopes') || _gistScopes;
         _gistScopes = scopes;
+        // Fine-grained PATs return their expiry as an ISO date string in this
+        // custom header on every authenticated response. Classic ghp_ tokens
+        // don't include it.
+        const exp = resp.headers.get('github-authentication-token-expiration') || _gistTokenExpiry;
+        _gistTokenExpiry = exp;
         if (resp.status === 304) {
           _gistFetchedAt = Date.now();
-          return { body: _gistBody, scopes, status: 304, fromCache: true };
+          return { body: _gistBody, scopes, expiry: _gistTokenExpiry, status: 304, fromCache: true };
         }
         if (!resp.ok) {
-          return { body: null, scopes, status: resp.status, error: 'http_' + resp.status };
+          return { body: null, scopes, expiry: _gistTokenExpiry, status: resp.status, error: 'http_' + resp.status };
         }
         _etag = resp.headers.get('ETag') || _etag;
         const data = await resp.json();
         _gistBody = data;
         _gistFetchedAt = Date.now();
-        return { body: data, scopes, status: 200, fromCache: false };
+        return { body: data, scopes, expiry: _gistTokenExpiry, status: 200, fromCache: false };
       } catch (e) {
-        return { body: null, scopes: _gistScopes, status: 0, error: String(e.message || e) };
+        return { body: null, scopes: _gistScopes, expiry: _gistTokenExpiry, status: 0, error: String(e.message || e) };
       } finally {
         _gistInflight = null;
       }
@@ -253,15 +292,16 @@ window.CloudSync = (function () {
   // /gists/{id} requests on page load.
   async function fetchGist(opts = {}) { return _loadGistRaw(opts); }
   function getCachedGist() {
-    return { body: _gistBody, scopes: _gistScopes, fetchedAt: _gistFetchedAt };
+    return { body: _gistBody, scopes: _gistScopes, expiry: _gistTokenExpiry, fetchedAt: _gistFetchedAt };
   }
+  function getTokenExpiry() { return _gistTokenExpiry; }
   function invalidateGist() {
     _gistBody = null; _gistFetchedAt = 0; _etag = null;
   }
 
   return {
     init, register, pull, push, markDirty,
-    fetchGist, getCachedGist, invalidateGist,
+    fetchGist, getCachedGist, getTokenExpiry, invalidateGist,
     lastSyncedAt: () => _lastPulled,
     lastPushedAt: () => _lastPushedAt,
     deviceId: _deviceId,

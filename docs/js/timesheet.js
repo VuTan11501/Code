@@ -215,12 +215,17 @@ function renderTimesheet() {
 
   if (!snap) {
     if (summaryEl) summaryEl.innerHTML = `
-      <div class="card bg-card border border-border rounded-lg p-4 text-center text-muted-foreground">
-        <div class="text-sm">No timesheet data for ${key}.</div>
-        <div class="text-xs mt-1">Click <strong>Sync DokoKin</strong> to pull the latest.</div>
+      <div class="card bg-card border border-border rounded-lg p-6 text-center">
+        <div class="text-base font-semibold mb-1">No timesheet data for ${key}</div>
+        <div class="text-sm text-muted-foreground mb-4">Pull the latest from DokoKin to see your recognized hours and lost OT.</div>
+        <button class="btn primary" onclick="syncTimesheetFromDokoKin && syncTimesheetFromDokoKin()">
+          <span data-icon="sparkles" data-size="14"></span> Sync DokoKin now
+        </button>
       </div>`;
     if (tableBody) tableBody.innerHTML =
-      `<tr><td colspan="12" class="text-center text-muted-foreground py-8">No data</td></tr>`;
+      `<tr><td colspan="12" class="text-center text-muted-foreground py-8">No data yet — tap <strong>Sync DokoKin</strong> above to fetch.</td></tr>`;
+    // Re-render any newly-inserted data-icon spans
+    if (typeof renderIcons === 'function') renderIcons();
     return;
   }
 

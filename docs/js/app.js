@@ -240,6 +240,25 @@ async function checkTokenScopes() {
       if (scopes && !scopes.includes('gist')) {
         toast('⚠️ PAT thiếu scope "gist" — Schedule sẽ không tạo được. Cập nhật token tại Settings.', 'warning');
       }
+      // Fine-grained PAT expiry warning — fires once per session if expiry
+      // is within EXPIRY_WARN_DAYS. The header `github-authentication-token-
+      // expiration` is only set for fine-grained PATs; classic ghp_ tokens
+      // are silent (user warned via setup-form hint instead).
+      const expiry = (res && res.expiry) || '';
+      if (expiry && !window._tokenExpiryWarned) {
+        const dt = Date.parse(expiry);
+        if (!isNaN(dt)) {
+          const daysLeft = Math.floor((dt - Date.now()) / (24 * 60 * 60 * 1000));
+          const EXPIRY_WARN_DAYS = 14;
+          if (daysLeft <= 0) {
+            toast(`⚠️ PAT đã hết hạn (${expiry.slice(0,10)}) — cập nhật token tại Settings`, 'error', { duration: 15000 });
+            window._tokenExpiryWarned = true;
+          } else if (daysLeft <= EXPIRY_WARN_DAYS) {
+            toast(`🔑 PAT hết hạn trong ${daysLeft} ngày (${expiry.slice(0,10)}) — đổi token sớm tại Settings`, 'warning', { duration: 10000 });
+            window._tokenExpiryWarned = true;
+          }
+        }
+      }
       return;
     }
     // Fallback (CloudSync not loaded for some reason)
@@ -626,6 +645,35 @@ async function deleteVault() {
 // ETag cache for conditional requests (304 = no change, very fast)
 const etagCache = new Map(); // path → { etag, data }
 
+// Sleep helper used by the retry/backoff path.
+function _apiSleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// Decide how long to wait before retrying a failed GitHub call.
+// Honors Retry-After (seconds OR HTTP-date) and X-RateLimit-Reset (unix sec).
+// Falls back to exponential 500ms → 1s → 2s with jitter.
+function _apiRetryDelay(resp, attempt) {
+  const cap = 8000;  // never sleep more than 8s in a single attempt
+  if (resp) {
+    const ra = resp.headers.get('Retry-After');
+    if (ra) {
+      const n = Number(ra);
+      if (!isNaN(n)) return Math.min(cap, n * 1000);
+      const dt = Date.parse(ra);
+      if (!isNaN(dt)) return Math.min(cap, Math.max(0, dt - Date.now()));
+    }
+    if (resp.status === 403 || resp.status === 429) {
+      const reset = resp.headers.get('X-RateLimit-Reset');
+      if (reset) {
+        const ms = Math.max(0, parseInt(reset, 10) * 1000 - Date.now());
+        if (ms > 0) return Math.min(cap, ms);
+      }
+    }
+  }
+  const base = 500 * Math.pow(2, attempt);  // 500, 1000, 2000
+  const jitter = Math.floor(Math.random() * 250);
+  return Math.min(cap, base + jitter);
+}
+
 async function apiFetch(path, opts = {}) {
   const headers = { 'Accept': 'application/vnd.github+json' };
   if (sessionToken) headers['Authorization'] = `Bearer ${sessionToken}`;
@@ -636,7 +684,34 @@ async function apiFetch(path, opts = {}) {
     headers['If-None-Match'] = cached.etag;
   }
 
-  const res = await fetch(`${API}${path}`, { headers });
+  const maxAttempts = opts.maxAttempts ?? 3;
+  let lastErr = null;
+  let res = null;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      res = await fetch(`${API}${path}`, { headers });
+    } catch (e) {
+      // Network error — retry (offline blip, DNS hiccup)
+      lastErr = e;
+      if (attempt < maxAttempts - 1) {
+        await _apiSleep(_apiRetryDelay(null, attempt));
+        continue;
+      }
+      throw e;
+    }
+
+    // Transient: 429 Too Many Requests OR 5xx → retry with backoff
+    if (res.status === 429 || (res.status >= 500 && res.status < 600)) {
+      if (attempt < maxAttempts - 1) {
+        await _apiSleep(_apiRetryDelay(res, attempt));
+        continue;
+      }
+    }
+    break;
+  }
+
+  if (!res) throw lastErr || new Error('apiFetch: no response');
 
   // 304 Not Modified — return cached data (no bandwidth used)
   if (res.status === 304 && cached?.data) {
@@ -1391,4 +1466,133 @@ if (document.readyState === 'loading') {
   window.addEventListener('scroll', hide, true);
   window.addEventListener('resize', hide);
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') hide(); });
+})();
+
+// (keyboard shortcuts appended below)
+
+// ═══════════════════════════════════════════════════════════════════
+// Keyboard shortcuts
+// ───────────────────────────────────────────────────────────────────
+// - `g` then `d/o/t/s/a/x` within 800ms → navigate (Dashboard/Ot/Timesheet/Schedule/Ai/settings)
+// - `cmd+k` or `ctrl+k` → quick-switcher modal
+// - `?` → show shortcut cheatsheet
+// Skipped while typing in inputs/textareas/contenteditable.
+// ═══════════════════════════════════════════════════════════════════
+(function() {
+  const NAV = {
+    d: 'dashboard', o: 'ot', t: 'timesheet', s: 'schedule', a: 'ai', x: 'settings',
+  };
+  const NAV_LABELS = {
+    dashboard: 'Dashboard', ot: 'OT', timesheet: 'Timesheet',
+    schedule: 'Schedule', ai: 'AI Assistant', settings: 'Settings',
+  };
+
+  let gPending = false;
+  let gTimer = null;
+
+  function isTyping(el) {
+    if (!el) return false;
+    const tag = (el.tagName || '').toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || tag === 'select') return true;
+    if (el.isContentEditable) return true;
+    return false;
+  }
+
+  function go(page) {
+    if (typeof navigate === 'function') {
+      location.hash = '#' + page;
+    }
+  }
+
+  function openQuickSwitcher() {
+    if (document.getElementById('quickSwitcher')) return;
+    const overlay = document.createElement('div');
+    overlay.id = 'quickSwitcher';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:9999;display:flex;align-items:flex-start;justify-content:center;padding-top:15vh;backdrop-filter:blur(2px)';
+    overlay.innerHTML = `
+      <div style="background:var(--card,#fff);color:var(--foreground,#000);border:1px solid var(--border,#ccc);border-radius:12px;width:min(420px,92vw);box-shadow:0 12px 32px rgba(0,0,0,.25);overflow:hidden">
+        <input id="qsInput" type="text" placeholder="Jump to page…" autocomplete="off"
+          style="width:100%;padding:14px 16px;border:0;outline:0;background:transparent;color:inherit;font-size:15px;border-bottom:1px solid var(--border,#ccc)">
+        <ul id="qsList" role="listbox" style="list-style:none;margin:0;padding:6px 0;max-height:50vh;overflow:auto"></ul>
+      </div>`;
+    document.body.appendChild(overlay);
+
+    const items = Object.entries(NAV_LABELS).map(([page, label]) => ({ page, label }));
+    let idx = 0;
+
+    const input = overlay.querySelector('#qsInput');
+    const list = overlay.querySelector('#qsList');
+
+    function render() {
+      const q = input.value.trim().toLowerCase();
+      const filtered = items.filter(i => !q || i.label.toLowerCase().includes(q) || i.page.includes(q));
+      if (idx >= filtered.length) idx = 0;
+      list.innerHTML = filtered.map((it, i) => `
+        <li role="option" data-page="${it.page}" data-i="${i}"
+          style="padding:10px 16px;cursor:pointer;font-size:14px;${i === idx ? 'background:var(--accent,#eee)' : ''}">
+          ${it.label}
+          <span style="float:right;opacity:.5;font-size:12px">g ${Object.entries(NAV).find(([_,p])=>p===it.page)?.[0] || ''}</span>
+        </li>`).join('') || '<li style="padding:14px 16px;opacity:.6;font-size:13px">No match</li>';
+      list.querySelectorAll('li[data-page]').forEach(li => {
+        li.addEventListener('click', () => { close(); go(li.dataset.page); });
+        li.addEventListener('mousemove', () => { idx = parseInt(li.dataset.i, 10); render(); });
+      });
+      return filtered;
+    }
+
+    function close() { overlay.remove(); }
+
+    input.addEventListener('input', render);
+    input.addEventListener('keydown', (e) => {
+      const filtered = items.filter(i => {
+        const q = input.value.trim().toLowerCase();
+        return !q || i.label.toLowerCase().includes(q) || i.page.includes(q);
+      });
+      if (e.key === 'Escape') { e.preventDefault(); close(); return; }
+      if (e.key === 'ArrowDown') { e.preventDefault(); idx = Math.min(filtered.length - 1, idx + 1); render(); return; }
+      if (e.key === 'ArrowUp') { e.preventDefault(); idx = Math.max(0, idx - 1); render(); return; }
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (filtered[idx]) { close(); go(filtered[idx].page); }
+      }
+    });
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+
+    render();
+    setTimeout(() => input.focus(), 0);
+  }
+
+  function showCheatsheet() {
+    if (typeof toast !== 'function') return;
+    toast(
+      '⌨️ <strong>g d</strong> Dashboard · <strong>g o</strong> OT · <strong>g t</strong> Timesheet · <strong>g s</strong> Schedule · <strong>g a</strong> AI · <strong>g x</strong> Settings · <strong>⌘/Ctrl K</strong> Quick switcher',
+      '', { duration: 6000 }
+    );
+  }
+
+  document.addEventListener('keydown', (e) => {
+    // ⌘K / Ctrl+K — quick switcher (works even in inputs, like VSCode)
+    if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
+      e.preventDefault();
+      openQuickSwitcher();
+      return;
+    }
+    if (isTyping(e.target)) return;
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+    // `?` cheatsheet
+    if (e.key === '?') { e.preventDefault(); showCheatsheet(); return; }
+
+    if (gPending) {
+      const page = NAV[e.key.toLowerCase()];
+      gPending = false;
+      clearTimeout(gTimer);
+      if (page) { e.preventDefault(); go(page); }
+      return;
+    }
+    if (e.key === 'g' || e.key === 'G') {
+      gPending = true;
+      gTimer = setTimeout(() => { gPending = false; }, 800);
+    }
+  });
 })();

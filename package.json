@@ -10,12 +10,15 @@
     "build:js:fast": "node scripts/build-js.mjs",
     "build": "npm run build:css && npm run build:js",
     "test:smoke": "playwright test",
-    "test:smoke:install": "playwright install --with-deps chromium"
+    "test:smoke:install": "playwright install --with-deps chromium",
+    "test:unit": "vitest run",
+    "test": "vitest run"
   },
   "devDependencies": {
     "@playwright/test": "^1.60.0",
     "esbuild": "^0.28.0",
     "javascript-obfuscator": "^5.4.3",
-    "tailwindcss": "^3.4.13"
+    "tailwindcss": "^3.4.13",
+    "vitest": "^4.1.7"
   }
 }
