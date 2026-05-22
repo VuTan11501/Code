@@ -109,23 +109,54 @@ function _minToHhmm(min) {
 }
 
 // Lost-OT for one day: requested OT minutes that did NOT get recognized.
-// `otNormal + otSat + otSun` = total actual OT hours (otMidnight is a subset
-// per ot-salary.js — overlaps with the others; don't double-count).
-function _calcLostMinForDay(d) {
+// Returns: { lostMin, sundayLostMin, nightLostMin }
+//
+// • `otNormal + otSat + otSun` = total recognized OT (otMidnight is a subset
+//   per ot-salary.js — overlaps with the others; don't double-count).
+// • Sunday premium (+10%) applies to entire lost block if isSunday (matches
+//   the OT engine, which buckets by REQUEST START DATE day-of-week).
+// • Night premium (+25%) applies to the lost portion of midnight hours,
+//   computed as max(0, requested midnight − actual midnight recognized).
+function _calcLostForDay(d) {
   const req = _hhmmToMin(d.otRequest);
-  if (req <= 0) return 0;
+  if (req <= 0) return { lostMin: 0, sundayLostMin: 0, nightLostMin: 0 };
   const actual = _hhmmToMin(d.otNormal) + _hhmmToMin(d.otSat) + _hhmmToMin(d.otSun);
   const gap = req - actual;
-  return gap > LOST_OT_TOLERANCE_MIN ? gap : 0;
+  if (gap <= LOST_OT_TOLERANCE_MIN) {
+    return { lostMin: 0, sundayLostMin: 0, nightLostMin: 0 };
+  }
+  // Night portion lost: per-day requested midnight − actual recognized midnight
+  // (both are hours floats from the raw API → minutes).
+  const reqMidMin    = Math.round((d.otRequestMidNum || 0) * 60);
+  const actualMidMin = Math.round((d.actualMidNum    || 0) * 60);
+  const nightLostMin = Math.max(0, Math.min(gap, reqMidMin - actualMidMin));
+  const sundayLostMin = d.isSunday ? gap : 0;
+  return { lostMin: gap, sundayLostMin, nightLostMin };
 }
 
-// Yen value of N minutes of lost OT at the base rate (125%).
-// Premiums (Sun +10%, Night +25%) ignored on purpose: lost OT could be ANY
-// kind, and base is the conservative floor estimate.
-function _lostYenFromMin(min) {
-  if (!min || !window.OT_SALARY) return 0;
+// Back-compat shim for any callers still using the old signature.
+function _calcLostMinForDay(d) { return _calcLostForDay(d).lostMin; }
+
+// Yen value of one day's lost OT — applies same 3-line formula as
+// OT_SALARY.calcMonthlySummary: base 125% + Sunday +10% + Night +25%.
+function _lostYenFromDay(parts) {
+  if (!parts || !parts.lostMin || !window.OT_SALARY) return 0;
   const S = window.OT_SALARY.SALARY;
-  return Math.floor((min / 60) * S.HOURLY_WAGE * S.OT_BASE_RATE);
+  const w = S.HOURLY_WAGE;
+  const baseLine   = Math.floor((parts.lostMin       / 60) * w * S.OT_BASE_RATE);
+  const sundayLine = Math.floor((parts.sundayLostMin / 60) * w * S.SUNDAY_PREMIUM);
+  const nightLine  = Math.floor((parts.nightLostMin  / 60) * w * S.NIGHT_PREMIUM);
+  return baseLine + sundayLine + nightLine;
+}
+
+// Aggregate yen for whole-month totals (matches payslip line-level floor math).
+function _lostYenFromTotals(t) {
+  if (!t || !window.OT_SALARY) return 0;
+  const S = window.OT_SALARY.SALARY;
+  const w = S.HOURLY_WAGE;
+  return Math.floor((t.lostMin       / 60) * w * S.OT_BASE_RATE)
+       + Math.floor((t.sundayLostMin / 60) * w * S.SUNDAY_PREMIUM)
+       + Math.floor((t.nightLostMin  / 60) * w * S.NIGHT_PREMIUM);
 }
 
 // ─── Render ─────────────────────────────────────────
@@ -160,16 +191,18 @@ function renderTimesheet() {
 
   // Compute lost-OT
   const details = Array.isArray(snap.details) ? snap.details : [];
-  let totalLostMin = 0;
+  const totals = { lostMin: 0, sundayLostMin: 0, nightLostMin: 0 };
   const lostDays = [];
   for (const d of details) {
-    const lost = _calcLostMinForDay(d);
-    if (lost > 0) {
-      totalLostMin += lost;
-      lostDays.push({ ...d, lostMin: lost });
+    const parts = _calcLostForDay(d);
+    if (parts.lostMin > 0) {
+      totals.lostMin       += parts.lostMin;
+      totals.sundayLostMin += parts.sundayLostMin;
+      totals.nightLostMin  += parts.nightLostMin;
+      lostDays.push({ ...d, ...parts });
     }
   }
-  const totalLostYen = _lostYenFromMin(totalLostMin);
+  const totalLostYen = _lostYenFromTotals(totals);
 
   // ── Summary card ──
   const s = snap.summary || {};
@@ -198,9 +231,15 @@ function renderTimesheet() {
   }
 
   let lostHtml = '';
-  if (totalLostMin > 0) {
+  if (totals.lostMin > 0) {
     const yen = '¥' + totalLostYen.toLocaleString('en-US');
-    const hhmm = _minToHhmm(totalLostMin);
+    const hhmm = _minToHhmm(totals.lostMin);
+    const premiumNote = [];
+    if (totals.sundayLostMin > 0) premiumNote.push(`Sun ${_minToHhmm(totals.sundayLostMin)} +10%`);
+    if (totals.nightLostMin > 0)  premiumNote.push(`Night ${_minToHhmm(totals.nightLostMin)} +25%`);
+    const noteHtml = premiumNote.length
+      ? `<div class="ts-lost-sub" style="opacity:.75;font-size:.8em">incl. ${premiumNote.join(' · ')}</div>`
+      : '';
     lostHtml = `
       <div class="ts-lost-card" role="alert">
         <div class="ts-lost-head">
@@ -208,6 +247,7 @@ function renderTimesheet() {
           <div>
             <div class="ts-lost-title">Lost OT detected — ${lostDays.length} day${lostDays.length > 1 ? 's' : ''}</div>
             <div class="ts-lost-sub">${hhmm} requested but not recognized → <strong>${yen}</strong> gross (est.)</div>
+            ${noteHtml}
           </div>
         </div>
         <div class="ts-lost-hint">
@@ -235,7 +275,8 @@ function renderTimesheet() {
         return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}`;
       })();
       for (const d of details) {
-        const lost = _calcLostMinForDay(d);
+        const parts = _calcLostForDay(d);
+        const lost = parts.lostMin;
         const isLost = lost > 0;
         const isToday = d.date === today;
         const dayClass = d.isSunday ? 'ts-dow-sun'
@@ -245,11 +286,20 @@ function renderTimesheet() {
           isLost ? 'ts-row-lost' : '',
           isToday ? 'ts-row-today' : '',
         ].filter(Boolean).join(' ');
-        const deltaCell = isLost
-          ? `<td class="ts-cell ts-cell-delta text-destructive font-semibold" title="${_minToHhmm(lost)} OT requested but not recognized → ≈ ¥${_lostYenFromMin(lost).toLocaleString('en-US')}">−${_minToHhmm(lost)}</td>`
-          : (d.otRequest && _hhmmToMin(d.otRequest) > 0
-              ? `<td class="ts-cell ts-cell-delta text-success">✓</td>`
-              : `<td class="ts-cell ts-cell-delta text-muted-foreground">—</td>`);
+        let deltaCell;
+        if (isLost) {
+          const dayYen = _lostYenFromDay(parts);
+          const premiumParts = [];
+          if (parts.sundayLostMin > 0) premiumParts.push(`Sun +10% on ${_minToHhmm(parts.sundayLostMin)}`);
+          if (parts.nightLostMin > 0)  premiumParts.push(`Night +25% on ${_minToHhmm(parts.nightLostMin)}`);
+          const tip = `${_minToHhmm(lost)} OT requested but not recognized → ≈ ¥${dayYen.toLocaleString('en-US')}`
+                    + (premiumParts.length ? `\n(${premiumParts.join('; ')})` : '');
+          deltaCell = `<td class="ts-cell ts-cell-delta text-destructive font-semibold" title="${tip}">−${_minToHhmm(lost)}</td>`;
+        } else {
+          deltaCell = (d.otRequest && _hhmmToMin(d.otRequest) > 0)
+            ? `<td class="ts-cell ts-cell-delta text-success">✓</td>`
+            : `<td class="ts-cell ts-cell-delta text-muted-foreground">—</td>`;
+        }
         const dateLabel = d.date ? d.date.slice(5) : '—';   // MM-DD
         rows += `
           <tr class="${rowClass}">

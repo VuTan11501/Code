@@ -84,8 +84,11 @@ def _hours_to_hhmm(h) -> str:
 
 def _slim_detail(d: dict) -> dict:
     """Keep only fields the dashboard renders. Cuts payload ~90%."""
-    # OT request: API only returns numeric `otRequestTime` at detail level (no display field).
+    # OT request: API only returns numeric `otRequestTime` at detail level.
     ot_req_num = d.get("otRequestTime") or 0
+    ot_req_mid_num = d.get("otRequestTimeMidNight") or 0
+    # Actual midnight OT recognized (numeric — needed to compute night-premium loss)
+    actual_mid_num = d.get("weekdayLateNightOvertime") or 0
     return {
         "date":           _date_str(d.get("workingDate") or d.get("partTimeWorkingDate")),
         "dow":            d.get("dayOfWeek") or "",
@@ -102,6 +105,8 @@ def _slim_detail(d: dict) -> dict:
         "otSun":          d.get("displaySundayWorkingTime") or "",
         "otRequest":      _hours_to_hhmm(ot_req_num),
         "otRequestNum":   ot_req_num,
+        "otRequestMidNum": ot_req_mid_num,
+        "actualMidNum":   actual_mid_num,
         "specialLeave":   d.get("displaySpecialLeavesTime") or "",
         "leave":          d.get("displayTotalLeaveTime") or "",
         "isHoliday":      bool(d.get("isFjpHoliday")),
