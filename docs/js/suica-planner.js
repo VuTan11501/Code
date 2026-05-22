@@ -2924,7 +2924,7 @@
           <div class="text-sm font-medium flex items-center gap-1.5">
             <button type="button" class="btn btn-ghost sm text-[12px] p-0.5 ${s.pinned ? 'text-primary' : 'opacity-40 hover:opacity-100'}" data-snap-pin="${s.id}" aria-label="${s.pinned ? 'Unpin snapshot' : 'Pin snapshot to top'}" data-tooltip="${s.pinned ? 'Unpin snapshot' : 'Pin to top of list'}">📌</button>
             <button type="button" class="btn btn-ghost sm text-[12px] p-0.5 ${s.favorite ? '' : 'opacity-40 hover:opacity-100'}" data-snap-fav="${s.id}" aria-label="${s.favorite ? 'Unfavorite snapshot' : 'Favorite snapshot'}" data-tooltip="${s.favorite ? 'Remove from favorites' : 'Mark as favorite'}">${s.favorite ? '⭐' : '☆'}</button>
-            <span data-snap-name>${s.name}</span>${isCompareA ? '<span class="status-badge status-info text-[10px]">A</span>' : ''}
+            <span data-snap-name data-snap-name-id="${s.id}" tabindex="0" role="button" title="Double-click to rename" class="cursor-text hover:underline decoration-dotted underline-offset-2">${s.name}</span>${isCompareA ? '<span class="status-badge status-info text-[10px]">A</span>' : ''}
             <button type="button" class="btn btn-ghost sm text-[10px] p-0.5 opacity-50 hover:opacity-100" data-snap-rename="${s.id}" aria-label="Rename snapshot" data-tooltip="Rename snapshot">
               <span data-icon="edit" data-size="11"></span>
             </button>
@@ -2959,6 +2959,43 @@
     wrap.querySelectorAll('[data-snap-clone]').forEach((b) => b.addEventListener('click', (e) => cloneSnapshot(e.currentTarget.getAttribute('data-snap-clone'))));
     wrap.querySelectorAll('[data-snap-compare]').forEach((b) => b.addEventListener('click', (e) => pickSnapshotForCompare(e.currentTarget.getAttribute('data-snap-compare'))));
     wrap.querySelectorAll('[data-snap-rename]').forEach((b) => b.addEventListener('click', (e) => renameSnapshot(e.currentTarget.getAttribute('data-snap-rename'))));
+    // Inline rename: dblclick (mouse) or Enter (kbd) on the snapshot name turns it into an input
+    wrap.querySelectorAll('[data-snap-name]').forEach((span) => {
+      function startEdit() {
+        const id = span.getAttribute('data-snap-name-id');
+        const list = loadSnapshots();
+        const s = list.find((x) => x.id === id);
+        if (!s) return;
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.value = s.name;
+        input.className = 'input input-sm text-sm font-medium';
+        input.style.minWidth = '160px';
+        span.replaceWith(input);
+        input.focus(); input.select();
+        let committed = false;
+        function commit(save) {
+          if (committed) return;
+          committed = true;
+          if (save) {
+            const trimmed = input.value.trim();
+            if (trimmed && trimmed !== s.name) {
+              s.name = trimmed.slice(0, 80);
+              saveSnapshots(list);
+              if (window.Toast) window.Toast.success(`Renamed to "${s.name}"`);
+            }
+          }
+          renderSnapshots();
+        }
+        input.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') { e.preventDefault(); commit(true); }
+          else if (e.key === 'Escape') { e.preventDefault(); commit(false); }
+        });
+        input.addEventListener('blur', () => commit(true));
+      }
+      span.addEventListener('dblclick', startEdit);
+      span.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === 'F2') { e.preventDefault(); startEdit(); } });
+    });
     wrap.querySelectorAll('[data-snap-note]').forEach((ta) => {
       let timer = null;
       ta.addEventListener('input', () => {
