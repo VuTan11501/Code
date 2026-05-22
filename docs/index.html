@@ -497,12 +497,12 @@ tailwind.config = {
                 <th class="px-2 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Out</th>
                 <th class="px-2 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Break</th>
                 <th class="px-2 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Actual</th>
-                <th class="px-2 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider" title="OT recognized on weekdays">OT Normal</th>
-                <th class="px-2 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider" title="Midnight OT 22:00–05:00 (subset of OT Normal/Sat/Sun — already counted)">Midnight</th>
-                <th class="px-2 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider" title="OT recognized on Saturdays and Japanese holidays">Sat/Hol</th>
-                <th class="px-2 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider" title="OT recognized on Sundays">Sun</th>
-                <th class="px-2 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider" title="OT hours you requested via DokoKin">Requested</th>
-                <th class="px-2 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider" title="Requested − recognized. Red = lost yen (fix checkin/out via 勤務時間変更).">Lost</th>
+                <th class="px-2 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider tooltip-trigger" data-tooltip="OT hours you requested via DokoKin (申請 OT)">Requested</th>
+                <th class="px-2 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider tooltip-trigger" data-tooltip="OT recognized on weekdays (Normal). Computed by FJP from your actual checkin/out vs OT request window.">OT NOR</th>
+                <th class="px-2 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider tooltip-trigger" data-tooltip="Midnight OT 22:00–05:00. This is a SUBSET already included in NOR/SAT/SUN — only used to compute +25% night premium.">OT MID</th>
+                <th class="px-2 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider tooltip-trigger" data-tooltip="OT recognized on Saturdays and Japanese holidays">OT SAT</th>
+                <th class="px-2 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider tooltip-trigger" data-tooltip="OT recognized on Sundays (+10% premium)">OT SUN</th>
+                <th class="px-2 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider tooltip-trigger" data-tooltip="Lost OT = Requested − Recognized. Means your checkin/out window did NOT fully cover the OT request range, so DokoKin paid you for fewer OT hours than you asked for. Fix via DokoKin → 勤務時間変更.">Lost</th>
               </tr>
             </thead>
             <tbody id="tsTableBody">
@@ -1264,7 +1264,7 @@ tailwind.config = {
 <script src="js/schedule.js?v=27"></script>
 <script src="js/ot-salary.js?v=37"></script>
 <script src="js/ot-planner.js?v=52"></script>
-<script src="js/timesheet.js?v=5"></script>
+<script src="js/timesheet.js?v=6"></script>
 <script src="js/ai-validators.js?v=1"></script>
 <script src="js/ai-audit.js?v=4"></script>
 <script src="js/ai-proposals.js?v=2"></script>

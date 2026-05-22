@@ -298,15 +298,18 @@ function renderTimesheet() {
         let deltaCell;
         if (isLost) {
           const dayYen = _lostYenFromDay(parts);
-          const premiumParts = [];
-          if (parts.sundayLostMin > 0) premiumParts.push(`Sun +10% on ${_minToHhmm(parts.sundayLostMin)}`);
-          if (parts.nightLostMin > 0)  premiumParts.push(`Night +25% on ${_minToHhmm(parts.nightLostMin)}`);
-          const tip = `${_minToHhmm(lost)} OT requested but not recognized → ≈ ¥${dayYen.toLocaleString('en-US')}`
-                    + (premiumParts.length ? `\n(${premiumParts.join('; ')})` : '');
-          deltaCell = `<td class="ts-cell ts-cell-delta text-destructive font-semibold" title="${tip}">−${_minToHhmm(lost)}</td>`;
+          const lines = [
+            `Lost ${_minToHhmm(lost)} (≈ ¥${dayYen.toLocaleString('en-US')} gross)`,
+            `Checkin/out didn't fully cover the OT request range.`,
+            `Requested: ${d.otRequest || '—'} · Recognized: ${_minToHhmm(_hhmmToMin(d.otNormal) + _hhmmToMin(d.otSat) + _hhmmToMin(d.otSun))}`,
+          ];
+          if (parts.sundayLostMin > 0) lines.push(`+10% Sunday on ${_minToHhmm(parts.sundayLostMin)}`);
+          if (parts.nightLostMin > 0)  lines.push(`+25% Night on ${_minToHhmm(parts.nightLostMin)}`);
+          const tip = lines.join(' · ').replace(/"/g, '&quot;');
+          deltaCell = `<td class="ts-cell ts-cell-delta text-destructive font-semibold tooltip-trigger" data-tooltip="${tip}">−${_minToHhmm(lost)}</td>`;
         } else {
           deltaCell = (d.otRequest && _hhmmToMin(d.otRequest) > 0)
-            ? `<td class="ts-cell ts-cell-delta text-success">✓</td>`
+            ? `<td class="ts-cell ts-cell-delta text-success tooltip-trigger" data-tooltip="OT request fully covered by checkin/out ✓">✓</td>`
             : `<td class="ts-cell ts-cell-delta text-muted-foreground">—</td>`;
         }
         const dateLabel = d.date ? d.date.slice(5) : '—';   // MM-DD
@@ -318,11 +321,11 @@ function renderTimesheet() {
             <td class="ts-cell">${d.out || ''}</td>
             <td class="ts-cell text-muted-foreground">${d.break || ''}</td>
             <td class="ts-cell">${d.actualWorking || ''}</td>
+            <td class="ts-cell font-medium">${d.otRequest || ''}</td>
             <td class="ts-cell">${d.otNormal || ''}</td>
             <td class="ts-cell">${d.otMidnight || ''}</td>
             <td class="ts-cell">${d.otSat || ''}</td>
             <td class="ts-cell">${d.otSun || ''}</td>
-            <td class="ts-cell font-medium">${d.otRequest || ''}</td>
             ${deltaCell}
           </tr>`;
       }
