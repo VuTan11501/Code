@@ -145,19 +145,45 @@ def slip_to_record(slip: dict, year: int, month: int) -> dict:
     keeps working with no further changes.
     """
     receivable_items = []
-    for item in (_get(slip, "CompanyReceivableList", "companyReceivableList") or []):
+    for idx, item in enumerate(_get(slip, "CompanyReceivableList", "companyReceivableList") or [], start=1):
         if not isinstance(item, dict):
             continue
-        sub = _get(item, "SubItem", "subItem", "sub")
+        # Build label from note1 (date range) + note2 (description), e.g.
+        # "03/16-03/31 FJP Management Fee". Fallback to Description/label fields
+        # for older API variants.
+        note1 = (_get(item, "note1", "Note1") or "").strip()
+        note2 = (_get(item, "note2", "Note2") or "").strip()
+        note3 = (_get(item, "note3", "Note3") or "").strip()
+        label_parts = [p for p in (note1, note2, note3) if p]
+        label = " ".join(label_parts) or (_get(item, "Description", "description") or "")
+        sub = _get(item, "SubItem", "subItem", "sub", default=idx)
         try:
-            sub_val = int(sub) if sub is not None else None
+            sub_val = int(sub) if sub is not None else idx
         except Exception:
-            sub_val = sub
+            sub_val = idx
         receivable_items.append({
             "sub": sub_val,
-            "label": _get(item, "Description", "description") or "",
+            "label": label,
             "value": _i(_get(item, "Amount", "amount")),
         })
+
+    # Remarks list (optional explanatory notes — e.g. "1.3 Salary adjustment Feb2025").
+    remarks = []
+    for src_key in ("remarkList", "remarkListMonthly", "remarkListTotal"):
+        raw = _get(slip, src_key)
+        if not raw:
+            continue
+        # remarkList can be a single dict OR a list of dicts.
+        if isinstance(raw, dict):
+            raw = [raw]
+        if not isinstance(raw, list):
+            continue
+        for r in raw:
+            if isinstance(r, dict) and (r.get("remarkContent") or r.get("RemarkContent")):
+                remarks.append({
+                    "type": (r.get("type") or r.get("Type") or src_key),
+                    "content": (r.get("remarkContent") or r.get("RemarkContent") or "").strip(),
+                })
 
     # Hourly wage. Prefer AverageHourlyWage from API; else compute from contract.
     hourly = _i(_get(slip, "AverageHourlyWage"))
@@ -193,6 +219,7 @@ def slip_to_record(slip: dict, year: int, month: int) -> dict:
             "ot_hours":          _f(_get(slip, "OvertimeHours")),
             "sunday_hours":      _f(_get(slip, "SundayOvertime")),
             "night_hours":       _f(_get(slip, "NightWorkingHours")),
+            "holiday_hours":     _f(_get(slip, "HolidaysOvertime")),
             "other_ot_hours":    _f(_get(slip, "OtherOvertime")),
         },
         "gross": _i(_get(slip, "GrossIncome")),
@@ -203,6 +230,7 @@ def slip_to_record(slip: dict, year: int, month: int) -> dict:
             "ot_allowance":          _i(_get(slip, "OvertimeAllowance")),
             "sunday_ot_allowance":   _i(_get(slip, "SundayOvertimeAllowance")),
             "night_allowance":       _i(_get(slip, "NightWorkingAllowance")),
+            "holiday_ot_allowance":  _i(_get(slip, "HolidaysOvertimeAllowance")),
             "other_ot_allowance":    _i(_get(slip, "OtherOvertimeAllowance")),
             "other_income":          _i(_get(slip, "OtherIncome")),
         },
@@ -225,6 +253,7 @@ def slip_to_record(slip: dict, year: int, month: int) -> dict:
         "company_payable":  _i(_get(slip, "CompanyPayableTotal")),
         "net_after_tax":    _i(_get(slip, "NetIncomeAfterInsTax")),
         "take_home":        _i(_get(slip, "AmountPaidThisMonth")),
+        "remarks":          remarks,
         "fetched_at":       datetime.now(JST).isoformat(timespec="seconds"),
     }
 
