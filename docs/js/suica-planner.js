@@ -1224,26 +1224,36 @@
   function renderWarnings(ctx) {
     const panel = $('planner-warnings');
     if (!panel) return;
-    const warns = computeWarnings(ctx);
+    const allWarns = computeWarnings(ctx);
+    const warns = allWarns.filter((w) => !_dismissedWarnings.has(w.msg));
     if (!warns.length) { panel.classList.add('hidden'); panel.innerHTML = ''; return; }
     panel.classList.remove('hidden');
     const iconFor = (s) => s === 'error' ? 'alertTriangle' : s === 'warn' ? 'alert' : 'info';
     const toneFor = (s) => s === 'error' ? 'text-destructive' : s === 'warn' ? 'text-warning' : 'text-muted-foreground';
+    const hidden = allWarns.length - warns.length;
     panel.innerHTML = `
       <div class="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-2 uppercase tracking-wide">
-        <span data-icon="alert" data-size="12"></span> Plan checks (${warns.length})
+        <span data-icon="alert" data-size="12"></span> Plan checks (${warns.length}${hidden ? ` · ${hidden} hidden` : ''})
       </div>
       <ul class="flex flex-col gap-1.5">
-        ${warns.map((w) => `
+        ${warns.map((w, i) => `
           <li class="flex items-start gap-2 text-xs ${toneFor(w.severity)}">
             <span data-icon="${iconFor(w.severity)}" data-size="12" class="mt-0.5 flex-none"></span>
             <span class="flex-1">${w.msg}</span>
             ${w.fix === 'auto-suggest' ? '<button type="button" class="btn btn-ghost sm text-[10px] py-0.5 px-2" data-warn-fix="auto-suggest">Fix</button>' : ''}
+            <button type="button" class="btn btn-ghost sm text-[10px] py-0.5 px-1.5 opacity-60 hover:opacity-100" data-warn-dismiss="${i}" aria-label="Dismiss warning" data-tooltip="Dismiss until the plan changes">×</button>
           </li>`).join('')}
       </ul>`;
     if (window.refreshIcons) window.refreshIcons(panel);
     panel.querySelectorAll('[data-warn-fix="auto-suggest"]').forEach((b) => {
       b.addEventListener('click', () => { const real = $('planner-auto-suggest'); if (real) real.click(); });
+    });
+    panel.querySelectorAll('[data-warn-dismiss]').forEach((b) => {
+      b.addEventListener('click', () => {
+        const i = +b.dataset.warnDismiss;
+        if (warns[i]) _dismissedWarnings.add(warns[i].msg);
+        renderWarnings(ctx);
+      });
     });
   }
 
@@ -2235,11 +2245,14 @@
       settings: JSON.parse(JSON.stringify(state.settings)),
     };
   }
+  const _dismissedWarnings = new Set();
   function pushHistory() {
     if (_hist.suppress) return;
     _hist.stack.push(_snapshotState());
     if (_hist.stack.length > _hist.max) _hist.stack.shift();
     _hist.redo.length = 0;
+    // Any user-initiated state change should re-surface dismissed warnings.
+    _dismissedWarnings.clear();
   }
   function applyHistorySnap(snap) {
     _hist.suppress = true;
