@@ -283,4 +283,8 @@
       '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
     })[c]);
   }
+
+  // Expose the render entry-point so other modules (e.g. the planner's
+  // "Generate PDF" flow) can preview synthetic histories in the viewer below.
+  window.renderSuicaHistory = render;
 })();
