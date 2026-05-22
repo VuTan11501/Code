@@ -1143,11 +1143,30 @@
     if (sortMode === 'fare') indexed.sort((a, b) => fareOf(b.l.route) - fareOf(a.l.route));
     else if (sortMode === 'weight') indexed.sort((a, b) => b.l.weight - a.l.weight);
     else if (sortMode === 'name') indexed.sort((a, b) => a.l.route.localeCompare(b.l.route, 'ja'));
+    // Build leisure-route popularity from Recent history so users see which
+    // routes the generator has actually been picking.
+    const recentList = (function () { try { return loadRecent(); } catch (_) { return []; } })();
+    const popularity = Object.create(null);
+    let popMax = 0;
+    recentList.forEach((r) => {
+      (r.routes || []).forEach((rt) => {
+        popularity[rt] = (popularity[rt] || 0) + 1;
+        if (popularity[rt] > popMax) popMax = popularity[rt];
+      });
+    });
     indexed.forEach(({ l, idx }) => {
       const row = document.createElement('div');
       row.className = 'flex items-center gap-2 py-1.5 border-b border-border last:border-b-0';
+      const pop = popularity[l.route] || 0;
+      const filled = popMax ? Math.round((pop / popMax) * 5) : 0;
+      const dotsStr = (recentList.length && pop)
+        ? `<span class="font-mono text-[10px] text-muted-foreground" data-tooltip="Picked in ${pop} of the last ${recentList.length} generations">${'●'.repeat(filled)}${'○'.repeat(5 - filled)}</span>`
+        : (recentList.length
+            ? `<span class="font-mono text-[10px] text-muted-foreground/50" data-tooltip="Not yet picked in the last ${recentList.length} generations">○○○○○</span>`
+            : '<span class="font-mono text-[10px] text-muted-foreground/40" data-tooltip="No generation history yet">—</span>');
       row.innerHTML = `
         <span class="status-badge status-pending font-mono flex-none">${l.route}</span>
+        ${dotsStr}
         <span class="text-xs text-muted-foreground">weight</span>
         <input type="number" min="1" max="20" value="${l.weight}" class="input w-16 text-sm" data-leisure-weight="${idx}">
         <span class="text-xs text-muted-foreground font-mono ml-auto">${fmtYen(fareOf(l.route))}</span>
