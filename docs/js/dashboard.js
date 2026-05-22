@@ -537,8 +537,9 @@ async function triggerWorkflow(file, ev) {
     const action = isCheckin ? 'CHECKIN' : 'CHECKOUT';
     const emoji = isCheckin ? '📥' : '📤';
     const message =
-      `${emoji} Sẽ ghi nhận ${action} tại:\n\n` +
-      `🕐 ${nowFmt} JST\n\n` +
+      `${emoji} Sẽ ghi nhận ${action} lúc:\n\n` +
+      `🕐 ${nowFmt} JST\n` +
+      `📍 Office (GPS mặc định)\n\n` +
       (offHours
         ? `⚠️ Đang ngoài giờ làm việc — hãy chắc chắn đây là điều bạn muốn (record sai sẽ phải xoá thủ công trên DokoKin).\n\n`
         : ``) +
