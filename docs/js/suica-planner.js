@@ -2035,6 +2035,10 @@
           <div class="spinner-ring" role="status" aria-label="Generating Suica PDF"></div>
           <div class="spinner-overlay-label"></div>
           <div class="spinner-overlay-sub text-xs text-muted-foreground"></div>
+          <div class="spinner-overlay-progress" style="width:240px;max-width:80vw;margin:10px auto 0;height:6px;background:var(--muted,#eee);border-radius:999px;overflow:hidden;position:relative;">
+            <div class="spinner-overlay-progress-bar" style="height:100%;width:0%;background:linear-gradient(90deg,var(--primary,#6366f1),color-mix(in oklab,var(--primary,#6366f1) 60%,white));transition:width .4s ease;"></div>
+          </div>
+          <div class="spinner-overlay-pct text-[10px] text-muted-foreground" style="margin-top:4px;font-variant-numeric:tabular-nums;">~0%</div>
           <div class="spinner-overlay-actions" style="margin-top:12px; display:flex; gap:8px; justify-content:center;">
             <button type="button" id="suicaPdfViewLogsBtn" class="btn sm btn-ghost" disabled style="font-size:12px;">
               <span data-icon="terminal" data-size="12"></span>
@@ -2067,6 +2071,24 @@
     if (!overlay) return;
     const subEl = overlay.querySelector('.spinner-overlay-sub');
     if (subEl) subEl.textContent = sub || '';
+  }
+  // Visual progress estimate while waiting for a workflow run. Typical end-to-end
+  // run is ~75–110s, so we asymptote to 95% via 1 - e^(-t/45) and only hit 100%
+  // when the caller passes `done`.
+  function _updateOverlayProgress(elapsedSec, done) {
+    const overlay = document.getElementById('suicaPdfOverlay');
+    if (!overlay) return;
+    const bar = overlay.querySelector('.spinner-overlay-progress-bar');
+    const pctEl = overlay.querySelector('.spinner-overlay-pct');
+    if (!bar || !pctEl) return;
+    let pct;
+    if (done) pct = 100;
+    else {
+      const eased = 1 - Math.exp(-Math.max(0, elapsedSec) / 45);
+      pct = Math.min(95, Math.round(eased * 95));
+    }
+    bar.style.width = pct + '%';
+    pctEl.textContent = (done ? '' : '~') + pct + '%';
   }
   // Enable the "View logs" button + Open-on-GitHub link once we have a run.
   function _wireOverlayRun(run) {
@@ -2158,6 +2180,7 @@
             }
             const elapsed = Math.floor((Date.now() - start) / 1000);
             _updateOverlay(`Run #${candidate.run_number} · ${candidate.status} · ${elapsed}s`);
+            _updateOverlayProgress(elapsed, candidate.status === 'completed');
             if (candidate.status === 'completed') {
               _logCtx.completed = true;
               if (candidate.conclusion !== 'success') {
@@ -2166,7 +2189,9 @@
               return candidate;
             }
           } else {
-            _updateOverlay(`Waiting for run to appear… ${Math.floor((Date.now() - start) / 1000)}s`);
+            const wait = Math.floor((Date.now() - start) / 1000);
+            _updateOverlay(`Waiting for run to appear… ${wait}s`);
+            _updateOverlayProgress(wait);
           }
         }
       } catch (e) {
