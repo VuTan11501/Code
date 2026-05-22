@@ -2055,6 +2055,7 @@
     const list = loadSnapshots();
     const s = list.find((x) => x.id === id);
     if (!s) return;
+    pushHistory();
     state.pattern = JSON.parse(JSON.stringify(s.pattern));
     state.leisure = JSON.parse(JSON.stringify(s.leisure));
     state.settings = JSON.parse(JSON.stringify(s.settings));
@@ -2071,7 +2072,12 @@
     const lMin = $('planner-leisure-min'); if (lMin) lMin.value = state.settings.leisure_min;
     const lMax = $('planner-leisure-max'); if (lMax) lMax.value = state.settings.leisure_max;
     renderPattern(); renderLeisure(); renderEstimate(); saveState();
-    if (window.Toast) window.Toast.success(`Loaded "${s.name}"`, { title: 'Snapshot restored' });
+    if (window.Toast) window.Toast.success(`Loaded "${s.name}"`, {
+      title: 'Snapshot restored',
+      duration: 7000,
+      actionLabel: 'Undo',
+      onAction: () => { try { undo(); } catch (_) {} },
+    });
   }
   function deleteSnapshot(id) {
     const list = loadSnapshots().filter((x) => x.id !== id);
