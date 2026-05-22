@@ -1664,6 +1664,93 @@
     }
   }
 
+  // ────── Plan snapshots ──────
+  // User-named saved plans stored under SNAPSHOTS_KEY. Each snapshot is a deep
+  // clone of {pattern, leisure, settings, lastRoute} at the moment of save.
+  // Caps at 20 snapshots; oldest is evicted.
+  const SNAPSHOTS_KEY = 'suica-planner-snapshots-v1';
+  function loadSnapshots() {
+    try { return JSON.parse(localStorage.getItem(SNAPSHOTS_KEY) || '[]'); }
+    catch (_) { return []; }
+  }
+  function saveSnapshots(arr) {
+    try { localStorage.setItem(SNAPSHOTS_KEY, JSON.stringify(arr.slice(-20))); } catch (_) {}
+  }
+  function captureSnapshot(name) {
+    const snap = {
+      id: 'snap-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+      name: name || `Snapshot ${new Date().toLocaleString()}`,
+      created_at: new Date().toISOString(),
+      pattern: JSON.parse(JSON.stringify(state.pattern)),
+      leisure: JSON.parse(JSON.stringify(state.leisure)),
+      settings: JSON.parse(JSON.stringify(state.settings)),
+      route: currentRoute(),
+    };
+    const list = loadSnapshots();
+    list.push(snap);
+    saveSnapshots(list);
+    renderSnapshots();
+    if (window.Toast) window.Toast.success(`"${snap.name}"`, { title: 'Plan snapshot saved' });
+  }
+  function restoreSnapshot(id) {
+    const list = loadSnapshots();
+    const s = list.find((x) => x.id === id);
+    if (!s) return;
+    state.pattern = JSON.parse(JSON.stringify(s.pattern));
+    state.leisure = JSON.parse(JSON.stringify(s.leisure));
+    state.settings = JSON.parse(JSON.stringify(s.settings));
+    // Mirror settings into inputs
+    ['month', 'target', 'seed', 'initial_balance', 'topup_threshold', 'topup_amount', 'leisure_min', 'leisure_max'].forEach((k) => {
+      const el = $('planner-' + k.replace(/_/g, '-')); if (el) el.value = state.settings[k];
+    });
+    const tEl = $('planner-target'); if (tEl) tEl.value = state.settings.target;
+    const mEl = $('planner-month'); if (mEl) mEl.value = state.settings.month;
+    const sEl = $('planner-seed'); if (sEl) sEl.value = state.settings.seed;
+    const iEl = $('planner-initial'); if (iEl) iEl.value = state.settings.initial_balance;
+    const tThr = $('planner-topup-threshold'); if (tThr) tThr.value = state.settings.topup_threshold;
+    const tAmt = $('planner-topup-amount'); if (tAmt) tAmt.value = state.settings.topup_amount;
+    const lMin = $('planner-leisure-min'); if (lMin) lMin.value = state.settings.leisure_min;
+    const lMax = $('planner-leisure-max'); if (lMax) lMax.value = state.settings.leisure_max;
+    renderPattern(); renderLeisure(); renderEstimate(); saveState();
+    if (window.Toast) window.Toast.success(`Loaded "${s.name}"`, { title: 'Snapshot restored' });
+  }
+  function deleteSnapshot(id) {
+    const list = loadSnapshots().filter((x) => x.id !== id);
+    saveSnapshots(list);
+    renderSnapshots();
+  }
+  function renderSnapshots() {
+    const wrap = $('planner-snapshots-list');
+    if (!wrap) return;
+    const list = loadSnapshots();
+    if (!list.length) {
+      wrap.innerHTML = '<div class="text-xs text-muted-foreground italic py-2">No snapshots yet — click "Save snapshot" to capture the current plan.</div>';
+      return;
+    }
+    wrap.innerHTML = '';
+    list.slice().reverse().forEach((s) => {
+      const row = document.createElement('div');
+      row.className = 'flex items-center gap-3 py-2 border-b border-border last:border-b-0 flex-wrap';
+      const when = new Date(s.created_at).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' });
+      const tripCount = DAYS.reduce((sum, d) => sum + (s.pattern[d]?.length || 0), 0);
+      row.innerHTML = `
+        <div class="flex flex-col gap-0.5 flex-1 min-w-[160px]">
+          <div class="text-sm font-medium">${s.name}</div>
+          <div class="text-xs text-muted-foreground">${when} · ${tripCount} commute trips · ${s.leisure.length} leisure · target ¥${(+s.settings.target).toLocaleString('en-US')}</div>
+        </div>
+        <button type="button" class="btn btn-ghost sm text-xs" data-snap-restore="${s.id}">
+          <span data-icon="undo" data-size="12"></span><span class="btn-label">Restore</span>
+        </button>
+        <button type="button" class="btn btn-ghost sm text-xs" data-snap-delete="${s.id}" aria-label="Delete snapshot">
+          <span data-icon="trash" data-size="12"></span>
+        </button>`;
+      wrap.appendChild(row);
+    });
+    wrap.querySelectorAll('[data-snap-restore]').forEach((b) => b.addEventListener('click', (e) => restoreSnapshot(e.currentTarget.getAttribute('data-snap-restore'))));
+    wrap.querySelectorAll('[data-snap-delete]').forEach((b) => b.addEventListener('click', (e) => deleteSnapshot(e.currentTarget.getAttribute('data-snap-delete'))));
+    if (window.refreshIcons) window.refreshIcons(wrap);
+  }
+
   function loadSamplePlan() {
     state.pattern = {
       monday: [{ route: '東京↔新宿', type: 'commute' }],
@@ -1970,6 +2057,15 @@
       const status = $('planner-pdf-status');
       if (status) { status.textContent = `Seed bumped to ${next} — same plan, different schedule. Click Generate to render.`; status.className = 'text-xs text-primary'; }
     });
+    const snapSave = $('planner-snapshot-save');
+    if (snapSave) snapSave.addEventListener('click', () => {
+      const name = prompt('Name this snapshot:', `Plan ${new Date().toLocaleDateString()}`);
+      if (name === null) return;
+      captureSnapshot(name.trim() || null);
+      // Close the parent details menu
+      const det = snapSave.closest('details'); if (det) det.removeAttribute('open');
+    });
+    renderSnapshots();
     const recentClearBtn = $('planner-recent-clear');
     if (recentClearBtn) recentClearBtn.addEventListener('click', () => {
       saveRecent([]); renderRecent();

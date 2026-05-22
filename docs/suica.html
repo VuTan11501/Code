@@ -359,6 +359,11 @@
                 <span data-icon="download" data-size="14"></span>
                 <span class="btn-label">Download history.json</span>
               </button>
+              <div class="separator h-px w-full bg-border my-1"></div>
+              <button id="planner-snapshot-save" class="btn btn-ghost sm justify-start" type="button" data-tooltip="Save the current plan into browser storage for one-click restore later">
+                <span data-icon="save" data-size="14"></span>
+                <span class="btn-label">Save snapshot…</span>
+              </button>
             </div>
           </details>
           <button id="planner-auto-suggest" class="btn sm btn-outline" type="button" data-tooltip="Auto-fill weekday commute (current From↔To) and tune leisure to hit your ¥ target">
@@ -392,6 +397,18 @@
 
   <!-- Multi-suggest variant panel (Light / Standard / Heavy) -->
   <section id="planner-multi-suggest-panel" class="card hidden" aria-live="polite"></section>
+
+  <!-- Plan snapshots (saved plans) -->
+  <section id="planner-snapshots-section" aria-label="Saved snapshots">
+    <div class="section-title text-sm font-medium text-muted-foreground mb-4 flex items-center gap-2">
+      <span data-icon="save" data-size="16"></span> Saved snapshots
+    </div>
+    <div class="card">
+      <div class="card-content">
+        <div id="planner-snapshots-list"></div>
+      </div>
+    </div>
+  </section>
 
   <!-- Recent runs (last 5 PDF generations) -->
   <section id="planner-recent-section" aria-label="Recent generations" class="hidden">
@@ -592,6 +609,6 @@
 <script src="js/suica-history.js?v=6" defer></script>
 <script src="js/log-viewer.js?v=1" defer></script>
 <script>window.SUICA_FARE_API='https://suica-fare-proxy.workflow-dashboard.workers.dev';</script>
-<script src="js/suica-planner.js?v=27" defer></script>
+<script src="js/suica-planner.js?v=28" defer></script>
 </body>
 </html>
