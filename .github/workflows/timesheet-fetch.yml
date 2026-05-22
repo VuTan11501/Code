@@ -1,0 +1,63 @@
+name: Timesheet Fetch
+
+# Pulls monthly timesheet detail from DokoKin and stores it as
+# `timesheet-history.json` in the Gist. The PWA "Timesheet" tab reads it
+# to flag days where actual working time < OT request ("lost OT" detector).
+
+on:
+  workflow_dispatch:
+    inputs:
+      months_keep:
+        description: "Rolling window — how many recent months to keep"
+        required: false
+        default: "6"
+      account:
+        description: "DokoKin account (default: tanvc)"
+        required: false
+        default: "tanvc"
+  schedule:
+    # 07:00 JST daily = 22:00 UTC previous day
+    - cron: "0 22 * * *"
+
+permissions:
+  contents: read
+
+env:
+  TZ: Asia/Tokyo
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            .github/scripts
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Run timesheet fetch
+        id: fetch
+        env:
+          AZURE_REFRESH_TOKEN: ${{ secrets.AZURE_REFRESH_TOKEN }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+          MONTHS_KEEP: ${{ inputs.months_keep || '6' }}
+          ACCOUNT: ${{ inputs.account || 'tanvc' }}
+        run: python .github/scripts/gh_timesheet_fetch.py
+
+      - name: Update secret if token rotated
+        if: always() && steps.fetch.outputs.token_rotated == 'true'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+          NEW_REFRESH_TOKEN: ${{ steps.fetch.outputs.new_refresh_token }}
+        run: |
+          if [ -n "$NEW_REFRESH_TOKEN" ] && [ -n "$GH_TOKEN" ]; then
+            gh secret set AZURE_REFRESH_TOKEN --body "$NEW_REFRESH_TOKEN" --repo "$GITHUB_REPOSITORY"
+            echo "✅ Secret updated with rotated token"
+          fi

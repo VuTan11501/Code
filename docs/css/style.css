@@ -3617,3 +3617,57 @@ body.ai-page-active .ai-dot-grid {
 .ai-msg-reapply-row { margin-top: 6px; }
 .ai-action-btn.ai-action-reapply { color: var(--primary); border-color: color-mix(in srgb, var(--primary) 30%, transparent); background: color-mix(in srgb, var(--primary) 8%, transparent); }
 .ai-action-btn.ai-action-reapply:hover { background: color-mix(in srgb, var(--primary) 14%, transparent); border-color: color-mix(in srgb, var(--primary) 50%, transparent); }
+
+/* ─── Timesheet tab ─────────────────────────────────────── */
+.ts-summary { display: flex; flex-direction: column; gap: 12px; }
+.ts-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 8px;
+}
+.ts-chip {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 8px 10px;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.ts-chip-label {
+  font-size: 10px;
+  color: var(--muted-foreground);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.ts-chip-value {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--foreground);
+  font-variant-numeric: tabular-nums;
+}
+.ts-lost-card {
+  background: var(--red-subtle, rgba(239, 68, 68, 0.08));
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  border-radius: var(--radius-lg);
+  padding: 14px 16px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.ts-lost-head { display: flex; align-items: flex-start; gap: 10px; }
+.ts-lost-icon { font-size: 20px; line-height: 1; flex-shrink: 0; }
+.ts-lost-title { font-size: 14px; font-weight: 600; color: var(--red, #ef4444); }
+.ts-lost-sub { font-size: 12px; color: var(--foreground); margin-top: 2px; }
+.ts-lost-hint { font-size: 11px; color: var(--muted-foreground); padding-left: 30px; }
+
+.ts-table { min-width: 920px; font-variant-numeric: tabular-nums; }
+.ts-table th, .ts-table td {
+  padding: 6px 8px !important;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.ts-table .ts-cell-date { font-weight: 600; }
+.ts-table .ts-dow-sun  { color: var(--red, #ef4444); font-weight: 600; }
+.ts-table .ts-dow-sat  { color: var(--blue, #3b82f6); font-weight: 600; }
+.ts-table .ts-dow-hol  { color: var(--purple, #a855f7); font-weight: 600; }
+.ts-table tr.ts-row-lost { background: rgba(239, 68, 68, 0.06); }
+.ts-table tr.ts-row-lost:hover { background: rgba(239, 68, 68, 0.10); }
+.ts-table tr.ts-row-today { box-shadow: inset 2px 0 0 var(--primary, #3b82f6); }
+.ts-table .text-success { color: var(--green, #22c55e); }

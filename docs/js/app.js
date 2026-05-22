@@ -368,6 +368,7 @@ function navigate(hash) {
   // Initialize page-specific content
   if (page === 'schedule' && typeof initSchedulePage === 'function') initSchedulePage();
   if (page === 'ot' && typeof initOtPlannerPage === 'function') initOtPlannerPage();
+  if (page === 'timesheet' && typeof initTimesheetPage === 'function') initTimesheetPage();
   if (page === 'ai' && window.AIAgent && typeof window.AIAgent.mount === 'function') window.AIAgent.mount();
   if (page === 'settings' && typeof initSettingsPage === 'function') initSettingsPage();
   if (page === 'dashboard' && typeof refresh === 'function' && sessionToken) {

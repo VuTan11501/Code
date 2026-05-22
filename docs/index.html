@@ -179,6 +179,12 @@ tailwind.config = {
         </span>
         <span class="nav-label">OT</span>
       </a>
+      <a class="tabs-trigger nav-item flex-1 text-center px-3 py-2 rounded-md text-sm font-medium text-muted-foreground cursor-pointer transition-all flex items-center justify-center gap-2 no-underline" data-page="timesheet" href="#timesheet" role="tab" aria-selected="false" onclick="navigate('#timesheet')">
+        <span class="nav-icon" aria-hidden="true">
+          <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 22h14"/><path d="M5 2h14"/><path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22"/><path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"/></svg>
+        </span>
+        <span class="nav-label">Timesheet</span>
+      </a>
       <a class="tabs-trigger nav-item flex-1 text-center px-3 py-2 rounded-md text-sm font-medium text-muted-foreground cursor-pointer transition-all flex items-center justify-center gap-2 no-underline" data-page="ai" href="#ai" role="tab" aria-selected="false" onclick="navigate('#ai')">
         <span class="nav-icon" aria-hidden="true">
           <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/></svg>
@@ -452,6 +458,61 @@ tailwind.config = {
             <button id="otSyncBtn" class="btn sm" onclick="syncOtWithDokoKin()" data-tooltip="Trigger Auto OT Creator now (~60–90s)"><span data-icon="sparkles" data-size="14"></span> Sync DokoKin</button>
             <button id="otRefreshBtn" class="btn sm" onclick="refreshOtData()" data-tooltip="Refresh from Gist"><span data-icon="refresh" data-size="14"></span> Refresh</button>
           </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- PAGE: TIMESHEET -->
+    <div class="page" id="page-timesheet" role="tabpanel" aria-label="Timesheet page">
+      <section aria-label="Timesheet month summary">
+        <div class="section-title text-sm font-medium text-muted-foreground mb-4 flex items-center justify-between gap-2">
+          <span class="flex items-center gap-2"><span data-icon="hourglass" data-size="16"></span> <span id="tsMonthLabel">Timesheet</span></span>
+          <div class="flex items-center gap-1">
+            <button class="btn sm btn-ghost btn-icon" onclick="tsNavMonth(-1)" aria-label="Previous month"><span data-icon="chevronLeft" data-size="16"></span></button>
+            <button class="btn sm" onclick="tsGoToday()">Today</button>
+            <button class="btn sm btn-ghost btn-icon" onclick="tsNavMonth(1)" aria-label="Next month"><span data-icon="chevronRight" data-size="16"></span></button>
+          </div>
+        </div>
+        <div id="tsSummary" class="ts-summary"></div>
+      </section>
+
+      <div class="separator h-px w-full bg-border mt-6 mb-4"></div>
+
+      <section aria-label="Timesheet daily detail">
+        <div class="section-title text-sm font-medium text-muted-foreground mb-4 flex items-center justify-between gap-2 flex-wrap">
+          <span class="flex items-center gap-2"><span data-icon="list" data-size="16"></span> Daily detail</span>
+          <div class="flex items-center gap-2">
+            <span id="tsUpdatedAt" class="text-xs text-muted-foreground"></span>
+            <button id="tsSyncBtn" class="btn sm" onclick="syncTimesheetFromDokoKin()" data-tooltip="Trigger Timesheet Fetch workflow (~60s)"><span data-icon="sparkles" data-size="14"></span> Sync DokoKin</button>
+            <button id="tsRefreshBtn" class="btn sm" onclick="loadTimesheetData({refresh:true})" data-tooltip="Refresh from Gist"><span data-icon="refresh" data-size="14"></span> Refresh</button>
+          </div>
+        </div>
+        <div class="sched-table-wrap overflow-x-auto rounded-lg border border-border">
+          <table class="sched-table ts-table w-full text-sm">
+            <thead>
+              <tr class="bg-muted/50 border-b border-border">
+                <th class="px-2 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Date</th>
+                <th class="px-2 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Day</th>
+                <th class="px-2 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">In</th>
+                <th class="px-2 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Out</th>
+                <th class="px-2 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Break</th>
+                <th class="px-2 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Actual</th>
+                <th class="px-2 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider" title="OT Normal">N</th>
+                <th class="px-2 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider" title="OT Midnight (subset of N/Sat/Sun)">Mid</th>
+                <th class="px-2 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider" title="OT Saturday/Holiday">Sat</th>
+                <th class="px-2 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider" title="OT Sunday">Sun</th>
+                <th class="px-2 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider" title="OT requested via DokoKin">Req</th>
+                <th class="px-2 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider" title="Negative = OT requested but not recognized → lost yen">Δ</th>
+              </tr>
+            </thead>
+            <tbody id="tsTableBody">
+              <tr><td colspan="12" class="text-center text-muted-foreground py-8">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="flex items-center justify-between mt-3 text-xs text-muted-foreground">
+          <span id="tsRowCount">0 days</span>
+          <span class="text-muted-foreground">Lost-OT tolerance: 5min · gross @ 125%</span>
         </div>
       </section>
     </div>
@@ -1203,6 +1264,7 @@ tailwind.config = {
 <script src="js/schedule.js?v=27"></script>
 <script src="js/ot-salary.js?v=37"></script>
 <script src="js/ot-planner.js?v=52"></script>
+<script src="js/timesheet.js?v=1"></script>
 <script src="js/ai-validators.js?v=1"></script>
 <script src="js/ai-audit.js?v=4"></script>
 <script src="js/ai-proposals.js?v=2"></script>
