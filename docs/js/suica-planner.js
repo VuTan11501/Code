@@ -909,6 +909,27 @@
       const empty = document.createElement('div');
       empty.className = 'rounded-md border border-dashed border-border bg-muted/30 p-3 text-center mb-2';
       empty.innerHTML = `
+        <svg viewBox="0 0 220 60" width="180" height="50" aria-hidden="true" style="display:block;margin:0 auto 6px;opacity:.55;color:var(--muted-foreground);">
+          <line x1="6" y1="48" x2="214" y2="48" stroke="currentColor" stroke-width="1.4"/>
+          <g stroke="currentColor" stroke-width="1" opacity=".5">
+            <line x1="14"  y1="52" x2="14"  y2="56"/><line x1="44"  y1="52" x2="44"  y2="56"/>
+            <line x1="74"  y1="52" x2="74"  y2="56"/><line x1="104" y1="52" x2="104" y2="56"/>
+            <line x1="134" y1="52" x2="134" y2="56"/><line x1="164" y1="52" x2="164" y2="56"/>
+            <line x1="194" y1="52" x2="194" y2="56"/>
+          </g>
+          <g fill="currentColor">
+            <rect x="60" y="20" width="100" height="24" rx="5"/>
+            <rect x="156" y="14" width="12" height="30" rx="3"/>
+          </g>
+          <g fill="var(--card)" stroke="var(--card)">
+            <rect x="68" y="26" width="14" height="10" rx="1.5"/>
+            <rect x="88" y="26" width="14" height="10" rx="1.5"/>
+            <rect x="108" y="26" width="14" height="10" rx="1.5"/>
+            <rect x="128" y="26" width="14" height="10" rx="1.5"/>
+          </g>
+          <circle cx="78" cy="48" r="4" fill="currentColor"/>
+          <circle cx="142" cy="48" r="4" fill="currentColor"/>
+        </svg>
         <div class="text-sm font-medium mb-0.5">No commute set yet</div>
         <div class="text-xs text-muted-foreground mb-2">Pick a From↔To above, then tap <b>Auto-suggest from target</b> to fill weekdays.</div>
         <button type="button" id="planner-empty-suggest" class="btn sm btn-outline" data-tooltip="Auto-fill weekdays from the current From↔To and ¥ target">
