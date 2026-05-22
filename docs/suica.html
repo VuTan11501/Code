@@ -197,6 +197,20 @@
     .card { box-shadow: none !important; border: 1px solid #ccc !important; page-break-inside: avoid; }
     a { color: inherit !important; text-decoration: none !important; }
   }
+  /* Compact density (toggled via #suica-density-toggle, persisted in
+     localStorage). Reduces card padding and row spacing for power users
+     who want more on screen without sacrificing fonts. */
+  body.suica-compact main { padding: 0.75rem !important; gap: 0.5rem !important; }
+  body.suica-compact .card { padding: 0.5rem !important; }
+  body.suica-compact .card-content { padding: 0.5rem !important; }
+  body.suica-compact .py-1\\.5 { padding-top: 0.125rem !important; padding-bottom: 0.125rem !important; }
+  body.suica-compact .py-2   { padding-top: 0.25rem  !important; padding-bottom: 0.25rem  !important; }
+  body.suica-compact .mb-2,
+  body.suica-compact .mb-3,
+  body.suica-compact .mb-4   { margin-bottom: 0.375rem !important; }
+  body.suica-compact .space-y-5 > * + * { margin-top: 0.5rem !important; }
+  body.suica-compact .gap-3  { gap: 0.5rem !important; }
+  body.suica-compact .input  { padding-top: 0.25rem !important; padding-bottom: 0.25rem !important; }
 </style>
 </head>
 <body class="bg-background text-foreground font-sans text-sm antialiased min-h-dvh overflow-x-hidden">
@@ -218,6 +232,9 @@
       <button id="suica-theme-toggle" type="button" class="btn sm btn-ghost" aria-label="Toggle light/dark theme" data-tooltip="Toggle light/dark theme (T)">
         <span data-icon="sun" data-size="14" data-theme-icon="light"></span>
         <span data-icon="moon" data-size="14" data-theme-icon="dark" class="hidden"></span>
+      </button>
+      <button id="suica-density-toggle" type="button" class="btn sm btn-ghost" aria-label="Toggle compact density" data-tooltip="Toggle compact / comfortable density">
+        <span style="font-size:14px;line-height:1">▤</span>
       </button>
       <a href="index.html" class="btn sm btn-ghost no-underline">
         <span data-icon="chevronLeft" data-size="14"></span>
@@ -737,7 +754,7 @@
 <script src="js/suica-history.js?v=6" defer></script>
 <script src="js/log-viewer.js?v=1" defer></script>
 <script>window.SUICA_FARE_API='https://suica-fare-proxy.workflow-dashboard.workers.dev';</script>
-<script src="js/suica-planner.js?v=64" defer></script>
+<script src="js/suica-planner.js?v=65" defer></script>
 <script>
 // Theme toggle for suica.html (mirrors the dashboard's behavior; uses the same
 // localStorage key so the preference syncs across pages).
@@ -773,6 +790,29 @@
       var ae = document.activeElement;
       if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
       toggleTheme();
+    });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();
+</script>
+<script>
+// Compact density toggle — adds/removes body.suica-compact, persists in
+// localStorage under "suica-density" so the choice survives reloads.
+(function () {
+  var KEY = 'suica-density';
+  function apply(mode) {
+    document.body.classList.toggle('suica-compact', mode === 'compact');
+  }
+  function init() {
+    var btn = document.getElementById('suica-density-toggle');
+    var saved = (function () { try { return localStorage.getItem(KEY); } catch (_) { return null; } })();
+    if (saved === 'compact') apply('compact');
+    if (btn) btn.addEventListener('click', function () {
+      var next = document.body.classList.contains('suica-compact') ? 'comfortable' : 'compact';
+      apply(next);
+      try { localStorage.setItem(KEY, next); } catch (_) {}
+      if (window.Toast) window.Toast.info('Density: ' + next);
     });
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
