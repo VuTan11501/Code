@@ -1137,6 +1137,33 @@
         });
       }
       row.appendChild(chips);
+      // "Clone previous day" — appears on every row except Monday (which has no
+      // previous in our weekly sense). Convenient when most days share trips.
+      {
+        const dayIdx = DAYS.indexOf(day);
+        if (dayIdx > 0) {
+          const prev = DAYS[dayIdx - 1];
+          if (state.pattern[prev].length) {
+            const cloneBtn = document.createElement('button');
+            cloneBtn.type = 'button';
+            cloneBtn.className = 'btn btn-ghost sm text-xs flex-none';
+            cloneBtn.setAttribute('aria-label', `Clone ${DAY_LABELS[prev]} trips into ${DAY_LABELS[day]}`);
+            cloneBtn.setAttribute('data-tooltip', `Clone ${DAY_LABELS[prev]} (${state.pattern[prev].length} trips) into ${DAY_LABELS[day]}`);
+            cloneBtn.textContent = '⤴';
+            cloneBtn.addEventListener('click', () => {
+              pushHistory();
+              state.pattern[day] = state.pattern[prev].map((t) => ({ ...t }));
+              renderPattern(); renderEstimate(); saveState();
+              if (window.Toast) window.Toast.info(`${DAY_LABELS[prev]} → ${DAY_LABELS[day]}`, {
+                duration: 3500,
+                actionLabel: 'Undo',
+                onAction: () => { try { undo(); } catch (_) {} },
+              });
+            });
+            row.appendChild(cloneBtn);
+          }
+        }
+      }
       // "Clear day" button — only shown when this day has trips
       if (state.pattern[day].length) {
         const clearBtn = document.createElement('button');
