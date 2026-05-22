@@ -1064,6 +1064,35 @@
       meter.appendChild(sumLabel);
       wrap.appendChild(meter);
     }
+    // Quick-add: a single chip per day that, on click, appends the currently
+    // selected From↔To route to that day. Lets users seed a custom schedule
+    // (e.g. only Tue/Thu) without going through the bulk Mon-Fri commute add.
+    {
+      const route = currentRoute();
+      const qa = document.createElement('div');
+      qa.className = 'flex items-center gap-1 mb-2 px-1 flex-wrap text-[10px]';
+      qa.innerHTML = `<span class="text-muted-foreground uppercase tracking-wide mr-1">Quick add:</span>`;
+      DAYS.forEach((d) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'btn btn-ghost sm text-[10px] px-1.5 py-0.5';
+        b.disabled = !route;
+        if (!route) b.classList.add('opacity-40', 'cursor-not-allowed');
+        const exists = route && state.pattern[d].some((x) => x.route === route);
+        b.setAttribute('data-tooltip', route ? (exists ? `${route} already on ${DAY_LABELS[d]} — click to remove` : `Add ${route} to ${DAY_LABELS[d]}`) : 'Pick a From↔To above first');
+        b.innerHTML = `<span class="${exists ? 'text-primary font-semibold' : ''}">${DAY_LABELS[d]}</span>`;
+        b.addEventListener('click', () => {
+          if (!route) return;
+          pushHistory();
+          const idx = state.pattern[d].findIndex((x) => x.route === route);
+          if (idx >= 0) state.pattern[d].splice(idx, 1);
+          else state.pattern[d].push({ route, type: 'commute' });
+          renderPattern(); renderEstimate(); saveState();
+        });
+        qa.appendChild(b);
+      });
+      wrap.appendChild(qa);
+    }
     const JP_DAYS = { monday: '月', tuesday: '火', wednesday: '水', thursday: '木', friday: '金', saturday: '土', sunday: '日' };
     DAYS.forEach((day) => {
       const row = document.createElement('div');
@@ -3058,7 +3087,7 @@
     // Wire comboboxes (replaces the old datalist <input>)
     const fromWrap = document.querySelector('[data-combobox-id="planner-from"]');
     const toWrap = document.querySelector('[data-combobox-id="planner-to"]');
-    const onComboChange = () => { updateFareDisplay(); saveState(); if (typeof applyFareRangeFilter === 'function') applyFareRangeFilter(); };
+    const onComboChange = () => { updateFareDisplay(); saveState(); if (typeof applyFareRangeFilter === 'function') applyFareRangeFilter(); renderPattern(); };
     if (fromWrap) cbFrom = createCombobox(fromWrap, { options: state.stations, placeholder: '東京 / Tokyo', onChange: onComboChange });
     if (toWrap)   cbTo   = createCombobox(toWrap,   { options: state.stations, placeholder: '新宿 / Shinjuku', onChange: onComboChange });
 
