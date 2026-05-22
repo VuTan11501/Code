@@ -1,5 +1,6 @@
 // suica-history.js — Standalone viewer for suica-history-generator JSON output.
 // All processing is local; no network calls except optional --load-from-url.
+// Uses shadcn-style classes from style.css (bg-card, btn, status-badge, etc.).
 (function () {
   'use strict';
 
@@ -35,7 +36,6 @@
     }
   }
 
-  // Drag & drop on loader card
   const loader = $('loader');
   loader.addEventListener('dragover', (e) => {
     e.preventDefault(); loader.classList.add('drop-active');
@@ -67,7 +67,7 @@
     const stations = ['東京', '新宿', '渋谷', '横浜', '品川'];
     const startDay = new Date('2026-05-01T08:00:00+09:00').getTime();
     for (let i = 0; i < 30; i++) {
-      if (i % 7 === 6) continue; // skip Sunday
+      if (i % 7 === 6) continue;
       const day = new Date(startDay + i * 86400000);
       const a = stations[i % stations.length];
       const b = stations[(i + 1) % stations.length];
@@ -77,7 +77,6 @@
       entries.push({ kind: '入', datetime: inTime.toISOString(), station: a, fare_yen: 0, balance_yen: bal });
       bal -= fare;
       entries.push({ kind: '出', datetime: outTime.toISOString(), station: b, fare_yen: fare, balance_yen: bal });
-      // Return trip evening
       const inE = new Date(day); inE.setHours(18, 30);
       const outE = new Date(day); outE.setHours(19, 5);
       entries.push({ kind: '入', datetime: inE.toISOString(), station: b, fare_yen: 0, balance_yen: bal });
@@ -91,40 +90,28 @@
   }
 
   // ─── Renderer ───────────────────────────────────────────
-  let CURRENT = null;
-
   function render(data) {
     if (!data || !Array.isArray(data.entries)) {
       showError('Invalid history JSON: missing "entries" array');
       return;
     }
-    CURRENT = data;
     $('report').classList.remove('hidden');
 
-    // KPIs
     $('kpi-month').textContent = data.month || '—';
     $('kpi-spent').textContent = fmt(data.total_spent);
 
     const pairs = countTrips(data.entries);
-    $('kpi-trips').textContent = pairs.length;
+    $('kpi-trips').textContent = String(pairs.length);
 
-    // Avg / weekday: sum fare on entries with kind=='出' grouped by weekday !== Sun (0).
     const dailyMap = aggregateDaily(data.entries);
-    const weekdays = Array.from(dailyMap.entries()).filter(([d]) => new Date(d).getDay() !== 0);
+    const weekdays = [...dailyMap.entries()].filter(([d]) => new Date(d).getDay() !== 0);
     const avg = weekdays.length ? weekdays.reduce((s, [,v]) => s + v, 0) / weekdays.length : 0;
     $('kpi-avg').textContent = fmt(Math.round(avg));
 
-    // Daily chart
     renderDailyChart(dailyMap, data.month);
-
-    // Top stations / routes
     renderTopStations(data.entries);
     renderTopRoutes(pairs);
-
-    // Entries table
     renderEntries(data.entries);
-
-    // What-if
     initWhatIf(data);
   }
 
@@ -137,17 +124,18 @@
         pairs.push({ from: pending.station, to: e.station, fare: e.fare_yen, at: pending.datetime });
         pending = null;
       } else {
-        pending = null; // reset on other kinds
+        pending = null;
       }
     }
     return pairs;
   }
 
   function aggregateDaily(entries) {
-    const out = new Map(); // YYYY-MM-DD -> yen
+    const out = new Map();
     for (const e of entries) {
       if (e.kind !== '出' && e.kind !== '物販') continue;
-      const day = e.datetime.slice(0, 10);
+      const day = (e.datetime || '').slice(0, 10);
+      if (!day) continue;
       out.set(day, (out.get(day) || 0) + Number(e.fare_yen || 0));
     }
     return out;
@@ -159,18 +147,19 @@
     if (!month) return;
     const [y, m] = month.split('-').map(Number);
     const days = new Date(y, m, 0).getDate();
-    const max = Math.max(1, ...Array.from(dailyMap.values()));
+    const max = Math.max(1, ...dailyMap.values());
     for (let d = 1; d <= days; d++) {
       const key = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
       const yen = dailyMap.get(key) || 0;
       const dow = new Date(key).getDay();
-      const colour = yen === 0 ? 'bg-slate-200 dark:bg-slate-800'
-                   : dow === 0 ? 'bg-red-400'
-                   : dow === 6 ? 'bg-amber-400'
-                   : 'bg-blue-500';
+      const colourClass =
+        yen === 0 ? 'bg-muted'
+        : dow === 0 ? 'bg-destructive'
+        : dow === 6 ? 'bg-warning'
+        : 'bg-primary';
       const h = yen === 0 ? 4 : Math.max(6, Math.round((yen / max) * 100));
       const bar = document.createElement('div');
-      bar.className = `bar flex-1 rounded-t ${colour}`;
+      bar.className = `suica-bar flex-1 rounded-t ${colourClass}`;
       bar.style.height = h + '%';
       bar.title = `${key}: ${fmt(yen)}`;
       chart.appendChild(bar);
@@ -189,8 +178,14 @@
     for (const [name, n] of sorted) {
       const li = document.createElement('li');
       const pct = Math.round((n / total) * 100);
-      li.innerHTML = `<div class="flex justify-between"><span>${escapeHtml(name)}</span><span class="text-slate-500">${n}× (${pct}%)</span></div>
-                      <div class="h-1 bg-slate-100 dark:bg-slate-800 rounded mt-1"><div class="h-1 bg-blue-500 rounded" style="width:${pct}%"></div></div>`;
+      li.innerHTML =
+        `<div class="flex justify-between items-baseline">
+           <span class="truncate">${escapeHtml(name)}</span>
+           <span class="text-xs text-muted-foreground font-mono">${n}× · ${pct}%</span>
+         </div>
+         <div class="h-1 bg-muted rounded mt-1">
+           <div class="h-1 bg-primary rounded" style="width:${pct}%"></div>
+         </div>`;
       ol.appendChild(li);
     }
   }
@@ -208,7 +203,11 @@
     ol.innerHTML = '';
     for (const [key, v] of sorted) {
       const li = document.createElement('li');
-      li.innerHTML = `<div class="flex justify-between"><span>${escapeHtml(key)}</span><span class="text-slate-500">${v.n}× · ${fmt(v.total)}</span></div>`;
+      li.innerHTML =
+        `<div class="flex justify-between items-baseline">
+           <span class="truncate">${escapeHtml(key)}</span>
+           <span class="text-xs text-muted-foreground font-mono">${v.n}× · ${fmt(v.total)}</span>
+         </div>`;
       ol.appendChild(li);
     }
   }
@@ -218,17 +217,28 @@
     tb.innerHTML = '';
     entries.forEach((e, i) => {
       const tr = document.createElement('tr');
-      tr.className = i % 2 ? 'bg-slate-50 dark:bg-slate-900/50' : '';
+      tr.className = 'border-t border-border';
       const ts = (e.datetime || '').replace('T', ' ').slice(0, 16);
+      const badge = kindBadge(e.kind);
       tr.innerHTML =
-        `<td class="py-0.5 pr-2 text-slate-400">${i + 1}</td>` +
-        `<td class="pr-2">${escapeHtml(ts)}</td>` +
-        `<td class="pr-2">${escapeHtml(e.kind || '')}</td>` +
-        `<td class="pr-2">${escapeHtml(e.station || '')}</td>` +
-        `<td class="pr-2 text-right">${e.fare_yen ? fmt(e.fare_yen) : ''}</td>` +
-        `<td class="text-right">${fmt(e.balance_yen)}</td>`;
+        `<td class="py-1 px-3 text-muted-foreground">${i + 1}</td>` +
+        `<td class="py-1 px-3">${escapeHtml(ts)}</td>` +
+        `<td class="py-1 px-3">${badge}</td>` +
+        `<td class="py-1 px-3">${escapeHtml(e.station || '')}</td>` +
+        `<td class="py-1 px-3 text-right">${e.fare_yen ? fmt(e.fare_yen) : ''}</td>` +
+        `<td class="py-1 px-3 text-right">${fmt(e.balance_yen)}</td>`;
       tb.appendChild(tr);
     });
+  }
+
+  function kindBadge(kind) {
+    const variant =
+      kind === '入' ? 'status-info'
+      : kind === '出' ? 'status-success'
+      : kind === 'オートチャージ' ? 'status-pending'
+      : kind === '物販' ? 'status-skipped'
+      : 'status-skipped';
+    return `<span class="status-badge ${variant}">${escapeHtml(kind || '')}</span>`;
   }
 
   function initWhatIf(data) {
@@ -254,8 +264,14 @@
         `    --seed 42 \\\n` +
         `    --out out/${data.month}-whatif.json`;
       navigator.clipboard.writeText(cmd).then(() => {
-        $('whatif-copy').textContent = 'Copied!';
-        setTimeout(() => ($('whatif-copy').textContent = 'Copy CLI command'), 1500);
+        const btn = $('whatif-copy');
+        const orig = btn.innerHTML;
+        btn.innerHTML = '<span data-icon="check" data-size="14"></span><span class="btn-label">Copied!</span>';
+        if (window.refreshIcons) window.refreshIcons(btn);
+        setTimeout(() => {
+          btn.innerHTML = orig;
+          if (window.refreshIcons) window.refreshIcons(btn);
+        }, 1500);
       });
     };
   }

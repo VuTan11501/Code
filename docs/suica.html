@@ -1,116 +1,234 @@
-<!doctype html>
-<html lang="en">
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
 <head>
-<meta charset="utf-8">
-<title>Suica History Viewer · FJP Workflow Dashboard</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#09090b" id="themeColorMeta">
+<meta name="color-scheme" content="dark">
+<title>Suica History Viewer · Workflow Dashboard</title>
 <link rel="icon" href="favicon/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="css/tailwind.css">
+<link rel="icon" href="favicon/favicon-96x96.png" type="image/png" sizes="96x96">
+<link rel="icon" href="favicon/favicon.ico" sizes="48x48">
+<link rel="apple-touch-icon" href="favicon/apple-touch-icon.png" sizes="180x180">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script>
+/* Theme init — runs before CSS so first paint matches user pref */
+(function () {
+  try {
+    var mode = localStorage.getItem('wf_dash_theme') || 'auto';
+    var resolved = mode;
+    if (mode === 'auto') {
+      resolved = (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) ? 'light' : 'dark';
+    }
+    document.documentElement.setAttribute('data-theme', resolved);
+    var meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', resolved === 'light' ? '#ffffff' : '#09090b');
+  } catch (e) {}
+})();
+</script>
+<link rel="stylesheet" href="css/tailwind.css?v=1">
+<link rel="stylesheet" href="css/style.css?v=122">
 <style>
-  body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", "Hiragino Sans", "Yu Gothic", sans-serif; }
-  .stat-card { transition: transform 0.15s; }
-  .stat-card:hover { transform: translateY(-2px); }
-  .bar { transition: height 0.4s ease-out; }
-  .drop-active { outline: 2px dashed rgb(59, 130, 246); background: rgba(59,130,246,0.05); }
+  /* Page-local helpers; relies on shadcn tokens from style.css + tailwind.css */
+  .suica-drop { transition: border-color 150ms, background 150ms; }
+  .suica-drop.drop-active { border-color: var(--primary); background: rgba(59,130,246,0.04); }
+  .suica-bar { transition: height 400ms cubic-bezier(0.16,1,0.3,1); }
+  .suica-entries { max-height: 420px; overflow: auto; }
+  .suica-entries thead th {
+    position: sticky; top: 0; background: var(--card);
+    border-bottom: 1px solid var(--border);
+  }
 </style>
 </head>
-<body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 min-h-screen">
+<body class="bg-background text-foreground font-sans text-sm antialiased min-h-dvh overflow-x-hidden">
 
-<div class="max-w-6xl mx-auto p-6 space-y-6">
+<main class="max-w-6xl mx-auto p-5 space-y-5">
 
-  <header class="flex items-baseline justify-between flex-wrap gap-3">
-    <h1 class="text-2xl font-bold">Suica History Viewer</h1>
-    <div class="text-sm text-slate-500">Companion to <code>suica-history-generator</code> skill</div>
+  <!-- Header -->
+  <header class="flex items-baseline justify-between flex-wrap gap-3 pb-2">
+    <div>
+      <h1 class="text-xl font-semibold tracking-tight flex items-center gap-2">
+        <span data-icon="mapPin" data-size="20"></span>
+        Suica History Viewer
+      </h1>
+      <p class="text-xs text-muted-foreground mt-1">
+        Companion viewer for the <code class="font-mono">suica-history-generator</code> skill. All processing is in-browser.
+      </p>
+    </div>
+    <a href="index.html" class="btn sm btn-ghost no-underline">
+      <span data-icon="chevronLeft" data-size="14"></span>
+      <span class="btn-label">Back to dashboard</span>
+    </a>
   </header>
 
-  <!-- File loader -->
-  <section id="loader" class="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6">
-    <h2 class="font-semibold mb-2">Load a generated history</h2>
-    <p class="text-sm text-slate-500 mb-3">Drag &amp; drop a <code>.json</code> file produced by <code>scripts/generate.py --out *.json</code>, or click to browse. Files never leave your browser.</p>
-    <label class="block">
-      <input id="file-input" type="file" accept=".json" class="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
-    </label>
-    <div class="mt-3 flex gap-3 text-sm">
-      <button id="load-sample" class="text-blue-600 hover:underline">Load sample (synthetic)</button>
-      <button id="load-from-url" class="text-blue-600 hover:underline">Load from URL…</button>
+  <!-- Loader card -->
+  <section aria-label="Load history">
+    <div class="section-title text-sm font-medium text-muted-foreground mb-3 flex items-center gap-2">
+      <span data-icon="upload" data-size="16"></span> Load a generated history
     </div>
-    <div id="loader-error" class="mt-2 text-sm text-red-600 hidden"></div>
+    <div id="loader" class="suica-drop card bg-card border border-border rounded-lg p-5">
+      <div class="card-content space-y-3">
+        <p class="text-sm text-muted-foreground">
+          Drag &amp; drop a <code class="font-mono">.json</code> file produced by
+          <code class="font-mono">scripts/generate.py --out *.json</code>, or click to browse.
+          Files never leave your browser.
+        </p>
+        <div class="field">
+          <label class="field-label text-xs text-muted-foreground font-medium block mb-1" for="file-input">JSON file</label>
+          <input id="file-input" type="file" accept=".json" class="input w-full">
+        </div>
+        <div class="flex flex-wrap gap-2 pt-1">
+          <button id="load-sample" class="btn sm">
+            <span data-icon="sparkles" data-size="14"></span>
+            <span class="btn-label">Load sample</span>
+          </button>
+          <button id="load-from-url" class="btn sm">
+            <span data-icon="download" data-size="14"></span>
+            <span class="btn-label">Load from URL…</span>
+          </button>
+        </div>
+        <div id="loader-error" class="status-badge status-failure hidden"></div>
+      </div>
+    </div>
   </section>
 
-  <main id="report" class="hidden space-y-6">
+  <!-- Report (hidden until data loaded) -->
+  <div id="report" class="hidden space-y-5 animate-page-in">
 
-    <!-- KPIs -->
-    <section class="grid grid-cols-2 md:grid-cols-4 gap-3">
-      <div class="stat-card rounded-lg p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-        <div class="text-xs text-slate-500">Month</div>
-        <div id="kpi-month" class="text-xl font-bold">—</div>
+    <!-- KPI grid -->
+    <section aria-label="Summary stats">
+      <div class="section-title text-sm font-medium text-muted-foreground mb-3 flex items-center gap-2">
+        <span data-icon="barChart" data-size="16"></span> Summary
       </div>
-      <div class="stat-card rounded-lg p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-        <div class="text-xs text-slate-500">Total spent</div>
-        <div id="kpi-spent" class="text-xl font-bold">¥—</div>
-      </div>
-      <div class="stat-card rounded-lg p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-        <div class="text-xs text-slate-500">Trips (in/out pairs)</div>
-        <div id="kpi-trips" class="text-xl font-bold">—</div>
-      </div>
-      <div class="stat-card rounded-lg p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-        <div class="text-xs text-slate-500">Avg / weekday</div>
-        <div id="kpi-avg" class="text-xl font-bold">¥—</div>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div class="card bg-card border border-border rounded-lg p-4">
+          <div class="text-xs text-muted-foreground">Month</div>
+          <div id="kpi-month" class="text-lg font-semibold tracking-tight mt-1">—</div>
+        </div>
+        <div class="card bg-card border border-border rounded-lg p-4">
+          <div class="text-xs text-muted-foreground">Total spent</div>
+          <div id="kpi-spent" class="text-lg font-semibold tracking-tight mt-1 font-mono">¥—</div>
+        </div>
+        <div class="card bg-card border border-border rounded-lg p-4">
+          <div class="text-xs text-muted-foreground">Trips (in/out pairs)</div>
+          <div id="kpi-trips" class="text-lg font-semibold tracking-tight mt-1 font-mono">—</div>
+        </div>
+        <div class="card bg-card border border-border rounded-lg p-4">
+          <div class="text-xs text-muted-foreground">Avg / weekday</div>
+          <div id="kpi-avg" class="text-lg font-semibold tracking-tight mt-1 font-mono">¥—</div>
+        </div>
       </div>
     </section>
 
-    <!-- What-if slider -->
-    <section class="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
-      <h3 class="font-semibold mb-2">What-if: re-target this month</h3>
-      <p class="text-xs text-slate-500 mb-3">Linearly scales every fare to see how a different total budget would land. Useful for forecasting.</p>
-      <div class="flex items-center gap-3 flex-wrap">
-        <input id="whatif-slider" type="range" min="0.4" max="2.0" step="0.05" value="1.0" class="flex-1 min-w-[200px]">
-        <div class="text-sm">scale = <span id="whatif-scale" class="font-mono">1.00x</span></div>
-        <div class="text-sm">new target = <span id="whatif-target" class="font-bold">¥—</span></div>
-        <button id="whatif-copy" class="text-xs px-2 py-1 rounded bg-blue-50 text-blue-700 hover:bg-blue-100">Copy CLI command</button>
+    <!-- What-if -->
+    <section aria-label="What-if budget">
+      <div class="section-title text-sm font-medium text-muted-foreground mb-3 flex items-center gap-2">
+        <span data-icon="target" data-size="16"></span> What-if: re-target this month
+      </div>
+      <div class="card bg-card border border-border rounded-lg p-5">
+        <div class="card-content space-y-3">
+          <p class="text-xs text-muted-foreground">
+            Linearly scales the observed spend. Use to forecast how a different
+            budget would land — then copy the equivalent CLI command.
+          </p>
+          <div class="flex items-center gap-3 flex-wrap">
+            <input id="whatif-slider" type="range" min="0.4" max="2.0" step="0.05" value="1.0" class="input flex-1 min-w-[200px] p-0">
+            <div class="text-xs text-muted-foreground">scale</div>
+            <div class="text-sm font-mono"><span id="whatif-scale">1.00x</span></div>
+            <div class="separator h-6 w-px bg-border mx-1"></div>
+            <div class="text-xs text-muted-foreground">new target</div>
+            <div class="text-sm font-mono font-semibold"><span id="whatif-target">¥—</span></div>
+            <button id="whatif-copy" class="btn sm primary ml-auto">
+              <span data-icon="copy" data-size="14"></span>
+              <span class="btn-label">Copy CLI command</span>
+            </button>
+          </div>
+        </div>
       </div>
     </section>
 
-    <!-- Daily spend chart -->
-    <section class="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
-      <h3 class="font-semibold mb-3">Daily spend</h3>
-      <div id="daily-chart" class="flex items-end gap-[2px] h-40 border-b border-slate-200 dark:border-slate-700"></div>
-      <div class="flex justify-between text-xs text-slate-400 mt-1"><span>day 1</span><span>day 31</span></div>
-    </section>
-
-    <!-- Top routes -->
-    <section class="grid md:grid-cols-2 gap-3">
-      <div class="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
-        <h3 class="font-semibold mb-3">Top stations</h3>
-        <ol id="top-stations" class="space-y-1 text-sm"></ol>
+    <!-- Daily spend -->
+    <section aria-label="Daily spend chart">
+      <div class="section-title text-sm font-medium text-muted-foreground mb-3 flex items-center gap-2">
+        <span data-icon="calendar" data-size="16"></span> Daily spend
       </div>
-      <div class="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
-        <h3 class="font-semibold mb-3">Top routes (IN → OUT)</h3>
-        <ol id="top-routes" class="space-y-1 text-sm"></ol>
-      </div>
-    </section>
-
-    <!-- Entries table -->
-    <section class="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
-      <h3 class="font-semibold mb-3">All entries</h3>
-      <div class="overflow-x-auto max-h-[400px]">
-        <table class="w-full text-xs">
-          <thead class="text-left text-slate-500 sticky top-0 bg-white dark:bg-slate-900">
-            <tr><th class="py-1">#</th><th>When (JST)</th><th>Kind</th><th>Station</th><th class="text-right">Fare</th><th class="text-right">Balance</th></tr>
-          </thead>
-          <tbody id="entries-tbody" class="font-mono"></tbody>
-        </table>
+      <div class="card bg-card border border-border rounded-lg p-5">
+        <div class="card-content">
+          <div id="daily-chart" class="flex items-end gap-[2px] h-40 border-b border-border"></div>
+          <div class="flex justify-between text-xs text-muted-foreground mt-1">
+            <span>day 1</span><span>day 31</span>
+          </div>
+          <div class="flex items-center gap-4 mt-3 text-xs text-muted-foreground">
+            <span class="inline-flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-sm bg-primary"></span>weekday</span>
+            <span class="inline-flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-sm bg-warning"></span>Saturday</span>
+            <span class="inline-flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-sm bg-destructive"></span>Sunday</span>
+            <span class="inline-flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-sm bg-muted"></span>no activity</span>
+          </div>
+        </div>
       </div>
     </section>
 
-  </main>
+    <!-- Top stations / routes -->
+    <section aria-label="Top stations and routes" class="grid md:grid-cols-2 gap-3">
+      <div class="card bg-card border border-border rounded-lg p-5">
+        <div class="card-header pb-3 mb-3 border-b border-border">
+          <div class="card-title text-sm font-semibold flex items-center gap-2">
+            <span data-icon="mapPin" data-size="14"></span> Top stations
+          </div>
+        </div>
+        <div class="card-content">
+          <ol id="top-stations" class="space-y-2 text-sm"></ol>
+        </div>
+      </div>
+      <div class="card bg-card border border-border rounded-lg p-5">
+        <div class="card-header pb-3 mb-3 border-b border-border">
+          <div class="card-title text-sm font-semibold flex items-center gap-2">
+            <span data-icon="chevronRight" data-size="14"></span> Top routes (IN → OUT)
+          </div>
+        </div>
+        <div class="card-content">
+          <ol id="top-routes" class="space-y-2 text-sm"></ol>
+        </div>
+      </div>
+    </section>
 
-  <footer class="text-xs text-slate-400 text-center py-6">
+    <!-- Entries -->
+    <section aria-label="All entries">
+      <div class="section-title text-sm font-medium text-muted-foreground mb-3 flex items-center gap-2">
+        <span data-icon="list" data-size="16"></span> All entries
+      </div>
+      <div class="card bg-card border border-border rounded-lg overflow-hidden">
+        <div class="card-content p-0">
+          <div class="suica-entries">
+            <table class="w-full text-xs">
+              <thead class="text-left text-muted-foreground">
+                <tr>
+                  <th class="py-2 px-3 font-medium">#</th>
+                  <th class="py-2 px-3 font-medium">When (JST)</th>
+                  <th class="py-2 px-3 font-medium">Kind</th>
+                  <th class="py-2 px-3 font-medium">Station</th>
+                  <th class="py-2 px-3 font-medium text-right">Fare</th>
+                  <th class="py-2 px-3 font-medium text-right">Balance</th>
+                </tr>
+              </thead>
+              <tbody id="entries-tbody" class="font-mono"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <footer class="text-xs text-muted-foreground text-center py-6">
     Read-only viewer. All processing is in-browser. Files never uploaded.
   </footer>
+</main>
 
-</div>
-
-<script src="js/suica-history.js" defer></script>
+<script src="js/icons.js?v=1" defer></script>
+<script src="js/theme.js?v=1" defer></script>
+<script src="js/suica-history.js?v=1" defer></script>
 </body>
 </html>
