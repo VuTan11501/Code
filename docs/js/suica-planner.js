@@ -1368,6 +1368,7 @@
         <span class="text-xs text-muted-foreground">weight</span>
         <input type="number" min="0" max="20" value="${l.weight}" class="input w-16 text-sm" data-leisure-weight="${idx}" ${muted ? 'disabled' : ''}>
         <span class="text-xs text-muted-foreground font-mono ml-auto">${fmtYen(fareOf(l.route))}</span>
+        <button class="btn sm btn-ghost" data-leisure-clone="${idx}" aria-label="Duplicate ${l.route}" data-tooltip="Duplicate this row (same route, same weight)">⎘</button>
         <button class="btn sm btn-ghost" data-leisure-remove="${idx}" aria-label="Remove ${l.route} from leisure pool">×</button>
       `;
       wrap.appendChild(row);
@@ -1402,6 +1403,19 @@
         else delete state.leisure[i].tag;
         saveState();
         renderLeisure();
+      });
+    });
+    wrap.querySelectorAll('[data-leisure-clone]').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        const i = +e.currentTarget.dataset.leisureClone;
+        const src = state.leisure[i];
+        if (!src) return;
+        pushHistory();
+        state.leisure.splice(i + 1, 0, { ...src });
+        renderLeisure(); renderEstimate(); saveState();
+        if (window.Toast) window.Toast.info(`Duplicated ${src.route}`, {
+          duration: 4000, actionLabel: 'Undo', onAction: () => { try { undo(); } catch (_) {} },
+        });
       });
     });
     wrap.querySelectorAll('[data-leisure-remove]').forEach((btn) => {
