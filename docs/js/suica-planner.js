@@ -52,8 +52,23 @@
   // fare/station catalogues (those are reloaded from the network each visit).
   const STORAGE_KEY = 'suica-planner-v2';
   let _saveTimer = null;
+  function _setSaveBadge(stateLabel) {
+    const el = document.getElementById('planner-save-badge');
+    if (!el) return;
+    const now = new Date();
+    if (stateLabel === 'saving') {
+      el.textContent = '… Saving';
+      el.className = 'status-badge status-pending text-[10px]';
+      el.title = 'Persisting plan to localStorage';
+    } else {
+      el.textContent = '✓ Saved';
+      el.className = 'status-badge status-success text-[10px]';
+      el.title = 'Last saved ' + now.toLocaleTimeString();
+    }
+  }
   function saveState() {
     if (_saveTimer) return;
+    _setSaveBadge('saving');
     _saveTimer = setTimeout(() => {
       _saveTimer = null;
       try {
@@ -69,6 +84,7 @@
           },
         };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+        _setSaveBadge('saved');
       } catch (_) { /* quota or private-mode — ignore */ }
     }, 200);
   }
