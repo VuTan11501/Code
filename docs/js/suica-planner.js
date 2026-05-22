@@ -60,6 +60,7 @@
         if (a) set.add(a); if (b) set.add(b);
       });
       state.stations = Array.from(set).sort((x, y) => x.localeCompare(y, 'ja'));
+      buildFareGraph();
       populateComboboxes();
       setStatus(
         `<strong>${state.stations.length}</strong> Kanto stations · <strong>${Object.keys(state.fares).length}</strong> known IC fares loaded. Pick a route above to add it to your plan.`,
@@ -190,11 +191,74 @@
   });
 
   // ────── Fare lookup ──────
+  // Build an adjacency list from state.fares so we can route unknown pairs
+  // through 1+ intermediate stations (sum of known IC fares = upper bound
+  // estimate, but vastly more realistic than the median fallback).
+  function buildFareGraph() {
+    const g = {};
+    Object.keys(state.fares).forEach((k) => {
+      const [a, b] = k.split('↔');
+      if (!a || !b) return;
+      const w = state.fares[k];
+      (g[a] = g[a] || []).push({ to: b, w });
+      (g[b] = g[b] || []).push({ to: a, w });
+    });
+    state.fareGraph = g;
+    state._fareCache = {}; // invalidate cached estimates
+  }
+
+  function shortestFare(a, b) {
+    const g = state.fareGraph || {};
+    if (!g[a] || !g[b]) return null;
+    const dist = { [a]: 0 };
+    const prev = {};
+    // Tiny graph (~21 nodes) — linear-scan priority queue is fine.
+    const visited = new Set();
+    while (true) {
+      let u = null, best = Infinity;
+      for (const node in dist) {
+        if (!visited.has(node) && dist[node] < best) { best = dist[node]; u = node; }
+      }
+      if (u == null) break;
+      if (u === b) break;
+      visited.add(u);
+      for (const e of (g[u] || [])) {
+        const nd = dist[u] + e.w;
+        if (nd < (dist[e.to] == null ? Infinity : dist[e.to])) {
+          dist[e.to] = nd;
+          prev[e.to] = u;
+        }
+      }
+    }
+    if (dist[b] == null) return null;
+    const path = [b];
+    let cur = b;
+    while (prev[cur]) { cur = prev[cur]; path.unshift(cur); }
+    return { fare: dist[b], path };
+  }
+
+  function fareOf(routeKey) {
+    if (state.fares[routeKey] != null) return state.fares[routeKey];
+    const [a, b] = routeKey.split('↔');
+    const r = lookupFare(a, b);
+    return r ? r.fare : 0;
+  }
+
   function lookupFare(a, b) {
     if (!a || !b || a === b) return null;
     const key = pairKey(a, b);
     if (state.fares[key] != null) return { fare: state.fares[key], source: 'known' };
-    // Heuristic estimate: median of known fares as fallback (CLI will resolve via API)
+    state._fareCache = state._fareCache || {};
+    if (state._fareCache[key]) return state._fareCache[key];
+    const sp = shortestFare(a, b);
+    if (sp) {
+      const hops = sp.path.length - 1;
+      const via = hops > 1 ? sp.path.slice(1, -1).join('→') : '';
+      const r = { fare: sp.fare, source: 'graph', hops, via };
+      state._fareCache[key] = r;
+      return r;
+    }
+    // Last-resort: median of known fares (rare — only if either station is isolated)
     const vals = Object.values(state.fares);
     if (!vals.length) return null;
     const sorted = vals.slice().sort((x, y) => x - y);
@@ -217,8 +281,11 @@
     if (!r) { setBadge('No data', 'status-skipped'); addBtns.forEach((b) => b.setAttribute('disabled', '')); return; }
     if (r.source === 'known') {
       setBadge(`${fmtYen(r.fare)} · known IC`, 'status-success');
+    } else if (r.source === 'graph') {
+      const viaTxt = r.via ? ` via ${r.via}` : '';
+      setBadge(`${fmtYen(r.fare)} · ${r.hops}-hop estimate${viaTxt}`, 'status-pending');
     } else {
-      setBadge(`${fmtYen(r.fare)} · estimate (will resolve via API)`, 'status-pending');
+      setBadge(`${fmtYen(r.fare)} · rough estimate (no path data)`, 'status-pending');
     }
     addBtns.forEach((b) => b.removeAttribute('disabled'));
   }
@@ -306,7 +373,7 @@
         <span class="status-badge status-pending font-mono flex-none">${l.route}</span>
         <span class="text-xs text-muted-foreground">weight</span>
         <input type="number" min="1" max="20" value="${l.weight}" class="input w-16 text-sm" data-leisure-weight="${idx}">
-        <span class="text-xs text-muted-foreground font-mono ml-auto">${fmtYen((state.fares[l.route] || 0))}</span>
+        <span class="text-xs text-muted-foreground font-mono ml-auto">${fmtYen(fareOf(l.route))}</span>
         <button class="btn sm btn-ghost" data-leisure-remove="${idx}" aria-label="remove">×</button>
       `;
       wrap.appendChild(row);
@@ -348,7 +415,7 @@
     let commuteSpend = 0;
     DAYS.forEach((day) => {
       const trips = state.pattern[day];
-      const dayFare = trips.reduce((sum, t) => sum + (state.fares[t.route] || lookupFare(...t.route.split('↔'))?.fare || 0), 0);
+      const dayFare = trips.reduce((sum, t) => sum + fareOf(t.route), 0);
       commuteSpend += dayFare * monthInfo.counts[day];
     });
     // Each "trip" in pattern = one round-trip (IN+OUT = 2 taps but ONE fare debit)
@@ -356,7 +423,7 @@
     // For leisure: avg = (min+max)/2 monthly outings, each outing = 1 round trip → 2 fare debits at avg leisure fare.
     const totW = state.leisure.reduce((s, l) => s + l.weight, 0);
     const avgLeisureFare = totW
-      ? state.leisure.reduce((s, l) => s + (state.fares[l.route] || 0) * l.weight, 0) / totW
+      ? state.leisure.reduce((s, l) => s + fareOf(l.route) * l.weight, 0) / totW
       : 0;
     const avgOutings = (state.settings.leisure_min + state.settings.leisure_max) / 2;
     const leisureSpend = avgLeisureFare * avgOutings * 2;
@@ -477,7 +544,7 @@
     const emitTrip = (d, route, slot) => {
       const [a, b] = route.split('↔');
       const fareKey = pairKey(a, b);
-      const fare = fares[fareKey] || 0;
+      const fare = fareOf(fareKey);
       // direction
       const morningOutbound = slot === 'morning';
       const from = morningOutbound ? a : b;
@@ -512,7 +579,7 @@
         emitTrip(d, route, 'weekend');
         // return trip ~3-5h later
         const [a, b] = route.split('↔');
-        const fare = fares[pairKey(a,b)] || 0;
+        const fare = fareOf(pairKey(a,b));
         const hh = 16 + Math.floor(rng() * 4);
         const mm = Math.floor(rng() * 60);
         emitTopupIfNeeded(y, m, d, hh, mm, fare);
