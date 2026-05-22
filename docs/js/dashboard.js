@@ -515,6 +515,44 @@ async function triggerWorkflow(file, ev) {
   const btn = ev && ev.currentTarget;
   const origHtml = btn ? btn.innerHTML : '';
 
+  // 🛡️ Confirm popup for kintai triggers — checkin/checkout records the
+  // CURRENT time on DokoKin, so an accidental click at 2am gets logged as
+  // a 2am checkin and requires manual deletion. Always confirm with the
+  // exact JST time being recorded.
+  if (file === 'auto-checkin.yml' || file === 'auto-checkout.yml') {
+    const isCheckin = file === 'auto-checkin.yml';
+    const nowFmt = new Date().toLocaleString('ja-JP', {
+      timeZone: 'Asia/Tokyo', weekday: 'short',
+      month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', hour12: false,
+    });
+    // Soft warn outside normal kintai hours (JST). Office hours roughly
+    // 07:00-11:00 for checkin, 17:00-23:00 for checkout.
+    const jstHour = parseInt(new Date().toLocaleString('en-US', {
+      timeZone: 'Asia/Tokyo', hour: '2-digit', hour12: false,
+    }), 10);
+    const offHours = isCheckin
+      ? (jstHour < 6 || jstHour > 11)
+      : (jstHour < 16 || jstHour > 23);
+    const action = isCheckin ? 'CHECKIN' : 'CHECKOUT';
+    const emoji = isCheckin ? '📥' : '📤';
+    const message =
+      `${emoji} Sẽ ghi nhận ${action} tại:\n\n` +
+      `🕐 ${nowFmt} JST\n\n` +
+      (offHours
+        ? `⚠️ Đang ngoài giờ làm việc — hãy chắc chắn đây là điều bạn muốn (record sai sẽ phải xoá thủ công trên DokoKin).\n\n`
+        : ``) +
+      `Tiếp tục?`;
+    const ok = await uiConfirm({
+      title: `Xác nhận ${action}`,
+      message,
+      confirmText: isCheckin ? '📥 Checkin' : '📤 Checkout',
+      cancelText: 'Huỷ',
+      danger: offHours,
+    });
+    if (!ok) return;
+  }
+
   // ⚠️ Pre-flight check: warn if checkout would forfeit scheduled OT hours.
   if (file === 'auto-checkout.yml' && typeof getPendingCheckoutAhead === 'function') {
     const w = await getPendingCheckoutAhead();
