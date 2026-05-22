@@ -223,6 +223,17 @@
   }
   body:has(#suicaPdfOverlay) #planner-kbd-fab:hover,
   body:has(#suicaLogModal) #planner-kbd-fab:hover { opacity: 1; }
+  /* Pulse animation triggered on Ctrl+Z / Ctrl+S so the user gets a
+     subtle visual confirmation their shortcut was received. */
+  @keyframes fabPulse {
+    0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--primary) 70%, transparent); transform: scale(1); }
+    50%  { box-shadow: 0 0 0 10px color-mix(in srgb, var(--primary) 0%, transparent);  transform: scale(1.08); }
+    100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--primary) 0%, transparent);  transform: scale(1); }
+  }
+  #planner-kbd-fab.pulse { animation: fabPulse 0.55s ease-out; }
+  @media (prefers-reduced-motion: reduce) {
+    #planner-kbd-fab.pulse { animation: none; }
+  }
 </style>
 </head>
 <body class="bg-background text-foreground font-sans text-sm antialiased min-h-dvh overflow-x-hidden">
@@ -792,7 +803,7 @@
 <script src="js/suica-history.js?v=6" defer></script>
 <script src="js/log-viewer.js?v=1" defer></script>
 <script>window.SUICA_FARE_API='https://suica-fare-proxy.workflow-dashboard.workers.dev';</script>
-<script src="js/suica-planner.js?v=94" defer></script>
+<script src="js/suica-planner.js?v=95" defer></script>
 <script>
 // Theme toggle for suica.html (mirrors the dashboard's behavior; uses the same
 // localStorage key so the preference syncs across pages).

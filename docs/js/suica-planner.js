@@ -3325,25 +3325,35 @@
       return tag === 'input' || tag === 'textarea' || tag === 'select' || t.isContentEditable;
     };
     const triggerClick = (id) => { const el = $(id); if (el && !el.hasAttribute('disabled')) el.click(); };
+    const pulseFab = () => {
+      const fab = document.getElementById('planner-kbd-fab');
+      if (!fab) return;
+      fab.classList.remove('pulse');
+      // Force reflow so the animation restarts even on rapid repeats.
+      void fab.offsetWidth;
+      fab.classList.add('pulse');
+      setTimeout(() => fab.classList.remove('pulse'), 600);
+    };
     document.addEventListener('keydown', (e) => {
       // Ctrl/Cmd+Z = undo, Ctrl/Cmd+Shift+Z or Ctrl+Y = redo. Allowed even
       // while focus is in an input — most apps do this.
       const meta = e.ctrlKey || e.metaKey;
       if (meta && (e.key === 'z' || e.key === 'Z')) {
         if (e.shiftKey) { redo(); } else { undo(); }
+        pulseFab();
         e.preventDefault();
         return;
       }
-      if (meta && (e.key === 'y' || e.key === 'Y')) { redo(); e.preventDefault(); return; }
+      if (meta && (e.key === 'y' || e.key === 'Y')) { redo(); pulseFab(); e.preventDefault(); return; }
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       if (isTyping(e)) return;
       // Single-key shortcuts (lowercase)
       switch ((e.key || '').toLowerCase()) {
-        case 'g': triggerClick('planner-generate-pdf'); e.preventDefault(); break;
-        case 'a': triggerClick('planner-auto-suggest'); e.preventDefault(); break;
-        case 'c': triggerClick('planner-multi-suggest'); e.preventDefault(); break;
-        case 'r': triggerClick('planner-seed-reroll'); e.preventDefault(); break;
-        case 's': triggerClick('planner-snapshot-save'); e.preventDefault(); break;
+        case 'g': triggerClick('planner-generate-pdf'); pulseFab(); e.preventDefault(); break;
+        case 'a': triggerClick('planner-auto-suggest'); pulseFab(); e.preventDefault(); break;
+        case 'c': triggerClick('planner-multi-suggest'); pulseFab(); e.preventDefault(); break;
+        case 'r': triggerClick('planner-seed-reroll'); pulseFab(); e.preventDefault(); break;
+        case 's': triggerClick('planner-snapshot-save'); pulseFab(); e.preventDefault(); break;
         case '?': showShortcutsHelp(); e.preventDefault(); break;
         case 'escape': {
           // Close any open <details> popovers + the multi-suggest panel
