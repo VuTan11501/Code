@@ -1436,6 +1436,7 @@ input[type="time"], input[type="date"], input[type="datetime-local"] {
 /* â”€â”€â”€ MOBILE RESPONSIVE â”€â”€â”€ */
 @media (max-width: 768px) {
   .scheduler-panel { grid-template-columns: 1fr; }
+  #tsUpdatedAt { display: none; }
 }
 
 @media (max-width: 600px) {
