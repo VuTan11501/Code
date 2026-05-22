@@ -494,6 +494,30 @@ function toast(msg, cls) {
 }
 
 // ═══════════════════════════════════════════════════
+//  BUTTON SPINNER WRAPPER
+// ═══════════════════════════════════════════════════
+// Wraps an async action so the triggering button shows the same shadcn-
+// style spinner used by other Refresh/Sync buttons (icon swap + disable
+// + label). The button is restored even if `fn()` throws.
+//   await withBtnSpinner('myBtnId', () => loadFoo({refresh:true}), 'Refreshing…')
+async function withBtnSpinner(btnIdOrEl, fn, label = 'Loading…') {
+  const btn = typeof btnIdOrEl === 'string' ? document.getElementById(btnIdOrEl) : btnIdOrEl;
+  const orig = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.disabled = true;
+    const iconHtml = (typeof ICON === 'function') ? ICON('refresh', 14, 'animate-spin') : '';
+    btn.innerHTML = `${iconHtml} ${label}`;
+  }
+  try { return await fn(); }
+  finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = orig;
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════
 //  UI CONFIRM (shadcn-style dialog — replaces window.confirm)
 // ═══════════════════════════════════════════════════
 let _uiConfirmResolve = null;
