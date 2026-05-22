@@ -206,11 +206,11 @@ function successRate(runs) {
 }
 
 function renderWorkflowCard(wf, runs) {
-  const last5 = runs.slice(0, 4);
+  const lastRuns = runs.slice(0, 2);
   return `
-    <div class="card">
+    <div class="card workflow-card">
       <div class="card-header">
-        <h2>${ICON(wf.iconName || 'play', 18)} ${wf.name}</h2>
+        <h2>${ICON(wf.iconName || 'play', 16)} ${wf.name}</h2>
         ${statusBadge(runs)}
       </div>
       <div class="card-body">
@@ -225,11 +225,11 @@ function renderWorkflowCard(wf, runs) {
           </div>
         </div>
         <ul class="run-list">
-          ${last5.map((r, i) => {
+          ${lastRuns.map((r, i) => {
             const title = r.display_title || r.name || `Run #${r.run_number}`;
             const titleEsc = title.replace(/"/g, '&quot;');
             return `
-            <li class="run-item${i >= 2 ? ' hide-mobile' : ''}" onclick="openLogModal(${r.id}, '${wf.icon} ${wf.name} #${r.run_number}', '${r.status}')">
+            <li class="run-item" onclick="openLogModal(${r.id}, '${wf.icon} ${wf.name} #${r.run_number}', '${r.status}')">
               <span class="run-dot ${conclusionClass(r.conclusion || r.status)}"></span>
               <span class="run-name" data-tooltip="${titleEsc}" data-tooltip-truncate-only tabindex="0">${title}</span>
               <span class="run-meta">
@@ -239,7 +239,7 @@ function renderWorkflowCard(wf, runs) {
               </span>
             </li>
           `;}).join('')}
-          ${last5.length === 0 ? '<li class="run-item" style="color:var(--muted-foreground);cursor:default">No runs yet</li>' : ''}
+          ${lastRuns.length === 0 ? '<li class="run-item" style="color:var(--muted-foreground);cursor:default">No runs yet</li>' : ''}
         </ul>
         <div class="trigger-actions">
           <button class="btn primary sm" onclick="triggerWorkflow('${wf.file}', event)">▶ Trigger</button>

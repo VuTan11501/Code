@@ -949,6 +949,22 @@ select option { background: var(--card); color: var(--foreground); }
 .dash-infra-label strong { color: var(--foreground); font-weight: 600; }
 .dash-infra-hint { color: var(--muted-foreground); }
 
+/* Dashboard workflow grid — more cards per row + compact card sizing */
+#workflowGrid {
+  grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr));
+  gap: 12px;
+}
+.workflow-card .card-header { padding: 12px 14px; }
+.workflow-card .card-header h2 { font-size: var(--fs-sm); display: flex; align-items: center; gap: 6px; }
+.workflow-card .card-body { padding: 12px 14px; gap: 8px; }
+.workflow-card .stats-row { gap: 16px; margin-bottom: 8px; }
+.workflow-card .stat-value { font-size: 1.05rem; }
+.workflow-card .stat-label { font-size: 10px; }
+.workflow-card .run-list { font-size: var(--fs-xs); }
+.workflow-card .run-item { padding: 6px 0; }
+.workflow-card .trigger-actions { padding-top: 8px; gap: 6px; }
+.workflow-card .trigger-actions .btn { padding: 4px 10px; font-size: var(--fs-xs); min-height: 0; }
+
 /* Phase 3 â€” Template manager */
 .ot-template-list { display: flex; flex-direction: column; gap: var(--sp-2); }
 .ot-template-row {
