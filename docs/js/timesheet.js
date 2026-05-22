@@ -45,9 +45,18 @@ async function loadTimesheetData(opts) {
   try {
     const gist = await apiFetch(`/gists/${GIST_ID}`);
     const f = gist.files && gist.files[TS_FILE];
+    let content = (f && f.content) || '';
+    // GitHub truncates large file content in the Gist JSON response (~240KB).
+    // Fall back to raw_url for the full body.
+    if (f && f.truncated && f.raw_url) {
+      try {
+        const r = await fetch(f.raw_url, { cache: 'no-store' });
+        if (r.ok) content = await r.text();
+      } catch { /* keep truncated content as last resort */ }
+    }
     let raw = null;
-    if (f && f.content) {
-      try { raw = JSON.parse(f.content); }
+    if (content) {
+      try { raw = JSON.parse(content); }
       catch { raw = null; }
     }
     if (raw && typeof raw === 'object' && raw.months) {

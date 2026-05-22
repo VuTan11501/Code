@@ -74,6 +74,16 @@ def read_gist_file(pat: str, gist_id: str, filename: str, log=None) -> dict:
     files = gist.get("files") or {}
     f = files.get(filename)
     content = (f.get("content") if f else None) or ""
+    # GitHub truncates Gist file content above ~1MB (in practice ~240KB)
+    # in the JSON response. When truncated, fetch the full body from raw_url.
+    if f and f.get("truncated") and f.get("raw_url"):
+        _log(f"⚠️ {filename} truncated by API ({f.get('size')} bytes) — fetching raw_url…")
+        raw_req = urllib.request.Request(f["raw_url"], headers={
+            "Authorization": f"Bearer {pat}",
+            "Accept": "text/plain",
+        })
+        with urllib.request.urlopen(raw_req, timeout=30) as raw_resp:
+            content = raw_resp.read().decode("utf-8")
     try:
         parsed = json.loads(content) if content else None
     except Exception as e:
