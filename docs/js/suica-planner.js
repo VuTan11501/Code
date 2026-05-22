@@ -854,6 +854,89 @@
       if (barTargetLabel) barTargetLabel.textContent = 'Target ¥—';
       if (barWrap) barWrap.setAttribute('aria-hidden', 'true');
     }
+    renderWarnings({ total, target, commuteSpend, leisureSpend, monthInfo });
+  }
+
+  // ────── Validation: surface non-blocking warnings ──────
+  // Pure: looks at current state + computed totals and returns an array of
+  // {severity:'warn'|'error'|'info', msg, fix?}. Rendered into #planner-warnings.
+  function computeWarnings(ctx) {
+    const out = [];
+    const target = +(ctx && ctx.target) || +state.settings.target || 0;
+    const total = +(ctx && ctx.total) || 0;
+    const monthInfo = ctx && ctx.monthInfo;
+    if (target && total) {
+      const diffPct = Math.abs(total - target) / target;
+      if (diffPct > 0.25) {
+        out.push({ severity: total > target ? 'error' : 'warn',
+          msg: `Estimate is ${(diffPct*100).toFixed(0)}% ${total > target ? 'over' : 'under'} target — consider Auto-suggest`,
+          fix: 'auto-suggest' });
+      }
+    }
+    // Empty plan
+    const totalTrips = DAYS.reduce((s, d) => s + (state.pattern[d]?.length || 0), 0) + state.leisure.length;
+    if (!totalTrips) {
+      out.push({ severity: 'warn', msg: 'Plan is empty — add a commute or pick a preset' });
+    }
+    // Invalid month
+    if (!monthInfo) {
+      out.push({ severity: 'error', msg: 'Month is not a valid YYYY-MM' });
+    }
+    // Routes missing fare data
+    const missing = new Set();
+    DAYS.forEach((d) => state.pattern[d].forEach((t) => { if (!state.fares[t.route]) missing.add(t.route); }));
+    state.leisure.forEach((l) => { if (!state.fares[l.route]) missing.add(l.route); });
+    if (missing.size) {
+      out.push({ severity: 'error', msg: `Missing fare data for: ${Array.from(missing).slice(0,3).join(', ')}${missing.size > 3 ? ` (+${missing.size-3})` : ''}` });
+    }
+    // Leisure min > max
+    if (+state.settings.leisure_min > +state.settings.leisure_max) {
+      out.push({ severity: 'error', msg: `Leisure min (${state.settings.leisure_min}) is greater than max (${state.settings.leisure_max})` });
+    }
+    // Suspiciously low initial balance
+    if (+state.settings.initial_balance < 1000) {
+      out.push({ severity: 'info', msg: 'Initial balance < ¥1000 — first day may trigger immediate top-up' });
+    }
+    // Top-up threshold > amount
+    if (+state.settings.topup_threshold > +state.settings.topup_amount) {
+      out.push({ severity: 'warn', msg: 'Top-up amount is lower than threshold — balance may stay below trigger after top-up' });
+    }
+    // No weekend trips and target requires them
+    if (target && totalTrips && !state.leisure.length) {
+      const weekdaySpend = DAYS.slice(0, 5).reduce((s, d) => {
+        return s + state.pattern[d].reduce((ss, t) => ss + (fareOf(t.route) || 0), 0) * (monthInfo?.counts[d] || 0);
+      }, 0);
+      if (weekdaySpend < target * 0.6) {
+        out.push({ severity: 'info', msg: 'Weekdays alone cover <60% of target — add leisure routes for variety' });
+      }
+    }
+    return out;
+  }
+
+  function renderWarnings(ctx) {
+    const panel = $('planner-warnings');
+    if (!panel) return;
+    const warns = computeWarnings(ctx);
+    if (!warns.length) { panel.classList.add('hidden'); panel.innerHTML = ''; return; }
+    panel.classList.remove('hidden');
+    const iconFor = (s) => s === 'error' ? 'alertTriangle' : s === 'warn' ? 'alert' : 'info';
+    const toneFor = (s) => s === 'error' ? 'text-destructive' : s === 'warn' ? 'text-warning' : 'text-muted-foreground';
+    panel.innerHTML = `
+      <div class="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-2 uppercase tracking-wide">
+        <span data-icon="alert" data-size="12"></span> Plan checks (${warns.length})
+      </div>
+      <ul class="flex flex-col gap-1.5">
+        ${warns.map((w) => `
+          <li class="flex items-start gap-2 text-xs ${toneFor(w.severity)}">
+            <span data-icon="${iconFor(w.severity)}" data-size="12" class="mt-0.5 flex-none"></span>
+            <span class="flex-1">${w.msg}</span>
+            ${w.fix === 'auto-suggest' ? '<button type="button" class="btn btn-ghost sm text-[10px] py-0.5 px-2" data-warn-fix="auto-suggest">Fix</button>' : ''}
+          </li>`).join('')}
+      </ul>`;
+    if (window.refreshIcons) window.refreshIcons(panel);
+    panel.querySelectorAll('[data-warn-fix="auto-suggest"]').forEach((b) => {
+      b.addEventListener('click', () => { const real = $('planner-auto-suggest'); if (real) real.click(); });
+    });
   }
 
   // ────── Build preset JSON ──────
