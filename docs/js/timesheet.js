@@ -173,11 +173,16 @@ function renderTimesheet() {
 
   // ── Summary card ──
   const s = snap.summary || {};
+  // API doesn't always populate displayTotalOTHours — compute from weekday+Sat+Sun.
+  const totalOTMin = _hhmmToMin(s.displayOvertimeHours)
+                   + _hhmmToMin(s.displayHolidayOvertimeHours)
+                   + _hhmmToMin(s.displaySundayOvertimeHours);
+  const totalOT = totalOTMin > 0 ? _minToHhmm(totalOTMin) : (s.displayTotalOTHours || '—');
   const chips = [
     ['Working hours', s.displayTotalWorkingHours || '—'],
     ['Actual', s.displayTotalActualWorkingTime || '—'],
     ['OT request', s.displayOTRequestHours || '—'],
-    ['OT total', s.displayTotalOTHours || s.displayOvertimeHours || '—'],
+    ['OT total', totalOT],
     ['OT weekday', s.displayOvertimeHours || '—'],
     ['OT midnight', s.displayNightWorkingHours || '—'],
     ['OT Sat/Hol', s.displayHolidayOvertimeHours || '—'],
