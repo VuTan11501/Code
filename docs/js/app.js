@@ -961,9 +961,12 @@ function checkForNewFailures(allRuns) {
   }
 
   let notified = 0;
+  // Workflows that should NEVER trigger notifications (too frequent / heartbeat-style).
+  const NOTIF_MUTED_WORKFLOWS = new Set(['scheduled-dispatch.yml']);
   const tryNotify = (r, kind) => {
     if (notified >= MAX_NOTIFY_PER_REFRESH) return;
     const wf = r._wf || {};
+    if (wf.file && NOTIF_MUTED_WORKFLOWS.has(wf.file)) return;
     const wfName = wf.name || 'Workflow';
     const icon = wf.icon || '⚙️';
     const titles = {
