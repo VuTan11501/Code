@@ -6,7 +6,7 @@
 <!--
   Content-Security-Policy — defense-in-depth.
   - default-src 'self'    : block all external resources by default
-  - connect-src           : ONLY same-origin + GitHub API allowed for fetch/XHR
+  - connect-src           : ONLY same-origin + GitHub API + Cloudflare Workers (proxy) allowed for fetch/XHR
   - script-src            : 'unsafe-inline' kept because index.html has the
                             theme-init <script> and many onclick= handlers.
                             Removing it would require a full inline-handler
@@ -18,7 +18,7 @@
   only). On GH Pages we can't customize headers, so clickjacking protection
   for now relies on the SOP + the app not being embedded anywhere.
 -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://api.github.com https://gist.githubusercontent.com; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' https: data: blob:; manifest-src 'self'; worker-src 'self'; base-uri 'self';">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://api.github.com https://gist.githubusercontent.com https://*.workers.dev; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' https: data: blob:; manifest-src 'self'; worker-src 'self'; base-uri 'self';">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#09090b" id="themeColorMeta">
