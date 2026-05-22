@@ -1631,51 +1631,88 @@
       btn.innerHTML = '<span data-icon="refresh" data-size="14" class="animate-spin"></span><span class="btn-label">Generating…</span>';
       if (window.refreshIcons) window.refreshIcons(btn);
 
-      const preset = buildPreset();
-      // Reset log context for this run
-      _logCtx.token = token;
-      _logCtx.runId = null;
-      _logCtx.jobId = null;
-      _logCtx.completed = false;
-      if (_logCtx.pollTimer) { clearInterval(_logCtx.pollTimer); _logCtx.pollTimer = null; }
-      setStatus('Dispatching workflow…', 'text-muted-foreground');
-      _showOverlay('Generating Suica PDF', 'Dispatching workflow…');
+      // Batch generation: read user-selected months count (1..6). When > 1, we
+      // iterate the month + seed locally between dispatches and restore the
+      // originals at the end so the UI looks unchanged.
+      const batchEl = $('planner-batch-months');
+      const batchN = Math.max(1, Math.min(12, +(batchEl && batchEl.value) || 1));
+      const origMonth = state.settings.month;
+      const origSeed = +state.settings.seed;
+      const monthInput = $('planner-month');
+      const seedInput = $('planner-seed');
+      function _bumpMonth(ym) {
+        const [y, m] = ym.split('-').map(Number);
+        const d = new Date(y, (m - 1) + 1, 1);
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      }
+      const filenames = [];
+
       if (window.Toast) {
-        progressToast = window.Toast.info('Dispatching workflow…', {
-          title: 'Generating Suica PDF',
+        progressToast = window.Toast.info(batchN > 1 ? `Dispatching workflow (1/${batchN})…` : 'Dispatching workflow…', {
+          title: batchN > 1 ? `Generating ${batchN} Suica PDFs` : 'Generating Suica PDF',
           duration: 0,
         });
       }
-      const dispatchedAt = Date.now();
-      await _dispatchWorkflow(token, preset);
-      setStatus('Workflow dispatched — waiting for run…', 'text-muted-foreground');
+      _showOverlay(batchN > 1 ? `Generating ${batchN} Suica PDFs` : 'Generating Suica PDF', 'Dispatching workflow…');
 
-      const run = await _waitForRun(token, dispatchedAt);
-      setStatus(`Run #${run.run_number} succeeded — downloading PDF…`, 'text-muted-foreground');
-      const zipBuf = await _downloadArtifact(token, run.id);
-      const filename = await _extractAndSavePdf(zipBuf, `suica-${state.settings.month}.pdf`);
-      setStatus(`✓ Downloaded ${filename}`, 'text-primary');
+      for (let i = 0; i < batchN; i++) {
+        const tag = batchN > 1 ? ` (${i + 1}/${batchN})` : '';
+        const preset = buildPreset();
+        // Reset log context for this run
+        _logCtx.token = token;
+        _logCtx.runId = null;
+        _logCtx.jobId = null;
+        _logCtx.completed = false;
+        if (_logCtx.pollTimer) { clearInterval(_logCtx.pollTimer); _logCtx.pollTimer = null; }
+        setStatus(`Dispatching workflow${tag}…`, 'text-muted-foreground');
+        const dispatchedAt = Date.now();
+        await _dispatchWorkflow(token, preset);
+        setStatus(`Workflow dispatched${tag} — waiting for run…`, 'text-muted-foreground');
+
+        const run = await _waitForRun(token, dispatchedAt);
+        setStatus(`Run #${run.run_number}${tag} succeeded — downloading PDF…`, 'text-muted-foreground');
+        const zipBuf = await _downloadArtifact(token, run.id);
+        const filename = await _extractAndSavePdf(zipBuf, `suica-${state.settings.month}.pdf`);
+        filenames.push(filename);
+        setStatus(`✓ Downloaded ${filename}${tag}`, 'text-primary');
+
+        // Record this generation for the "Recent" panel
+        try {
+          recordGeneration({
+            filename,
+            month: state.settings.month,
+            target: +state.settings.target,
+            seed: +state.settings.seed,
+            routes: currentPlanRoutes(),
+            runUrl: run && run.html_url ? run.html_url : null,
+          });
+        } catch (_) {}
+
+        // Prepare next iteration (don't bump after last one)
+        if (i < batchN - 1) {
+          state.settings.month = _bumpMonth(state.settings.month);
+          state.settings.seed = +state.settings.seed + 1;
+          if (monthInput) monthInput.value = state.settings.month;
+          if (seedInput) seedInput.value = String(state.settings.seed);
+        }
+      }
+
+      // Restore originals so the planner UI keeps the user's authored values.
+      if (batchN > 1) {
+        state.settings.month = origMonth;
+        state.settings.seed = origSeed;
+        if (monthInput) monthInput.value = origMonth;
+        if (seedInput) seedInput.value = String(origSeed);
+        saveState();
+      }
+
       if (progressToast) { progressToast.dismiss(); progressToast = null; }
-      if (window.Toast) window.Toast.success(`Saved ${filename}`, {
-        title: 'Suica PDF ready',
-        actionLabel: run && run.html_url ? 'View run' : null,
-        onAction: run && run.html_url ? () => window.open(run.html_url, '_blank') : null,
-      });
+      if (window.Toast) window.Toast.success(
+        batchN > 1 ? `Saved ${filenames.length} PDFs` : `Saved ${filenames[0]}`,
+        { title: batchN > 1 ? 'Suica batch ready' : 'Suica PDF ready' }
+      );
 
-      // Record this generation for the "Recent" panel
-      try {
-        recordGeneration({
-          filename,
-          month: state.settings.month,
-          target: +state.settings.target,
-          seed: +state.settings.seed,
-          routes: currentPlanRoutes(),
-          runUrl: run && run.html_url ? run.html_url : null,
-        });
-      } catch (_) {}
-
-      // Also feed the generated history into the viewer below for preview,
-      // if we can locally reproduce it (deterministic via seed).
+      // Preview last-generated history in the viewer below.
       if (window.renderSuicaHistory) {
         try { window.renderSuicaHistory(generateMonthlyHistory()); } catch (_) {}
       }

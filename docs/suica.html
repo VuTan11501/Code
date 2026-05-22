@@ -423,6 +423,16 @@
             <span data-icon="download" data-size="14"></span>
             <span class="btn-label">Generate Suica PDF</span>
           </button>
+          <label class="text-xs text-muted-foreground flex items-center gap-1" data-tooltip="Generate this many consecutive months in one batch (month increments, seed +1 each)">
+            <span>Batch:</span>
+            <select id="planner-batch-months" class="input input-sm w-14">
+              <option value="1" selected>1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+              <option value="6">6</option>
+            </select>
+            <span>mo.</span>
+          </label>
           <span id="planner-pdf-status" class="text-xs text-muted-foreground"></span>
           <div class="flex-1"></div>
           <details class="relative">
@@ -704,7 +714,7 @@
 <script src="js/suica-history.js?v=6" defer></script>
 <script src="js/log-viewer.js?v=1" defer></script>
 <script>window.SUICA_FARE_API='https://suica-fare-proxy.workflow-dashboard.workers.dev';</script>
-<script src="js/suica-planner.js?v=46" defer></script>
+<script src="js/suica-planner.js?v=47" defer></script>
 <script>
 // Theme toggle for suica.html (mirrors the dashboard's behavior; uses the same
 // localStorage key so the preference syncs across pages).
