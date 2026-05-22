@@ -288,26 +288,46 @@ function renderCloudSyncStatus() {
   `;
 }
 
-async function cloudSyncPullNow() {
+async function cloudSyncPullNow(ev) {
   if (!window.CloudSync) return;
+  const btn = ev && ev.currentTarget;
+  const orig = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = `${ICON('refresh', 14, 'animate-spin')} Pulling…`;
+  }
   toast('Pulling settings from cloud…');
-  const r = await window.CloudSync.pull({ force: true });
-  if (r.error) toast('❌ Pull failed: ' + r.error, 'error');
-  else if (r.applied) toast(`✅ Synced ${r.applied} settings from ${r.from}`);
-  else if (r.empty) toast('☁️ No remote settings yet — push first to seed');
-  else toast('✓ Already up to date');
-  if (typeof window.CloudSync?.applyToUI === 'function') window.CloudSync.applyToUI();
-  renderCloudSyncStatus();
+  try {
+    const r = await window.CloudSync.pull({ force: true });
+    if (r.error) toast('❌ Pull failed: ' + r.error, 'error');
+    else if (r.applied) toast(`✅ Synced ${r.applied} settings from ${r.from}`);
+    else if (r.empty) toast('☁️ No remote settings yet — push first to seed');
+    else toast('✓ Already up to date');
+    if (typeof window.CloudSync?.applyToUI === 'function') window.CloudSync.applyToUI();
+    renderCloudSyncStatus();
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+  }
 }
 
-async function cloudSyncPushNow() {
+async function cloudSyncPushNow(ev) {
   if (!window.CloudSync) return;
+  const btn = ev && ev.currentTarget;
+  const orig = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = `${ICON('refresh', 14, 'animate-spin')} Pushing…`;
+  }
   toast('Pushing settings to cloud…');
-  const r = await window.CloudSync.push();
-  if (r.error) toast('❌ Push failed: ' + r.error, 'error');
-  else if (r.ok) toast('✅ Settings pushed to cloud');
-  else if (r.skipped === 'empty') toast('⚠️ Nothing to push (no settings yet)', 'warning');
-  renderCloudSyncStatus();
+  try {
+    const r = await window.CloudSync.push();
+    if (r.error) toast('❌ Push failed: ' + r.error, 'error');
+    else if (r.ok) toast('✅ Settings pushed to cloud');
+    else if (r.skipped === 'empty') toast('⚠️ Nothing to push (no settings yet)', 'warning');
+    renderCloudSyncStatus();
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+  }
 }
 
 // Auto-refresh status panel when settings page is visited

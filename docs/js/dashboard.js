@@ -205,7 +205,7 @@ function renderWorkflowCard(wf, runs) {
           ${last5.length === 0 ? '<li class="run-item" style="color:var(--muted-foreground);cursor:default">No runs yet</li>' : ''}
         </ul>
         <div class="trigger-actions">
-          <button class="btn primary sm" onclick="triggerWorkflow('${wf.file}')">▶ Trigger</button>
+          <button class="btn primary sm" onclick="triggerWorkflow('${wf.file}', event)">▶ Trigger</button>
           <a class="btn sm" href="https://github.com/${OWNER}/${REPO}/actions/workflows/${wf.file}" target="_blank">View →</a>
         </div>
       </div>
@@ -216,8 +216,10 @@ function renderWorkflowCard(wf, runs) {
 // ═══════════════════════════════════════════════════
 //  TRIGGER & CANCEL
 // ═══════════════════════════════════════════════════
-async function triggerWorkflow(file) {
+async function triggerWorkflow(file, ev) {
   if (!sessionToken) { toast('⚠️ Not authenticated'); return; }
+  const btn = ev && ev.currentTarget;
+  const origHtml = btn ? btn.innerHTML : '';
 
   // ⚠️ Pre-flight check: warn if checkout would forfeit scheduled OT hours.
   if (file === 'auto-checkout.yml' && typeof getPendingCheckoutAhead === 'function') {
@@ -248,6 +250,10 @@ async function triggerWorkflow(file) {
   }
 
   try {
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = `${ICON('refresh', 14, 'animate-spin')} Triggering…`;
+    }
     const res = await fetch(`${API}/repos/${OWNER}/${REPO}/actions/workflows/${file}/dispatches`, {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${sessionToken}`, 'Accept': 'application/vnd.github+json' },
@@ -269,6 +275,12 @@ async function triggerWorkflow(file) {
     }
     else toast(`❌ Failed (${res.status})`);
   } catch (e) { toast(`❌ ${e.message}`); }
+  finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = origHtml;
+    }
+  }
 }
 
 async function cancelWorkflowRun(runId) {

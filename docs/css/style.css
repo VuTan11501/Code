@@ -927,6 +927,16 @@ select option { background: var(--card); color: var(--foreground); }
 }
 @keyframes spinner-rotate { to { transform: rotate(360deg); } }
 
+/* shadcn/Radix-style spin override — slower & smoother than Tailwind's 1s default */
+@keyframes ts-spin { to { transform: rotate(360deg); } }
+.animate-spin {
+  animation: ts-spin 1.4s cubic-bezier(0.55, 0.15, 0.45, 0.85) infinite;
+  transform-origin: center;
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-spin { animation-duration: 2.4s; }
+}
+
 /* Phase 3 â€” Template manager */
 .ot-template-list { display: flex; flex-direction: column; gap: var(--sp-2); }
 .ot-template-row {
