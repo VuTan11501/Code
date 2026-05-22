@@ -85,7 +85,9 @@ def write_outputs(history: MonthlyHistory, out_path: Path,
                   template_pdf: Path | None = None,
                   validate: bool = True,
                   verify_target_yen: int | None = None,
-                  verify_tolerance_yen: int = 500) -> None:
+                  verify_tolerance_yen: int = 500,
+                  verify_month: str | None = None,
+                  verify_expected_fares: dict[tuple[str, str], int] | None = None) -> None:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     suffix = out_path.suffix.lower()
 
@@ -136,6 +138,8 @@ def write_outputs(history: MonthlyHistory, out_path: Path,
             target_yen=verify_target_yen,
             tolerance_yen=verify_tolerance_yen,
             rendered_count=stats.get("rendered"),
+            month=verify_month,
+            expected_fares=verify_expected_fares,
         )
         if not ok:
             failed_codes = ", ".join(c.code for c in vreport.failed)
@@ -198,10 +202,21 @@ def main(argv: list[str] | None = None) -> int:
     history = TapBuilder(config, rng=rng).build(timed, args.month)
 
     print(history.summary())
+    # Build expected fare table {(from, to): yen} from the resolved cache so
+    # the verifier can confirm every OUT entry's amount matches the verified
+    # IC fare for its route — catches cases where the renderer used a stale
+    # fare or where TapBuilder mis-assigned a fare to the wrong pair.
+    expected_fares: dict[tuple[str, str], int] = {}
+    for route_name, res in cache._cache.items():
+        a, b = route_name.split("↔", 1)
+        expected_fares[(a, b)] = res.consensus_fare
+        expected_fares[(b, a)] = res.consensus_fare
     write_outputs(history, args.out, template_pdf=args.template,
                   validate=not args.no_validate,
                   verify_target_yen=args.target,
-                  verify_tolerance_yen=args.tolerance)
+                  verify_tolerance_yen=args.tolerance,
+                  verify_month=args.month,
+                  verify_expected_fares=expected_fares)
     if args.rakuraku_out:
         from .rakuraku_export import write_trips_json
         stats = write_trips_json(history, args.rakuraku_out)

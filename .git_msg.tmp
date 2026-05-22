@@ -1,0 +1,9 @@
+feat(suica-pdf): 5 more tier-2 quality checks (20 total)
+
+TRIP-FARE-EXACT     OUT amount matches verified IC fare from cache
+DATE-RANGE          every entry datetime within target YYYY-MM
+NO-EMPTY-CELLS      required cells populated per row
+FONT-CONSISTENT-ROW no mixed font families on same data row
+GLYPH-METRICS       co-located digit widths agree across fonts (size+row banded)
+
+Local run: 20/20 PASS, pytest 42/42.

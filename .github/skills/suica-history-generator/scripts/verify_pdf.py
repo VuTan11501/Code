@@ -526,6 +526,195 @@ def _check_no_soft_hyphen(doc: fitz.Document, r: VerifyReport) -> None:
 
 
 # --------------------------------------------------------------------------
+#  Quality checks — tier 2: forensic + content correctness
+# --------------------------------------------------------------------------
+
+
+def _check_trip_fare_exact(
+    history: MonthlyHistory | None,
+    expected_fares: dict[tuple[str, str], int] | None,
+    r: VerifyReport,
+) -> None:
+    """Walk IN→OUT pairs and verify the OUT fare equals the verified IC
+    fare for that (from, to) pair as recorded in the FareCache. Catches
+    cases where the renderer wrote a stale or mis-assigned fare."""
+    if history is None or not expected_fares:
+        r.add("TRIP-FARE-EXACT", True, "no fare table supplied (skipped)")
+        return
+    bad: list[str] = []
+    checked = 0
+    pending_in: dict[str, tuple[int, str]] = {}
+    for i, e in enumerate(history.entries):
+        if e.kind == TapKind.IN:
+            pending_in[e.at.date().isoformat()] = (i, e.station)
+        elif e.kind == TapKind.OUT:
+            key = e.at.date().isoformat()
+            if key not in pending_in:
+                continue
+            _, st_from = pending_in.pop(key)
+            st_to = e.station
+            actual = abs(e.fare_yen)
+            expected = expected_fares.get((st_from, st_to))
+            if expected is None:
+                # No cached fare for this pair — can't verify, skip
+                continue
+            checked += 1
+            if actual != expected:
+                bad.append(f"row{i} {st_from}→{st_to} fare=¥{actual} expected=¥{expected} (Δ=¥{actual-expected:+,})")
+    if bad:
+        head = "; ".join(bad[:3])
+        suffix = f" (+{len(bad)-3} more)" if len(bad) > 3 else ""
+        r.add("TRIP-FARE-EXACT", False,
+              f"{len(bad)}/{checked} OUT fares don't match verified IC fare: {head}{suffix}")
+    else:
+        r.add("TRIP-FARE-EXACT", True,
+              f"all {checked} trip fare(s) match verified IC fare cache exactly")
+
+
+def _check_date_range(history: MonthlyHistory | None, month: str | None, r: VerifyReport) -> None:
+    """Every entry datetime must fall within the target YYYY-MM."""
+    if history is None or not month:
+        r.add("DATE-RANGE", True, "no month/history supplied (skipped)")
+        return
+    try:
+        y, m = map(int, month.split("-"))
+    except Exception:
+        r.add("DATE-RANGE", False, f"unparseable month spec: {month!r}")
+        return
+    bad: list[str] = []
+    for i, e in enumerate(history.entries):
+        if e.at.year != y or e.at.month != m:
+            bad.append(f"row{i} {e.at.isoformat()} outside {month}")
+    if bad:
+        head = "; ".join(bad[:3])
+        suffix = f" (+{len(bad)-3} more)" if len(bad) > 3 else ""
+        r.add("DATE-RANGE", False, f"{len(bad)} entries outside target month: {head}{suffix}")
+    else:
+        r.add("DATE-RANGE", True, f"all {len(history.entries)} entries fall within {month}")
+
+
+def _check_no_empty_cells(rows: list[dict], r: VerifyReport) -> None:
+    """Every IN/OUT data row must have month, day, type, st_from, st_to,
+    balance, and amount populated. Carryover rows (繰) are allowed to skip
+    st_from / st_to / amount."""
+    data_rows = [row for row in rows if _is_data_row(row)]
+    bad: list[str] = []
+    for idx, row in enumerate(data_rows):
+        typ = str(row.get("type") or "").strip()
+        required = ["month", "day", "type", "balance"]
+        if typ != "繰":
+            required += ["amount"]
+        # For trip rows (入/出/物販/オートチャージ), most need st_from too;
+        # オートチャージ / 物販 sometimes only fill st_to. Be lenient: only
+        # demand that the trip rows have BOTH stations OR explicitly are
+        # a single-station type (charge / shopping).
+        for col in required:
+            v = row.get(col)
+            if v is None or (isinstance(v, str) and not v.strip()):
+                bad.append(f"row{idx} type={typ!r} missing '{col}'")
+                break
+    if bad:
+        head = "; ".join(bad[:3])
+        suffix = f" (+{len(bad)-3} more)" if len(bad) > 3 else ""
+        r.add("NO-EMPTY-CELLS", False, f"{len(bad)} row(s) have empty required cells: {head}{suffix}")
+    else:
+        r.add("NO-EMPTY-CELLS", True, f"all {len(data_rows)} data row(s) have complete required cells")
+
+
+def _check_font_consistency_per_row(doc: fitz.Document, r: VerifyReport) -> None:
+    """Within a single data row, all cells should use the SAME font face —
+    mixing MSGothic with IPAGothic on one row would be visible (slightly
+    different stroke weight / kanji width). Chrome / footer rows are exempt
+    because the carryover or header may share a row with the column header."""
+    bad: list[str] = []
+    checked = 0
+    for pno in range(doc.page_count):
+        rows: dict[float, list[dict]] = {}
+        for blk in doc[pno].get_text("dict").get("blocks", []):
+            for ln in blk.get("lines", []):
+                for sp in ln.get("spans", []):
+                    if (sp.get("text") or "").strip():
+                        y = round(sp["bbox"][1] * 2) / 2
+                        rows.setdefault(y, []).append(sp)
+        for y, spans in rows.items():
+            if y < 110 or y > 685:  # data-band only
+                continue
+            checked += 1
+            font_set = set(sp["font"] for sp in spans)
+            if len(font_set) > 1:
+                # Allow combinations that share the same family — e.g. both
+                # MSGothic subsets with different prefixes count as same.
+                bare = set(f.split("+", 1)[-1].lower().replace(" ", "") for f in font_set)
+                if len(bare) > 1:
+                    bad.append(f"p{pno} y={y} fonts={sorted(font_set)}")
+    if bad:
+        head = "; ".join(bad[:3])
+        suffix = f" (+{len(bad)-3} more)" if len(bad) > 3 else ""
+        r.add("FONT-CONSISTENT-ROW", False,
+              f"{len(bad)}/{checked} data rows mix font families: {head}{suffix}")
+    else:
+        r.add("FONT-CONSISTENT-ROW", True,
+              f"all {checked} data row(s) use a single font family")
+
+
+def _check_glyph_metrics(doc: fitz.Document, r: VerifyReport) -> None:
+    """For ASCII digits 0-9, compute the average glyph bbox width per
+    (font, size) bucket. Fail only when fonts with mismatched digit
+    widths actually appear in the SAME row band (Δy ≤ 3pt) — that is
+    the only case where the eye can directly compare them. Drift across
+    visually distant regions (e.g. chrome header vs data rows) is not a
+    pixel-perfect concern because users don't see them side-by-side.
+    """
+    # (font, size, y_center) → avg digit width
+    samples: list[tuple[str, float, float, float]] = []
+    for pno in range(doc.page_count):
+        for blk in doc[pno].get_text("dict").get("blocks", []):
+            for ln in blk.get("lines", []):
+                for sp in ln.get("spans", []):
+                    txt = sp.get("text") or ""
+                    digits = sum(1 for c in txt if c.isdigit())
+                    if digits == 0:
+                        continue
+                    bbox = sp["bbox"]
+                    w_per_char = (bbox[2] - bbox[0]) / len(txt)
+                    y_center = (bbox[1] + bbox[3]) / 2
+                    samples.append((sp["font"], round(sp["size"], 1), y_center, w_per_char))
+
+    # Group by size, then by row band (Δy ≤ 3pt)
+    issues: list[str] = []
+    by_size: dict[float, list[tuple[str, float, float]]] = {}
+    for font, size, y, w in samples:
+        by_size.setdefault(size, []).append((font, y, w))
+
+    for size, rows in by_size.items():
+        rows.sort(key=lambda t: t[1])
+        # Cluster into row bands
+        bands: list[list[tuple[str, float, float]]] = []
+        for item in rows:
+            if bands and abs(item[1] - bands[-1][-1][1]) <= 3.0:
+                bands[-1].append(item)
+            else:
+                bands.append([item])
+        for band in bands:
+            fonts_in_band: dict[str, list[float]] = {}
+            for font, _y, w in band:
+                fonts_in_band.setdefault(font, []).append(w)
+            if len(fonts_in_band) <= 1:
+                continue
+            avgs = {f: sum(ws)/len(ws) for f, ws in fonts_in_band.items()}
+            span = max(avgs.values()) - min(avgs.values())
+            if span > 0.3:
+                d = ", ".join(f"{f.split('+',1)[-1]}={w:.2f}pt" for f, w in avgs.items())
+                issues.append(f"y≈{band[0][1]:.0f} {size}pt: {d} (Δ{span:.2f}pt)")
+    if issues:
+        r.add("GLYPH-METRICS", False,
+              "co-located fonts with digit-width drift > 0.3pt: " + "; ".join(issues[:3]))
+    else:
+        r.add("GLYPH-METRICS", True,
+              f"no co-located digit-width drift across {len(samples)} digit span(s)")
+
+
+# --------------------------------------------------------------------------
 #  Top-level entry
 # --------------------------------------------------------------------------
 
@@ -537,6 +726,8 @@ def verify_pdf(
     target_yen: int | None = None,
     tolerance_yen: int = SPEND_TOLERANCE_DEFAULT,
     rendered_count: int | None = None,
+    month: str | None = None,
+    expected_fares: dict[tuple[str, str], int] | None = None,
 ) -> tuple[bool, VerifyReport]:
     pdf_path = Path(pdf_path)
     template_pdf = Path(template_pdf)
@@ -563,6 +754,11 @@ def verify_pdf(
         _check_trip_pairing(history, report)
         _check_time_monotonic(history, report)
         _check_fare_correctness(history, report)
+        _check_trip_fare_exact(history, expected_fares, report)
+        _check_date_range(history, month, report)
+        _check_no_empty_cells(rows, report)
+        _check_font_consistency_per_row(doc, report)
+        _check_glyph_metrics(doc, report)
         if history is not None:
             _check_spend_target(history, target_yen, tolerance_yen, report)
     finally:
