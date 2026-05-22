@@ -2728,7 +2728,14 @@
         </button>
         <button type="button" class="btn btn-ghost sm text-xs" data-snap-delete="${s.id}" aria-label="Delete snapshot">
           <span data-icon="trash" data-size="12"></span>
-        </button>`;
+        </button>
+        <div class="basis-full"></div>
+        <details class="basis-full" ${s.note ? 'open' : ''}>
+          <summary class="text-[11px] text-muted-foreground cursor-pointer select-none opacity-70 hover:opacity-100">
+            <span data-icon="edit" data-size="10"></span> ${s.note ? 'Note' : 'Add note'}${s.note ? ` · ${s.note.length} chars` : ''}
+          </summary>
+          <textarea data-snap-note="${s.id}" rows="2" maxlength="500" placeholder="Why did you save this snapshot? (optional, max 500 chars)" class="input input-sm w-full mt-1 text-xs">${(s.note || '').replace(/&/g, '&amp;').replace(/</g, '&lt;')}</textarea>
+        </details>`;
       wrap.appendChild(row);
     });
     wrap.querySelectorAll('[data-snap-pin]').forEach((b) => b.addEventListener('click', (e) => togglePinSnapshot(e.currentTarget.getAttribute('data-snap-pin'))));
@@ -2737,6 +2744,20 @@
     wrap.querySelectorAll('[data-snap-delete]').forEach((b) => b.addEventListener('click', (e) => deleteSnapshot(e.currentTarget.getAttribute('data-snap-delete'))));
     wrap.querySelectorAll('[data-snap-compare]').forEach((b) => b.addEventListener('click', (e) => pickSnapshotForCompare(e.currentTarget.getAttribute('data-snap-compare'))));
     wrap.querySelectorAll('[data-snap-rename]').forEach((b) => b.addEventListener('click', (e) => renameSnapshot(e.currentTarget.getAttribute('data-snap-rename'))));
+    wrap.querySelectorAll('[data-snap-note]').forEach((ta) => {
+      let timer = null;
+      ta.addEventListener('input', () => {
+        clearTimeout(timer);
+        timer = setTimeout(() => {
+          const id = ta.getAttribute('data-snap-note');
+          const list = loadSnapshots();
+          const s = list.find((x) => x.id === id);
+          if (!s) return;
+          s.note = ta.value.trim().slice(0, 500);
+          saveSnapshots(list);
+        }, 400);
+      });
+    });
     if (window.refreshIcons) window.refreshIcons(wrap);
   }
 
