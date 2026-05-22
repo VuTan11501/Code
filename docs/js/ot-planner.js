@@ -304,10 +304,23 @@ function _updateOtMutationButtons() {
 // ot-history-fetch workflow; current/future months just re-read the Gist
 // (which is updated continuously by Auto OT Creator).
 async function refreshOtData() {
-  if (_isViewMonthPast()) {
-    await pullOtFromDokoKin();
-  } else {
-    await loadOtData({ refresh: true });
+  const btn = document.getElementById('otRefreshBtn');
+  const origHtml = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = `${ICON('refresh', 14, 'animate-spin')} Refreshing…`;
+  }
+  try {
+    if (_isViewMonthPast()) {
+      await pullOtFromDokoKin();
+    } else {
+      await loadOtData({ refresh: true });
+    }
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = origHtml;
+    }
   }
 }
 

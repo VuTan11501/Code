@@ -988,14 +988,15 @@ select option { background: var(--card); color: var(--foreground); }
 }
 @keyframes spinner-rotate { to { transform: rotate(360deg); } }
 
-/* shadcn/Radix-style spin override — slower & smoother than Tailwind's 1s default */
+/* shadcn/Radix-style spin override — slower & smoother than Tailwind's 1s default.
+   Linear timing matches the Radix Spinner aesthetic (constant velocity, no ease). */
 @keyframes ts-spin { to { transform: rotate(360deg); } }
 .animate-spin {
-  animation: ts-spin 1.4s cubic-bezier(0.55, 0.15, 0.45, 0.85) infinite;
+  animation: ts-spin 2s linear infinite;
   transform-origin: center;
 }
 @media (prefers-reduced-motion: reduce) {
-  .animate-spin { animation-duration: 2.4s; }
+  .animate-spin { animation-duration: 3s; }
 }
 
 /* Dashboard infrastructure-workflow toggle bar */
