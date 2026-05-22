@@ -253,6 +253,13 @@
     </div>
     <div class="flex items-center gap-2">
       <span id="planner-save-badge" class="status-badge status-success text-[10px] hidden sm:inline-flex" title="Plan autosave status">✓ Saved</span>
+      <div id="suica-accent-row" class="hidden sm:flex items-center gap-1" role="radiogroup" aria-label="Accent color">
+        <button type="button" data-accent="" class="rounded-full w-4 h-4 border border-border" style="background:#3b82f6" title="Default blue" aria-label="Default blue"></button>
+        <button type="button" data-accent="violet" class="rounded-full w-4 h-4 border border-border" style="background:#8b5cf6" title="Violet" aria-label="Violet"></button>
+        <button type="button" data-accent="emerald" class="rounded-full w-4 h-4 border border-border" style="background:#10b981" title="Emerald" aria-label="Emerald"></button>
+        <button type="button" data-accent="rose" class="rounded-full w-4 h-4 border border-border" style="background:#f43f5e" title="Rose" aria-label="Rose"></button>
+        <button type="button" data-accent="amber" class="rounded-full w-4 h-4 border border-border" style="background:#f59e0b" title="Amber" aria-label="Amber"></button>
+      </div>
       <button id="suica-theme-toggle" type="button" class="btn sm btn-ghost" aria-label="Toggle light/dark theme" data-tooltip="Toggle light/dark theme (T)">
         <span data-icon="sun" data-size="14" data-theme-icon="light"></span>
         <span data-icon="moon" data-size="14" data-theme-icon="dark" class="hidden"></span>
@@ -807,7 +814,7 @@
 <script src="js/suica-history.js?v=6" defer></script>
 <script src="js/log-viewer.js?v=1" defer></script>
 <script>window.SUICA_FARE_API='https://suica-fare-proxy.workflow-dashboard.workers.dev';</script>
-<script src="js/suica-planner.js?v=99" defer></script>
+<script src="js/suica-planner.js?v=100" defer></script>
 <script>
 // Theme toggle for suica.html (mirrors the dashboard's behavior; uses the same
 // localStorage key so the preference syncs across pages).
@@ -889,7 +896,37 @@
       var on = !(window.Toast && window.Toast.getSound && window.Toast.getSound());
       if (window.Toast && window.Toast.setSound) window.Toast.setSound(on);
       paint();
-      if (window.Toast) window.Toast.info(on ? '🔔 Toast sounds enabled' : '🔕 Toast sounds muted');
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();
+</script>
+<script>
+// Accent picker — overrides --primary on :root. Persisted to localStorage.
+(function () {
+  var KEY = 'suica-accent';
+  var MAP = {
+    '':        { primary: '#3b82f6' },
+    'violet':  { primary: '#8b5cf6' },
+    'emerald': { primary: '#10b981' },
+    'rose':    { primary: '#f43f5e' },
+    'amber':   { primary: '#f59e0b' },
+  };
+  function apply(key) {
+    var c = MAP[key] || MAP[''];
+    document.documentElement.style.setProperty('--primary', c.primary);
+  }
+  function init() {
+    var row = document.getElementById('suica-accent-row');
+    if (!row) return;
+    var saved = (function () { try { return localStorage.getItem(KEY) || ''; } catch (_) { return ''; } })();
+    apply(saved);
+    row.querySelectorAll('[data-accent]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var k = btn.getAttribute('data-accent') || '';
+        apply(k);
+        try { localStorage.setItem(KEY, k); } catch (_) {}
+        if (window.Toast) window.Toast.info('Accent: ' + (k || 'default'));
+      });
     });
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
