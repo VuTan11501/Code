@@ -2538,6 +2538,36 @@
       ...ld.removed.map((r) => `<span class="status-badge status-failure font-mono text-[10px]">− ${r}</span>`),
       ...ld.added.map((r) => `<span class="status-badge status-success font-mono text-[10px]">+ ${r}</span>`),
     ].join(' ') || '<span class="text-xs italic text-muted-foreground">none</span>';
+    // Per-day commute-spend mini bar chart (uses current state.fares as the
+    // reference price-book; snapshots don't capture fares separately).
+    function _routeCost(routes) {
+      return routes.reduce((s, r) => s + (+state.fares[r] || 0), 0);
+    }
+    const dayCosts = DAYS.map((d) => ({
+      day: d,
+      a: _routeCost((snapA.pattern[d] || []).map((t) => t.route)),
+      b: _routeCost((snapB.pattern[d] || []).map((t) => t.route)),
+    }));
+    const maxCost = Math.max(1, ...dayCosts.flatMap((x) => [x.a, x.b]));
+    const totalA = dayCosts.reduce((s, x) => s + x.a, 0);
+    const totalB = dayCosts.reduce((s, x) => s + x.b, 0);
+    const delta = totalB - totalA;
+    const deltaTone = delta > 0 ? 'text-warning' : delta < 0 ? 'text-success' : 'text-muted-foreground';
+    const bw = 14, gap = 4, h = 36;
+    const w = DAYS.length * (2 * bw + gap + 8);
+    const sparkSvg = `
+      <svg width="${w}" height="${h + 14}" viewBox="0 0 ${w} ${h + 14}" aria-hidden="true" style="display:block">
+        ${dayCosts.map((x, i) => {
+          const x0 = i * (2 * bw + gap + 8) + 4;
+          const aH = Math.round((x.a / maxCost) * h);
+          const bH = Math.round((x.b / maxCost) * h);
+          return `<g>
+            <rect x="${x0}" y="${h - aH}" width="${bw}" height="${aH}" fill="var(--muted-foreground)" opacity="0.45"><title>${DAY_LABELS[x.day]} A: ¥${x.a.toLocaleString('en-US')}</title></rect>
+            <rect x="${x0 + bw + gap}" y="${h - bH}" width="${bw}" height="${bH}" fill="var(--primary)" opacity="0.85"><title>${DAY_LABELS[x.day]} B: ¥${x.b.toLocaleString('en-US')}</title></rect>
+            <text x="${x0 + bw + gap / 2}" y="${h + 12}" font-size="9" fill="currentColor" text-anchor="middle" opacity="0.6">${DAY_LABELS[x.day].slice(0, 1)}</text>
+          </g>`;
+        }).join('')}
+      </svg>`;
     const settingsKeys = Object.keys({ ...snapA.settings, ...snapB.settings });
     const settingsHtml = settingsKeys.map((k) => {
       const va = snapA.settings[k];
@@ -2553,6 +2583,13 @@
       <div class="text-xs text-muted-foreground mb-3">
         <strong>A:</strong> ${snapA.name} · <strong>B:</strong> ${snapB.name}
         — green = added in B · red = removed from A · grey = unchanged
+      </div>
+      <div class="mb-3 p-2 rounded border border-border/60 bg-muted/30">
+        <div class="text-[10px] uppercase tracking-wide text-muted-foreground mb-1 flex items-center gap-2">
+          <span>Per-day commute spend (grey = A, accent = B)</span>
+          <span class="ml-auto ${deltaTone}">Total ¥${totalA.toLocaleString('en-US')} → ¥${totalB.toLocaleString('en-US')} (${delta >= 0 ? '+' : ''}¥${delta.toLocaleString('en-US')})</span>
+        </div>
+        ${sparkSvg}
       </div>
       <h4 class="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">Weekly pattern</h4>
       <table class="w-full mb-3"><tbody>${dayRows}</tbody></table>
