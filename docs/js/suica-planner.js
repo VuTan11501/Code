@@ -1351,6 +1351,22 @@
     // Sort toolbar — affects render order only, not state order.
     const sortMode = wrap.dataset.leisureSort || 'manual';
     const tagFilter = wrap.dataset.leisureTag || '';
+    const searchQ = (wrap.dataset.leisureSearch || '').trim().toLowerCase();
+    // Inline search box — only when 8+ rows exist so it doesn't add clutter for small pools.
+    if (state.leisure.length >= 8) {
+      const sbar = document.createElement('div');
+      sbar.className = 'pb-1.5';
+      sbar.innerHTML = `<input type="search" id="planner-leisure-search" placeholder="Filter routes…" class="input input-sm w-full text-xs" autocomplete="off" value="${searchQ.replace(/"/g, '&quot;')}">`;
+      const inp = sbar.querySelector('input');
+      inp.addEventListener('input', () => {
+        wrap.dataset.leisureSearch = inp.value;
+        const pos = inp.selectionStart;
+        renderLeisure();
+        const fresh = document.getElementById('planner-leisure-search');
+        if (fresh) { fresh.focus(); try { fresh.setSelectionRange(pos, pos); } catch (_) {} }
+      });
+      wrap.appendChild(sbar);
+    }
     // Tag filter chip row — only shown when at least one row has a tag.
     const allTags = Array.from(new Set(state.leisure.map((l) => (l.tag || '').trim()).filter(Boolean))).sort();
     if (allTags.length) {
@@ -1380,7 +1396,8 @@
       wrap.appendChild(bar);
     }
     const indexed = state.leisure.map((l, idx) => ({ l, idx }))
-      .filter(({ l }) => !tagFilter || (l.tag || '').trim() === tagFilter);
+      .filter(({ l }) => !tagFilter || (l.tag || '').trim() === tagFilter)
+      .filter(({ l }) => !searchQ || l.route.toLowerCase().indexOf(searchQ) >= 0);
     if (sortMode === 'fare') indexed.sort((a, b) => fareOf(b.l.route) - fareOf(a.l.route));
     else if (sortMode === 'weight') indexed.sort((a, b) => b.l.weight - a.l.weight);
     else if (sortMode === 'name') indexed.sort((a, b) => a.l.route.localeCompare(b.l.route, 'ja'));
