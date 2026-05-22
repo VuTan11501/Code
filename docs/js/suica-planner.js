@@ -250,13 +250,16 @@
       const fresh = $('planner-recent-search');
       if (fresh) { fresh.focus(); if (typeof focusPos === 'number') fresh.setSelectionRange(focusPos, focusPos); }
     });
+    const selCount = filtered.filter((r) => _recentSel.has(r.when)).length;
     const chipRow = document.createElement('div');
-    chipRow.className = 'flex items-center gap-1 text-[10px] uppercase tracking-wide text-muted-foreground mb-2';
+    chipRow.className = 'flex items-center gap-1 text-[10px] uppercase tracking-wide text-muted-foreground mb-2 flex-wrap';
     chipRow.innerHTML = `
       <span class="mr-1">Filter:</span>
       ${['all', '7d', '30d'].map((f) => `
         <button type="button" data-recent-filter="${f}" class="btn btn-ghost sm text-[10px] ${filter === f ? 'bg-muted' : ''}">${f === 'all' ? 'All' : 'Last ' + f}</button>
       `).join('')}
+      ${selCount > 0 ? `<button type="button" data-recent-bulk-del class="btn sm text-[10px] text-destructive border border-destructive/40 ml-1" data-tooltip="Delete the ${selCount} selected run${selCount === 1 ? '' : 's'} from local history">Delete ${selCount}</button>
+      <button type="button" data-recent-sel-clear class="btn btn-ghost sm text-[10px]" data-tooltip="Clear selection">Clear sel</button>` : ''}
       <span class="ml-auto text-muted-foreground normal-case tracking-normal">${filtered.length}/${list.length}</span>
     `;
     wrap.appendChild(chipRow);
@@ -264,6 +267,23 @@
       wrap.dataset.recentFilter = e.currentTarget.getAttribute('data-recent-filter');
       renderRecent();
     }));
+    const bulkDel = chipRow.querySelector('[data-recent-bulk-del]');
+    if (bulkDel) bulkDel.addEventListener('click', () => {
+      const ids = Array.from(_recentSel);
+      if (!ids.length) return;
+      if (!confirm(`Delete ${ids.length} run${ids.length === 1 ? '' : 's'} from your local history? This does not affect GitHub Actions.`)) return;
+      const remaining = list.filter((r) => !_recentSel.has(r.when));
+      const removed = list.filter((r) => _recentSel.has(r.when));
+      saveRecent(remaining);
+      _recentSel.clear();
+      renderRecent();
+      if (window.Toast) window.Toast.info(`${removed.length} run${removed.length === 1 ? '' : 's'} deleted`, {
+        duration: 6000,
+        action: { label: 'Undo', onClick: () => { saveRecent([...removed, ...loadRecent()].slice(0, 50)); renderRecent(); } },
+      });
+    });
+    const selClear = chipRow.querySelector('[data-recent-sel-clear]');
+    if (selClear) selClear.addEventListener('click', () => { _recentSel.clear(); renderRecent(); });
     // Sparkline of target ¥ from the most recent (oldest→newest in viz, so reverse)
     const targets = list.slice(0, 6).map((r) => +r.target).filter((n) => isFinite(n)).reverse();
     const sparkHtml = _renderSparkline(targets);
@@ -284,6 +304,19 @@
       row.className = 'flex items-start gap-3 py-2 border-b border-border last:border-b-0 flex-wrap';
       const when = new Date(r.when);
       const dt = when.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+      const rowId = r.when;
+      const isSel = _recentSel.has(rowId);
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = isSel;
+      cb.className = 'mt-1 flex-none';
+      cb.setAttribute('aria-label', 'Select this run for bulk delete');
+      cb.setAttribute('data-tooltip', 'Select for bulk delete');
+      cb.addEventListener('change', () => {
+        if (cb.checked) _recentSel.add(rowId); else _recentSel.delete(rowId);
+        renderRecent();
+      });
+      row.appendChild(cb);
       const routeList = (r.routes || []);
       const visible = routeList.slice(0, 6);
       const remaining = routeList.length - visible.length;
@@ -2549,6 +2582,7 @@
     };
   }
   const _dismissedWarnings = new Set();
+  const _recentSel = new Set();
   function pushHistory() {
     if (_hist.suppress) return;
     _hist.stack.push(_snapshotState());
