@@ -2092,6 +2092,86 @@
     card.querySelector('[data-close]').addEventListener('click', close);
     document.addEventListener('keydown', function onEsc(e) { if (e.key === 'Escape') { close(); document.removeEventListener('keydown', onEsc); } });
   }
+
+  // Fare-table modal. Lists every known IC fare in state.fares with override
+  // info and a search/sort UI. Read-only catalogue browser (fare edits still
+  // live on the verify badge in the From↔To picker).
+  function _openFareTable() {
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay open';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9998;display:flex;align-items:center;justify-content:center;padding:1rem;';
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.style.cssText = 'max-width:680px;width:100%;max-height:80vh;overflow:auto;padding:1rem;';
+    const sortKeyAttr = 'data-fare-sort';
+    let sortBy = 'route';
+    let sortDir = 1;
+    let search = '';
+    function render() {
+      const overrides = state.fareOverrides || {};
+      const all = Object.keys(state.fares).map((k) => ({
+        route: k,
+        fare: state.fares[k],
+        override: overrides[k] != null ? overrides[k] : null,
+      }));
+      const q = search.trim().toLowerCase();
+      const filtered = q ? all.filter((r) => r.route.toLowerCase().indexOf(q) >= 0) : all;
+      filtered.sort((a, b) => {
+        let av, bv;
+        if (sortBy === 'route') { av = a.route; bv = b.route; return sortDir * av.localeCompare(bv, 'ja'); }
+        if (sortBy === 'fare') { av = a.override != null ? a.override : a.fare; bv = b.override != null ? b.override : b.fare; }
+        if (sortBy === 'override') { av = a.override == null ? 0 : 1; bv = b.override == null ? 0 : 1; }
+        return sortDir * (av - bv);
+      });
+      const overrideCount = all.filter((r) => r.override != null).length;
+      const rows = filtered.slice(0, 500).map((r) => `
+        <tr class="border-b border-border/40">
+          <td class="py-1 pr-3 font-mono text-xs">${r.route}</td>
+          <td class="py-1 pr-3 font-mono text-xs text-right">${fmtYen(r.fare)}</td>
+          <td class="py-1 pr-3 font-mono text-xs text-right ${r.override != null ? 'text-warning' : 'text-muted-foreground'}">${r.override != null ? fmtYen(r.override) : '—'}</td>
+        </tr>
+      `).join('');
+      card.innerHTML = `
+        <div class="flex items-center gap-2 mb-3">
+          <h3 class="font-semibold text-sm flex-1">Fare table · ${all.length} routes · ${overrideCount} overridden</h3>
+          <button type="button" class="btn btn-ghost sm" data-close>×</button>
+        </div>
+        <input type="search" id="fare-table-search" placeholder="Filter by route (kanji)…" class="input input-sm w-full mb-2" value="${search.replace(/"/g, '&quot;')}" autocomplete="off">
+        <div class="text-[10px] text-muted-foreground mb-1">Click headers to sort. Showing first 500 rows; refine the search to see more.</div>
+        <table class="w-full text-xs">
+          <thead><tr class="text-muted-foreground border-b border-border">
+            <th class="py-1 pr-3 text-left cursor-pointer select-none" ${sortKeyAttr}="route">Route ${sortBy==='route'?(sortDir>0?'↑':'↓'):''}</th>
+            <th class="py-1 pr-3 text-right cursor-pointer select-none" ${sortKeyAttr}="fare">IC fare ${sortBy==='fare'?(sortDir>0?'↑':'↓'):''}</th>
+            <th class="py-1 pr-3 text-right cursor-pointer select-none" ${sortKeyAttr}="override">Override ${sortBy==='override'?(sortDir>0?'↑':'↓'):''}</th>
+          </tr></thead>
+          <tbody>${rows || '<tr><td colspan="3" class="py-3 text-center text-muted-foreground italic">No matches</td></tr>'}</tbody>
+        </table>
+      `;
+      const inp = card.querySelector('#fare-table-search');
+      if (inp) inp.addEventListener('input', () => {
+        const pos = inp.selectionStart;
+        search = inp.value;
+        render();
+        const fresh = card.querySelector('#fare-table-search');
+        if (fresh) { fresh.focus(); if (typeof pos === 'number') fresh.setSelectionRange(pos, pos); }
+      });
+      card.querySelectorAll('[' + sortKeyAttr + ']').forEach((th) => {
+        th.addEventListener('click', () => {
+          const k = th.getAttribute(sortKeyAttr);
+          if (sortBy === k) sortDir = -sortDir;
+          else { sortBy = k; sortDir = 1; }
+          render();
+        });
+      });
+      card.querySelector('[data-close]').addEventListener('click', close);
+    }
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+    const close = () => { overlay.remove(); };
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+    document.addEventListener('keydown', function onEsc(e) { if (e.key === 'Escape') { close(); document.removeEventListener('keydown', onEsc); } });
+    render();
+  }
   function pickSnapshotForCompare(id) {
     const list = loadSnapshots();
     const snap = list.find((x) => x.id === id);
@@ -2940,6 +3020,11 @@
     if (icsBtn) icsBtn.addEventListener('click', () => {
       exportIcs();
       const det = icsBtn.closest('details'); if (det) det.removeAttribute('open');
+    });
+    const fareTableBtn = $('planner-fare-table');
+    if (fareTableBtn) fareTableBtn.addEventListener('click', () => {
+      const det = fareTableBtn.closest('details'); if (det) det.removeAttribute('open');
+      _openFareTable();
     });
     renderSnapshots();
     // Offer to import a plan if the URL hash contains one
