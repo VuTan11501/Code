@@ -258,6 +258,14 @@
             <div class="flex-1">Loading fare data…</div>
           </div>
           <div id="planner-station-hints" class="rounded-md border border-border bg-muted/20 px-3 py-2 mt-3 hidden" aria-live="polite"></div>
+          <div class="flex items-center gap-2 mt-3 text-xs flex-wrap" id="planner-fare-range-row">
+            <span class="text-muted-foreground" data-tooltip="Limit the To-station dropdown to candidates whose verified fare from the selected From-station falls within this range.">Fare range filter:</span>
+            <input id="planner-fare-min" type="number" class="input input-sm w-24" placeholder="min ¥" min="0" step="10" autocomplete="off">
+            <span class="text-muted-foreground">–</span>
+            <input id="planner-fare-max" type="number" class="input input-sm w-24" placeholder="max ¥" min="0" step="10" autocomplete="off">
+            <button id="planner-fare-range-clear" class="btn btn-ghost sm text-[10px]" type="button">Clear</button>
+            <span id="planner-fare-range-status" class="text-muted-foreground"></span>
+          </div>
         </div>
 
         <div class="separator h-px w-full bg-border"></div>
@@ -663,6 +671,6 @@
 <script src="js/suica-history.js?v=6" defer></script>
 <script src="js/log-viewer.js?v=1" defer></script>
 <script>window.SUICA_FARE_API='https://suica-fare-proxy.workflow-dashboard.workers.dev';</script>
-<script src="js/suica-planner.js?v=34" defer></script>
+<script src="js/suica-planner.js?v=35" defer></script>
 </body>
 </html>

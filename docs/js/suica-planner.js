@@ -315,6 +315,7 @@
     const placeholderText = (opts && opts.placeholder) || 'Pick…';
     let options = (opts && opts.options) || [];
     let value = (opts && opts.value) || '';
+    let baseFilter = (opts && opts.baseFilter) || null;
     let panel = null;
     let listEl = null;
     let searchEl = null;
@@ -343,17 +344,19 @@
       trigger.setAttribute('aria-expanded', 'true');
       searchEl = panel.querySelector('.combobox-search');
       listEl = panel.querySelector('.combobox-list');
-      filtered = options.slice();
-      activeIdx = Math.max(0, options.indexOf(value));
+      const _baseList = () => baseFilter ? options.filter(baseFilter) : options.slice();
+      filtered = _baseList();
+      activeIdx = Math.max(0, filtered.indexOf(value));
       renderList();
       searchEl.addEventListener('input', () => {
         const q = searchEl.value.trim().toLowerCase();
+        const baseList = baseFilter ? options.filter(baseFilter) : options;
         if (!q) {
-          filtered = options.slice();
+          filtered = baseList.slice();
         } else {
           // Rank: prefix-match on any field beats substring match
           const scored = [];
-          for (const o of options) {
+          for (const o of baseList) {
             const hay = _searchHaystack(o);
             const idx = hay.indexOf(q);
             if (idx < 0) continue;
@@ -429,6 +432,7 @@
       },
       setValue(v) { value = v || ''; render(); },
       getValue() { return value; },
+      setBaseFilter(fn) { baseFilter = fn; if (panel) { filtered = baseFilter ? options.filter(baseFilter) : options.slice(); activeIdx = 0; renderList(); } },
     };
   }
 
@@ -2298,7 +2302,7 @@
     // Wire comboboxes (replaces the old datalist <input>)
     const fromWrap = document.querySelector('[data-combobox-id="planner-from"]');
     const toWrap = document.querySelector('[data-combobox-id="planner-to"]');
-    const onComboChange = () => { updateFareDisplay(); saveState(); };
+    const onComboChange = () => { updateFareDisplay(); saveState(); if (typeof applyFareRangeFilter === 'function') applyFareRangeFilter(); };
     if (fromWrap) cbFrom = createCombobox(fromWrap, { options: state.stations, placeholder: '東京 / Tokyo', onChange: onComboChange });
     if (toWrap)   cbTo   = createCombobox(toWrap,   { options: state.stations, placeholder: '新宿 / Shinjuku', onChange: onComboChange });
 
@@ -2313,6 +2317,48 @@
     $('planner-swap').addEventListener('click', swap);
     $('planner-add-commute').addEventListener('click', addCommute);
     $('planner-add-leisure').addEventListener('click', addLeisure);
+
+    // ────── Fare-range filter for To-station combobox ──────
+    const fareMinEl = $('planner-fare-min');
+    const fareMaxEl = $('planner-fare-max');
+    const fareRangeStatus = $('planner-fare-range-status');
+    function applyFareRangeFilter() {
+      if (!cbTo) return;
+      const minV = +(fareMinEl && fareMinEl.value) || 0;
+      const maxV = +(fareMaxEl && fareMaxEl.value) || 0;
+      const fromName = cbFrom ? cbFrom.getValue() : '';
+      if (!minV && !maxV) {
+        cbTo.setBaseFilter(null);
+        if (fareRangeStatus) fareRangeStatus.textContent = '';
+        return;
+      }
+      if (!fromName) {
+        cbTo.setBaseFilter(null);
+        if (fareRangeStatus) fareRangeStatus.textContent = 'pick From first';
+        return;
+      }
+      const lo = minV || 0;
+      const hi = maxV || Infinity;
+      let matchCount = 0;
+      cbTo.setBaseFilter((cand) => {
+        if (cand === fromName) return false;
+        const key = pairKey(fromName, cand);
+        const fare = state.fares[key];
+        if (typeof fare !== 'number') return false;
+        const ok = fare >= lo && fare <= hi;
+        if (ok) matchCount++;
+        return ok;
+      });
+      if (fareRangeStatus) fareRangeStatus.textContent = `${matchCount} match${matchCount === 1 ? '' : 'es'}`;
+    }
+    if (fareMinEl) fareMinEl.addEventListener('input', applyFareRangeFilter);
+    if (fareMaxEl) fareMaxEl.addEventListener('input', applyFareRangeFilter);
+    const fareRangeClear = $('planner-fare-range-clear');
+    if (fareRangeClear) fareRangeClear.addEventListener('click', () => {
+      if (fareMinEl) fareMinEl.value = '';
+      if (fareMaxEl) fareMaxEl.value = '';
+      applyFareRangeFilter();
+    });
 
     // Settings inputs
     const bind = (id, key, isNum) => {
