@@ -10,7 +10,7 @@
 //   * Update flow: new SW activates → postMessage {type:'sw-updated'} to
 //     all clients. app.js shows a "Reload to update" toast.
 
-const VERSION = 'wf-dash-v1';
+const VERSION = 'wf-dash-v2';
 const SHELL_CACHE = `${VERSION}-shell`;
 const API_CACHE   = `${VERSION}-api`;
 const API_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
@@ -88,7 +88,15 @@ self.addEventListener('fetch', (event) => {
 
 async function cacheFirst(req, cacheName) {
   const cache = await caches.open(cacheName);
-  const cached = await cache.match(req, { ignoreSearch: true });
+  const url = new URL(req.url);
+  // Honor cache-busting query strings (e.g. `dist/app.bundle.min.js?v=5`) for
+  // same-origin shell assets — without this, bumping ?v=N had no effect and
+  // the OLD bundle kept being served even after a fresh deploy. Cross-origin
+  // assets (fonts.gstatic.com) keep ignoreSearch because their URLs already
+  // version themselves via path hashes.
+  const sameOrigin = url.origin === self.location.origin;
+  const matchOpts = sameOrigin ? {} : { ignoreSearch: true };
+  const cached = await cache.match(req, matchOpts);
   if (cached) {
     fetch(req).then(resp => {
       if (resp && resp.ok && resp.type === 'basic') {
