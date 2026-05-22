@@ -281,6 +281,7 @@
       ${['all', '7d', '30d'].map((f) => `
         <button type="button" data-recent-filter="${f}" class="btn btn-ghost sm text-[10px] ${filter === f ? 'bg-muted' : ''}">${f === 'all' ? 'All' : 'Last ' + f}</button>
       `).join('')}
+      <button type="button" data-recent-csv class="btn btn-ghost sm text-[10px]" data-tooltip="Download visible runs as CSV (filename,month,target,seed,routes,when,runUrl)">CSV</button>
       ${selCount > 0 ? `<button type="button" data-recent-bulk-del class="btn sm text-[10px] text-destructive border border-destructive/40 ml-1" data-tooltip="Delete the ${selCount} selected run${selCount === 1 ? '' : 's'} from local history">Delete ${selCount}</button>
       <button type="button" data-recent-sel-clear class="btn btn-ghost sm text-[10px]" data-tooltip="Clear selection">Clear sel</button>` : ''}
       <span class="ml-auto text-muted-foreground normal-case tracking-normal">${filtered.length}/${list.length}</span>
@@ -307,6 +308,33 @@
     });
     const selClear = chipRow.querySelector('[data-recent-sel-clear]');
     if (selClear) selClear.addEventListener('click', () => { _recentSel.clear(); renderRecent(); });
+    const csvBtn = chipRow.querySelector('[data-recent-csv]');
+    if (csvBtn) csvBtn.addEventListener('click', () => {
+      if (!filtered.length) { if (window.Toast) window.Toast.warning('No runs to export.'); return; }
+      const esc = (v) => {
+        const s = v == null ? '' : String(v);
+        return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+      };
+      const header = ['when', 'filename', 'month', 'target', 'seed', 'routes', 'runUrl'];
+      const rows = filtered.map((r) => [
+        new Date(r.when).toISOString(),
+        r.filename || '',
+        r.month || '',
+        r.target || '',
+        r.seed || '',
+        (r.routes || []).join(' | '),
+        r.runUrl || '',
+      ]);
+      const csv = [header, ...rows].map((cols) => cols.map(esc).join(',')).join('\r\n');
+      // Prepend UTF-8 BOM so Excel reads kanji correctly.
+      const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'suica-recent-runs.csv';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      if (window.Toast) window.Toast.success(`Exported ${filtered.length} run${filtered.length === 1 ? '' : 's'} as CSV`);
+    });
     // Sparkline of target ¥ from the most recent (oldest→newest in viz, so reverse)
     const targets = list.slice(0, 6).map((r) => +r.target).filter((n) => isFinite(n)).reverse();
     const sparkHtml = _renderSparkline(targets);
