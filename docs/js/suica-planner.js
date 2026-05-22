@@ -3253,6 +3253,14 @@
     const commuteSpend = 2 * commuteFare * weekdayCount;
     const remainder = Math.max(0, target - commuteSpend);
     const [a, b] = route.split('↔');
+    // Popularity weights from Recent run history so suggestions favour
+    // routes the user has actually generated PDFs with before.
+    const popMap = {};
+    try {
+      const recent = loadRecent();
+      recent.forEach((r) => (r.routes || []).forEach((rt) => { popMap[rt] = (popMap[rt] || 0) + 1; }));
+    } catch (_) {}
+    const popScore = (k) => Math.log(1 + (popMap[k] || 0)); // 0, 0.69, 1.10, 1.39…
     const nearby = [];
     Object.keys(state.fares).forEach((k) => {
       if (k === route) return;
@@ -3262,10 +3270,18 @@
         if (f >= 150 && f <= 800) nearby.push({ k, f });
       }
     });
-    nearby.sort((p, q) => Math.abs((remainder/8) - p.f) - Math.abs((remainder/8) - q.f));
+    // Sort by fare proximity to target slice, then break ties by popularity.
+    nearby.sort((p, q) => {
+      const ds = Math.abs((remainder/8) - p.f) - Math.abs((remainder/8) - q.f);
+      if (Math.abs(ds) > 30) return ds; // strong fare-fit dominates
+      return popScore(q.k) - popScore(p.k);
+    });
     let leisureCandidates = nearby.slice(0, 3).map((n) => n.k);
     if (!leisureCandidates.length) {
-      const any = Object.keys(state.fares).filter((k) => state.fares[k] >= 200 && state.fares[k] <= 800).slice(0, 2);
+      const any = Object.keys(state.fares)
+        .filter((k) => state.fares[k] >= 200 && state.fares[k] <= 800)
+        .sort((p, q) => popScore(q) - popScore(p))
+        .slice(0, 2);
       leisureCandidates = any;
     }
     const avgLeisureFare = leisureCandidates.length
