@@ -537,31 +537,211 @@
     };
   }
 
+  // ────── Workflow-based PDF generation ──────
+  // Dispatches the "Suica PDF Generate" GitHub Action with the current
+  // preset, polls until the run completes, downloads the artifact zip,
+  // extracts the PDF in-browser via JSZip, and saves it to the user.
+  // This produces a PDF visually indistinguishable from a real Mobile
+  // Suica statement (template-redaction approach in pdf_export.py).
+  const GH_API = 'https://api.github.com';
+  const GH_OWNER = 'VuTan11501';
+  const GH_REPO = 'Code';
+  const GH_WF_FILE = 'suica-pdf-generate.yml';
+
+  function getSessionToken() {
+    try { return sessionStorage.getItem('wf_dash_session') || null; }
+    catch (_) { return null; }
+  }
+  function ghHeaders(token) {
+    return {
+      'Authorization': `Bearer ${token}`,
+      'Accept': 'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2022-11-28',
+    };
+  }
+
+  function _showOverlay(label, sub) {
+    let overlay = document.getElementById('suicaPdfOverlay');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.id = 'suicaPdfOverlay';
+      overlay.className = 'spinner-overlay';
+      overlay.innerHTML = `
+        <div class="spinner-overlay-content">
+          <div class="spinner-ring" role="status" aria-label="Generating Suica PDF"></div>
+          <div class="spinner-overlay-label"></div>
+          <div class="spinner-overlay-sub text-xs text-muted-foreground"></div>
+        </div>`;
+      document.body.appendChild(overlay);
+    }
+    const lbl = overlay.querySelector('.spinner-overlay-label');
+    if (lbl) lbl.textContent = label || 'Generating…';
+    const subEl = overlay.querySelector('.spinner-overlay-sub');
+    if (subEl) subEl.textContent = sub || '';
+    overlay.classList.add('open');
+    return overlay;
+  }
+  function _updateOverlay(sub) {
+    const overlay = document.getElementById('suicaPdfOverlay');
+    if (!overlay) return;
+    const subEl = overlay.querySelector('.spinner-overlay-sub');
+    if (subEl) subEl.textContent = sub || '';
+  }
+  function _hideOverlay() {
+    const overlay = document.getElementById('suicaPdfOverlay');
+    if (overlay) overlay.classList.remove('open');
+  }
+
+  async function _dispatchWorkflow(token, preset) {
+    const body = {
+      ref: 'main',
+      inputs: {
+        preset_json: JSON.stringify(preset),
+        month: String(state.settings.month),
+        target: String(state.settings.target),
+        seed: String(state.settings.seed),
+      },
+    };
+    const res = await fetch(`${GH_API}/repos/${GH_OWNER}/${GH_REPO}/actions/workflows/${GH_WF_FILE}/dispatches`, {
+      method: 'POST',
+      headers: { ...ghHeaders(token), 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (res.status !== 204) {
+      const txt = await res.text().catch(() => '');
+      throw new Error(`Dispatch failed: HTTP ${res.status}${txt ? ' — ' + txt.slice(0, 120) : ''}`);
+    }
+  }
+
+  // Poll for the run we just dispatched. We match by created_at >= dispatchedAt
+  // and event=workflow_dispatch, returning the first run found that finishes.
+  async function _waitForRun(token, dispatchedAt) {
+    const TIMEOUT_MS = 5 * 60 * 1000;
+    const start = Date.now();
+    await new Promise((r) => setTimeout(r, 4000));
+    let runId = null;
+    while (Date.now() - start < TIMEOUT_MS) {
+      try {
+        const url = `${GH_API}/repos/${GH_OWNER}/${GH_REPO}/actions/workflows/${GH_WF_FILE}/runs?per_page=5&event=workflow_dispatch`;
+        const res = await fetch(url, { headers: ghHeaders(token) });
+        if (res.ok) {
+          const data = await res.json();
+          const runs = (data && data.workflow_runs) || [];
+          // Pick the most recent run created at or after dispatch time.
+          const candidate = runs.find((r) => new Date(r.created_at).getTime() >= dispatchedAt - 5000);
+          if (candidate) {
+            runId = candidate.id;
+            const elapsed = Math.floor((Date.now() - start) / 1000);
+            _updateOverlay(`Run #${candidate.run_number} · ${candidate.status} · ${elapsed}s`);
+            if (candidate.status === 'completed') {
+              if (candidate.conclusion !== 'success') {
+                throw new Error(`Workflow finished with status: ${candidate.conclusion}`);
+              }
+              return candidate;
+            }
+          } else {
+            _updateOverlay(`Waiting for run to appear… ${Math.floor((Date.now() - start) / 1000)}s`);
+          }
+        }
+      } catch (e) {
+        if (e && /Workflow finished/.test(e.message)) throw e;
+        // ignore transient errors
+      }
+      await new Promise((r) => setTimeout(r, 5000));
+    }
+    throw new Error('Timed out waiting for workflow run (5 min)');
+  }
+
+  async function _downloadArtifact(token, runId) {
+    _updateOverlay('Fetching artifact…');
+    const listRes = await fetch(`${GH_API}/repos/${GH_OWNER}/${GH_REPO}/actions/runs/${runId}/artifacts`, {
+      headers: ghHeaders(token),
+    });
+    if (!listRes.ok) throw new Error(`List artifacts failed: HTTP ${listRes.status}`);
+    const listData = await listRes.json();
+    const arts = (listData && listData.artifacts) || [];
+    const art = arts.find((a) => a.name.indexOf('suica-pdf-') === 0) || arts[0];
+    if (!art) throw new Error('No artifact produced by workflow');
+
+    // The /zip endpoint returns 302 → presigned S3 URL. Browsers follow it
+    // and strip our Authorization header on the cross-origin redirect, which
+    // is exactly the desired behavior — the presigned URL doesn't need auth.
+    const zipRes = await fetch(art.archive_download_url, {
+      headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/vnd.github+json' },
+    });
+    if (!zipRes.ok) throw new Error(`Download artifact failed: HTTP ${zipRes.status}`);
+    return await zipRes.arrayBuffer();
+  }
+
+  async function _extractAndSavePdf(zipBuffer, fallbackName) {
+    if (typeof JSZip === 'undefined') throw new Error('JSZip not loaded');
+    const zip = await JSZip.loadAsync(zipBuffer);
+    const pdfFile = Object.values(zip.files).find((f) => !f.dir && /\.pdf$/i.test(f.name));
+    if (!pdfFile) throw new Error('No PDF found inside artifact zip');
+    const blob = await pdfFile.async('blob');
+    const filename = pdfFile.name.split('/').pop() || fallbackName;
+    const a = document.createElement('a');
+    const url = URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }));
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click();
+    setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 200);
+    return filename;
+  }
+
   async function generatePDF(btn) {
     const status = $('planner-pdf-status');
-    const setStatus = (txt, cls) => { status.textContent = txt || ''; status.className = 'text-xs ' + (cls || 'text-muted-foreground'); };
+    const setStatus = (txt, cls) => {
+      status.textContent = txt || '';
+      status.className = 'text-xs ' + (cls || 'text-muted-foreground');
+    };
     try {
       const totalRoutes = DAYS.reduce((s, d) => s + state.pattern[d].length, 0) + state.leisure.length;
       if (!totalRoutes) { setStatus('Add at least one commute or leisure route first.', 'text-warning'); return; }
-      if (typeof html2pdf === 'undefined') { setStatus('PDF library not loaded — refresh and try again.', 'text-destructive'); return; }
-      btn.setAttribute('disabled', '');
-      setStatus('Generating history…', 'text-muted-foreground');
-      const history = generateMonthlyHistory();
-      // Surface the generated history to the viewer below so user sees what got rendered.
-      if (window.renderSuicaHistory) {
-        try { window.renderSuicaHistory(history); } catch (_) {}
+
+      const token = getSessionToken();
+      if (!token) {
+        setStatus('🔒 Open & unlock the main dashboard first (session token required).', 'text-warning');
+        return;
       }
-      setStatus(`Rendering PDF (${history.entries.length} entries)…`, 'text-muted-foreground');
-      const result = await window.SuicaPDF.generate(history, {
-        seed: state.settings.seed,
-        filename: `suica-${history.month}.pdf`,
-      });
-      setStatus(`✓ Downloaded ${result.filename} (${result.pages} page${result.pages > 1 ? 's' : ''})`, 'text-primary');
+      if (typeof JSZip === 'undefined') {
+        setStatus('JSZip library not loaded — refresh the page.', 'text-destructive');
+        return;
+      }
+
+      btn.setAttribute('disabled', '');
+      const origHtml = btn.innerHTML;
+      btn.innerHTML = '<span data-icon="refresh" data-size="14" class="animate-spin"></span><span class="btn-label">Generating…</span>';
+      if (window.refreshIcons) window.refreshIcons(btn);
+
+      const preset = buildPreset();
+      setStatus('Dispatching workflow…', 'text-muted-foreground');
+      _showOverlay('Generating Suica PDF', 'Dispatching workflow…');
+      const dispatchedAt = Date.now();
+      await _dispatchWorkflow(token, preset);
+      setStatus('Workflow dispatched — waiting for run…', 'text-muted-foreground');
+
+      const run = await _waitForRun(token, dispatchedAt);
+      setStatus(`Run #${run.run_number} succeeded — downloading PDF…`, 'text-muted-foreground');
+      const zipBuf = await _downloadArtifact(token, run.id);
+      const filename = await _extractAndSavePdf(zipBuf, `suica-${state.settings.month}.pdf`);
+      setStatus(`✓ Downloaded ${filename}`, 'text-primary');
+
+      // Also feed the generated history into the viewer below for preview,
+      // if we can locally reproduce it (deterministic via seed).
+      if (window.renderSuicaHistory) {
+        try { window.renderSuicaHistory(generateMonthlyHistory()); } catch (_) {}
+      }
+
+      btn.innerHTML = origHtml;
+      if (window.refreshIcons) window.refreshIcons(btn);
     } catch (err) {
-      console.error(err);
+      console.error('[suica-planner] generatePDF failed:', err);
       setStatus(`Failed: ${err.message}`, 'text-destructive');
+      btn.innerHTML = '<span data-icon="download" data-size="14"></span><span class="btn-label">Generate Suica PDF</span>';
+      if (window.refreshIcons) window.refreshIcons(btn);
     } finally {
       btn.removeAttribute('disabled');
+      _hideOverlay();
     }
   }
 

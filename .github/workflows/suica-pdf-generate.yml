@@ -1,0 +1,119 @@
+name: Suica PDF Generate
+
+# Generates a Mobile-Suica-style PDF from a user-supplied preset (route plan).
+# Triggered from the Suica viewer page in the dashboard: the user designs a
+# trip plan in-browser, clicks "Generate Suica PDF", and the dashboard
+# dispatches this workflow with the preset JSON as input. The PDF is uploaded
+# as an artifact which the dashboard downloads, unzips client-side, and saves.
+#
+# Pipeline (runs scripts/generate.py from .github/skills/suica-history-generator):
+#   1. Resolve a Japanese gothic font (fonts-ipafont-gothic on Linux)
+#   2. Write preset_json input → preset.json
+#   3. scripts.generate --config preset.json --out out.pdf --template <fixture>
+#      (generate.py internally calls pdf_export which redacts the template PDF
+#       and overlays generated rows — produces a byte-faithful Suica statement.)
+#   4. Upload out.pdf as artifact `suica-pdf-<run_id>`
+
+on:
+  workflow_dispatch:
+    inputs:
+      preset_json:
+        description: 'Preset JSON (full plan from dashboard trip planner)'
+        required: true
+      month:
+        description: 'Target month (YYYY-MM)'
+        required: true
+      target:
+        description: 'Target monthly spend (yen)'
+        required: true
+        default: '25000'
+      seed:
+        description: 'Reproducibility seed'
+        required: false
+        default: '42'
+
+permissions:
+  contents: read
+
+env:
+  TZ: Asia/Tokyo
+  SKILL_ROOT: .github/skills/suica-history-generator
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          # Need both the generator skill AND the pdf-editor sibling skill
+          # (generator's pdf_export.py dynamically imports suica_update.py
+          #  from .github/skills/suica-pdf-editor/scripts/).
+          sparse-checkout: |
+            .github/skills/suica-history-generator
+            .github/skills/suica-pdf-editor
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: |
+            ${{ env.SKILL_ROOT }}/scripts/requirements.txt
+            .github/skills/suica-pdf-editor/scripts/requirements.txt
+
+      - name: Install Japanese gothic font
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends fonts-ipafont-gothic
+          # Resolve the actual font path apt installed (path is stable but verify)
+          FONT_PATH=$(fc-list :lang=ja file | grep -i 'ipag\.ttf' | head -1 | sed 's/: *$//')
+          if [ -z "$FONT_PATH" ]; then
+            FONT_PATH="/usr/share/fonts/opentype/ipafont-gothic/ipag.ttf"
+          fi
+          echo "Using Japanese font: $FONT_PATH"
+          test -f "$FONT_PATH" || { echo "Font not found"; exit 1; }
+          echo "SUICA_FONT_FILE=$FONT_PATH" >> "$GITHUB_ENV"
+
+      - name: Install Python deps
+        run: |
+          pip install -r "${SKILL_ROOT}/scripts/requirements.txt"
+          pip install -r .github/skills/suica-pdf-editor/scripts/requirements.txt
+
+      - name: Write preset JSON
+        env:
+          PRESET_JSON: ${{ inputs.preset_json }}
+        run: |
+          printf '%s' "$PRESET_JSON" > preset.json
+          # Sanity-check parses as JSON before invoking the generator
+          python -c "import json,sys; json.load(open('preset.json'));"
+          echo "preset.json: $(wc -c < preset.json) bytes"
+
+      - name: Generate Suica PDF
+        env:
+          MONTH: ${{ inputs.month }}
+          TARGET: ${{ inputs.target }}
+          SEED: ${{ inputs.seed }}
+        run: |
+          cd "${SKILL_ROOT}"
+          cp ../../../preset.json preset.json
+          python -m scripts.generate \
+            --config preset.json \
+            --month  "$MONTH" \
+            --target "$TARGET" \
+            --seed   "$SEED" \
+            --template fixtures/template.pdf \
+            --out out.pdf \
+            -v
+          ls -la out.pdf
+          # Copy back to workspace root so upload-artifact can find it cleanly
+          cp out.pdf "${GITHUB_WORKSPACE}/suica-${MONTH}.pdf"
+
+      - name: Upload PDF artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: suica-pdf-${{ github.run_id }}
+          path: suica-*.pdf
+          retention-days: 1
+          if-no-files-found: error

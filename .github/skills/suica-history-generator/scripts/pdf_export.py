@@ -32,7 +32,28 @@ log = logging.getLogger(__name__)
 
 
 # --- Layout constants (must match suica_update.py COL_RANGES) ---
-FONT_FILE_DEFAULT = r"C:\Windows\Fonts\msgothic.ttc"
+# Font path is overridable via SUICA_FONT_FILE env var so Linux CI runners
+# (which use fonts-ipafont-gothic at /usr/share/fonts/...) can supply their
+# own gothic font without code changes.
+def _default_font_path() -> str:
+    env = os.environ.get("SUICA_FONT_FILE")
+    if env and Path(env).exists():
+        return env
+    win = r"C:\Windows\Fonts\msgothic.ttc"
+    if Path(win).exists():
+        return win
+    # Common Linux fallbacks (fonts-ipafont-gothic, fonts-noto-cjk)
+    for candidate in (
+        "/usr/share/fonts/opentype/ipafont-gothic/ipag.ttf",
+        "/usr/share/fonts/truetype/fonts-japanese-gothic.ttf",
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/opentype/noto/NotoSansJP-Regular.otf",
+    ):
+        if Path(candidate).exists():
+            return candidate
+    return win  # report Windows path even if missing — error msg stays familiar
+
+FONT_FILE_DEFAULT = _default_font_path()
 FONT_NAME = "msgo"
 FONT_SIZE = 9
 GLYPH_W = 4.5

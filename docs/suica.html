@@ -120,34 +120,6 @@
   }
   .combobox-item.is-selected::before { content: '✓ '; color: var(--primary); margin-right: 4px; }
   .combobox-empty { padding: 12px; text-align: center; color: var(--muted-foreground); font-size: var(--fs-xs); }
-
-  /* ───── Hidden Suica PDF render container ───── */
-  #suica-pdf-render {
-    position: fixed; left: -10000px; top: 0;
-    width: 595px;  /* A4 width @ 72dpi */
-    background: #ffffff; color: #000000;
-    font-family: 'MS Gothic', 'Hiragino Kaku Gothic ProN', 'Yu Gothic Medium', 'Meiryo', monospace;
-    font-size: 9pt; line-height: 1.4;
-    padding: 0;
-  }
-  #suica-pdf-render .suica-page {
-    width: 100%; min-height: 842px; padding: 28px 32px 24px; box-sizing: border-box;
-    page-break-after: always; display: flex; flex-direction: column;
-  }
-  #suica-pdf-render .suica-page:last-child { page-break-after: auto; }
-  #suica-pdf-render .pdf-h1 { font-size: 14pt; font-weight: bold; letter-spacing: 2px; margin: 0 0 4px; }
-  #suica-pdf-render .pdf-card-no { font-size: 8pt; text-align: right; letter-spacing: 1px; margin: -10px 0 10px; }
-  #suica-pdf-render .pdf-section { font-size: 10pt; margin: 8px 0 6px; }
-  #suica-pdf-render table.pdf-table { width: 100%; border-collapse: collapse; font-size: 8.5pt; }
-  #suica-pdf-render table.pdf-table th,
-  #suica-pdf-render table.pdf-table td {
-    border-bottom: 1px solid #888; padding: 3px 2px; text-align: left; white-space: nowrap;
-  }
-  #suica-pdf-render table.pdf-table th { font-weight: normal; background: #f0f0f0; border-bottom: 1px solid #000; }
-  #suica-pdf-render table.pdf-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
-  #suica-pdf-render .pdf-footer { margin-top: auto; padding-top: 14px; font-size: 8pt; }
-  #suica-pdf-render .pdf-footer .right { text-align: right; }
-  #suica-pdf-render .pdf-page-no { font-size: 8pt; margin-top: 6px; }
 </style>
 </head>
 <body class="bg-background text-foreground font-sans text-sm antialiased min-h-dvh overflow-x-hidden">
@@ -319,7 +291,7 @@
 
         <!-- Output actions -->
         <div class="flex flex-wrap gap-2 items-center">
-          <button id="planner-generate-pdf" class="btn primary" type="button">
+          <button id="planner-generate-pdf" class="btn primary" type="button" data-tooltip="Dispatches the Suica PDF Generate workflow on GitHub and downloads the resulting PDF (~30-60s)">
             <span data-icon="download" data-size="14"></span>
             <span class="btn-label">Generate Suica PDF</span>
           </button>
@@ -540,14 +512,12 @@
   </footer>
 </main>
 
-<!-- Hidden off-screen container used by the in-browser PDF renderer -->
-<div id="suica-pdf-render" aria-hidden="true"></div>
-
-<script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js" defer></script>
+<!-- JSZip used client-side to extract the PDF from the artifact zip downloaded
+     from the Suica PDF Generate workflow (see js/suica-planner.js). -->
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js" defer></script>
 <script src="js/icons.js?v=1" defer></script>
 <script src="js/theme.js?v=1" defer></script>
 <script src="js/suica-history.js?v=4" defer></script>
-<script src="js/suica-pdf.js?v=1" defer></script>
-<script src="js/suica-planner.js?v=3" defer></script>
+<script src="js/suica-planner.js?v=4" defer></script>
 </body>
 </html>
