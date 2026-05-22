@@ -1958,6 +1958,18 @@
         presetsMenu.appendChild(btn);
       });
     }
+    const seedReroll = $('planner-seed-reroll');
+    if (seedReroll) seedReroll.addEventListener('click', () => {
+      const seedEl = $('planner-seed');
+      const current = +state.settings.seed || 0;
+      const next = current + 1;
+      state.settings.seed = next;
+      if (seedEl) seedEl.value = next;
+      saveState();
+      if (window.Toast) window.Toast.info(`Seed → ${next}`, { title: 'Try another schedule' });
+      const status = $('planner-pdf-status');
+      if (status) { status.textContent = `Seed bumped to ${next} — same plan, different schedule. Click Generate to render.`; status.className = 'text-xs text-primary'; }
+    });
     const recentClearBtn = $('planner-recent-clear');
     if (recentClearBtn) recentClearBtn.addEventListener('click', () => {
       saveRecent([]); renderRecent();

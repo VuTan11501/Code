@@ -275,7 +275,12 @@
             </div>
             <div class="field">
               <label class="field-label text-xs text-muted-foreground font-medium block mb-1" for="planner-seed" data-tooltip="Random seed. Same seed + same plan = byte-identical PDF every time. Change it to roll a different schedule.">Random seed</label>
-              <input id="planner-seed" type="number" min="0" class="input font-mono" data-tooltip="Same seed + same plan = byte-identical PDF every time.">
+              <div class="flex items-center gap-1">
+                <input id="planner-seed" type="number" min="0" class="input font-mono flex-1" data-tooltip="Same seed + same plan = byte-identical PDF every time.">
+                <button id="planner-seed-reroll" type="button" class="btn btn-ghost sm" data-tooltip="Try another seed (increments by 1)" aria-label="Roll a different seed">
+                  <span data-icon="refresh" data-size="14"></span>
+                </button>
+              </div>
             </div>
             <div class="field">
               <label class="field-label text-xs text-muted-foreground font-medium block mb-1" for="planner-initial">Initial balance (¥)</label>
@@ -587,6 +592,6 @@
 <script src="js/suica-history.js?v=6" defer></script>
 <script src="js/log-viewer.js?v=1" defer></script>
 <script>window.SUICA_FARE_API='https://suica-fare-proxy.workflow-dashboard.workers.dev';</script>
-<script src="js/suica-planner.js?v=26" defer></script>
+<script src="js/suica-planner.js?v=27" defer></script>
 </body>
 </html>
