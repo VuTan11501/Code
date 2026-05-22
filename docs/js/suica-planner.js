@@ -939,7 +939,11 @@
           pushHistory();
           state.pattern[day] = [];
           renderPattern(); renderEstimate(); saveState();
-          if (window.Toast) window.Toast.info(`${DAY_LABELS[day]} cleared`, { duration: 2500 });
+          if (window.Toast) window.Toast.info(`${DAY_LABELS[day]} cleared`, {
+            duration: 5000,
+            actionLabel: 'Undo',
+            onAction: () => { try { undo(); } catch (_) {} },
+          });
         });
         row.appendChild(clearBtn);
         if (window.refreshIcons) window.refreshIcons(clearBtn);
@@ -2783,7 +2787,11 @@
       pushHistory();
       state.leisure = [];
       renderLeisure(); renderEstimate(); saveState();
-      if (window.Toast) window.Toast.info('Leisure pool cleared (Ctrl+Z to undo).', { duration: 3500 });
+      if (window.Toast) window.Toast.info('Leisure pool cleared', {
+        duration: 6000,
+        actionLabel: 'Undo',
+        onAction: () => { try { undo(); } catch (_) {} },
+      });
     });
     const bulkFileBtn = $('planner-leisure-bulk-file');
     const bulkFileInput = $('planner-leisure-bulk-file-input');
