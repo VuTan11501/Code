@@ -296,7 +296,7 @@ function renderTimesheet() {
     let salaryVal, salaryTip, salaryExtras = '';
     if (realSlip && realSlip.take_home != null) {
       const eyeBtn = `<button class="ts-chip-eye ot-takehome-clickable" data-payslip-month="${key}" aria-label="View payslip detail">${eyeIcon}</button>`;
-      salaryVal = `${F(realSlip.take_home)} <span class="ts-chip-badge ts-chip-badge-actual">actual</span>`;
+      salaryVal = `${F(realSlip.take_home)} <span class="ts-chip-badge ts-chip-badge-actual">act.</span>`;
       salaryExtras = eyeBtn;
       salaryTip = `Actual take-home for work month ${key}\n`
                 + `(paid ${payDateStr} · payslip ${realSlip.month})\n`
