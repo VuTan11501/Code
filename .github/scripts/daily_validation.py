@@ -82,14 +82,28 @@ def get_tokens(refresh_token):
 
 
 def get_dakoku_status(token, date_str):
-    """GET dakoku status for a date."""
+    """GET dakoku status for a date.
+
+    The KINTAI API uses startWorkingTime / endWorkingTime (with display variants).
+    Older field names (checkinDate/checkinTime) are kept as fallback for safety.
+    """
     status, data = http_get(
         API_BASE + f"dakoku/me/{date_str}",
         headers={"Authorization": f"Bearer {token}", "Module": "KINTAI"},
     )
     if status == 200 and data:
-        ci = data.get("checkinDate") or data.get("checkinTime")
-        co = data.get("checkoutDate") or data.get("checkoutTime")
+        ci = (
+            data.get("startWorkingTime")
+            or data.get("displayStartWorkingTime")
+            or data.get("checkinDate")
+            or data.get("checkinTime")
+        )
+        co = (
+            data.get("endWorkingTime")
+            or data.get("displayEndWorkingTime")
+            or data.get("checkoutDate")
+            or data.get("checkoutTime")
+        )
         return ci, co
     return None, None
 
