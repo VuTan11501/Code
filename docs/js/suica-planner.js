@@ -57,7 +57,16 @@
       ]);
       if (!faresRes.ok) throw new Error('HTTP ' + faresRes.status);
       const data = await faresRes.json();
-      state.fares = data.fares || {};
+      // Normalize all fare keys to canonical pairKey form so the JSON file
+      // can be authored or sorted in any order (Python sort vs JS localeCompare
+      // produce different orderings for CJK strings).
+      const rawFares = data.fares || {};
+      state.fares = {};
+      Object.keys(rawFares).forEach((k) => {
+        const [a, b] = k.split('↔');
+        if (!a || !b) return;
+        state.fares[pairKey(a, b)] = rawFares[k];
+      });
 
       const set = new Set();
       Object.keys(state.fares).forEach((k) => {
@@ -125,23 +134,34 @@
     return 2 * R * Math.asin(Math.sqrt(h));
   }
   // Distance brackets are great-circle km × 1.25 detour factor → tariff km.
+  // Source: JR East 幹線 IC運賃, effective 2026-03-14 (urban discount zones
+  // 山手線内 / 電車特定区間 abolished; everything merged into 幹線).
+  // Ref: https://www.jreast.co.jp/2026unchin-kaitei/
   function _tariffYen(rawKm) {
     const km = rawKm * 1.25;
-    if (km <= 3)  return 146;
-    if (km <= 6)  return 168;
-    if (km <= 10) return 178;
-    if (km <= 15) return 210;
-    if (km <= 20) return 240;
-    if (km <= 25) return 330;
-    if (km <= 30) return 510;
-    if (km <= 40) return 660;
-    if (km <= 50) return 820;
-    if (km <= 60) return 990;
-    if (km <= 70) return 1170;
-    if (km <= 80) return 1340;
-    if (km <= 100) return 1690;
-    if (km <= 120) return 1980;
-    return Math.round(1980 + (km - 120) * 16);
+    if (km <= 3)   return 155;
+    if (km <= 6)   return 199;
+    if (km <= 10)  return 209;
+    if (km <= 15)  return 253;
+    if (km <= 20)  return 341;
+    if (km <= 25)  return 440;
+    if (km <= 30)  return 528;
+    if (km <= 35)  return 616;
+    if (km <= 40)  return 715;
+    if (km <= 45)  return 803;
+    if (km <= 50)  return 902;
+    if (km <= 60)  return 1034;
+    if (km <= 70)  return 1221;
+    if (km <= 80)  return 1408;
+    if (km <= 90)  return 1595;
+    if (km <= 100) return 1782;
+    if (km <= 120) return 2090;
+    if (km <= 140) return 2420;
+    if (km <= 160) return 2750;
+    if (km <= 180) return 3190;
+    if (km <= 200) return 3520;
+    // Beyond 200 km, the table continues at roughly +¥210 per +20 km
+    return Math.round(3520 + (km - 200) * 10.5);
   }
 
   // ────── Combobox component (shadcn-style) ──────
