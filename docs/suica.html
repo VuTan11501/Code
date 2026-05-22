@@ -211,6 +211,12 @@
   body.suica-compact .space-y-5 > * + * { margin-top: 0.5rem !important; }
   body.suica-compact .gap-3  { gap: 0.5rem !important; }
   body.suica-compact .input  { padding-top: 0.25rem !important; padding-bottom: 0.25rem !important; }
+  /* Cozy — midpoint between comfortable (default) and compact. */
+  body.suica-cozy main { padding: 1rem !important; gap: 0.75rem !important; }
+  body.suica-cozy .card { padding: 0.75rem !important; }
+  body.suica-cozy .py-2 { padding-top: 0.375rem !important; padding-bottom: 0.375rem !important; }
+  body.suica-cozy .space-y-5 > * + * { margin-top: 0.875rem !important; }
+  body.suica-cozy .gap-3 { gap: 0.625rem !important; }
   /* When the PDF preview overlay is open it pins a close (×) button to the
      top-right; move the keyboard-shortcuts FAB to the bottom-left so it
      doesn't collide with the overlay's own action buttons. Uses :has()
@@ -814,7 +820,7 @@
 <script src="js/suica-history.js?v=6" defer></script>
 <script src="js/log-viewer.js?v=1" defer></script>
 <script>window.SUICA_FARE_API='https://suica-fare-proxy.workflow-dashboard.workers.dev';</script>
-<script src="js/suica-planner.js?v=100" defer></script>
+<script src="js/suica-planner.js?v=101" defer></script>
 <script>
 // Theme toggle for suica.html (mirrors the dashboard's behavior; uses the same
 // localStorage key so the preference syncs across pages).
@@ -857,23 +863,37 @@
 })();
 </script>
 <script>
-// Compact density toggle — adds/removes body.suica-compact, persists in
-// localStorage under "suica-density" so the choice survives reloads.
+// Density tri-state cycle: comfortable → cozy → compact → comfortable. Each
+// step removes more vertical padding; mapped via body classes consumed by CSS.
 (function () {
   var KEY = 'suica-density';
+  var MODES = ['comfortable', 'cozy', 'compact'];
   function apply(mode) {
-    document.body.classList.toggle('suica-compact', mode === 'compact');
+    document.body.classList.remove('suica-compact', 'suica-cozy');
+    if (mode === 'compact') document.body.classList.add('suica-compact');
+    else if (mode === 'cozy') document.body.classList.add('suica-cozy');
+  }
+  function current() {
+    if (document.body.classList.contains('suica-compact')) return 'compact';
+    if (document.body.classList.contains('suica-cozy')) return 'cozy';
+    return 'comfortable';
   }
   function init() {
     var btn = document.getElementById('suica-density-toggle');
     var saved = (function () { try { return localStorage.getItem(KEY); } catch (_) { return null; } })();
-    if (saved === 'compact') apply('compact');
-    if (btn) btn.addEventListener('click', function () {
-      var next = document.body.classList.contains('suica-compact') ? 'comfortable' : 'compact';
-      apply(next);
-      try { localStorage.setItem(KEY, next); } catch (_) {}
-      if (window.Toast) window.Toast.info('Density: ' + next);
-    });
+    if (MODES.indexOf(saved) >= 0) apply(saved);
+    if (btn) {
+      var paint = function () { btn.setAttribute('data-tooltip', 'Density: ' + current() + ' (click to cycle)'); };
+      paint();
+      btn.addEventListener('click', function () {
+        var cur = current();
+        var next = MODES[(MODES.indexOf(cur) + 1) % MODES.length];
+        apply(next);
+        try { localStorage.setItem(KEY, next); } catch (_) {}
+        paint();
+        if (window.Toast) window.Toast.info('Density: ' + next);
+      });
+    }
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
