@@ -81,9 +81,21 @@ class FareCache:
         return self.resolve_route(trip.route).route.duration_min
 
 
-def write_outputs(history: MonthlyHistory, out_path: Path) -> None:
+def write_outputs(history: MonthlyHistory, out_path: Path,
+                  template_pdf: Path | None = None,
+                  validate: bool = True) -> None:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     suffix = out_path.suffix.lower()
+
+    if validate:
+        from .validator import validate as run_validate
+        report = run_validate(history)
+        if report.errors:
+            log.error("Validation FAILED with %d errors:\n%s",
+                      len(report.errors), report.summary())
+            sys.exit(3)
+        if report.warnings:
+            log.warning("Validation produced %d warnings", len(report.warnings))
 
     if suffix in ("", ".json"):
         out_path.write_text(
@@ -99,8 +111,15 @@ def write_outputs(history: MonthlyHistory, out_path: Path) -> None:
                 writer.writerow(e.to_dict())
         log.info("Wrote CSV → %s", out_path)
     elif suffix == ".pdf":
-        log.error("PDF output requires Phase 3 (suica-pdf-editor integration). Not implemented yet.")
-        sys.exit(2)
+        if template_pdf is None or not Path(template_pdf).exists():
+            log.error("PDF output requires --template <real-suica.pdf>")
+            sys.exit(2)
+        from .pdf_export import PdfExporter
+        exporter = PdfExporter(str(template_pdf))
+        stats = exporter.render(history, str(out_path))
+        log.info("Wrote PDF → %s (rendered %d/%d rows, cleared %d, truncated %d)",
+                 out_path, stats["rendered"], stats["template_rows"],
+                 stats["cleared"], stats["truncated"])
     else:
         log.error("Unsupported output suffix: %s", suffix)
         sys.exit(2)
@@ -114,6 +133,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--tolerance", type=int, default=500, help="Allowed ± deviation from target (¥)")
     p.add_argument("--seed", type=int, default=None, help="Reproducibility seed")
     p.add_argument("--out", type=Path, default=Path("out/history.json"), help="Output file (.json/.csv/.pdf)")
+    p.add_argument("--template", type=Path, default=None, help="Template Suica PDF (required for --out *.pdf)")
+    p.add_argument("--no-validate", action="store_true", help="Skip validator pass")
     p.add_argument("-v", "--verbose", action="store_true")
     args = p.parse_args(argv)
 
@@ -152,7 +173,8 @@ def main(argv: list[str] | None = None) -> int:
     history = TapBuilder(config).build(timed, args.month)
 
     print(history.summary())
-    write_outputs(history, args.out)
+    write_outputs(history, args.out, template_pdf=args.template,
+                  validate=not args.no_validate)
     return 0
 
 

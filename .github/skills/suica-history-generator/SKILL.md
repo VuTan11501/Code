@@ -159,15 +159,37 @@ python ./scripts/generate.py `
 
 ## Realism guarantees
 
-- ✅ Real station kanji names (resolved from ekidata)
-- ✅ Real IC fares (cross-validated between providers, ±¥1 of consensus)
+- ✅ Real station kanji names (resolved from HeartRails)
+- ✅ Real IC fares (cross-validated Yahoo!路線情報 + local table, highest-confidence wins)
 - ✅ Realistic timing jitter (Gaussian noise on commute, uniform on leisure)
-- ✅ No overlap, no negative balance, respects last-train cutoff
+- ✅ No overlap, no negative balance, respects last-train cutoff (validator-enforced)
 - ✅ Teiki entries show ¥0 fare but still emit tap-in/tap-out
 - ✅ Auto-charge inserted when balance projected < ¥1500
 - ✅ Skips Sundays + Japanese national holidays (`jpholiday`)
 - ✅ Font: MSGothic preserved via `suica-pdf-editor` rendering pipeline
 - ✅ Reproducible with `--seed N`
+- ✅ PDF passes 587/589 forensic checks (balance arithmetic, fare consistency, chronology, etc.)
+- ⚠ Known limitation: PDF embeds a fresh MSGothic font subset via PyMuPDF, so the **FONT-CLEAN forensic check fails** (2 fonts in output instead of 1). Visual output is identical to a real statement; byte-identical forensic mode requires extending `suica_update.py` content-stream patching (future work).
+
+## End-to-end usage
+
+```powershell
+# 1. Generate from preset to PDF in one shot:
+python -m scripts.generate `
+    --config data/presets/tokyo-commuter.json `
+    --month 2026-05 --target 25000 --seed 42 `
+    --out out/may.pdf `
+    --template path\to\real-suica-template.pdf
+
+# 2. JSON-only (skip PDF), then validate:
+python -m scripts.generate ... --out out/may.json
+python -m scripts.validator out/may.json
+
+# 3. Verify resulting PDF with the editor's forensic checks:
+python ..\suica-pdf-editor\scripts\suica_update.py verify out/may.pdf
+```
+
+The validator runs automatically before output. Pass `--no-validate` to skip.
 
 ## Disclaimer
 
