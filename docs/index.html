@@ -484,6 +484,7 @@ tailwind.config = {
           <div class="flex items-center gap-2">
             <span id="tsUpdatedAt" class="text-xs text-muted-foreground"></span>
             <button id="tsSyncBtn" class="btn sm" onclick="syncTimesheetFromDokoKin()" data-tooltip="Trigger Timesheet Fetch workflow (~60s)"><span data-icon="sparkles" data-size="14"></span> Sync DokoKin</button>
+            <button id="tsSyncPayslipBtn" class="btn sm" onclick="syncPayslipFromFJP()" data-tooltip="Re-fetch payslip for the currently-viewed work month from FJP (~30s)"><span data-icon="wallet" data-size="14"></span> Sync Payslip</button>
             <button id="tsRefreshBtn" class="btn sm" onclick="loadTimesheetData({refresh:true})" data-tooltip="Refresh from Gist"><span data-icon="refresh" data-size="14"></span> Refresh</button>
           </div>
         </div>
@@ -1264,7 +1265,7 @@ tailwind.config = {
 <script src="js/schedule.js?v=27"></script>
 <script src="js/ot-salary.js?v=38"></script>
 <script src="js/ot-planner.js?v=53"></script>
-<script src="js/timesheet.js?v=13"></script>
+<script src="js/timesheet.js?v=14"></script>
 <script src="js/ai-validators.js?v=1"></script>
 <script src="js/ai-audit.js?v=4"></script>
 <script src="js/ai-proposals.js?v=2"></script>

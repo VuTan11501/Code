@@ -7,6 +7,7 @@
 // ═══════════════════════════════════════════════════
 const TS_FILE = 'timesheet-history.json';
 const TS_FETCH_WF = 'timesheet-fetch.yml';
+const PAYSLIP_FETCH_WF = 'payslip-fetch.yml';
 
 // Tolerance: anything ≤ this is "rounding noise", not a real loss.
 // DokoKin rounds to the minute; 5 min covers minor clock drift.
@@ -406,6 +407,7 @@ function renderTimesheet() {
           isToday ? 'ts-row-today' : '',
         ].filter(Boolean).join(' ');
         let deltaCell;
+        const isFuture = d.date && d.date > today;
         if (isLost) {
           const dayYen = _lostYenFromDay(parts);
           const lines = [
@@ -417,6 +419,8 @@ function renderTimesheet() {
           if (parts.nightLostMin > 0)  lines.push(`+25% Night on ${_minToHhmm(parts.nightLostMin)}`);
           const tip = lines.join(' · ').replace(/"/g, '&quot;');
           deltaCell = `<td class="ts-cell ts-cell-delta text-destructive font-semibold tooltip-trigger" data-tooltip="${tip}">−${_minToHhmm(lost)}</td>`;
+        } else if (isFuture && d.otRequest && _hhmmToMin(d.otRequest) > 0) {
+          deltaCell = `<td class="ts-cell ts-cell-delta text-muted-foreground tooltip-trigger" data-tooltip="Future date — OT not yet worked, lost status unknown">?</td>`;
         } else {
           deltaCell = (d.otRequest && _hhmmToMin(d.otRequest) > 0)
             ? `<td class="ts-cell ts-cell-delta text-success tooltip-trigger" data-tooltip="OT request fully covered by checkin/out ✓">✓</td>`
@@ -507,6 +511,93 @@ async function _waitForTimesheetFetchRun() {
   throw new Error('Timed out waiting for Timesheet Fetch run');
 }
 
+// ─── Sync payslip (dispatch workflow) ───────────────
+// Re-fetches the payslip for a specific work-month from FJP (POST
+// /api/payroll/salary/{year}/{month}) and updates payslip-history.json.
+// `workYearMonth` is "YYYY-MM" of the WORK month (e.g. "2026-04"). The
+// workflow's input `year_month` is the PAY month — i.e. work+1.
+async function syncPayslipFromFJP(workYearMonth, opts = {}) {
+  if (!sessionToken) {
+    toast('🔒 Unlock first', 'error');
+    return;
+  }
+  // workYearMonth optional — defaults to currently-viewed month.
+  let wym = workYearMonth;
+  if (!wym && _tsState.viewYear != null) {
+    wym = `${_tsState.viewYear}-${String(_tsState.viewMonth + 1).padStart(2, '0')}`;
+  }
+  if (!wym) {
+    toast('❌ No month selected', 'error');
+    return;
+  }
+  // Convert work-month → pay-month (work + 1 month).
+  let payYM = wym;
+  if (window.OT_SALARY && typeof window.OT_SALARY.workMonthToPayMonth === 'function') {
+    payYM = window.OT_SALARY.workMonthToPayMonth(wym);
+  }
+  const force = opts.force !== false;  // default true (user explicitly asked to re-fetch)
+  const btn = opts.btn || document.getElementById('tsSyncPayslipBtn');
+  const orig = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = `${ICON('refresh', 14, 'animate-spin')} Fetching…`;
+  }
+  try {
+    const res = await fetch(
+      `${API}/repos/${OWNER}/${REPO}/actions/workflows/${PAYSLIP_FETCH_WF}/dispatches`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${sessionToken}`,
+        'Accept': 'application/vnd.github+json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ ref: 'main', inputs: {
+        year_month: payYM,
+        months_back: '0',
+        force: force ? 'true' : 'false',
+      }}),
+    });
+    if (res.status !== 204) {
+      const body = await res.text().catch(() => '');
+      throw new Error(`HTTP ${res.status}${body ? ': ' + body.slice(0, 80) : ''}`);
+    }
+    toast(`☁️ Pulling payslip ${payYM} (work ${wym}) — waiting…`);
+    await _waitForPayslipFetchRun();
+    await loadTimesheetData({ refresh: true });
+    toast(`✅ Payslip ${payYM} synced`, 'success');
+  } catch (e) {
+    toast(`❌ Payslip sync failed: ${e.message}`, 'error');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = orig;
+    }
+  }
+}
+
+async function _waitForPayslipFetchRun() {
+  const start = Date.now();
+  const TIMEOUT_MS = 3 * 60 * 1000;
+  await new Promise(r => setTimeout(r, 4000));
+  while (Date.now() - start < TIMEOUT_MS) {
+    try {
+      const data = await apiFetch(
+        `/repos/${OWNER}/${REPO}/actions/workflows/${PAYSLIP_FETCH_WF}/runs?per_page=1&event=workflow_dispatch`);
+      const run = data && data.workflow_runs && data.workflow_runs[0];
+      if (run && run.status === 'completed') {
+        if (run.conclusion !== 'success') {
+          throw new Error(`Workflow ${run.conclusion || 'failed'} — see Actions tab`);
+        }
+        return run;
+      }
+    } catch (err) {
+      if (err && /Workflow/.test(err.message)) throw err;
+    }
+    await new Promise(r => setTimeout(r, 5000));
+  }
+  throw new Error('Timed out waiting for Payslip Fetch run');
+}
+
 // ─── Skeletons ──────────────────────────────────────
 function _tsSummarySkeleton() {
   let chips = '';
@@ -534,3 +625,4 @@ window.loadTimesheetData = loadTimesheetData;
 window.tsNavMonth = tsNavMonth;
 window.tsGoToday = tsGoToday;
 window.syncTimesheetFromDokoKin = syncTimesheetFromDokoKin;
+window.syncPayslipFromFJP = syncPayslipFromFJP;
