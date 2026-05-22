@@ -209,8 +209,9 @@ CLI command. All processing is in-browser — no upload, no telemetry.
 - ✅ Skips Sundays + Japanese national holidays (`jpholiday`)
 - ✅ Font: MSGothic preserved via `suica-pdf-editor` rendering pipeline
 - ✅ Reproducible with `--seed N`
-- ✅ PDF passes 587/589 forensic checks (balance arithmetic, fare consistency, chronology, etc.)
-- ⚠ Known limitation: PDF embeds a fresh MSGothic font subset via PyMuPDF, so the **FONT-CLEAN forensic check fails** (2 fonts in output instead of 1). Visual output is identical to a real statement; byte-identical forensic mode requires extending `suica_update.py` content-stream patching (future work).
+- ✅ **PDF passes a strict 20-check pixel-perfect verifier** (see `docs/VERIFY_PDF.md`) — generator exits non-zero on any failure
+- ✅ Benchmarked across 20 diverse seeds: worst Y-baseline drift **0.09 pt**, worst right-align drift **0.00 pt** (see `docs/BENCHMARK.md`)
+- ⚠ Known limitation: output PDF is ~67 KB vs reference ~55 KB because we embed a second MSGothic subset for kanji not in the template's digit-only F2 subset. Visually identical; reduction to ~50 KB requires the deferred hybrid CID-patching path described in `docs/VERIFY_PDF.md` → "Future optimization".
 
 ## End-to-end usage
 
