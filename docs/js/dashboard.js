@@ -34,14 +34,16 @@ function renderInfraToggle() {
   const on = dashShowInfra();
   bar.innerHTML = `
     <span class="dash-infra-label">Showing <strong>${on ? WORKFLOWS_ALL.length : WORKFLOWS.length}</strong> / ${WORKFLOWS_ALL.length} workflows</span>
+    <span class="dash-infra-hint">Show infrastructure</span>
     <button type="button"
             class="switch ${on ? 'active' : ''}"
             role="switch"
             aria-checked="${on}"
             aria-label="Toggle infrastructure workflows"
             onclick="toggleDashInfra()"
-            data-tooltip="${on ? 'Hide infrastructure workflows (heartbeat, dispatcher, deploy-pages, etc.)' : 'Also show infrastructure workflows (heartbeat, dispatcher, deploy-pages, etc.)'}"></button>
-    <span class="dash-infra-hint">Show infrastructure</span>
+            data-tooltip="${on ? 'Hide infrastructure workflows (heartbeat, dispatcher, deploy-pages, etc.)' : 'Also show infrastructure workflows (heartbeat, dispatcher, deploy-pages, etc.)'}">
+      <span class="switch-thumb"></span>
+    </button>
   `;
 }
 
