@@ -281,14 +281,23 @@
     }
     filtered.forEach((r) => {
       const row = document.createElement('div');
-      row.className = 'flex items-center gap-3 py-2 border-b border-border last:border-b-0 flex-wrap';
+      row.className = 'flex items-start gap-3 py-2 border-b border-border last:border-b-0 flex-wrap';
       const when = new Date(r.when);
       const dt = when.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
-      const routes = (r.routes || []).slice(0, 3).join(', ') + ((r.routes || []).length > 3 ? '…' : '');
+      const routeList = (r.routes || []);
+      const visible = routeList.slice(0, 6);
+      const remaining = routeList.length - visible.length;
+      const chipsHtml = routeList.length
+        ? `<div class="flex flex-wrap gap-1 mt-1" data-tooltip="${routeList.join(', ')}">
+             ${visible.map((rt) => `<span class="status-badge font-mono text-[10px]">${rt}</span>`).join('')}
+             ${remaining > 0 ? `<span class="status-badge font-mono text-[10px] opacity-70">+${remaining}</span>` : ''}
+           </div>`
+        : '<div class="text-xs text-muted-foreground italic mt-1">no routes recorded</div>';
       row.innerHTML = `
-        <div class="flex flex-col gap-0.5 flex-1 min-w-[180px]">
+        <div class="flex flex-col gap-0.5 flex-1 min-w-[220px]">
           <div class="text-sm font-mono font-medium">${r.filename || ('suica-' + r.month + '.pdf')}</div>
-          <div class="text-xs text-muted-foreground">${dt} · ${routes || 'no routes recorded'}</div>
+          <div class="text-xs text-muted-foreground">${dt}</div>
+          ${chipsHtml}
         </div>
         <span class="status-badge status-info font-mono">${r.month}</span>
         <span class="status-badge status-pending font-mono">¥${(+r.target).toLocaleString('en-US')}</span>
