@@ -917,99 +917,30 @@
   }
 
   // ────── Log viewer modal ──────
-  function _ensureLogModal() {
-    let modal = document.getElementById('suicaPdfLogModal');
-    if (modal) return modal;
-    modal = document.createElement('div');
-    modal.id = 'suicaPdfLogModal';
-    modal.className = 'modal-overlay';
-    modal.innerHTML = `
-      <div class="modal" style="max-width: 960px; width: 95vw; max-height: 85vh;">
-        <div class="modal-header">
-          <h3>Workflow run logs <span id="suicaPdfLogJobName" class="text-xs text-muted-foreground" style="margin-left:8px; font-weight:400;"></span></h3>
-          <div style="display:flex; gap:8px; align-items:center;">
-            <span id="suicaPdfLogStatus" class="text-xs text-muted-foreground"></span>
-            <button type="button" class="btn sm btn-ghost" id="suicaPdfLogRefreshBtn" data-tooltip="Refresh now">
-              <span data-icon="refresh" data-size="14"></span>
-            </button>
-            <button type="button" class="modal-close" id="suicaPdfLogCloseBtn" aria-label="Close">×</button>
-          </div>
-        </div>
-        <div class="modal-body" style="padding: 0;">
-          <pre id="suicaPdfLogPre" class="log-pre" style="margin:0; max-height:70vh; overflow:auto; padding:16px; font-size:11px; line-height:1.4; white-space:pre-wrap; word-break:break-word;">Loading…</pre>
-        </div>
-      </div>`;
-    document.body.appendChild(modal);
-    modal.querySelector('#suicaPdfLogCloseBtn').addEventListener('click', _closeLogModal);
-    modal.querySelector('#suicaPdfLogRefreshBtn').addEventListener('click', () => _refreshLog(true));
-    modal.addEventListener('click', (e) => { if (e.target === modal) _closeLogModal(); });
-    if (window.refreshIcons) window.refreshIcons(modal);
-    return modal;
-  }
+  // Per-step log UI is rendered by docs/js/log-viewer.js (window.LogViewer).
+  // We just pass it the run id + token; it handles fetch, parse, polling,
+  // step expand/collapse, copy-log, and cancel.
   async function _openLogModal() {
     if (!_logCtx.runId || !_logCtx.token) return;
-    const modal = _ensureLogModal();
-    modal.classList.add('open');
-    // Resolve jobId lazily on first open
-    if (!_logCtx.jobId) {
-      try {
-        const r = await fetch(`${GH_API}/repos/${GH_OWNER}/${GH_REPO}/actions/runs/${_logCtx.runId}/jobs`, { headers: ghHeaders(_logCtx.token) });
-        if (r.ok) {
-          const d = await r.json();
-          const j = (d.jobs || [])[0];
-          if (j) {
-            _logCtx.jobId = j.id;
-            const nm = modal.querySelector('#suicaPdfLogJobName');
-            if (nm) nm.textContent = `· ${j.name}`;
-          }
-        }
-      } catch (_) { /* ignored */ }
+    if (!window.LogViewer || typeof window.LogViewer.open !== 'function') {
+      console.error('[suica-planner] LogViewer module not loaded');
+      return;
     }
-    await _refreshLog(true);
-    if (!_logCtx.completed && !_logCtx.pollTimer) {
-      _logCtx.pollTimer = setInterval(() => _refreshLog(false), 4000);
-    }
+    window.LogViewer.open({
+      token: _logCtx.token,
+      owner: GH_OWNER,
+      repo:  GH_REPO,
+      runId: _logCtx.runId,
+      status: _logCtx.completed ? 'completed' : 'in_progress',
+      title: 'Suica PDF — workflow run logs',
+    });
   }
   function _closeLogModal() {
-    const modal = document.getElementById('suicaPdfLogModal');
-    if (modal) modal.classList.remove('open');
-    if (_logCtx.pollTimer) { clearInterval(_logCtx.pollTimer); _logCtx.pollTimer = null; }
-  }
-  async function _refreshLog(forceScroll) {
-    if (!_logCtx.runId || !_logCtx.token) return;
-    const pre = document.getElementById('suicaPdfLogPre');
-    const statusEl = document.getElementById('suicaPdfLogStatus');
-    if (!pre) return;
-    try {
-      if (!_logCtx.jobId) {
-        // Try resolve again if the job didn't exist on first open
-        const r0 = await fetch(`${GH_API}/repos/${GH_OWNER}/${GH_REPO}/actions/runs/${_logCtx.runId}/jobs`, { headers: ghHeaders(_logCtx.token) });
-        if (r0.ok) {
-          const d0 = await r0.json();
-          const j0 = (d0.jobs || [])[0];
-          if (j0) _logCtx.jobId = j0.id;
-        }
-      }
-      if (!_logCtx.jobId) { pre.textContent = 'Waiting for job to start…'; if (statusEl) statusEl.textContent = ''; return; }
-      const r = await fetch(`${GH_API}/repos/${GH_OWNER}/${GH_REPO}/actions/jobs/${_logCtx.jobId}/logs`, {
-        headers: { 'Authorization': `Bearer ${_logCtx.token}` },
-      });
-      if (r.status === 404) { pre.textContent = 'Log not available yet…'; if (statusEl) statusEl.textContent = '(job pending)'; return; }
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      const raw = await r.text();
-      // Strip ANSI escape codes
-      const cleaned = raw.replace(/\x1b\[[0-9;]*m/g, '');
-      // Tail last ~600 lines so the modal stays responsive on large logs
-      const lines = cleaned.split(/\r?\n/);
-      const tail = lines.length > 600 ? ['… (' + (lines.length - 600) + ' earlier lines omitted)', ...lines.slice(-600)] : lines;
-      const wasNearBottom = pre.scrollTop + pre.clientHeight >= pre.scrollHeight - 40;
-      pre.textContent = tail.join('\n');
-      if (forceScroll || wasNearBottom) pre.scrollTop = pre.scrollHeight;
-      if (statusEl) statusEl.textContent = `${lines.length} lines · updated ${new Date().toLocaleTimeString()}`;
-    } catch (e) {
-      pre.textContent = 'Failed to load log: ' + e.message;
+    if (window.LogViewer && typeof window.LogViewer.close === 'function') {
+      window.LogViewer.close();
     }
   }
+  async function _refreshLog() { /* now handled internally by LogViewer */ }
 
   async function _dispatchWorkflow(token, preset) {
     const body = {
