@@ -627,6 +627,9 @@
     };
   }
 
+  // Holds the currently-running workflow context so the log modal can poll.
+  const _logCtx = { token: null, runId: null, jobId: null, completed: false, pollTimer: null };
+
   function _showOverlay(label, sub) {
     let overlay = document.getElementById('suicaPdfOverlay');
     if (!overlay) {
@@ -638,13 +641,30 @@
           <div class="spinner-ring" role="status" aria-label="Generating Suica PDF"></div>
           <div class="spinner-overlay-label"></div>
           <div class="spinner-overlay-sub text-xs text-muted-foreground"></div>
+          <div class="spinner-overlay-actions" style="margin-top:12px; display:flex; gap:8px; justify-content:center;">
+            <button type="button" id="suicaPdfViewLogsBtn" class="btn sm btn-ghost" disabled style="font-size:12px;">
+              <span data-icon="terminal" data-size="12"></span>
+              <span class="btn-label">View logs</span>
+            </button>
+            <a id="suicaPdfRunLink" href="#" target="_blank" rel="noopener" class="btn sm btn-ghost" style="display:none; font-size:12px;">
+              <span data-icon="external-link" data-size="12"></span>
+              <span class="btn-label">Open on GitHub</span>
+            </a>
+          </div>
         </div>`;
       document.body.appendChild(overlay);
+      overlay.querySelector('#suicaPdfViewLogsBtn').addEventListener('click', _openLogModal);
+      if (window.refreshIcons) window.refreshIcons(overlay);
     }
     const lbl = overlay.querySelector('.spinner-overlay-label');
     if (lbl) lbl.textContent = label || 'Generating…';
     const subEl = overlay.querySelector('.spinner-overlay-sub');
     if (subEl) subEl.textContent = sub || '';
+    // Reset action buttons every time overlay opens
+    const logsBtn = overlay.querySelector('#suicaPdfViewLogsBtn');
+    if (logsBtn) logsBtn.setAttribute('disabled', '');
+    const link = overlay.querySelector('#suicaPdfRunLink');
+    if (link) { link.style.display = 'none'; link.href = '#'; }
     overlay.classList.add('open');
     return overlay;
   }
@@ -654,9 +674,116 @@
     const subEl = overlay.querySelector('.spinner-overlay-sub');
     if (subEl) subEl.textContent = sub || '';
   }
+  // Enable the "View logs" button + Open-on-GitHub link once we have a run.
+  function _wireOverlayRun(run) {
+    const overlay = document.getElementById('suicaPdfOverlay');
+    if (!overlay) return;
+    const logsBtn = overlay.querySelector('#suicaPdfViewLogsBtn');
+    if (logsBtn) logsBtn.removeAttribute('disabled');
+    const link = overlay.querySelector('#suicaPdfRunLink');
+    if (link && run && run.html_url) {
+      link.href = run.html_url;
+      link.style.display = '';
+    }
+  }
   function _hideOverlay() {
     const overlay = document.getElementById('suicaPdfOverlay');
     if (overlay) overlay.classList.remove('open');
+  }
+
+  // ────── Log viewer modal ──────
+  function _ensureLogModal() {
+    let modal = document.getElementById('suicaPdfLogModal');
+    if (modal) return modal;
+    modal = document.createElement('div');
+    modal.id = 'suicaPdfLogModal';
+    modal.className = 'modal-overlay';
+    modal.innerHTML = `
+      <div class="modal" style="max-width: 960px; width: 95vw; max-height: 85vh;">
+        <div class="modal-header">
+          <h3>Workflow run logs <span id="suicaPdfLogJobName" class="text-xs text-muted-foreground" style="margin-left:8px; font-weight:400;"></span></h3>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <span id="suicaPdfLogStatus" class="text-xs text-muted-foreground"></span>
+            <button type="button" class="btn sm btn-ghost" id="suicaPdfLogRefreshBtn" data-tooltip="Refresh now">
+              <span data-icon="refresh" data-size="14"></span>
+            </button>
+            <button type="button" class="modal-close" id="suicaPdfLogCloseBtn" aria-label="Close">×</button>
+          </div>
+        </div>
+        <div class="modal-body" style="padding: 0;">
+          <pre id="suicaPdfLogPre" class="log-pre" style="margin:0; max-height:70vh; overflow:auto; padding:16px; font-size:11px; line-height:1.4; white-space:pre-wrap; word-break:break-word;">Loading…</pre>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+    modal.querySelector('#suicaPdfLogCloseBtn').addEventListener('click', _closeLogModal);
+    modal.querySelector('#suicaPdfLogRefreshBtn').addEventListener('click', () => _refreshLog(true));
+    modal.addEventListener('click', (e) => { if (e.target === modal) _closeLogModal(); });
+    if (window.refreshIcons) window.refreshIcons(modal);
+    return modal;
+  }
+  async function _openLogModal() {
+    if (!_logCtx.runId || !_logCtx.token) return;
+    const modal = _ensureLogModal();
+    modal.classList.add('open');
+    // Resolve jobId lazily on first open
+    if (!_logCtx.jobId) {
+      try {
+        const r = await fetch(`${GH_API}/repos/${GH_OWNER}/${GH_REPO}/actions/runs/${_logCtx.runId}/jobs`, { headers: ghHeaders(_logCtx.token) });
+        if (r.ok) {
+          const d = await r.json();
+          const j = (d.jobs || [])[0];
+          if (j) {
+            _logCtx.jobId = j.id;
+            const nm = modal.querySelector('#suicaPdfLogJobName');
+            if (nm) nm.textContent = `· ${j.name}`;
+          }
+        }
+      } catch (_) { /* ignored */ }
+    }
+    await _refreshLog(true);
+    if (!_logCtx.completed && !_logCtx.pollTimer) {
+      _logCtx.pollTimer = setInterval(() => _refreshLog(false), 4000);
+    }
+  }
+  function _closeLogModal() {
+    const modal = document.getElementById('suicaPdfLogModal');
+    if (modal) modal.classList.remove('open');
+    if (_logCtx.pollTimer) { clearInterval(_logCtx.pollTimer); _logCtx.pollTimer = null; }
+  }
+  async function _refreshLog(forceScroll) {
+    if (!_logCtx.runId || !_logCtx.token) return;
+    const pre = document.getElementById('suicaPdfLogPre');
+    const statusEl = document.getElementById('suicaPdfLogStatus');
+    if (!pre) return;
+    try {
+      if (!_logCtx.jobId) {
+        // Try resolve again if the job didn't exist on first open
+        const r0 = await fetch(`${GH_API}/repos/${GH_OWNER}/${GH_REPO}/actions/runs/${_logCtx.runId}/jobs`, { headers: ghHeaders(_logCtx.token) });
+        if (r0.ok) {
+          const d0 = await r0.json();
+          const j0 = (d0.jobs || [])[0];
+          if (j0) _logCtx.jobId = j0.id;
+        }
+      }
+      if (!_logCtx.jobId) { pre.textContent = 'Waiting for job to start…'; if (statusEl) statusEl.textContent = ''; return; }
+      const r = await fetch(`${GH_API}/repos/${GH_OWNER}/${GH_REPO}/actions/jobs/${_logCtx.jobId}/logs`, {
+        headers: { 'Authorization': `Bearer ${_logCtx.token}` },
+      });
+      if (r.status === 404) { pre.textContent = 'Log not available yet…'; if (statusEl) statusEl.textContent = '(job pending)'; return; }
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const raw = await r.text();
+      // Strip ANSI escape codes
+      const cleaned = raw.replace(/\x1b\[[0-9;]*m/g, '');
+      // Tail last ~600 lines so the modal stays responsive on large logs
+      const lines = cleaned.split(/\r?\n/);
+      const tail = lines.length > 600 ? ['… (' + (lines.length - 600) + ' earlier lines omitted)', ...lines.slice(-600)] : lines;
+      const wasNearBottom = pre.scrollTop + pre.clientHeight >= pre.scrollHeight - 40;
+      pre.textContent = tail.join('\n');
+      if (forceScroll || wasNearBottom) pre.scrollTop = pre.scrollHeight;
+      if (statusEl) statusEl.textContent = `${lines.length} lines · updated ${new Date().toLocaleTimeString()}`;
+    } catch (e) {
+      pre.textContent = 'Failed to load log: ' + e.message;
+    }
   }
 
   async function _dispatchWorkflow(token, preset) {
@@ -698,9 +825,16 @@
           const candidate = runs.find((r) => new Date(r.created_at).getTime() >= dispatchedAt - 5000);
           if (candidate) {
             runId = candidate.id;
+            // Expose run + (lazily) job id to the log modal
+            if (_logCtx.runId !== candidate.id) {
+              _logCtx.runId = candidate.id;
+              _logCtx.jobId = null;
+              _wireOverlayRun(candidate);
+            }
             const elapsed = Math.floor((Date.now() - start) / 1000);
             _updateOverlay(`Run #${candidate.run_number} · ${candidate.status} · ${elapsed}s`);
             if (candidate.status === 'completed') {
+              _logCtx.completed = true;
               if (candidate.conclusion !== 'success') {
                 throw new Error(`Workflow finished with status: ${candidate.conclusion}`);
               }
@@ -781,6 +915,12 @@
       if (window.refreshIcons) window.refreshIcons(btn);
 
       const preset = buildPreset();
+      // Reset log context for this run
+      _logCtx.token = token;
+      _logCtx.runId = null;
+      _logCtx.jobId = null;
+      _logCtx.completed = false;
+      if (_logCtx.pollTimer) { clearInterval(_logCtx.pollTimer); _logCtx.pollTimer = null; }
       setStatus('Dispatching workflow…', 'text-muted-foreground');
       _showOverlay('Generating Suica PDF', 'Dispatching workflow…');
       const dispatchedAt = Date.now();
@@ -809,6 +949,9 @@
     } finally {
       btn.removeAttribute('disabled');
       _hideOverlay();
+      if (_logCtx.pollTimer) { clearInterval(_logCtx.pollTimer); _logCtx.pollTimer = null; }
+      // Allow user to still open the log modal after the run finished by leaving
+      // _logCtx.runId set; they just won't get the live spinner overlay anymore.
     }
   }
 
