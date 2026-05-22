@@ -1416,6 +1416,8 @@ if (document.readyState === 'loading') {
   let tip = null;
   let currentTrigger = null;
   let hideTimer = null;
+  let showTimer = null;
+  const SHOW_DELAY_MS = 400;
 
   function ensureTip() {
     if (!tip) {
@@ -1478,12 +1480,16 @@ if (document.readyState === 'loading') {
 
   document.addEventListener('mouseover', (e) => {
     const t = e.target.closest('[data-tooltip]');
-    if (t && t !== currentTrigger) show(t);
+    if (t && t !== currentTrigger) {
+      clearTimeout(showTimer);
+      showTimer = setTimeout(() => show(t), SHOW_DELAY_MS);
+    }
   });
   document.addEventListener('mouseout', (e) => {
     const t = e.target.closest('[data-tooltip]');
-    if (t && t === currentTrigger) {
-      hideTimer = setTimeout(hide, 80);
+    if (t) {
+      clearTimeout(showTimer);
+      if (t === currentTrigger) hideTimer = setTimeout(hide, 80);
     }
   });
   document.addEventListener('focusin', (e) => {
