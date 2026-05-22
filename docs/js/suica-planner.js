@@ -2084,6 +2084,19 @@
     saveSnapshots(list);
     renderSnapshots();
   }
+  function renameSnapshot(id) {
+    const list = loadSnapshots();
+    const s = list.find((x) => x.id === id);
+    if (!s) return;
+    const next = prompt('Rename snapshot:', s.name);
+    if (next === null) return;
+    const trimmed = String(next).trim().slice(0, 80);
+    if (!trimmed || trimmed === s.name) return;
+    s.name = trimmed;
+    saveSnapshots(list);
+    renderSnapshots();
+    if (window.Toast) window.Toast.success(`Renamed to "${trimmed}"`);
+  }
   let _snapCompareA = null;
   function _diffRoutesArr(a, b) {
     const sa = new Set(a || []);
@@ -2268,7 +2281,12 @@
       const isCompareA = _snapCompareA && _snapCompareA.id === s.id;
       row.innerHTML = `
         <div class="flex flex-col gap-0.5 flex-1 min-w-[160px]">
-          <div class="text-sm font-medium">${s.name}${isCompareA ? ' <span class="status-badge status-info text-[10px]">A</span>' : ''}</div>
+          <div class="text-sm font-medium flex items-center gap-1.5">
+            <span data-snap-name>${s.name}</span>${isCompareA ? '<span class="status-badge status-info text-[10px]">A</span>' : ''}
+            <button type="button" class="btn btn-ghost sm text-[10px] p-0.5 opacity-50 hover:opacity-100" data-snap-rename="${s.id}" aria-label="Rename snapshot" data-tooltip="Rename snapshot">
+              <span data-icon="edit" data-size="11"></span>
+            </button>
+          </div>
           <div class="text-xs text-muted-foreground">${when} · ${tripCount} commute trips · ${s.leisure.length} leisure · target ¥${(+s.settings.target).toLocaleString('en-US')}</div>
         </div>
         <button type="button" class="btn btn-ghost sm text-xs" data-snap-compare="${s.id}" data-tooltip="${isCompareA ? 'Cancel compare selection' : (_snapCompareA ? `Diff vs "${_snapCompareA.name}"` : 'Pick as A, then click on another snapshot to diff')}">
@@ -2285,6 +2303,7 @@
     wrap.querySelectorAll('[data-snap-restore]').forEach((b) => b.addEventListener('click', (e) => restoreSnapshot(e.currentTarget.getAttribute('data-snap-restore'))));
     wrap.querySelectorAll('[data-snap-delete]').forEach((b) => b.addEventListener('click', (e) => deleteSnapshot(e.currentTarget.getAttribute('data-snap-delete'))));
     wrap.querySelectorAll('[data-snap-compare]').forEach((b) => b.addEventListener('click', (e) => pickSnapshotForCompare(e.currentTarget.getAttribute('data-snap-compare'))));
+    wrap.querySelectorAll('[data-snap-rename]').forEach((b) => b.addEventListener('click', (e) => renameSnapshot(e.currentTarget.getAttribute('data-snap-rename'))));
     if (window.refreshIcons) window.refreshIcons(wrap);
   }
 
