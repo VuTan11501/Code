@@ -1300,6 +1300,31 @@
       const row = document.createElement('div');
       const muted = +l.weight === 0;
       row.className = 'flex items-center gap-2 py-1.5 border-b border-border last:border-b-0' + (muted ? ' opacity-50' : '');
+      row.draggable = (sortMode === 'manual' && !tagFilter);
+      row.dataset.leisureRow = String(idx);
+      if (row.draggable) {
+        row.style.cursor = 'grab';
+        row.setAttribute('data-tooltip', 'Drag to reorder');
+        row.addEventListener('dragstart', (e) => {
+          row.classList.add('opacity-30');
+          e.dataTransfer.effectAllowed = 'move';
+          e.dataTransfer.setData('text/plain', String(idx));
+        });
+        row.addEventListener('dragend', () => row.classList.remove('opacity-30'));
+        row.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; row.style.borderTopColor = 'var(--primary)'; });
+        row.addEventListener('dragleave', () => { row.style.borderTopColor = ''; });
+        row.addEventListener('drop', (e) => {
+          e.preventDefault();
+          row.style.borderTopColor = '';
+          const from = +e.dataTransfer.getData('text/plain');
+          const to = idx;
+          if (!isFinite(from) || from === to) return;
+          pushHistory();
+          const moved = state.leisure.splice(from, 1)[0];
+          state.leisure.splice(to, 0, moved);
+          renderLeisure(); renderEstimate(); saveState();
+        });
+      }
       const pop = popularity[l.route] || 0;
       const filled = popMax ? Math.round((pop / popMax) * 5) : 0;
       const dotsStr = (recentList.length && pop)
