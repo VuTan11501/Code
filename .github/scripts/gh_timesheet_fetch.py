@@ -237,12 +237,21 @@ def main():
             log(f"  · {y}-{m:02d}: skipped (no data / fetch error)")
             continue
         snap = normalize_month(raw)
+        # Skip empty calendar shells (months before user joined FJP).
+        # Heuristic: no actual working time AND no OT request AND no checkins.
+        s = snap["summary"]
+        actual = (s.get("displayTotalActualWorkingTime") or "00:00").strip()
+        otreq  = (s.get("displayOTRequestHours") or "00:00").strip()
+        has_checkin = any(d.get("in") for d in snap["details"])
+        if actual in ("", "00:00") and otreq in ("", "00:00") and not has_checkin:
+            log(f"  · {y}-{m:02d}: empty (pre-FJP or no activity) — skipped")
+            continue
         key = f"{y}-{m:02d}"
         fetched[key] = snap
         log(f"  ✓ {key}: {len(snap['details'])} days, "
-            f"actual={snap['summary'].get('displayTotalActualWorkingTime')}, "
-            f"OT={snap['summary'].get('displayOvertimeHours')}, "
-            f"OTreq={snap['summary'].get('displayOTRequestHours')}")
+            f"actual={s.get('displayTotalActualWorkingTime')}, "
+            f"OT={s.get('displayOvertimeHours')}, "
+            f"OTreq={s.get('displayOTRequestHours')}")
 
     if not fetched:
         log("Nothing fetched — aborting (no write).")

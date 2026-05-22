@@ -10,7 +10,7 @@ on:
       months_keep:
         description: "Rolling window — how many recent months to keep"
         required: false
-        default: "6"
+        default: "120"
       account:
         description: "DokoKin account (default: tanvc)"
         required: false
@@ -51,7 +51,7 @@ jobs:
         env:
           AZURE_REFRESH_TOKEN: ${{ secrets.AZURE_REFRESH_TOKEN }}
           GH_PAT: ${{ secrets.GH_PAT }}
-          MONTHS_KEEP: ${{ inputs.months_keep || '6' }}
+          MONTHS_KEEP: ${{ inputs.months_keep || '120' }}
           ACCOUNT: ${{ inputs.account || 'tanvc' }}
           DEBUG_DUMP: ${{ inputs.debug_dump && '1' || '' }}
         run: python .github/scripts/gh_timesheet_fetch.py
