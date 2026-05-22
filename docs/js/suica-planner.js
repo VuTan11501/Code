@@ -2472,6 +2472,20 @@
     saveSnapshots(list);
     renderSnapshots();
   }
+  function cloneSnapshot(id) {
+    const list = loadSnapshots();
+    const s = list.find((x) => x.id === id);
+    if (!s) return;
+    const copy = JSON.parse(JSON.stringify(s));
+    copy.id = 'snap_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    copy.name = (s.name || 'snapshot') + ' (copy)';
+    copy.created_at = new Date().toISOString();
+    copy.pinned = false;
+    list.unshift(copy);
+    saveSnapshots(list);
+    renderSnapshots();
+    if (window.Toast) window.Toast.success(`Duplicated as "${copy.name}"`);
+  }
   function renameSnapshot(id) {
     const list = loadSnapshots();
     const s = list.find((x) => x.id === id);
@@ -2803,6 +2817,9 @@
         <button type="button" class="btn btn-ghost sm text-xs" data-snap-restore="${s.id}">
           <span data-icon="undo" data-size="12"></span><span class="btn-label">Restore</span>
         </button>
+        <button type="button" class="btn btn-ghost sm text-xs" data-snap-clone="${s.id}" aria-label="Duplicate snapshot" data-tooltip="Duplicate this snapshot">
+          <span data-icon="copy" data-size="12"></span>
+        </button>
         <button type="button" class="btn btn-ghost sm text-xs" data-snap-delete="${s.id}" aria-label="Delete snapshot">
           <span data-icon="trash" data-size="12"></span>
         </button>
@@ -2819,6 +2836,7 @@
     wrap.querySelectorAll('[data-snap-fav]').forEach((b) => b.addEventListener('click', (e) => toggleFavoriteSnapshot(e.currentTarget.getAttribute('data-snap-fav'))));
     wrap.querySelectorAll('[data-snap-restore]').forEach((b) => b.addEventListener('click', (e) => restoreSnapshot(e.currentTarget.getAttribute('data-snap-restore'))));
     wrap.querySelectorAll('[data-snap-delete]').forEach((b) => b.addEventListener('click', (e) => deleteSnapshot(e.currentTarget.getAttribute('data-snap-delete'))));
+    wrap.querySelectorAll('[data-snap-clone]').forEach((b) => b.addEventListener('click', (e) => cloneSnapshot(e.currentTarget.getAttribute('data-snap-clone'))));
     wrap.querySelectorAll('[data-snap-compare]').forEach((b) => b.addEventListener('click', (e) => pickSnapshotForCompare(e.currentTarget.getAttribute('data-snap-compare'))));
     wrap.querySelectorAll('[data-snap-rename]').forEach((b) => b.addEventListener('click', (e) => renameSnapshot(e.currentTarget.getAttribute('data-snap-rename'))));
     wrap.querySelectorAll('[data-snap-note]').forEach((ta) => {
