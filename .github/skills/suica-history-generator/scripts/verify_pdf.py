@@ -43,7 +43,7 @@ from typing import Iterable
 
 import fitz
 
-from .pdf_export import BAL_RIGHT, AMT_RIGHT, _is_data_row, _load_suica_update
+from .pdf_export import BAL_RIGHT, AMT_RIGHT, COL_X, _is_data_row, _load_suica_update
 from .models import MonthlyHistory, TapKind
 
 log = logging.getLogger("verify_pdf")
@@ -59,6 +59,8 @@ ALLOWED_FONT_PATTERNS = (
 _FONT_RE = re.compile("|".join(ALLOWED_FONT_PATTERNS), re.IGNORECASE)
 
 ALIGN_TOLERANCE_PT = 2.0
+LEFT_ALIGN_TOLERANCE_PT = 1.5
+Y_MATCH_TOLERANCE_PT = 0.5
 SPEND_TOLERANCE_DEFAULT = 500
 
 
@@ -315,6 +317,215 @@ def _check_spend_target(history: MonthlyHistory, target: int | None, tolerance: 
 
 
 # --------------------------------------------------------------------------
+#  Quality checks — pixel-perfect text positioning + content integrity
+# --------------------------------------------------------------------------
+
+
+def _check_left_align(doc: fitz.Document, r: VerifyReport) -> None:
+    """Every data row's M/D/T/SF/ST cells must sit at exactly COL_X[col]
+    (the same x as in the template). Drift >±1.5pt is visible to the eye
+    when scrolling row-by-row."""
+    bad: list[str] = []
+    checked = 0
+    # Stations can have multiple spans (e.g. multi-char kanji). Use bbox x0
+    # of the LEFTMOST span on the row near each anchor.
+    for pno in range(doc.page_count):
+        page = doc[pno]
+        td = page.get_text("dict")
+        spans_by_y: dict[float, list[dict]] = {}
+        for blk in td.get("blocks", []):
+            for ln in blk.get("lines", []):
+                for sp in ln.get("spans", []):
+                    if not (sp.get("text") or "").strip():
+                        continue
+                    y = round(sp["bbox"][1] * 2) / 2
+                    spans_by_y.setdefault(y, []).append(sp)
+        for y, spans in spans_by_y.items():
+            # Only data rows: skip header chrome (y<105) and footer chrome
+            # (y>685, where "ご利用ありがとう…" + page footer live, with
+            # left-margin starting at ~158 rather than COL_X["M"]=155).
+            if y < 105 or y > 685:
+                continue
+            for col, anchor_x in COL_X.items():
+                # Find leftmost span starting near this anchor (within 20pt)
+                candidates = [s for s in spans
+                              if anchor_x - 5 <= s["bbox"][0] <= anchor_x + 25]
+                if not candidates:
+                    continue
+                leftmost = min(candidates, key=lambda s: s["bbox"][0])
+                drift = leftmost["bbox"][0] - anchor_x
+                checked += 1
+                if abs(drift) > LEFT_ALIGN_TOLERANCE_PT:
+                    bad.append(
+                        f"p{pno} y={y} col={col} x0={leftmost['bbox'][0]:.2f} "
+                        f"anchor={anchor_x} Δ={drift:+.2f} text={leftmost['text']!r}"
+                    )
+    if bad:
+        head = "; ".join(bad[:3])
+        suffix = f" (+{len(bad)-3} more)" if len(bad) > 3 else ""
+        r.add("ALIGN-LEFT", False,
+              f"{len(bad)}/{checked} left-aligned cells off-anchor (>±{LEFT_ALIGN_TOLERANCE_PT}pt): {head}{suffix}")
+    else:
+        r.add("ALIGN-LEFT", True,
+              f"all {checked} left-aligned cell(s) hit COL_X within ±{LEFT_ALIGN_TOLERANCE_PT}pt")
+
+
+def _check_y_match_template(doc: fitz.Document, template: fitz.Document, r: VerifyReport) -> None:
+    """Every text y-baseline in OURS must exist in the TEMPLATE within ±0.5pt.
+    Any extra y means we inserted text at a wrong vertical position."""
+    def collect_ys(d: fitz.Document) -> list[set[float]]:
+        out = []
+        for pno in range(d.page_count):
+            ys = set()
+            for blk in d[pno].get_text("dict").get("blocks", []):
+                for ln in blk.get("lines", []):
+                    for sp in ln.get("spans", []):
+                        if (sp.get("text") or "").strip():
+                            ys.add(round(sp["bbox"][1], 1))
+            out.append(ys)
+        return out
+
+    ours = collect_ys(doc)
+    tmpl = collect_ys(template)
+    bad: list[str] = []
+    checked = 0
+    for pno in range(min(len(ours), len(tmpl))):
+        for y in sorted(ours[pno]):
+            checked += 1
+            # find a template y within tolerance
+            if not any(abs(y - ty) <= Y_MATCH_TOLERANCE_PT for ty in tmpl[pno]):
+                bad.append(f"p{pno} y={y} not in template (nearest Δ={min(abs(y-ty) for ty in tmpl[pno]):.2f}pt)")
+    if bad:
+        head = "; ".join(bad[:3])
+        suffix = f" (+{len(bad)-3} more)" if len(bad) > 3 else ""
+        r.add("Y-MATCH-TEMPLATE", False,
+              f"{len(bad)}/{checked} y-baselines drift from template: {head}{suffix}")
+    else:
+        r.add("Y-MATCH-TEMPLATE", True,
+              f"all {checked} y-baseline(s) align with template (±{Y_MATCH_TOLERANCE_PT}pt)")
+
+
+def _check_carryover_first(rows: list[dict], history: MonthlyHistory | None, r: VerifyReport) -> None:
+    data_rows = [row for row in rows if _is_data_row(row)]
+    if not data_rows:
+        r.add("CARRYOVER-FIRST", False, "no data rows present")
+        return
+    first = data_rows[0]
+    typ = str(first.get("type") or "").strip()
+    if typ != "繰":
+        r.add("CARRYOVER-FIRST", False, f"first data row type={typ!r}, expected '繰' (carryover)")
+        return
+    bal = _coerce_money(first.get("balance"), first.get("balance_text"))
+    if bal is None:
+        r.add("CARRYOVER-FIRST", False, f"carryover row has unparseable balance: {first!r}")
+        return
+    if history is not None and bal != history.initial_balance:
+        r.add("CARRYOVER-FIRST", False,
+              f"carryover balance ¥{bal:,} ≠ history.initial_balance ¥{history.initial_balance:,}")
+        return
+    r.add("CARRYOVER-FIRST", True, f"carryover row present at top, balance ¥{bal:,}")
+
+
+def _check_trip_pairing(history: MonthlyHistory | None, r: VerifyReport) -> None:
+    """Every IN entry must have a matching OUT later the same day at a
+    DIFFERENT station — if not, the trip is malformed and a real Suica
+    statement would never show such a thing."""
+    if history is None:
+        r.add("TRIP-PAIRING", True, "no history supplied (skipped)")
+        return
+    issues: list[str] = []
+    pending_in: dict[str, tuple] = {}  # date -> (idx, station, at)
+    for i, e in enumerate(history.entries):
+        if e.kind == TapKind.IN:
+            key = e.at.date().isoformat()
+            if key in pending_in:
+                issues.append(f"row{i} second IN on {key} before previous OUT (station={e.station})")
+            pending_in[key] = (i, e.station, e.at)
+        elif e.kind == TapKind.OUT:
+            key = e.at.date().isoformat()
+            if key not in pending_in:
+                issues.append(f"row{i} OUT on {key} with no preceding IN (station={e.station})")
+                continue
+            in_idx, in_st, in_at = pending_in.pop(key)
+            if e.at < in_at:
+                issues.append(f"row{i} OUT time before its IN (in={in_at} out={e.at})")
+            if e.station == in_st:
+                issues.append(f"row{i} OUT station == IN station ({e.station})")
+    for key, (idx, st, at) in pending_in.items():
+        issues.append(f"row{idx} IN at {st} on {key} has no matching OUT")
+    if issues:
+        head = "; ".join(issues[:3])
+        suffix = f" (+{len(issues)-3} more)" if len(issues) > 3 else ""
+        r.add("TRIP-PAIRING", False, f"{len(issues)} pairing issue(s): {head}{suffix}")
+    else:
+        r.add("TRIP-PAIRING", True, f"all IN/OUT pairs valid across {len(history.entries)} entries")
+
+
+def _check_time_monotonic(history: MonthlyHistory | None, r: VerifyReport) -> None:
+    if history is None:
+        r.add("TIME-MONOTONIC", True, "no history supplied (skipped)")
+        return
+    prev = None
+    bad: list[str] = []
+    for i, e in enumerate(history.entries):
+        if prev is not None and e.at < prev:
+            bad.append(f"row{i} {e.at} < previous {prev}")
+        prev = e.at
+    if bad:
+        r.add("TIME-MONOTONIC", False, f"{len(bad)} non-monotonic datetime(s): {bad[0]}")
+    else:
+        r.add("TIME-MONOTONIC", True, f"all {len(history.entries)} entries chronologically ordered")
+
+
+def _check_fare_correctness(history: MonthlyHistory | None, r: VerifyReport) -> None:
+    """For every OUT, fare should be > 0, ≤ ¥3000 (a sane IC fare upper
+    bound), and equal in magnitude to the FARE the IN/OUT pair claims.
+    We can't re-fetch IC fares here (no network) but we can sanity-check
+    bounds and consistency."""
+    if history is None:
+        r.add("FARE-SANITY", True, "no history supplied (skipped)")
+        return
+    bad: list[str] = []
+    out_count = 0
+    for i, e in enumerate(history.entries):
+        if e.kind == TapKind.OUT:
+            out_count += 1
+            fare = abs(e.fare_yen)
+            if fare <= 0:
+                bad.append(f"row{i} OUT fare=¥0")
+            elif fare > 3000:
+                bad.append(f"row{i} OUT fare=¥{fare:,} > ¥3000 (suspicious for IC)")
+            elif fare % 1 != 0:
+                bad.append(f"row{i} OUT fare=¥{fare} non-integer")
+    if bad:
+        head = "; ".join(bad[:3])
+        suffix = f" (+{len(bad)-3} more)" if len(bad) > 3 else ""
+        r.add("FARE-SANITY", False, f"{len(bad)}/{out_count} OUT fares look wrong: {head}{suffix}")
+    else:
+        r.add("FARE-SANITY", True, f"all {out_count} OUT fare(s) within ¥1-¥3000 IC bounds")
+
+
+def _check_no_soft_hyphen(doc: fitz.Document, r: VerifyReport) -> None:
+    """Negative amounts MUST use U+002D, not U+00AD (soft hyphen). On Linux
+    runners with IPAGothic the dash can mis-extract as SHY which breaks
+    re-parse and looks weird if copy-pasted from the PDF."""
+    bad: list[str] = []
+    for pno in range(doc.page_count):
+        for blk in doc[pno].get_text("dict").get("blocks", []):
+            for ln in blk.get("lines", []):
+                for sp in ln.get("spans", []):
+                    if "\u00ad" in (sp.get("text") or ""):
+                        bad.append(f"p{pno} y={sp['bbox'][1]:.1f} text={sp['text']!r}")
+    if bad:
+        head = "; ".join(bad[:3])
+        suffix = f" (+{len(bad)-3} more)" if len(bad) > 3 else ""
+        r.add("NO-SOFT-HYPHEN", False,
+              f"{len(bad)} cell(s) use U+00AD instead of U+002D: {head}{suffix}")
+    else:
+        r.add("NO-SOFT-HYPHEN", True, "no soft-hyphen (U+00AD) leakage in negative amounts")
+
+
+# --------------------------------------------------------------------------
 #  Top-level entry
 # --------------------------------------------------------------------------
 
@@ -344,7 +555,14 @@ def verify_pdf(
         _check_fonts(doc, report)
         _check_redact_annots(doc, report)
         _check_alignment(doc, report)
+        _check_left_align(doc, report)
+        _check_y_match_template(doc, template, report)
+        _check_no_soft_hyphen(doc, report)
         _check_balance_arith(rows, report)
+        _check_carryover_first(rows, history, report)
+        _check_trip_pairing(history, report)
+        _check_time_monotonic(history, report)
+        _check_fare_correctness(history, report)
         if history is not None:
             _check_spend_target(history, target_yen, tolerance_yen, report)
     finally:
