@@ -54,12 +54,22 @@ class BudgetAllocator:
 
         # Helper: leisure trips are round-trip pairs sharing a date+route
         def leisure_pairs() -> list[list[int]]:
-            """Return groups of indices that form one leisure round-trip."""
+            """Return groups of indices that form one leisure round-trip.
+
+            Pairs outbound+return within the same (date, route). If a
+            (date, route) has multiple round trips, split into consecutive pairs.
+            """
             groups: dict[tuple, list[int]] = {}
             for i, t in enumerate(trips):
                 if t.trip_type == TripType.LEISURE:
                     groups.setdefault((t.date, t.route), []).append(i)
-            return [v for v in groups.values() if len(v) == 2]
+            pairs: list[list[int]] = []
+            for idxs in groups.values():
+                # Sort so outbound (0) comes before return (1) deterministically
+                idxs_sorted = sorted(idxs, key=lambda i: (trips[i].direction != "outbound", i))
+                for k in range(0, len(idxs_sorted) - 1, 2):
+                    pairs.append([idxs_sorted[k], idxs_sorted[k + 1]])
+            return pairs
 
         # --- Reduce if over budget ---
         if cur_total > target_yen + self.tolerance:

@@ -1452,8 +1452,6 @@ input[type="time"], input[type="date"], input[type="datetime-local"] {
     position: fixed !important; left: 0 !important; right: 0 !important; bottom: 0 !important;
     z-index: 100;
     margin: 0 !important;
-    padding: 22px 8px 18px;
-    padding-bottom: calc(22px + env(safe-area-inset-bottom));
     border-radius: 0 !important;
     border: none;
     background: rgba(15,15,18,0.92);
