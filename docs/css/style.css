@@ -231,13 +231,30 @@ html { touch-action: manipulation; }
   background: rgba(239, 68, 68, 0.12);
   color: #ef4444;
   font-weight: 600;
+  position: relative;
+  /* Whole badge throbs subtly in sync with the heart */
+  animation: heart-badge-throb 1s ease-in-out infinite;
+}
+/* Outward ECG-style ring pulse — like a sonar ping from the heart */
+.status-beating::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border: 1.5px solid rgba(239, 68, 68, 0.55);
+  pointer-events: none;
+  animation: heart-ring-pulse 1s ease-out infinite;
 }
 .heart-beat {
   display: inline-block;
   transform-origin: center;
+  /* Lub-dub: two quick beats then rest */
   animation: heart-beat-pulse 1s ease-in-out infinite;
-  font-size: 1.05em;
+  font-size: 1.15em;
   line-height: 1;
+  /* Soft red glow so the heart looks alive even between beats */
+  filter: drop-shadow(0 0 2px rgba(239, 68, 68, 0.6));
+  will-change: transform, filter;
 }
 .heart-idle {
   display: inline-block;
@@ -246,15 +263,28 @@ html { touch-action: manipulation; }
   line-height: 1;
 }
 @keyframes heart-beat-pulse {
-  0%   { transform: scale(1); }
-  14%  { transform: scale(1.25); }
-  28%  { transform: scale(1); }
-  42%  { transform: scale(1.18); }
-  70%  { transform: scale(1); }
-  100% { transform: scale(1); }
+  0%   { transform: scale(1);     filter: drop-shadow(0 0 1px rgba(239, 68, 68, 0.4)); }
+  12%  { transform: scale(1.4);   filter: drop-shadow(0 0 5px rgba(239, 68, 68, 0.85)); }
+  24%  { transform: scale(1);     filter: drop-shadow(0 0 2px rgba(239, 68, 68, 0.55)); }
+  36%  { transform: scale(1.28);  filter: drop-shadow(0 0 4px rgba(239, 68, 68, 0.75)); }
+  50%  { transform: scale(1);     filter: drop-shadow(0 0 1px rgba(239, 68, 68, 0.4)); }
+  100% { transform: scale(1);     filter: drop-shadow(0 0 1px rgba(239, 68, 68, 0.4)); }
+}
+@keyframes heart-badge-throb {
+  0%, 50%, 100% { background: rgba(239, 68, 68, 0.12); color: #ef4444; }
+  12%           { background: rgba(239, 68, 68, 0.28); color: #dc2626; }
+  36%           { background: rgba(239, 68, 68, 0.22); color: #dc2626; }
+}
+@keyframes heart-ring-pulse {
+  0%   { transform: scale(1);    opacity: 0.7; border-width: 1.5px; }
+  60%  { transform: scale(1.18); opacity: 0;   border-width: 1px; }
+  100% { transform: scale(1.18); opacity: 0;   border-width: 1px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .heart-beat { animation: none; }
+  .heart-beat,
+  .status-beating,
+  .status-beating::before { animation: none; }
+  .status-beating::before { display: none; }
 }
 
 /* â”€â”€â”€ SKELETON LOADING â”€â”€â”€ */
