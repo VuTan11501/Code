@@ -15,6 +15,11 @@ on:
         description: "DokoKin account (default: tanvc)"
         required: false
         default: "tanvc"
+      debug_dump:
+        description: "DEBUG: dump raw current-month payload and exit (no Gist write)"
+        required: false
+        type: boolean
+        default: false
   schedule:
     # 07:00 JST daily = 22:00 UTC previous day
     - cron: "0 22 * * *"
@@ -48,6 +53,7 @@ jobs:
           GH_PAT: ${{ secrets.GH_PAT }}
           MONTHS_KEEP: ${{ inputs.months_keep || '6' }}
           ACCOUNT: ${{ inputs.account || 'tanvc' }}
+          DEBUG_DUMP: ${{ inputs.debug_dump && '1' || '' }}
         run: python .github/scripts/gh_timesheet_fetch.py
 
       - name: Update secret if token rotated

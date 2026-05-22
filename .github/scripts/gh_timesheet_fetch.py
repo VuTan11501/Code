@@ -173,6 +173,34 @@ def main():
     kt = get_kintai_token(az_tok)
     log("Token OK ✓")
 
+    # ─── DEBUG MODE: dump raw current-month payload and exit ───
+    if os.environ.get("DEBUG_DUMP", "").lower() in ("1", "true", "yes"):
+        log("⚠ DEBUG_DUMP=1 — fetching current month raw and printing, then exit (no Gist write)")
+        raw = fetch_timesheet_month(kt, account, now.year, now.month)
+        if not raw:
+            log("  · no data")
+            return
+        log("── MONTH ROOT KEYS ──")
+        log(repr(sorted(raw.keys())))
+        log("── MONTH timesheetAdjust ──")
+        log(json.dumps(raw.get("timesheetAdjust"), indent=2, ensure_ascii=False)[:2000])
+        details = raw.get("details") or []
+        log(f"── DETAILS COUNT: {len(details)} ──")
+        # Find a day with checkin AND known OT to maximize useful keys
+        sample = None
+        for d in details:
+            if isinstance(d, dict) and (d.get("displayStartWorkingTime") or d.get("startWorkingTime")):
+                sample = d
+                break
+        if not sample and details:
+            sample = details[0]
+        if sample:
+            log("── FULL RAW DETAIL (first day with checkin) ──")
+            log(json.dumps(sample, indent=2, ensure_ascii=False, default=str))
+        if new_refresh != refresh_token:
+            _emit_token_rotation(new_refresh)
+        return
+
     targets = _months_back(now, months_keep)
     fetched: dict[str, dict] = {}
     for (y, m) in targets:
