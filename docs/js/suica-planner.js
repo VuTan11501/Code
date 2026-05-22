@@ -1286,6 +1286,19 @@
       }
       wrap.appendChild(row);
     });
+    // Summary bar — total trips, weekday days touched, weekly commute cost
+    const totalTrips = DAYS.reduce((s, d) => s + state.pattern[d].length, 0);
+    if (totalTrips > 0) {
+      const activeDays = DAYS.filter((d) => state.pattern[d].length).length;
+      const weeklyCost = DAYS.reduce((s, d) => s + state.pattern[d].reduce((ss, t) => ss + (fareOf(t.route) * 2 || 0), 0), 0);
+      const summary = document.createElement('div');
+      summary.className = 'mt-2 px-2 py-1 rounded bg-muted/40 border border-border/40 flex items-center gap-3 text-[11px] text-muted-foreground flex-wrap';
+      summary.innerHTML = `
+        <span><strong class="text-foreground">${totalTrips}</strong> trip${totalTrips === 1 ? '' : 's'}</span>
+        <span><strong class="text-foreground">${activeDays}</strong>/7 days active</span>
+        <span class="ml-auto">Weekly commute (round-trip): <strong class="text-foreground">¥${weeklyCost.toLocaleString('en-US')}</strong></span>`;
+      wrap.appendChild(summary);
+    }
   }
 
   // ────── Render: leisure pool ──────
