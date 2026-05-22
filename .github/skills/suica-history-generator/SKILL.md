@@ -165,7 +165,7 @@ python ./scripts/generate.py `
 - ✅ No overlap, no negative balance, respects last-train cutoff
 - ✅ Teiki entries show ¥0 fare but still emit tap-in/tap-out
 - ✅ Auto-charge inserted when balance projected < ¥1500
-- ✅ Skips Sundays + Japanese national holidays (`jpholidayp`)
+- ✅ Skips Sundays + Japanese national holidays (`jpholiday`)
 - ✅ Font: MSGothic preserved via `suica-pdf-editor` rendering pipeline
 - ✅ Reproducible with `--seed N`
 
