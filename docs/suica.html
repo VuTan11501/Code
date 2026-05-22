@@ -329,6 +329,9 @@
         <!-- Plan validation warnings (populated by computeWarnings) -->
         <div id="planner-warnings" class="rounded-md border border-border bg-muted/30 p-3 hidden" role="status" aria-live="polite"></div>
 
+        <!-- Calendar preview -->
+        <div id="planner-calendar" class="hidden rounded-md border border-border bg-card p-3"></div>
+
         <!-- Output actions -->
         <div class="flex flex-wrap gap-2 items-center">
           <button id="planner-generate-pdf" class="btn primary" type="button" data-tooltip="Dispatches the Suica PDF Generate workflow on GitHub and downloads the resulting PDF (~30-60s)">
@@ -584,6 +587,6 @@
 <script src="js/suica-history.js?v=6" defer></script>
 <script src="js/log-viewer.js?v=1" defer></script>
 <script>window.SUICA_FARE_API='https://suica-fare-proxy.workflow-dashboard.workers.dev';</script>
-<script src="js/suica-planner.js?v=25" defer></script>
+<script src="js/suica-planner.js?v=26" defer></script>
 </body>
 </html>
