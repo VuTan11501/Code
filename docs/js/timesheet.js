@@ -66,6 +66,25 @@ async function loadTimesheetData(opts) {
     } else {
       _tsState.months = {};
     }
+    // Also load payslip history (used to render Salary chip with real or
+    // estimated net take-home). Same gist file as the OT planner uses.
+    _tsState.payslips = [];
+    const payFile = gist.files && gist.files['payslip-history.json'];
+    if (payFile) {
+      let payContent = payFile.content || '';
+      if (payFile.truncated && payFile.raw_url) {
+        try {
+          const r = await fetch(payFile.raw_url, { cache: 'no-store' });
+          if (r.ok) payContent = await r.text();
+        } catch { /* ignore */ }
+      }
+      if (payContent) {
+        try {
+          const parsed = JSON.parse(payContent) || {};
+          _tsState.payslips = Array.isArray(parsed.payslips) ? parsed.payslips : [];
+        } catch { /* ignore */ }
+      }
+    }
     renderTimesheet();
   } catch (e) {
     if (summaryEl) summaryEl.innerHTML =
@@ -246,13 +265,76 @@ function renderTimesheet() {
     ['OT Sat/Hol', s.displayHolidayOvertimeHours || '—'],
     ['OT Sun', s.displaySundayOvertimeHours || '—'],
   ];
+
+  // ── Salary chip (mirrors ot-planner.js Net take-home pattern) ──
+  // Computes OT gross from the recognized hours, then either uses the actual
+  // payslip if present, or estimates from the latest baseline payslip.
+  if (window.OT_SALARY) {
+    const SAL = window.OT_SALARY.SALARY;
+    const w = SAL.HOURLY_WAGE;
+    const totalH  = totalOTMin / 60;
+    const sundayH = _hhmmToMin(s.displaySundayOvertimeHours) / 60;
+    const nightH  = _hhmmToMin(s.displayNightWorkingHours) / 60;
+    const baseOTLine   = Math.floor(totalH  * w * SAL.OT_BASE_RATE);
+    const sundayLine   = Math.floor(sundayH * w * SAL.SUNDAY_PREMIUM);
+    const nightLine    = Math.floor(nightH  * w * SAL.NIGHT_PREMIUM);
+    const otGross      = baseOTLine + sundayLine + nightLine + SAL.FIXED_ALLOWANCE_YEN;
+    const F = window.OT_SALARY.formatYen;
+
+    const realSlip = window.OT_SALARY.findPayslipForMonth(_tsState.payslips, key);
+    const baseline = window.OT_SALARY.pickBaselinePayslip(_tsState.payslips, key);
+
+    let salaryVal, salaryTip;
+    if (realSlip && realSlip.take_home != null) {
+      salaryVal = `${F(realSlip.take_home)} <span class="ts-chip-badge ts-chip-badge-actual">actual</span>`;
+      salaryTip = `Actual take-home for ${realSlip.month} (from payslip):\n`
+                + `• Gross: ${F(realSlip.gross || 0)}\n`
+                + `• Take-home: ${F(realSlip.take_home)}\n`
+                + `(All deductions applied: insurance, taxes, rent, fees)`;
+    } else if (baseline) {
+      const est = window.OT_SALARY.calcFullMonthEstimate(otGross, baseline, { basicSalaryIndex: 1.0 });
+      salaryVal = `${F(est.takeHome)} <span class="ts-chip-badge">est.</span>`;
+      salaryTip = `Estimated take-home for ${key}\n`
+                + `(baseline: payslip ${baseline.month})\n`
+                + `• Total gross: ${F(est.gross)}\n`
+                + `  · contract: ${F(est.contractGross)}\n`
+                + `  · OT (incl. ¥20k fixed): ${F(est.otGross)}\n`
+                + `• − Insurance: ${F(est.insuranceTotal)}\n`
+                + `• − Income tax: ${F(est.incomeTax)}\n`
+                + `• − Resident tax: ${F(est.residentTax)}\n`
+                + `• − Company receivables: ${F(est.companyReceivables)}\n`
+                + `= ${F(est.takeHome)}`;
+    } else {
+      salaryVal = `${F(otGross)} <span class="ts-chip-badge">OT gross</span>`;
+      salaryTip = `OT gross only (no payslip baseline available — add a payslip in OT Planner first):\n`
+                + `• Base 125% × ${totalH.toFixed(2)}h: ${F(baseOTLine)}\n`
+                + (sundayLine ? `• Sunday +10% × ${sundayH.toFixed(2)}h: ${F(sundayLine)}\n` : '')
+                + (nightLine  ? `• Night +25% × ${nightH.toFixed(2)}h: ${F(nightLine)}\n` : '')
+                + `• Fixed allowance: ${F(SAL.FIXED_ALLOWANCE_YEN)}\n`
+                + `= ${F(otGross)} (gross, pre-tax)`;
+    }
+    chips.push(['Salary', { html: salaryVal, tip: salaryTip, cls: 'ts-chip-salary' }]);
+  }
+
   let chipsHtml = '';
-  for (const [label, val, aux] of chips) {
-    chipsHtml += `
-      <div class="ts-chip">
-        <div class="ts-chip-label">${label}</div>
-        <div class="ts-chip-value">${val}${aux || ''}</div>
-      </div>`;
+  for (const c of chips) {
+    const label = c[0];
+    const val = c[1];
+    const aux = c[2] || '';
+    if (val && typeof val === 'object') {
+      const tip = (val.tip || '').replace(/"/g, '&quot;');
+      chipsHtml += `
+        <div class="ts-chip ${val.cls || ''} tooltip-trigger" data-tooltip="${tip}">
+          <div class="ts-chip-label">${label}</div>
+          <div class="ts-chip-value">${val.html}</div>
+        </div>`;
+    } else {
+      chipsHtml += `
+        <div class="ts-chip">
+          <div class="ts-chip-label">${label}</div>
+          <div class="ts-chip-value">${val}${aux}</div>
+        </div>`;
+    }
   }
 
   let lostHtml = '';
