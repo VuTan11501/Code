@@ -3402,6 +3402,56 @@
       captureSnapshot(name.trim() || null);
       const det = snapSave.closest('details'); if (det) det.removeAttribute('open');
     });
+    const snapExport = $('planner-snapshots-export');
+    if (snapExport) snapExport.addEventListener('click', () => {
+      const list = loadSnapshots();
+      const det = snapExport.closest('details'); if (det) det.removeAttribute('open');
+      if (!list.length) { if (window.Toast) window.Toast.warning('No snapshots to export'); return; }
+      const payload = { kind: 'suica-planner-snapshots', v: 1, exported_at: new Date().toISOString(), snapshots: list };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      a.href = URL.createObjectURL(blob);
+      a.download = `suica-snapshots-${ts}.json`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+      if (window.Toast) window.Toast.success(`${list.length} snapshot${list.length === 1 ? '' : 's'} exported`);
+    });
+    const snapImport = $('planner-snapshots-import');
+    if (snapImport) snapImport.addEventListener('click', () => {
+      const det = snapImport.closest('details'); if (det) det.removeAttribute('open');
+      const inp = document.createElement('input');
+      inp.type = 'file';
+      inp.accept = 'application/json,.json';
+      inp.addEventListener('change', () => {
+        const file = inp.files && inp.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+          try {
+            const obj = JSON.parse(String(reader.result || ''));
+            const incoming = Array.isArray(obj) ? obj : (Array.isArray(obj.snapshots) ? obj.snapshots : null);
+            if (!incoming || !incoming.length) throw new Error('No snapshots found in file');
+            const existing = loadSnapshots();
+            const byId = new Map(existing.map((s) => [s.id, s]));
+            let added = 0, skipped = 0;
+            incoming.forEach((s) => {
+              if (!s || !s.id || !s.pattern || !s.settings) { skipped++; return; }
+              if (byId.has(s.id)) { skipped++; return; }
+              existing.push(s);
+              added++;
+            });
+            saveSnapshots(existing);
+            renderSnapshots();
+            if (window.Toast) window.Toast.success(`Imported ${added} snapshot${added === 1 ? '' : 's'}${skipped ? ` · ${skipped} skipped (duplicate/invalid)` : ''}`);
+          } catch (err) {
+            if (window.Toast) window.Toast.error(err.message || 'Invalid JSON', { title: 'Import failed' });
+          }
+        };
+        reader.readAsText(file);
+      });
+      inp.click();
+    });
     const shareBtn = $('planner-share-link');
     if (shareBtn) shareBtn.addEventListener('click', () => {
       copyShareLink();
