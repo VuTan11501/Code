@@ -221,20 +221,18 @@ function renderTimesheet() {
                    + _hhmmToMin(s.displaySundayOvertimeHours);
   const totalOT = totalOTMin > 0 ? _minToHhmm(totalOTMin) : (s.displayTotalOTHours || '—');
 
-  // "Billable extra" OT = total OT minus the ~10.24h already covered by the
-  // ¥20,000/month fixed allowance. If the result is ≤ 0, no extra is being
-  // paid above the fixed amount yet.
+  // "Billable extra" OT = total OT minus the 10h baseline already covered by
+  // the ¥20,000/month fixed allowance. If the result is ≤ 0, no extra is
+  // being paid above the fixed amount yet.
   let totalOTSecondary = '';
-  if (window.OT_SALARY && totalOTMin > 0) {
-    const fixedHoursMin = Math.round(window.OT_SALARY.FIXED_ALLOWANCE_HOURS * 60);
-    const billableMin = totalOTMin - fixedHoursMin;
-    const fixedHoursLabel = _minToHhmm(fixedHoursMin);
+  if (totalOTMin > 0) {
+    const FIXED_BASE_MIN = 10 * 60;  // round 10h baseline (per user preference)
+    const billableMin = totalOTMin - FIXED_BASE_MIN;
     const billableLabel = billableMin > 0 ? _minToHhmm(billableMin) : `−${_minToHhmm(-billableMin)}`;
-    const tip = `Billable extra OT (paid on top of the ¥20,000 fixed allowance). `
-              + `Fixed allowance covers ~${fixedHoursLabel} OT (= 20,000 / (1,563 × 1.25)). `
+    const tip = `Billable extra OT = total OT − 10h (fixed allowance baseline ¥20,000/month). `
               + (billableMin > 0
-                  ? `You're ${billableLabel} above that → extra paid line on payslip.`
-                  : `You're still under that — no extra paid OT line this month.`);
+                  ? `You're ${billableLabel} above 10h → extra paid line on payslip.`
+                  : `You're still under 10h — no extra paid OT line this month.`);
     totalOTSecondary = `<span class="ts-chip-aux tooltip-trigger" data-tooltip="${tip.replace(/"/g,'&quot;')}">${billableLabel}</span>`;
   }
 
