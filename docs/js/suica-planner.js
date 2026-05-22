@@ -3387,6 +3387,43 @@
         e.target.value = '';
       });
     }
+    const bulkPasteBtn = $('planner-leisure-bulk-paste');
+    if (bulkPasteBtn) bulkPasteBtn.addEventListener('click', () => {
+      const overlay = document.createElement('div');
+      overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:120;display:flex;align-items:center;justify-content:center;padding:1rem;';
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.style.cssText = 'max-width:520px;width:100%;padding:1rem;background:var(--card);color:var(--card-foreground);border:1px solid var(--border);border-radius:.5rem;';
+      const placeholder = `東京↔新宿\n新宿↔横浜,3\n# lines starting with # are ignored\n渋谷↔池袋\t2`;
+      card.innerHTML = `
+        <div class="flex items-center justify-between mb-2">
+          <div class="font-semibold text-sm">Paste leisure routes</div>
+          <button type="button" class="btn btn-ghost sm" data-bp-close aria-label="Close">×</button>
+        </div>
+        <div class="text-xs text-muted-foreground mb-2">One per line. Accepts <code class="font-mono">route</code> or <code class="font-mono">route,weight</code> (comma/tab). Lines starting with # are ignored. Duplicates by route name are skipped.</div>
+        <textarea id="bp-text" rows="8" class="input w-full font-mono text-xs" placeholder="${placeholder.replace(/"/g, '&quot;')}" autocomplete="off" spellcheck="false"></textarea>
+        <div class="flex gap-2 mt-3 justify-end">
+          <button type="button" class="btn sm btn-outline" data-bp-close>Cancel</button>
+          <button type="button" class="btn sm btn-primary" data-bp-add>Add to pool</button>
+        </div>
+      `;
+      overlay.appendChild(card);
+      document.body.appendChild(overlay);
+      const close = () => overlay.remove();
+      overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+      card.querySelectorAll('[data-bp-close]').forEach((b) => b.addEventListener('click', close));
+      const ta = card.querySelector('#bp-text');
+      ta.focus();
+      card.querySelector('[data-bp-add]').addEventListener('click', () => {
+        const text = ta.value || '';
+        if (!text.trim()) { if (window.Toast) window.Toast.warning('Nothing to import'); return; }
+        _bulkAddLeisureFromText(text, 'pasted');
+        close();
+      });
+      document.addEventListener('keydown', function onEsc(e) {
+        if (e.key === 'Escape') { close(); document.removeEventListener('keydown', onEsc); }
+      });
+    });
     const tgtShuffle = $('planner-target-shuffle');
     if (tgtShuffle) tgtShuffle.addEventListener('click', () => {
       const current = +state.settings.target || 0;
