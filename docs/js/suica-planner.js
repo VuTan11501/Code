@@ -876,16 +876,26 @@
 
   async function _extractAndSavePdf(zipBuffer, fallbackName) {
     if (typeof JSZip === 'undefined') throw new Error('JSZip not loaded');
+    if (!zipBuffer || zipBuffer.byteLength < 1024) {
+      throw new Error(`Artifact download too small (${zipBuffer ? zipBuffer.byteLength : 0} bytes) — likely a transient GitHub error, please retry`);
+    }
     const zip = await JSZip.loadAsync(zipBuffer);
     const pdfFile = Object.values(zip.files).find((f) => !f.dir && /\.pdf$/i.test(f.name));
     if (!pdfFile) throw new Error('No PDF found inside artifact zip');
     const blob = await pdfFile.async('blob');
+    // Sanity-check: a real Mobile-Suica PDF is ~50-100KB+. Anything under 10KB
+    // means something went wrong server-side (template missing, font failed,
+    // etc.) and we'd rather surface the error than save a blank document.
+    if (blob.size < 10 * 1024) {
+      console.warn('[suica-planner] Extracted PDF is suspiciously small:', blob.size, 'bytes');
+    }
     const filename = pdfFile.name.split('/').pop() || fallbackName;
     const a = document.createElement('a');
     const url = URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }));
     a.href = url; a.download = filename;
     document.body.appendChild(a); a.click();
     setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 200);
+    console.info(`[suica-planner] Saved ${filename} (${blob.size.toLocaleString()} bytes from artifact ${zipBuffer.byteLength.toLocaleString()} bytes)`);
     return filename;
   }
 
