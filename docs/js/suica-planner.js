@@ -851,6 +851,24 @@
         });
       }
       row.appendChild(chips);
+      // "Clear day" button — only shown when this day has trips
+      if (state.pattern[day].length) {
+        const clearBtn = document.createElement('button');
+        clearBtn.type = 'button';
+        clearBtn.className = 'btn btn-ghost sm text-xs flex-none text-destructive';
+        clearBtn.setAttribute('aria-label', `Clear all trips for ${DAY_LABELS[day]}`);
+        clearBtn.setAttribute('data-tooltip', `Remove all trips from ${DAY_LABELS[day]}`);
+        clearBtn.innerHTML = '<span data-icon="x" data-size="12"></span>';
+        clearBtn.addEventListener('click', () => {
+          if (state.pattern[day].length > 1 && !confirm(`Clear ${state.pattern[day].length} trips from ${DAY_LABELS[day]}?`)) return;
+          pushHistory();
+          state.pattern[day] = [];
+          renderPattern(); renderEstimate(); saveState();
+          if (window.Toast) window.Toast.info(`${DAY_LABELS[day]} cleared`, { duration: 2500 });
+        });
+        row.appendChild(clearBtn);
+        if (window.refreshIcons) window.refreshIcons(clearBtn);
+      }
       // "Copy to other weekdays" button — only shown when this day has trips
       // and there is at least one other weekday to copy to.
       if (state.pattern[day].length) {
