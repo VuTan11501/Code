@@ -224,13 +224,9 @@ def main():
     }
     new_content = json.dumps(new_payload, indent=2, ensure_ascii=False)
 
-    # No-op shape validator (file is dashboard-owned, schema is stable here)
-    def _shape_ok(content: str):
-        try:
-            obj = json.loads(content)
-        except Exception as e:
-            raise ValueError(f"not valid JSON: {e}")
-        if not isinstance(obj, dict) or "months" not in obj:
+    # Shape validator: gist_safety passes the already-parsed object (not raw string).
+    def _shape_ok(parsed):
+        if not isinstance(parsed, dict) or "months" not in parsed:
             raise ValueError("missing 'months' key")
 
     log("PATCHing Gist (with rolling backup + race detection)…")
