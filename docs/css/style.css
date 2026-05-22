@@ -1925,6 +1925,14 @@ input[type="time"], input[type="date"], input[type="datetime-local"] {
 .log-warn { color: #fcd34d; }
 .log-cmd { color: #86efac; font-weight: 500; }
 
+/* Light-mode log readability — dark-on-light, WCAG-AA contrast on white bg */
+[data-theme="light"] .log-pre   { color: #1f2937; }              /* slate-800 — main text */
+[data-theme="light"] .log-ts    { color: #6b7280; }              /* slate-500 — timestamp (kept muted, OK on white) */
+[data-theme="light"] .log-group { color: #1d4ed8; }              /* blue-700 */
+[data-theme="light"] .log-error { color: #b91c1c; background: rgba(239,68,68,0.08); } /* red-700 */
+[data-theme="light"] .log-warn  { color: #b45309; }              /* amber-700 */
+[data-theme="light"] .log-cmd   { color: #15803d; }              /* green-700 */
+
 @media (max-width: 480px) {
   .step-row { padding: 7px 8px; font-size: var(--fs-xs); }
   .log-pre { font-size: 11px; padding: 10px; }
