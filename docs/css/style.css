@@ -1454,7 +1454,8 @@ input[type="time"], input[type="date"], input[type="datetime-local"] {
     margin: 0 !important;
     border-radius: 0 !important;
     border: none;
-    background: rgba(15,15,18,0.92);
+    background: var(--card);
+    border-top: 1px solid var(--border);
     backdrop-filter: saturate(180%) blur(20px);
     -webkit-backdrop-filter: saturate(180%) blur(20px);
     display: flex; gap: 4px;
