@@ -36,6 +36,7 @@
       topup_amount: 3000,
       leisure_min: 2,
       leisure_max: 4,
+      seedPinned: false,
     },
   };
 
@@ -2992,6 +2993,10 @@
     }
     const seedReroll = $('planner-seed-reroll');
     if (seedReroll) seedReroll.addEventListener('click', () => {
+      if (state.settings.seedPinned) {
+        if (window.Toast) window.Toast.warning('Seed is pinned. Unpin (📌) to change it.');
+        return;
+      }
       const seedEl = $('planner-seed');
       const current = +state.settings.seed || 0;
       const next = current + 1;
@@ -3002,6 +3007,25 @@
       const status = $('planner-pdf-status');
       if (status) { status.textContent = `Seed bumped to ${next} — same plan, different schedule. Click Generate to render.`; status.className = 'text-xs text-primary'; }
     });
+    const seedPinBtn = $('planner-seed-pin');
+    function _renderSeedPin() {
+      if (!seedPinBtn) return;
+      const pinned = !!state.settings.seedPinned;
+      seedPinBtn.setAttribute('aria-pressed', pinned ? 'true' : 'false');
+      seedPinBtn.style.opacity = pinned ? '1' : '0.5';
+      seedPinBtn.style.transform = pinned ? 'rotate(-20deg)' : '';
+      seedPinBtn.setAttribute('data-tooltip', pinned ? 'Seed pinned — unpin to allow reroll/randomize' : 'Pin this seed so reroll/randomize won\'t change it');
+      const seedEl = $('planner-seed');
+      if (seedEl) seedEl.readOnly = pinned;
+    }
+    if (seedPinBtn) {
+      seedPinBtn.addEventListener('click', () => {
+        state.settings.seedPinned = !state.settings.seedPinned;
+        _renderSeedPin(); saveState();
+        if (window.Toast) window.Toast.info(state.settings.seedPinned ? 'Seed pinned' : 'Seed unpinned');
+      });
+      _renderSeedPin();
+    }
     const bulkBtn = $('planner-leisure-bulk');
     if (bulkBtn) bulkBtn.addEventListener('click', bulkAddLeisure);
     const clearLeisureBtn = $('planner-leisure-clear');
