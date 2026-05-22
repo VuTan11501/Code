@@ -534,7 +534,11 @@
   <section id="planner-recent-section" aria-label="Recent generations" class="hidden">
     <div class="section-title text-sm font-medium text-muted-foreground mb-4 flex items-center gap-2">
       <span data-icon="history" data-size="16"></span> Recent generations
-      <button id="planner-recent-clear" class="ml-auto btn btn-ghost sm text-xs" type="button" data-tooltip="Forget all recent generations">
+      <button id="planner-recent-export-csv" class="ml-auto btn btn-ghost sm text-xs" type="button" data-tooltip="Download recent generations as CSV">
+        <span data-icon="download" data-size="12"></span>
+        <span class="btn-label">CSV</span>
+      </button>
+      <button id="planner-recent-clear" class="btn btn-ghost sm text-xs" type="button" data-tooltip="Forget all recent generations">
         <span data-icon="trash" data-size="12"></span>
         <span class="btn-label">Clear</span>
       </button>
@@ -733,7 +737,7 @@
 <script src="js/suica-history.js?v=6" defer></script>
 <script src="js/log-viewer.js?v=1" defer></script>
 <script>window.SUICA_FARE_API='https://suica-fare-proxy.workflow-dashboard.workers.dev';</script>
-<script src="js/suica-planner.js?v=60" defer></script>
+<script src="js/suica-planner.js?v=61" defer></script>
 <script>
 // Theme toggle for suica.html (mirrors the dashboard's behavior; uses the same
 // localStorage key so the preference syncs across pages).

@@ -3124,6 +3124,33 @@
     if (recentClearBtn) recentClearBtn.addEventListener('click', () => {
       saveRecent([]); renderRecent();
     });
+    const recentCsvBtn = $('planner-recent-export-csv');
+    if (recentCsvBtn) recentCsvBtn.addEventListener('click', () => {
+      const list = loadRecent();
+      if (!list.length) { if (window.Toast) window.Toast.warning('No recent generations to export'); return; }
+      const esc = (s) => {
+        const v = String(s == null ? '' : s);
+        return /[",\n\r]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+      };
+      const header = ['when_iso','filename','month','target','seed','routes','run_url'];
+      const rows = list.map((r) => [
+        new Date(r.when).toISOString(),
+        r.filename || '',
+        r.month || '',
+        r.target ?? '',
+        r.seed ?? '',
+        (r.routes || []).join('|'),
+        r.runUrl || '',
+      ].map(esc).join(','));
+      const csv = '\uFEFF' + [header.join(','), ...rows].join('\r\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `suica-recent-${new Date().toISOString().slice(0,10)}.csv`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+      if (window.Toast) window.Toast.success(`Exported ${list.length} rows`);
+    });
     renderRecent();
 
     renderPattern(); renderLeisure(); renderEstimate();
