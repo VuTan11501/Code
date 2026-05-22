@@ -1345,6 +1345,90 @@
     setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
   }
 
+  // ────── Quick presets (pre-built scenarios) ──────
+  // Each preset describes a typical Suica spending pattern. They are pure data,
+  // so they survive station/fare list changes — applyPreset() only sets routes
+  // that exist in the current fare catalogue and gracefully degrades otherwise.
+  const PRESETS = [
+    {
+      id: 'tokyo-shinjuku-commute',
+      label: 'Tokyo↔Shinjuku commute',
+      desc: 'Daily JR commute, 2-3 weekend trips',
+      target: 18000,
+      pattern: ['東京↔新宿', '東京↔新宿', '東京↔新宿', '東京↔新宿', '東京↔新宿'],
+      leisure: [['新宿↔横浜', 3], ['東京↔上野', 2]],
+      leisure_min: 2, leisure_max: 3,
+    },
+    {
+      id: 'shibuya-yokohama-heavy',
+      label: 'Shibuya↔Yokohama heavy',
+      desc: 'Long commute + many weekend trips',
+      target: 35000,
+      pattern: ['渋谷↔横浜', '渋谷↔横浜', '渋谷↔横浜', '渋谷↔横浜', '渋谷↔横浜'],
+      leisure: [['渋谷↔新宿', 3], ['横浜↔鎌倉', 2], ['東京↔上野', 1]],
+      leisure_min: 4, leisure_max: 6,
+    },
+    {
+      id: 'light-3day',
+      label: 'Light hybrid (3 days/wk)',
+      desc: 'Hybrid worker — Mon/Wed/Fri office',
+      target: 10000,
+      pattern: ['東京↔新宿', '', '東京↔新宿', '', '東京↔新宿'],
+      leisure: [['新宿↔渋谷', 2]],
+      leisure_min: 1, leisure_max: 2,
+    },
+    {
+      id: 'weekend-only',
+      label: 'Weekend tourist',
+      desc: 'No commute, just Sat/Sun outings',
+      target: 8000,
+      pattern: ['', '', '', '', ''],
+      leisure: [['東京↔上野', 2], ['新宿↔横浜', 2], ['東京↔秋葉原', 2]],
+      leisure_min: 4, leisure_max: 6,
+    },
+    {
+      id: 'student-pass',
+      label: 'Student-style',
+      desc: 'Short commute, occasional outings',
+      target: 6000,
+      pattern: ['東京↔上野', '東京↔上野', '東京↔上野', '東京↔上野', '東京↔上野'],
+      leisure: [['東京↔秋葉原', 2], ['上野↔池袋', 1]],
+      leisure_min: 1, leisure_max: 3,
+    },
+  ];
+
+  function applyPreset(preset) {
+    if (!preset) return;
+    const isKnown = (r) => r && state.fares && state.fares[r] != null;
+    let appliedCommute = 0, skippedCommute = 0;
+    DAYS.forEach((d, idx) => {
+      if (idx >= 5) { state.pattern[d] = []; return; }
+      const r = preset.pattern[idx];
+      if (!r) { state.pattern[d] = []; return; }
+      if (isKnown(r)) { state.pattern[d] = [{ route: r, type: 'commute' }]; appliedCommute++; }
+      else { state.pattern[d] = []; skippedCommute++; }
+    });
+    state.leisure = preset.leisure
+      .filter(([r]) => isKnown(r))
+      .map(([route, weight]) => ({ route, weight }));
+    const skippedLeisure = preset.leisure.length - state.leisure.length;
+    state.settings.leisure_min = preset.leisure_min;
+    state.settings.leisure_max = preset.leisure_max;
+    if (preset.target) state.settings.target = preset.target;
+    const targetEl = $('planner-target'); if (targetEl && preset.target) targetEl.value = preset.target;
+    const minEl = $('planner-leisure-min'); if (minEl) minEl.value = preset.leisure_min;
+    const maxEl = $('planner-leisure-max'); if (maxEl) maxEl.value = preset.leisure_max;
+    renderPattern(); renderLeisure(); renderEstimate(); saveState();
+    const status = $('planner-pdf-status');
+    const skipped = skippedCommute + skippedLeisure;
+    const msg = `Applied "${preset.label}"` + (skipped ? ` — ${skipped} route(s) skipped (no fare data)` : '');
+    if (status) { status.textContent = msg; status.className = 'text-xs ' + (skipped ? 'text-warning' : 'text-primary'); }
+    if (window.toast) {
+      if (skipped) window.toast.warning(msg, { title: 'Preset applied (partial)' });
+      else window.toast.success(`Target ¥${preset.target.toLocaleString('en-US')}`, { title: 'Preset applied' });
+    }
+  }
+
   function loadSamplePlan() {
     state.pattern = {
       monday: [{ route: '東京↔新宿', type: 'commute' }],
@@ -1620,6 +1704,25 @@
     if (sgBtn) sgBtn.addEventListener('click', autoSuggest);
     const msBtn = $('planner-multi-suggest');
     if (msBtn) msBtn.addEventListener('click', multiSuggest);
+    const presetsMenu = $('planner-presets-menu');
+    if (presetsMenu) {
+      presetsMenu.innerHTML = '';
+      PRESETS.forEach((p) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn btn-ghost sm justify-start text-left';
+        btn.innerHTML = `
+          <div class="flex flex-col items-start gap-0.5 flex-1">
+            <span class="text-sm font-medium">${p.label}</span>
+            <span class="text-[10px] text-muted-foreground">${p.desc} · ¥${p.target.toLocaleString('en-US')}</span>
+          </div>`;
+        btn.addEventListener('click', () => {
+          applyPreset(p);
+          const det = presetsMenu.closest('details'); if (det) det.removeAttribute('open');
+        });
+        presetsMenu.appendChild(btn);
+      });
+    }
     const recentClearBtn = $('planner-recent-clear');
     if (recentClearBtn) recentClearBtn.addEventListener('click', () => {
       saveRecent([]); renderRecent();

@@ -356,6 +356,14 @@
             <span data-icon="list" data-size="14"></span>
             <span class="btn-label">Compare 3 options</span>
           </button>
+          <details class="relative">
+            <summary class="btn sm btn-outline cursor-pointer list-none" data-tooltip="Pre-built scenarios — apply with one click">
+              <span data-icon="zap" data-size="14"></span>
+              <span class="btn-label">Quick presets</span>
+              <span data-icon="chevronDown" data-size="12"></span>
+            </summary>
+            <div id="planner-presets-menu" class="absolute right-0 top-full mt-1 bg-card border border-border rounded-md shadow-lg p-1 z-20 min-w-[260px] flex flex-col gap-1"></div>
+          </details>
           <button id="planner-load-sample" class="btn sm btn-ghost" type="button">
             <span data-icon="sparkles" data-size="14"></span>
             <span class="btn-label">Load sample plan</span>
@@ -571,6 +579,6 @@
 <script src="js/suica-history.js?v=6" defer></script>
 <script src="js/log-viewer.js?v=1" defer></script>
 <script>window.SUICA_FARE_API='https://suica-fare-proxy.workflow-dashboard.workers.dev';</script>
-<script src="js/suica-planner.js?v=20" defer></script>
+<script src="js/suica-planner.js?v=21" defer></script>
 </body>
 </html>
