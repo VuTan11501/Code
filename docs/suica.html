@@ -234,7 +234,7 @@
     <div>
       <h1 class="text-xl font-semibold tracking-tight flex items-center gap-2">
         <span data-icon="mapPin" data-size="20"></span>
-        Suica History Viewer
+        <span data-i18n="title">Suica History Viewer</span>
       </h1>
       <p class="text-xs text-muted-foreground mt-1">
         Companion viewer for the <code class="font-mono">suica-history-generator</code> skill. All processing is in-browser.
@@ -248,6 +248,11 @@
       <button id="suica-density-toggle" type="button" class="btn sm btn-ghost" aria-label="Toggle compact density" data-tooltip="Toggle compact / comfortable density">
         <span style="font-size:14px;line-height:1">▤</span>
       </button>
+      <select id="suica-lang-select" class="input input-sm w-auto text-xs" aria-label="UI language" data-tooltip="Switch UI language (limited coverage)">
+        <option value="en">EN</option>
+        <option value="ja">日本語</option>
+        <option value="vi">Tiếng Việt</option>
+      </select>
       <a href="index.html" class="btn sm btn-ghost no-underline">
         <span data-icon="chevronLeft" data-size="14"></span>
         <span class="btn-label">Back to dashboard</span>
@@ -258,12 +263,12 @@
   <!-- Trip Planner -->
   <section aria-label="Trip planner">
     <div class="section-title text-sm font-medium text-muted-foreground mb-4 flex items-center gap-2">
-      <span data-icon="mapPin" data-size="16"></span> Trip Planner
+      <span data-icon="mapPin" data-size="16"></span> <span data-i18n="section.planner">Trip Planner</span>
     </div>
     <div class="card">
       <div class="card-header">
         <div class="card-title flex items-center gap-2">
-          <span data-icon="target" data-size="16"></span> Design a Suica history
+          <span data-icon="target" data-size="16"></span> <span data-i18n="planner.designTitle">Design a Suica history</span>
         </div>
         <div class="card-description">
           Pick stations, build a weekly commute and a weekend trip pool, then click <strong>Generate Suica PDF</strong> &mdash; a GitHub Actions workflow renders a byte-faithful Mobile Suica PDF and the dashboard downloads it for you (~30&ndash;60s).
@@ -715,9 +720,9 @@
       <div class="card">
         <div class="card-header">
           <div class="card-title flex items-center gap-2">
-            <span data-icon="mapPin" data-size="14"></span> Top stations
+            <span data-icon="mapPin" data-size="14"></span> <span data-i18n="card.topStations">Top stations</span>
           </div>
-          <div class="card-description">Most frequent IC tap stations</div>
+          <div class="card-description" data-i18n="card.topStationsDesc">Most frequent IC tap stations</div>
         </div>
         <div class="card-content">
           <ol id="top-stations" class="space-y-2 text-sm"></ol>
@@ -726,9 +731,9 @@
       <div class="card">
         <div class="card-header">
           <div class="card-title flex items-center gap-2">
-            <span data-icon="chevronRight" data-size="14"></span> Top routes (IN → OUT)
+            <span data-icon="chevronRight" data-size="14"></span> <span data-i18n="card.topRoutes">Top routes (IN → OUT)</span>
           </div>
-          <div class="card-description">Common origin → destination pairs</div>
+          <div class="card-description" data-i18n="card.topRoutesDesc">Common origin → destination pairs</div>
         </div>
         <div class="card-content">
           <ol id="top-routes" class="space-y-2 text-sm"></ol>
@@ -782,7 +787,7 @@
 <script src="js/suica-history.js?v=6" defer></script>
 <script src="js/log-viewer.js?v=1" defer></script>
 <script>window.SUICA_FARE_API='https://suica-fare-proxy.workflow-dashboard.workers.dev';</script>
-<script src="js/suica-planner.js?v=84" defer></script>
+<script src="js/suica-planner.js?v=85" defer></script>
 <script>
 // Theme toggle for suica.html (mirrors the dashboard's behavior; uses the same
 // localStorage key so the preference syncs across pages).
@@ -841,6 +846,66 @@
       apply(next);
       try { localStorage.setItem(KEY, next); } catch (_) {}
       if (window.Toast) window.Toast.info('Density: ' + next);
+    });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();
+</script>
+<script>
+// Minimal i18n for top-level chrome. Strings keyed by data-i18n attribute.
+// Stored under localStorage suica-lang. Only a few cards/sections covered;
+// rest of the planner UI stays in English by design.
+(function () {
+  var KEY = 'suica-lang';
+  var DICT = {
+    en: {
+      'title': 'Suica History Viewer',
+      'section.planner': 'Trip Planner',
+      'planner.designTitle': 'Design a Suica history',
+      'card.topStations': 'Top stations',
+      'card.topStationsDesc': 'Most frequent IC tap stations',
+      'card.topRoutes': 'Top routes (IN → OUT)',
+      'card.topRoutesDesc': 'Common origin → destination pairs',
+    },
+    ja: {
+      'title': 'Suica履歴ビューア',
+      'section.planner': '行程プランナー',
+      'planner.designTitle': 'Suica履歴をデザイン',
+      'card.topStations': '駅ランキング',
+      'card.topStationsDesc': 'タップ回数が多い駅',
+      'card.topRoutes': '区間ランキング（入場→出場）',
+      'card.topRoutesDesc': '頻出の入出場ペア',
+    },
+    vi: {
+      'title': 'Trình xem lịch sử Suica',
+      'section.planner': 'Bộ lập kế hoạch chuyến đi',
+      'planner.designTitle': 'Thiết kế lịch sử Suica',
+      'card.topStations': 'Top ga',
+      'card.topStationsDesc': 'Các ga có lượt quét IC nhiều nhất',
+      'card.topRoutes': 'Top tuyến (vào → ra)',
+      'card.topRoutesDesc': 'Các cặp ga vào → ra phổ biến',
+    },
+  };
+  function apply(lang) {
+    var dict = DICT[lang] || DICT.en;
+    document.querySelectorAll('[data-i18n]').forEach(function (el) {
+      var k = el.getAttribute('data-i18n');
+      if (dict[k] != null) el.textContent = dict[k];
+    });
+    document.documentElement.lang = lang === 'en' ? 'en' : (lang === 'ja' ? 'ja' : 'vi');
+  }
+  function init() {
+    var sel = document.getElementById('suica-lang-select');
+    if (!sel) return;
+    var saved = (function () { try { return localStorage.getItem(KEY); } catch (_) { return null; } })() || 'en';
+    sel.value = saved;
+    apply(saved);
+    sel.addEventListener('change', function () {
+      var v = sel.value;
+      try { localStorage.setItem(KEY, v); } catch (_) {}
+      apply(v);
+      if (window.Toast) window.Toast.info('Language: ' + v.toUpperCase());
     });
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
