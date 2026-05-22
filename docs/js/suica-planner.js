@@ -157,10 +157,35 @@
     const section = $('planner-recent-section');
     const wrap = $('planner-recent-list');
     if (!wrap || !section) return;
-    const list = loadRecent();
+    let list = loadRecent();
     if (!list.length) { section.classList.add('hidden'); return; }
     section.classList.remove('hidden');
     wrap.innerHTML = '';
+    // Filter chip row (All / 7d / 30d). Filter state is held on the wrap element.
+    const filter = wrap.dataset.recentFilter || 'all';
+    const now = Date.now();
+    const DAY_MS = 86400000;
+    const filtered = list.filter((r) => {
+      if (filter === 'all') return true;
+      const age = (now - new Date(r.when).getTime()) / DAY_MS;
+      if (filter === '7d') return age <= 7;
+      if (filter === '30d') return age <= 30;
+      return true;
+    });
+    const chipRow = document.createElement('div');
+    chipRow.className = 'flex items-center gap-1 text-[10px] uppercase tracking-wide text-muted-foreground mb-2';
+    chipRow.innerHTML = `
+      <span class="mr-1">Filter:</span>
+      ${['all', '7d', '30d'].map((f) => `
+        <button type="button" data-recent-filter="${f}" class="btn btn-ghost sm text-[10px] ${filter === f ? 'bg-muted' : ''}">${f === 'all' ? 'All' : 'Last ' + f}</button>
+      `).join('')}
+      <span class="ml-auto text-muted-foreground normal-case tracking-normal">${filtered.length}/${list.length}</span>
+    `;
+    wrap.appendChild(chipRow);
+    chipRow.querySelectorAll('[data-recent-filter]').forEach((b) => b.addEventListener('click', (e) => {
+      wrap.dataset.recentFilter = e.currentTarget.getAttribute('data-recent-filter');
+      renderRecent();
+    }));
     // Sparkline of target ¥ from the most recent (oldest→newest in viz, so reverse)
     const targets = list.slice(0, 6).map((r) => +r.target).filter((n) => isFinite(n)).reverse();
     const sparkHtml = _renderSparkline(targets);
@@ -169,7 +194,14 @@
       sparkWrap.innerHTML = sparkHtml;
       wrap.appendChild(sparkWrap.firstElementChild);
     }
-    list.forEach((r) => {
+    if (!filtered.length) {
+      const empty = document.createElement('div');
+      empty.className = 'text-xs text-muted-foreground italic py-2';
+      empty.textContent = 'No runs match the current filter.';
+      wrap.appendChild(empty);
+      return;
+    }
+    filtered.forEach((r) => {
       const row = document.createElement('div');
       row.className = 'flex items-center gap-3 py-2 border-b border-border last:border-b-0 flex-wrap';
       const when = new Date(r.when);
