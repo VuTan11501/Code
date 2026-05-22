@@ -1189,6 +1189,24 @@
     DAYS.forEach((day) => {
       const row = document.createElement('div');
       row.className = 'flex items-center gap-2 py-1.5 border-b border-border last:border-b-0';
+      row.dataset.patternRow = day;
+      row.tabIndex = 0;
+      row.setAttribute('role', 'group');
+      row.setAttribute('aria-label', `${DAY_LABELS[day]} trips — use Arrow Up/Down to switch days`);
+      row.addEventListener('keydown', (e) => {
+        if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'Home' && e.key !== 'End') return;
+        // Don't hijack arrows inside an editable control (e.g. add-trip input)
+        const ae = document.activeElement;
+        if (ae && ae !== row && (ae.tagName === 'INPUT' || ae.tagName === 'SELECT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
+        e.preventDefault();
+        const rows = Array.from(wrap.querySelectorAll('[data-pattern-row]'));
+        const i = rows.indexOf(row);
+        let target;
+        if (e.key === 'Home') target = rows[0];
+        else if (e.key === 'End') target = rows[rows.length - 1];
+        else target = e.key === 'ArrowDown' ? rows[i + 1] : rows[i - 1];
+        if (target) target.focus();
+      });
       const label = document.createElement('div');
       label.className = 'text-xs text-muted-foreground font-medium w-10 flex-none flex items-center gap-1';
       label.setAttribute('data-tooltip', `${DAY_LABELS[day]} · 日本語: ${JP_DAYS[day]}曜日`);
