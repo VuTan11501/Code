@@ -2860,6 +2860,36 @@
       renderEstimate(); saveState();
       if (window.Toast) window.Toast.success(`¥${current.toLocaleString('en-US')} → ¥${next.toLocaleString('en-US')}`, { title: 'Target randomized' });
     });
+    const tgtSpread = $('planner-target-spread');
+    if (tgtSpread) tgtSpread.addEventListener('click', () => {
+      const totalStr = prompt('Total spend to spread across N months (¥):', String((+state.settings.target || 50000) * 6));
+      if (totalStr === null) return;
+      const total = +String(totalStr).replace(/[^\d.-]/g, '');
+      if (!(total > 0)) { if (window.Toast) window.Toast.warning('Enter a positive total'); return; }
+      const nStr = prompt('Spread across how many months? (1–12)', '6');
+      if (nStr === null) return;
+      const n = Math.max(1, Math.min(12, Math.round(+nStr || 0)));
+      if (!n) return;
+      const per = Math.max(500, Math.round((total / n) / 500) * 500);
+      pushHistory();
+      state.settings.target = per;
+      const el = $('planner-target'); if (el) el.value = per;
+      const batchEl = $('planner-batch-months');
+      if (batchEl) {
+        // Add the option on demand if it isn't present.
+        const wanted = String(n);
+        if (!Array.from(batchEl.options).some((o) => o.value === wanted)) {
+          const opt = document.createElement('option'); opt.value = wanted; opt.textContent = `× ${wanted}`;
+          batchEl.appendChild(opt);
+        }
+        batchEl.value = wanted;
+      }
+      renderEstimate(); saveState();
+      if (window.Toast) window.Toast.success(
+        `Target set to ¥${per.toLocaleString('en-US')}/month — Batch dropdown set to × ${n}. Press Generate to roll ${n} PDFs totaling ~¥${(per * n).toLocaleString('en-US')}.`,
+        { title: 'Spread applied', duration: 8000 }
+      );
+    });
     const snapSave = $('planner-snapshot-save');
     if (snapSave) snapSave.addEventListener('click', () => {
       const name = prompt('Name this snapshot:', `Plan ${new Date().toLocaleDateString()}`);
