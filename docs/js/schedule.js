@@ -246,7 +246,7 @@ function renderScheduleCalendar(gistEntries) {
     const entry = _calendarEntries[i];
     if (entry.type !== 'recurring') continue;
     const r = entry.recurrence || {};
-    const wf = WORKFLOWS.find(w => w.file === entry.workflow);
+    const wf = WORKFLOWS_ALL.find(w => w.file === entry.workflow);
     const name = wf ? wf.name : entry.workflow;
     const typeKey = _pipTypeOf(entry.workflow);
     let days = [];
@@ -284,7 +284,7 @@ function renderScheduleCalendar(gistEntries) {
     if (jstMid < todayJstMid || jstMid >= weekEndJst) continue;
     const dayIdx = _dowMap[parts.weekday] ?? jstMid.getDay();
     const time = `${parts.hour}:${parts.minute}`;
-    const wf = WORKFLOWS.find(w => w.file === entry.workflow);
+    const wf = WORKFLOWS_ALL.find(w => w.file === entry.workflow);
     const name = wf ? wf.name : entry.workflow;
     const typeKey = _pipTypeOf(entry.workflow);
     const dateStr = `${parts.year}-${parts.month}-${parts.day}`;
@@ -566,7 +566,7 @@ function showContextMenu(x, y, items) {
 function openPipContextMenu(entryIdx, x, y) {
   const entry = _calendarEntries[entryIdx];
   if (!entry) return;
-  const wf = WORKFLOWS.find(w => w.file === entry.workflow);
+  const wf = WORKFLOWS_ALL.find(w => w.file === entry.workflow);
   const name = wf ? wf.name : entry.workflow;
   const isOnce  = entry.type === 'once';
   const enabled = entry.enabled !== false;
@@ -623,7 +623,7 @@ function openPipActions(entryIdx, pipEl) {
   closePipPopover();
   const entry = _calendarEntries[entryIdx];
   if (!entry) return;
-  const wf = WORKFLOWS.find(w => w.file === entry.workflow);
+  const wf = WORKFLOWS_ALL.find(w => w.file === entry.workflow);
   const name = wf ? wf.name : entry.workflow;
   const isOnce = entry.type === 'once';
   const enabled = entry.enabled !== false;
@@ -714,7 +714,7 @@ async function runScheduledNow(entryIdx) {
       body: JSON.stringify({ ref: 'main', inputs: Object.keys(inputs).length ? inputs : undefined }),
     });
     if (res.status === 204) {
-      const wf = WORKFLOWS.find(w => w.file === entry.workflow);
+      const wf = WORKFLOWS_ALL.find(w => w.file === entry.workflow);
       toast(`✅ Dispatched: ${wf ? wf.name : entry.workflow}`);
     } else {
       toast(`❌ Failed (${res.status})`);
@@ -1224,7 +1224,7 @@ async function clientSideDispatchOverdue(entries) {
             body: JSON.stringify({ ref: 'main', inputs }),
           });
           if (res.status === 204) {
-            toast(`✅ Dispatched: ${(WORKFLOWS.find(w=>w.file===entry.workflow)||{}).name || entry.workflow.replace('.yml','')}`);
+            toast(`✅ Dispatched: ${(WORKFLOWS_ALL.find(w=>w.file===entry.workflow)||{}).name || entry.workflow.replace('.yml','')}`);
             entry.dispatched = true;
             entry.last_run = now.toISOString();
             dispatched++;
@@ -1265,7 +1265,7 @@ async function clientSideDispatchOverdue(entries) {
             body: JSON.stringify({ ref: 'main', inputs }),
           });
           if (res.status === 204) {
-            toast(`✅ Dispatched: ${(WORKFLOWS.find(w=>w.file===entry.workflow)||{}).name || entry.workflow.replace('.yml','')}`);
+            toast(`✅ Dispatched: ${(WORKFLOWS_ALL.find(w=>w.file===entry.workflow)||{}).name || entry.workflow.replace('.yml','')}`);
             entry.last_run = now.toISOString();
             dispatched++;
           }
@@ -1360,7 +1360,7 @@ function renderScheduledQueue(entries) {
   });
 
   queue.innerHTML = annotated.map(({ e: entry, origIdx: i, enabled, nextFireMs, bucket, ranToday }) => {
-    const wf = WORKFLOWS.find(w => w.file === entry.workflow);
+    const wf = WORKFLOWS_ALL.find(w => w.file === entry.workflow);
     const wfName = wf?.name || entry.workflow.replace('.yml', '');
     const iconName = wf?.iconName || 'settings';
     const isOnce = entry.type === 'once';
@@ -1694,7 +1694,7 @@ function renderScheduleTable() {
 
   tbody.innerHTML = pageItems.map((entry) => {
     const realIdx = scheduleTableData.indexOf(entry);
-    const wf = WORKFLOWS.find(w => w.file === entry.workflow);
+    const wf = WORKFLOWS_ALL.find(w => w.file === entry.workflow);
     const wfName = wf ? `<span class="inline-flex items-center gap-1.5">${ICON(wf.iconName || 'play', 14)} ${wf.name}</span>` : entry.workflow;
     const isOnce = entry.type === 'once';
 

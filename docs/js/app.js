@@ -6,12 +6,29 @@ const REPO = 'Code';
 const API = 'https://api.github.com';
 const GIST_ID = 'abc2a47c0a396025a72a6580227ff493';
 const WORKFLOWS = [
-  { id: 277782817, name: 'Auto Checkin', icon: '📥', iconName: 'logIn', file: 'auto-checkin.yml' },
-  { id: 278639767, name: 'Auto Checkout', icon: '📤', iconName: 'logOut', file: 'auto-checkout.yml' },
-  { id: 277802136, name: 'Auto Request OT', icon: '⏰', iconName: 'hourglass', file: 'auto-ot-creator.yml' },
-  { id: 278223037, name: 'JPY Forecast', icon: '💹', iconName: 'barChart', file: 'jpy-forecast.yml' },
-  { id: 279267238, name: 'OT History Fetch', icon: '📊', iconName: 'refresh', file: 'ot-history-fetch.yml' },
+  { name: 'Auto Checkin', icon: '📥', iconName: 'logIn', file: 'auto-checkin.yml' },
+  { name: 'Auto Checkout', icon: '📤', iconName: 'logOut', file: 'auto-checkout.yml' },
+  { name: 'Auto Request OT', icon: '⏰', iconName: 'hourglass', file: 'auto-ot-creator.yml' },
+  { name: 'JPY Forecast', icon: '💹', iconName: 'barChart', file: 'jpy-forecast.yml' },
+  { name: 'OT History Fetch', icon: '📊', iconName: 'refresh', file: 'ot-history-fetch.yml' },
+  { name: 'Timesheet Fetch', icon: '🗓️', iconName: 'calendar', file: 'timesheet-fetch.yml' },
+  { name: 'Payslip Fetch', icon: '💰', iconName: 'wallet', file: 'payslip-fetch.yml' },
+  { name: 'OT Report', icon: '📋', iconName: 'clipboard', file: 'ot-report.yml' },
+  { name: 'Schedule Generator', icon: '🧮', iconName: 'calendarPlus', file: 'schedule-generator.yml' },
+  { name: 'Token Monitor', icon: '🔑', iconName: 'key', file: 'token-monitor.yml' },
+  { name: 'Azure Reauth', icon: '🔐', iconName: 'lockKeyhole', file: 'azure-reauth.yml' },
+  { name: 'Daily Validation', icon: '✅', iconName: 'check', file: 'daily-validation.yml' },
+  { name: 'AI Anomaly Check', icon: '🤖', iconName: 'bot', file: 'ai-anomaly-check.yml' },
+  { name: 'AI Monthly Insight', icon: '✨', iconName: 'sparkles', file: 'ai-monthly-insight.yml' },
 ];
+const WORKFLOWS_INFRA = [
+  { name: 'Scheduled Dispatch', icon: '🎯', iconName: 'target', file: 'scheduled-dispatch.yml', infra: true },
+  { name: 'Dispatcher Watchdog', icon: '🐕', iconName: 'eye', file: 'dispatcher-watchdog.yml', infra: true },
+  { name: 'Heartbeat', icon: '💓', iconName: 'zap', file: 'heartbeat.yml', infra: true },
+  { name: 'Deploy Pages', icon: '🚀', iconName: 'upload', file: 'deploy-pages.yml', infra: true },
+  { name: 'Copilot Setup', icon: '🛠️', iconName: 'settings', file: 'copilot-setup-steps.yml', infra: true },
+];
+const WORKFLOWS_ALL = [...WORKFLOWS, ...WORKFLOWS_INFRA];
 const AUTO_LOCK_MS = 15 * 60 * 1000;
 
 const SCHEDULE = {
@@ -957,7 +974,7 @@ function checkForNewFailures(allRuns) {
     showNotification({
       title: titles[kind],
       body: `Run #${r.run_number} • ${r.event} • ${relTimeShort(r.updated_at || r.created_at)}`,
-      tag: `wf-${kind}-${wf.id || 'unknown'}`,
+      tag: `wf-${kind}-${wf.file || wf.id || 'unknown'}`,
       url: r.html_url,
       requireInteraction: kind === 'failure' && prefs.requireInteraction,
       soundKind: kind,

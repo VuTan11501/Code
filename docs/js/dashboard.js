@@ -11,6 +11,40 @@ let lastRunStates = {};
 let hasRunningWorkflows = false;
 let consecutiveErrors = 0;
 
+// Dashboard workflow visibility — default: core only. Toggle persists in localStorage.
+const DASH_SHOW_INFRA_KEY = 'wf_dash_show_infra';
+function dashShowInfra() {
+  try { return localStorage.getItem(DASH_SHOW_INFRA_KEY) === '1'; } catch { return false; }
+}
+function getDashboardWorkflows() {
+  return dashShowInfra() ? WORKFLOWS_ALL : WORKFLOWS;
+}
+function toggleDashInfra(ev) {
+  const next = !dashShowInfra();
+  try { localStorage.setItem(DASH_SHOW_INFRA_KEY, next ? '1' : '0'); } catch {}
+  renderInfraToggle();
+  // Wipe grid skeletons so the new card set replaces cleanly.
+  const grid = document.getElementById('workflowGrid');
+  if (grid) grid.innerHTML = '<div class="skeleton skeleton-card"></div><div class="skeleton skeleton-card"></div><div class="skeleton skeleton-card"></div>';
+  if (typeof refresh === 'function') refresh();
+}
+function renderInfraToggle() {
+  const bar = document.getElementById('dashInfraToggleBar');
+  if (!bar) return;
+  const on = dashShowInfra();
+  bar.innerHTML = `
+    <span class="dash-infra-label">Showing <strong>${on ? WORKFLOWS_ALL.length : WORKFLOWS.length}</strong> / ${WORKFLOWS_ALL.length} workflows</span>
+    <button type="button"
+            class="switch ${on ? 'active' : ''}"
+            role="switch"
+            aria-checked="${on}"
+            aria-label="Toggle infrastructure workflows"
+            onclick="toggleDashInfra()"
+            data-tooltip="${on ? 'Hide infrastructure workflows (heartbeat, dispatcher, deploy-pages, etc.)' : 'Also show infrastructure workflows (heartbeat, dispatcher, deploy-pages, etc.)'}"></button>
+    <span class="dash-infra-hint">Show infrastructure</span>
+  `;
+}
+
 function updateLiveIndicator(status, interval) {
   const el = document.getElementById('liveIndicator');
   const statusEl = document.getElementById('liveStatus');
@@ -33,6 +67,7 @@ function startPolling() {
   stopPolling();
   pollInterval = POLL_NORMAL;
   updateLiveIndicator('active', pollInterval);
+  renderInfraToggle();
   schedulePoll();
 }
 
@@ -636,9 +671,10 @@ async function refresh() {
     // Previously had a "fast path" using global /actions/runs?per_page=20, but high-frequency
     // workflows (scheduled-dispatch self-loop) dominated the 20-slot pool, leaving other
     // cards empty whenever a trigger happened. Per-workflow guarantees each card has its data.
+    const activeWorkflows = getDashboardWorkflows();
     const results = await Promise.all(
-      WORKFLOWS.map(wf =>
-        apiFetch(`/repos/${OWNER}/${REPO}/actions/workflows/${wf.id}/runs?per_page=10`)
+      activeWorkflows.map(wf =>
+        apiFetch(`/repos/${OWNER}/${REPO}/actions/workflows/${wf.file}/runs?per_page=10`)
           .then(data => ({ wf, runs: data.workflow_runs || [] }))
           .catch(() => ({ wf, runs: [] }))
       )
