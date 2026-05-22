@@ -1880,6 +1880,93 @@
     saveSnapshots(list);
     renderSnapshots();
   }
+  let _snapCompareA = null;
+  function _diffRoutesArr(a, b) {
+    const sa = new Set(a || []);
+    const sb = new Set(b || []);
+    const added = [...sb].filter((x) => !sa.has(x));
+    const removed = [...sa].filter((x) => !sb.has(x));
+    return { added, removed, kept: [...sa].filter((x) => sb.has(x)) };
+  }
+  function _openSnapshotDiff(snapA, snapB) {
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay open';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9998;display:flex;align-items:center;justify-content:center;padding:1rem;';
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.style.cssText = 'max-width:780px;width:100%;max-height:80vh;overflow:auto;padding:1rem;';
+    const dayRows = DAYS.map((d) => {
+      const ra = (snapA.pattern[d] || []).map((t) => t.route);
+      const rb = (snapB.pattern[d] || []).map((t) => t.route);
+      const diff = _diffRoutesArr(ra, rb);
+      const same = !diff.added.length && !diff.removed.length;
+      const chips = [
+        ...diff.kept.map((r) => `<span class="status-badge font-mono text-[10px]">${r}</span>`),
+        ...diff.removed.map((r) => `<span class="status-badge status-failure font-mono text-[10px]">− ${r}</span>`),
+        ...diff.added.map((r) => `<span class="status-badge status-success font-mono text-[10px]">+ ${r}</span>`),
+      ].join(' ');
+      return `<tr class="${same ? 'opacity-60' : ''}"><td class="py-1 pr-3 text-xs text-muted-foreground">${DAY_LABELS[d]}</td><td class="py-1">${chips || '<span class="text-xs italic text-muted-foreground">no trips</span>'}</td></tr>`;
+    }).join('');
+    const lA = (snapA.leisure || []).map((l) => l.route);
+    const lB = (snapB.leisure || []).map((l) => l.route);
+    const ld = _diffRoutesArr(lA, lB);
+    const leisureHtml = [
+      ...ld.kept.map((r) => `<span class="status-badge font-mono text-[10px]">${r}</span>`),
+      ...ld.removed.map((r) => `<span class="status-badge status-failure font-mono text-[10px]">− ${r}</span>`),
+      ...ld.added.map((r) => `<span class="status-badge status-success font-mono text-[10px]">+ ${r}</span>`),
+    ].join(' ') || '<span class="text-xs italic text-muted-foreground">none</span>';
+    const settingsKeys = Object.keys({ ...snapA.settings, ...snapB.settings });
+    const settingsHtml = settingsKeys.map((k) => {
+      const va = snapA.settings[k];
+      const vb = snapB.settings[k];
+      const same = va === vb;
+      return `<tr class="${same ? 'opacity-60' : ''}"><td class="py-0.5 pr-3 text-xs text-muted-foreground font-mono">${k}</td><td class="py-0.5 text-xs font-mono">${va ?? '∅'}</td><td class="py-0.5 text-xs font-mono ${same ? '' : 'text-success'}">${vb ?? '∅'}</td></tr>`;
+    }).join('');
+    card.innerHTML = `
+      <div class="flex items-center gap-2 mb-3">
+        <h3 class="font-semibold text-sm flex-1">Compare snapshots</h3>
+        <button type="button" class="btn btn-ghost sm" data-close>×</button>
+      </div>
+      <div class="text-xs text-muted-foreground mb-3">
+        <strong>A:</strong> ${snapA.name} · <strong>B:</strong> ${snapB.name}
+        — green = added in B · red = removed from A · grey = unchanged
+      </div>
+      <h4 class="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">Weekly pattern</h4>
+      <table class="w-full mb-3"><tbody>${dayRows}</tbody></table>
+      <h4 class="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">Leisure pool</h4>
+      <div class="mb-3">${leisureHtml}</div>
+      <h4 class="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">Settings (A vs B)</h4>
+      <table class="w-full"><tbody>${settingsHtml}</tbody></table>
+    `;
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+    const close = () => { overlay.remove(); };
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+    card.querySelector('[data-close]').addEventListener('click', close);
+    document.addEventListener('keydown', function onEsc(e) { if (e.key === 'Escape') { close(); document.removeEventListener('keydown', onEsc); } });
+  }
+  function pickSnapshotForCompare(id) {
+    const list = loadSnapshots();
+    const snap = list.find((x) => x.id === id);
+    if (!snap) return;
+    if (!_snapCompareA) {
+      _snapCompareA = snap;
+      if (window.Toast) window.Toast.info(`A: ${snap.name}. Click Compare on another snapshot to diff.`, { title: 'Pick B…', duration: 6000 });
+      renderSnapshots();
+      return;
+    }
+    if (_snapCompareA.id === snap.id) {
+      _snapCompareA = null;
+      if (window.Toast) window.Toast.info('Compare selection cleared.');
+      renderSnapshots();
+      return;
+    }
+    const a = _snapCompareA;
+    _snapCompareA = null;
+    _openSnapshotDiff(a, snap);
+    renderSnapshots();
+  }
+
   function renderSnapshots() {
     const wrap = $('planner-snapshots-list');
     if (!wrap) return;
@@ -1894,11 +1981,15 @@
       row.className = 'flex items-center gap-3 py-2 border-b border-border last:border-b-0 flex-wrap';
       const when = new Date(s.created_at).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' });
       const tripCount = DAYS.reduce((sum, d) => sum + (s.pattern[d]?.length || 0), 0);
+      const isCompareA = _snapCompareA && _snapCompareA.id === s.id;
       row.innerHTML = `
         <div class="flex flex-col gap-0.5 flex-1 min-w-[160px]">
-          <div class="text-sm font-medium">${s.name}</div>
+          <div class="text-sm font-medium">${s.name}${isCompareA ? ' <span class="status-badge status-info text-[10px]">A</span>' : ''}</div>
           <div class="text-xs text-muted-foreground">${when} · ${tripCount} commute trips · ${s.leisure.length} leisure · target ¥${(+s.settings.target).toLocaleString('en-US')}</div>
         </div>
+        <button type="button" class="btn btn-ghost sm text-xs" data-snap-compare="${s.id}" data-tooltip="${isCompareA ? 'Cancel compare selection' : (_snapCompareA ? `Diff vs "${_snapCompareA.name}"` : 'Pick as A, then click on another snapshot to diff')}">
+          <span data-icon="list" data-size="12"></span><span class="btn-label">${isCompareA ? 'Cancel A' : (_snapCompareA ? 'Compare with A' : 'Compare')}</span>
+        </button>
         <button type="button" class="btn btn-ghost sm text-xs" data-snap-restore="${s.id}">
           <span data-icon="undo" data-size="12"></span><span class="btn-label">Restore</span>
         </button>
@@ -1909,6 +2000,7 @@
     });
     wrap.querySelectorAll('[data-snap-restore]').forEach((b) => b.addEventListener('click', (e) => restoreSnapshot(e.currentTarget.getAttribute('data-snap-restore'))));
     wrap.querySelectorAll('[data-snap-delete]').forEach((b) => b.addEventListener('click', (e) => deleteSnapshot(e.currentTarget.getAttribute('data-snap-delete'))));
+    wrap.querySelectorAll('[data-snap-compare]').forEach((b) => b.addEventListener('click', (e) => pickSnapshotForCompare(e.currentTarget.getAttribute('data-snap-compare'))));
     if (window.refreshIcons) window.refreshIcons(wrap);
   }
 
