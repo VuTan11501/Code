@@ -163,14 +163,36 @@
     wrap.innerHTML = '';
     // Filter chip row (All / 7d / 30d). Filter state is held on the wrap element.
     const filter = wrap.dataset.recentFilter || 'all';
+    const search = (wrap.dataset.recentSearch || '').trim().toLowerCase();
     const now = Date.now();
     const DAY_MS = 86400000;
     const filtered = list.filter((r) => {
-      if (filter === 'all') return true;
-      const age = (now - new Date(r.when).getTime()) / DAY_MS;
-      if (filter === '7d') return age <= 7;
-      if (filter === '30d') return age <= 30;
+      if (filter !== 'all') {
+        const age = (now - new Date(r.when).getTime()) / DAY_MS;
+        if (filter === '7d' && age > 7) return false;
+        if (filter === '30d' && age > 30) return false;
+      }
+      if (search) {
+        const hay = ((r.filename || '') + ' ' + (r.routes || []).join(' ') + ' ' + r.month).toLowerCase();
+        if (hay.indexOf(search) < 0) return false;
+      }
       return true;
+    });
+    // Search input row
+    const searchRow = document.createElement('div');
+    searchRow.className = 'mb-2';
+    searchRow.innerHTML = `
+      <input type="search" id="planner-recent-search" class="input input-sm w-full" placeholder="Search filename, route, or YYYY-MM…" value="${(wrap.dataset.recentSearch || '').replace(/"/g, '&quot;')}" autocomplete="off">
+    `;
+    wrap.appendChild(searchRow);
+    const searchInput = searchRow.querySelector('#planner-recent-search');
+    searchInput.addEventListener('input', () => {
+      wrap.dataset.recentSearch = searchInput.value;
+      const focusPos = searchInput.selectionStart;
+      renderRecent();
+      // re-grab and restore focus + caret because renderRecent rebuilds the DOM
+      const fresh = $('planner-recent-search');
+      if (fresh) { fresh.focus(); if (typeof focusPos === 'number') fresh.setSelectionRange(focusPos, focusPos); }
     });
     const chipRow = document.createElement('div');
     chipRow.className = 'flex items-center gap-1 text-[10px] uppercase tracking-wide text-muted-foreground mb-2';
