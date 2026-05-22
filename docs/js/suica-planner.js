@@ -871,19 +871,34 @@
       }
       // "Copy to other weekdays" button — only shown when this day has trips
       // and there is at least one other weekday to copy to.
+      // For weekend days (Sat/Sun), this button mirrors to the other weekend day.
       if (state.pattern[day].length) {
+        const isWeekend = day === 'saturday' || day === 'sunday';
         const copyBtn = document.createElement('button');
         copyBtn.type = 'button';
         copyBtn.className = 'btn btn-ghost sm text-xs flex-none';
-        copyBtn.setAttribute('aria-label', `Copy ${DAY_LABELS[day]} pattern to other weekdays`);
-        copyBtn.setAttribute('data-tooltip', 'Copy to other weekdays (Mon–Fri)');
-        copyBtn.innerHTML = '<span data-icon="chevronRight" data-size="12"></span>';
-        copyBtn.addEventListener('click', () => {
-          const weekdays = DAYS.slice(0, 5);
-          const target = state.pattern[day].map((t) => ({ ...t }));
-          weekdays.forEach((d) => { if (d !== day) state.pattern[d] = target.map((t) => ({ ...t })); });
-          renderPattern(); renderEstimate(); saveState();
-        });
+        if (isWeekend) {
+          const otherDay = day === 'saturday' ? 'sunday' : 'saturday';
+          copyBtn.setAttribute('aria-label', `Mirror ${DAY_LABELS[day]} pattern to ${DAY_LABELS[otherDay]}`);
+          copyBtn.setAttribute('data-tooltip', `Copy to ${DAY_LABELS[otherDay]}`);
+          copyBtn.innerHTML = '<span data-icon="chevronRight" data-size="12"></span>';
+          copyBtn.addEventListener('click', () => {
+            pushHistory();
+            state.pattern[otherDay] = state.pattern[day].map((t) => ({ ...t }));
+            renderPattern(); renderEstimate(); saveState();
+            if (window.Toast) window.Toast.info(`${DAY_LABELS[day]} → ${DAY_LABELS[otherDay]}`, { duration: 2200 });
+          });
+        } else {
+          copyBtn.setAttribute('aria-label', `Copy ${DAY_LABELS[day]} pattern to other weekdays`);
+          copyBtn.setAttribute('data-tooltip', 'Copy to other weekdays (Mon–Fri)');
+          copyBtn.innerHTML = '<span data-icon="chevronRight" data-size="12"></span>';
+          copyBtn.addEventListener('click', () => {
+            const weekdays = DAYS.slice(0, 5);
+            const target = state.pattern[day].map((t) => ({ ...t }));
+            weekdays.forEach((d) => { if (d !== day) state.pattern[d] = target.map((t) => ({ ...t })); });
+            renderPattern(); renderEstimate(); saveState();
+          });
+        }
         row.appendChild(copyBtn);
         if (window.refreshIcons) window.refreshIcons(copyBtn);
       }
