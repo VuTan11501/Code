@@ -287,21 +287,23 @@ function renderTimesheet() {
     const otGross      = baseOTLine + sundayLine + nightLine + SAL.FIXED_ALLOWANCE_YEN;
     const F = window.OT_SALARY.formatYen;
 
-    const realSlip = window.OT_SALARY.findPayslipForMonth(_tsState.payslips, key);
-    const baseline = window.OT_SALARY.pickBaselinePayslip(_tsState.payslips, key);
+    const realSlip = window.OT_SALARY.findPayslipForWorkMonth(_tsState.payslips, key);
+    const baseline = window.OT_SALARY.pickBaselineForWorkMonth(_tsState.payslips, key);
+    const payDateStr = window.OT_SALARY.formatPayDate(key);
 
     let salaryVal, salaryTip;
     if (realSlip && realSlip.take_home != null) {
       salaryVal = `${F(realSlip.take_home)} <span class="ts-chip-badge ts-chip-badge-actual">actual</span>`;
-      salaryTip = `Actual take-home for ${realSlip.month} (from payslip):\n`
+      salaryTip = `Actual take-home for work month ${key}\n`
+                + `(paid ${payDateStr} · payslip ${realSlip.month})\n`
                 + `• Gross: ${F(realSlip.gross || 0)}\n`
                 + `• Take-home: ${F(realSlip.take_home)}\n`
                 + `(All deductions applied: insurance, taxes, rent, fees)`;
     } else if (baseline) {
       const est = window.OT_SALARY.calcFullMonthEstimate(otGross, baseline, { basicSalaryIndex: 1.0 });
       salaryVal = `${F(est.takeHome)} <span class="ts-chip-badge">est.</span>`;
-      salaryTip = `Estimated take-home for ${key}\n`
-                + `(baseline: payslip ${baseline.month})\n`
+      salaryTip = `Estimated take-home for work month ${key}\n`
+                + `(will be paid ${payDateStr} · baseline: payslip ${baseline.month})\n`
                 + `• Total gross: ${F(est.gross)}\n`
                 + `  · contract: ${F(est.contractGross)}\n`
                 + `  · OT (incl. ¥20k fixed): ${F(est.otGross)}\n`

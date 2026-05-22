@@ -1153,16 +1153,18 @@ function renderOtStats() {
   // Take-home chip — real payslip if available, else estimate from baseline
   let takeHomeStr = '—', takeHomeTip = 'No payslip data', takeHomeBadge = '';
   if (window.OT_SALARY && sal) {
-    const realSlip = window.OT_SALARY.findPayslipForMonth(_otState.payslips, monthPrefix.slice(0, 7));
-    const baseline = window.OT_SALARY.pickBaselinePayslip(_otState.payslips, monthPrefix.slice(0, 7));
+    const realSlip = window.OT_SALARY.findPayslipForWorkMonth(_otState.payslips, monthPrefix.slice(0, 7));
+    const baseline = window.OT_SALARY.pickBaselineForWorkMonth(_otState.payslips, monthPrefix.slice(0, 7));
+    const wmKey = monthPrefix.slice(0, 7);
+    const payDateStr = window.OT_SALARY.formatPayDate(wmKey);
     if (realSlip && realSlip.take_home != null) {
       takeHomeStr = window.OT_SALARY.formatYen(realSlip.take_home);
       takeHomeBadge = ' ✓';
-      takeHomeTip = `Actual take-home for ${realSlip.month} (from payslip):\n• Gross: ${window.OT_SALARY.formatYen(realSlip.gross || 0)}\n• Take-home: ${window.OT_SALARY.formatYen(realSlip.take_home)}\n(All deductions applied: insurance, taxes, rent, fees)`;
+      takeHomeTip = `Actual take-home for work month ${wmKey}\n(paid ${payDateStr} · payslip ${realSlip.month}):\n• Gross: ${window.OT_SALARY.formatYen(realSlip.gross || 0)}\n• Take-home: ${window.OT_SALARY.formatYen(realSlip.take_home)}\n(All deductions applied: insurance, taxes, rent, fees)`;
     } else if (baseline) {
       const est = window.OT_SALARY.calcFullMonthEstimate(sal.gross, baseline, { basicSalaryIndex: 1.0 });
       takeHomeStr = window.OT_SALARY.formatYen(est.takeHome);
-      takeHomeTip = `Estimated take-home for ${monthPrefix.slice(0, 7)}\n(baseline: payslip ${baseline.month})\n• Total gross: ${window.OT_SALARY.formatYen(est.gross)}\n• − Insurance: ${window.OT_SALARY.formatYen(est.insuranceTotal)}\n• − Income tax: ${window.OT_SALARY.formatYen(est.incomeTax)}\n• − Resident tax: ${window.OT_SALARY.formatYen(est.residentTax)}\n• − Company receivables: ${window.OT_SALARY.formatYen(est.companyReceivables)}\n= ${window.OT_SALARY.formatYen(est.takeHome)}`;
+      takeHomeTip = `Estimated take-home for work month ${wmKey}\n(will be paid ${payDateStr} · baseline: payslip ${baseline.month})\n• Total gross: ${window.OT_SALARY.formatYen(est.gross)}\n• − Insurance: ${window.OT_SALARY.formatYen(est.insuranceTotal)}\n• − Income tax: ${window.OT_SALARY.formatYen(est.incomeTax)}\n• − Resident tax: ${window.OT_SALARY.formatYen(est.residentTax)}\n• − Company receivables: ${window.OT_SALARY.formatYen(est.companyReceivables)}\n= ${window.OT_SALARY.formatYen(est.takeHome)}`;
     }
   }
 
@@ -1238,8 +1240,8 @@ function renderOtBudget() {
 
   // Net take-home: prefer real payslip when available; otherwise estimate
   // using the latest payslip as fixed-cost baseline (insurance, rent, …).
-  const realSlip = window.OT_SALARY.findPayslipForMonth(_otState.payslips, monthKey);
-  const baseline = window.OT_SALARY.pickBaselinePayslip(_otState.payslips, monthKey);
+  const realSlip = window.OT_SALARY.findPayslipForWorkMonth(_otState.payslips, monthKey);
+  const baseline = window.OT_SALARY.pickBaselineForWorkMonth(_otState.payslips, monthKey);
   let netHtml = '';
   if (realSlip && realSlip.take_home != null) {
     // ━━ ACTUAL from payslip ━━
@@ -1788,11 +1790,11 @@ function openPayslipDetail(monthKey, isEstimate) {
   if (!body || !modal) return;
   const F = window.OT_SALARY.formatYen;
 
-  let slip = window.OT_SALARY.findPayslipForMonth(_otState.payslips, monthKey);
+  let slip = window.OT_SALARY.findPayslipForWorkMonth(_otState.payslips, monthKey);
   let source = 'actual';
   if (!slip || isEstimate) {
     // Build a synthetic "slip" from estimate
-    const baseline = window.OT_SALARY.pickBaselinePayslip(_otState.payslips, monthKey);
+    const baseline = window.OT_SALARY.pickBaselineForWorkMonth(_otState.payslips, monthKey);
     if (!baseline) {
       body.innerHTML = '<div class="empty text-muted-foreground text-sm p-4 text-center">No payslip data available.</div>';
       modal.classList.add('open');

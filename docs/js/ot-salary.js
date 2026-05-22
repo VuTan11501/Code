@@ -427,11 +427,50 @@ function findPayslipForMonth(payslips, month) {
   return payslips.find(p => p && p.month === month && !p.bonus) || null;
 }
 
+// ─── PAYROLL CYCLE HELPERS ───────────────────────────────────────────────
+// At FJP the salary cycle is: work done in month X (incl. all OT) is paid
+// on day 22 of month X+1. So `payslip.month` (= pay-date month) corresponds
+// to work done in `payslip.month − 1`. Use these helpers whenever the
+// surrounding code thinks in terms of WORK MONTH (e.g. timesheet view, OT
+// planner calendar) instead of pay-date.
+const PAY_DAY_OF_MONTH = 22;
+function _shiftMonth(ym, delta) {
+  if (!ym) return ym;
+  const [y, m] = ym.split('-').map(Number);
+  const d = new Date(Date.UTC(y, m - 1 + delta, 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+function workMonthToPayMonth(workMonth) { return _shiftMonth(workMonth, 1); }
+function payMonthToWorkMonth(payMonth)  { return _shiftMonth(payMonth, -1); }
+
+// Find payslip whose work-month equals `workMonth` (i.e. payslip.month = wm+1)
+function findPayslipForWorkMonth(payslips, workMonth) {
+  return findPayslipForMonth(payslips, workMonthToPayMonth(workMonth));
+}
+
+// Latest baseline payslip representing work strictly older than `workMonth`.
+// Equivalent to pickBaselinePayslip(payslips, payMonth(workMonth)) so the
+// real payslip for `workMonth` (if any) is excluded.
+function pickBaselineForWorkMonth(payslips, workMonth) {
+  return pickBaselinePayslip(payslips, workMonthToPayMonth(workMonth));
+}
+
+// Returns "May 22, 2026" given workMonth "2026-04" (pay date for that work)
+function formatPayDate(workMonth) {
+  const pay = workMonthToPayMonth(workMonth);
+  if (!pay) return '';
+  const [y, m] = pay.split('-').map(Number);
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return `${months[m - 1]} ${PAY_DAY_OF_MONTH}, ${y}`;
+}
+
 // Expose for ot-planner.js (vanilla, no module system)
 window.OT_SALARY = {
-  SALARY, FIXED_ALLOWANCE_HOURS, DEDUCTIONS,
+  SALARY, FIXED_ALLOWANCE_HOURS, DEDUCTIONS, PAY_DAY_OF_MONTH,
   splitOtByDay, calcOtBreakdown, calcMonthlySummary,
   calcMonthlyEstimate, calcTakeHomeDelta,
   calcFullMonthEstimate, pickBaselinePayslip, findPayslipForMonth,
+  workMonthToPayMonth, payMonthToWorkMonth,
+  findPayslipForWorkMonth, pickBaselineForWorkMonth, formatPayDate,
   formatYen, formatHours,
 };
