@@ -85,6 +85,42 @@
     badge.textContent = `+${next} earlier notifications dismissed`;
   }
 
+  // ─ Optional click/blip sound on toast (off by default; opt-in via
+  // localStorage 'toast-sound' = '1' or window.Toast.setSound(true)). Uses
+  // Web Audio so no asset download is needed.
+  let _audioCtx = null;
+  function _getCtx() {
+    if (_audioCtx) return _audioCtx;
+    const C = window.AudioContext || window.webkitAudioContext;
+    if (!C) return null;
+    try { _audioCtx = new C(); } catch (_) { _audioCtx = null; }
+    return _audioCtx;
+  }
+  function _playBlip(variant) {
+    if (localStorage.getItem('toast-sound') !== '1') return;
+    if (reduceMotion()) return;
+    const ctx = _getCtx(); if (!ctx) return;
+    try {
+      const freqMap = { info: 660, success: 880, warning: 520, error: 260 };
+      const baseF = freqMap[variant] || 660;
+      const now = ctx.currentTime;
+      const beep = (start, freq, dur = 0.08, vol = 0.05) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0.0001, start);
+        gain.gain.exponentialRampToValueAtTime(vol, start + 0.005);
+        gain.gain.exponentialRampToValueAtTime(0.0001, start + dur);
+        osc.connect(gain).connect(ctx.destination);
+        osc.start(start);
+        osc.stop(start + dur + 0.02);
+      };
+      beep(now, baseF);
+      if (variant === 'error') beep(now + 0.11, baseF * 0.8);
+    } catch (_) { /* ignore */ }
+  }
+
   function show(message, opts) {
     opts = opts || {};
     const variant = opts.variant || 'info';
@@ -145,6 +181,7 @@
     host.appendChild(card);
     if (window.refreshIcons) window.refreshIcons(card);
     pruneStack(host);
+    _playBlip(variant);
 
     // Animate in
     requestAnimationFrame(() => {
@@ -200,5 +237,7 @@
     success: (m, o) => show(m, Object.assign({ variant: 'success' }, o)),
     warning: (m, o) => show(m, Object.assign({ variant: 'warning' }, o)),
     error:   (m, o) => show(m, Object.assign({ variant: 'error', duration: 6000 }, o)),
+    setSound: (on) => { try { localStorage.setItem('toast-sound', on ? '1' : '0'); } catch (_) {} },
+    getSound: () => { try { return localStorage.getItem('toast-sound') === '1'; } catch (_) { return false; } },
   };
 })();

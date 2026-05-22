@@ -259,6 +259,9 @@
       <button id="suica-density-toggle" type="button" class="btn sm btn-ghost" aria-label="Toggle compact density" data-tooltip="Toggle compact / comfortable density">
         <span style="font-size:14px;line-height:1">▤</span>
       </button>
+      <button id="suica-sound-toggle" type="button" class="btn sm btn-ghost" aria-label="Toggle toast sounds" data-tooltip="Toggle subtle toast sounds (off by default)">
+        <span style="font-size:14px;line-height:1" data-sound-icon>🔕</span>
+      </button>
       <select id="suica-lang-select" class="input input-sm w-auto text-xs" aria-label="UI language" data-tooltip="Switch UI language (limited coverage)">
         <option value="en">EN</option>
         <option value="ja">日本語</option>
@@ -799,11 +802,11 @@
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js" defer></script>
 <script src="js/icons.js?v=1" defer></script>
 <script src="js/theme.js?v=1" defer></script>
-<script src="js/ui-toast.js?v=1" defer></script>
+<script src="js/ui-toast.js?v=2" defer></script>
 <script src="js/suica-history.js?v=6" defer></script>
 <script src="js/log-viewer.js?v=1" defer></script>
 <script>window.SUICA_FARE_API='https://suica-fare-proxy.workflow-dashboard.workers.dev';</script>
-<script src="js/suica-planner.js?v=95" defer></script>
+<script src="js/suica-planner.js?v=96" defer></script>
 <script>
 // Theme toggle for suica.html (mirrors the dashboard's behavior; uses the same
 // localStorage key so the preference syncs across pages).
@@ -862,6 +865,30 @@
       apply(next);
       try { localStorage.setItem(KEY, next); } catch (_) {}
       if (window.Toast) window.Toast.info('Density: ' + next);
+    });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();
+</script>
+<script>
+// Toast sound toggle (off by default). Persists to localStorage 'toast-sound'.
+(function () {
+  function init() {
+    var btn = document.getElementById('suica-sound-toggle');
+    if (!btn) return;
+    var icon = btn.querySelector('[data-sound-icon]');
+    function paint() {
+      var on = window.Toast && window.Toast.getSound && window.Toast.getSound();
+      if (icon) icon.textContent = on ? '🔔' : '🔕';
+      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    }
+    paint();
+    btn.addEventListener('click', function () {
+      var on = !(window.Toast && window.Toast.getSound && window.Toast.getSound());
+      if (window.Toast && window.Toast.setSound) window.Toast.setSound(on);
+      paint();
+      if (window.Toast) window.Toast.info(on ? '🔔 Toast sounds enabled' : '🔕 Toast sounds muted');
     });
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
