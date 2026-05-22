@@ -145,6 +145,36 @@
     #planner-recent-section .card-content,
     .card-content { padding: 12px !important; }
   }
+
+  /* ─── prefers-reduced-motion: kill all transitions/animations ─── */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+      scroll-behavior: auto !important;
+    }
+    /* The progress bar still works, just snaps instead of slides */
+    #planner-estimate-bar { transition: none !important; }
+  }
+
+  /* ─── Stronger focus ring for keyboard users ─── */
+  :focus-visible {
+    outline: 2px solid var(--primary, #3b82f6) !important;
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+  .btn:focus-visible,
+  .combobox-trigger:focus-visible,
+  .input:focus-visible {
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.35);
+  }
+
+  /* ─── High-contrast users (forced-colors) ─── */
+  @media (forced-colors: active) {
+    .status-badge { border: 1px solid CanvasText; }
+    .btn { border: 1px solid CanvasText; }
+  }
 </style>
 </head>
 <body class="bg-background text-foreground font-sans text-sm antialiased min-h-dvh overflow-x-hidden">
