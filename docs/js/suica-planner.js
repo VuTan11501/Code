@@ -1031,12 +1031,14 @@
       meter.appendChild(sumLabel);
       wrap.appendChild(meter);
     }
+    const JP_DAYS = { monday: '月', tuesday: '火', wednesday: '水', thursday: '木', friday: '金', saturday: '土', sunday: '日' };
     DAYS.forEach((day) => {
       const row = document.createElement('div');
       row.className = 'flex items-center gap-2 py-1.5 border-b border-border last:border-b-0';
       const label = document.createElement('div');
-      label.className = 'text-xs text-muted-foreground font-medium w-10 flex-none';
-      label.textContent = DAY_LABELS[day];
+      label.className = 'text-xs text-muted-foreground font-medium w-10 flex-none flex items-center gap-1';
+      label.setAttribute('data-tooltip', `${DAY_LABELS[day]} · 日本語: ${JP_DAYS[day]}曜日`);
+      label.innerHTML = `<span>${DAY_LABELS[day]}</span><span class="font-mono text-[10px] opacity-60">${JP_DAYS[day]}</span>`;
       row.appendChild(label);
       const chips = document.createElement('div');
       chips.className = 'flex flex-wrap gap-1.5 flex-1';
