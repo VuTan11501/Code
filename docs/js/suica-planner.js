@@ -141,7 +141,12 @@
     const lastPrev = values[values.length - 2];
     const trendCls = last >= lastPrev ? 'text-success' : 'text-warning';
     const trendArrow = last >= lastPrev ? '▲' : '▼';
-    const tooltip = `Target ¥ trend (last ${values.length}): ${values.map((v) => '¥' + v.toLocaleString()).join(' → ')} — right-click to save PNG`;
+    const tooltip = (function () {
+      const vmin = Math.min(...values);
+      const vmax = Math.max(...values);
+      const vavg = Math.round(values.reduce((a, b) => a + b, 0) / values.length);
+      return `Target ¥ trend (last ${values.length}): ${values.map((v) => '¥' + v.toLocaleString()).join(' → ')}\nmin ¥${vmin.toLocaleString()} · avg ¥${vavg.toLocaleString()} · max ¥${vmax.toLocaleString()}\nRight-click to save PNG`;
+    })();
     return `
       <div class="flex items-center gap-2 mb-2 text-xs text-muted-foreground" data-tooltip="${tooltip}" data-spark-trend="1">
         <span>Trend:</span>
