@@ -434,10 +434,24 @@
       state.stations = Array.from(set).sort((x, y) => x.localeCompare(y, 'ja'));
       buildFareGraph();
       populateComboboxes();
+      const ageMs = Date.now() - new Date(OFFICIAL_FARE_DATE).getTime();
+      const ageDays = Math.max(0, Math.floor(ageMs / 86400000));
+      const ageLabel = ageDays < 1 ? 'today'
+        : ageDays < 30 ? `${ageDays}d ago`
+        : ageDays < 365 ? `${Math.floor(ageDays / 30)}mo ago`
+        : `${(ageDays / 365).toFixed(1)}yr ago`;
+      const ageVariant = ageDays < 60 ? 'status-success' : ageDays < 180 ? 'status-pending' : 'status-warning';
       setStatus(
-        `<strong>${state.stations.length}</strong> Kanto stations · <strong>${withCoords}</strong> with coordinates · <strong>${Object.keys(state.fares).length}</strong> verified IC fares. Search supports kanji, kana, and romaji.`,
+        `<strong>${state.stations.length}</strong> Kanto stations · <strong>${withCoords}</strong> with coordinates · <strong>${Object.keys(state.fares).length}</strong> verified IC fares. Search supports kanji, kana, and romaji.
+         <span class="ml-2 status-badge ${ageVariant} text-[10px]" data-tooltip="JR East IC fare schedule effective ${new Date(OFFICIAL_FARE_DATE).toLocaleDateString()}">fares verified ${ageLabel}</span>
+         <button type="button" id="planner-fares-refresh" class="btn btn-ghost xs text-[10px] ml-1" data-tooltip="Re-fetch kanto_fares.json (bypasses HTTP cache)">↻ refresh</button>`,
         'info'
       );
+      const refreshBtn = document.getElementById('planner-fares-refresh');
+      if (refreshBtn) refreshBtn.addEventListener('click', () => {
+        refreshBtn.disabled = true; refreshBtn.textContent = 'refreshing…';
+        loadFares().then(() => { if (window.Toast) window.Toast.success('Fare data reloaded'); });
+      });
     } catch (err) {
       setStatus(`Failed to load fare data: ${err.message}`, 'error');
     }
