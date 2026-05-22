@@ -51,7 +51,6 @@
       if (window.refreshIcons) window.refreshIcons(box);
     };
     try {
-      // Fetch both files in parallel. Stations is optional (degrades gracefully).
       const [faresRes, stationsRes] = await Promise.all([
         fetch('data/kanto_fares.json', { cache: 'no-cache' }),
         fetch('data/kanto_stations.json', { cache: 'no-cache' }).catch(() => null),
@@ -66,33 +65,83 @@
         if (a) set.add(a); if (b) set.add(b);
       });
 
-      // Merge in the wider station catalogue (kanji + kana + romaji)
       state.stationMeta = {};
+      let withCoords = 0;
       if (stationsRes && stationsRes.ok) {
         try {
           const sdata = await stationsRes.json();
+          // Dedupe by name: for ambiguous names (~9 in Kanto) keep the entry
+          // with the most lines (heuristic for "more well-known"). User-visible
+          // sub-label still shows the prefecture so it's never confusing.
+          const byName = {};
           (sdata.stations || []).forEach((s) => {
             if (!s || !s.name) return;
+            const cur = byName[s.name];
+            const score = (s.lines || []).length;
+            if (!cur || score > cur._score) {
+              byName[s.name] = Object.assign({}, s, { _score: score });
+            }
+          });
+          Object.values(byName).forEach((s) => {
             set.add(s.name);
             state.stationMeta[s.name] = {
+              pref: s.pref || '',
               kana: s.kana || '',
               romaji: (s.romaji || '').toLowerCase(),
               alt: (s.alt || []).map((x) => String(x).toLowerCase()),
+              lat: typeof s.lat === 'number' ? s.lat : null,
+              lon: typeof s.lon === 'number' ? s.lon : null,
+              lines: s.lines || [],
             };
+            if (state.stationMeta[s.name].lat != null) withCoords++;
           });
         } catch (e) { console.warn('stations.json parse failed:', e); }
       }
       state.stations = Array.from(set).sort((x, y) => x.localeCompare(y, 'ja'));
       buildFareGraph();
       populateComboboxes();
-      const withRomaji = Object.keys(state.stationMeta).length;
       setStatus(
-        `<strong>${state.stations.length}</strong> Kanto stations (${withRomaji} searchable by romaji) · <strong>${Object.keys(state.fares).length}</strong> known IC fares. Pick a route above to add it to your plan.`,
+        `<strong>${state.stations.length}</strong> Kanto stations · <strong>${withCoords}</strong> with coordinates · <strong>${Object.keys(state.fares).length}</strong> verified IC fares. Search supports kanji, kana, and romaji.`,
         'info'
       );
     } catch (err) {
       setStatus(`Failed to load fare data: ${err.message}`, 'error');
     }
+  }
+
+  // ────── Geodesic distance + JR East IC tariff (Tier-3 fallback) ──────
+  // Source: JR East publicly-published IC運賃 brackets (本州3社, post-2026/03).
+  // We use these as conservative upper-bound estimates for any pair whose
+  // exact fare we don't know and which the Dijkstra graph cannot connect.
+  function _haversineKm(a, b) {
+    const m1 = state.stationMeta[a], m2 = state.stationMeta[b];
+    if (!m1 || !m2 || m1.lat == null || m2.lat == null) return null;
+    const R = 6371; // km
+    const toRad = (x) => x * Math.PI / 180;
+    const dLat = toRad(m2.lat - m1.lat);
+    const dLon = toRad(m2.lon - m1.lon);
+    const la1 = toRad(m1.lat), la2 = toRad(m2.lat);
+    const h = Math.sin(dLat/2)**2 + Math.cos(la1)*Math.cos(la2)*Math.sin(dLon/2)**2;
+    return 2 * R * Math.asin(Math.sqrt(h));
+  }
+  // Distance brackets are great-circle km × 1.25 detour factor → tariff km.
+  function _tariffYen(rawKm) {
+    const km = rawKm * 1.25;
+    if (km <= 3)  return 146;
+    if (km <= 6)  return 168;
+    if (km <= 10) return 178;
+    if (km <= 15) return 210;
+    if (km <= 20) return 240;
+    if (km <= 25) return 330;
+    if (km <= 30) return 510;
+    if (km <= 40) return 660;
+    if (km <= 50) return 820;
+    if (km <= 60) return 990;
+    if (km <= 70) return 1170;
+    if (km <= 80) return 1340;
+    if (km <= 100) return 1690;
+    if (km <= 120) return 1980;
+    return Math.round(1980 + (km - 120) * 16);
   }
 
   // ────── Combobox component (shadcn-style) ──────
@@ -102,13 +151,17 @@
   function _searchHaystack(name) {
     const m = state.stationMeta && state.stationMeta[name];
     if (!m) return name.toLowerCase();
-    // Build a single lowercase haystack: kanji + kana + romaji + alts
-    return (name + ' ' + (m.kana || '') + ' ' + (m.romaji || '') + ' ' + (m.alt || []).join(' ')).toLowerCase();
+    return (
+      name + ' ' + (m.kana || '') + ' ' + (m.romaji || '') + ' ' +
+      (m.alt || []).join(' ') + ' ' + (m.pref || '') + ' ' + (m.lines || []).join(' ')
+    ).toLowerCase();
   }
   function _renderOption(name) {
     const m = state.stationMeta && state.stationMeta[name];
-    if (!m || !m.romaji) return `<span class="combobox-item-name">${name}</span>`;
-    return `<span class="combobox-item-name">${name}</span><span class="combobox-item-sub">${m.romaji}</span>`;
+    if (!m) return `<span class="combobox-item-name">${name}</span>`;
+    const sub = m.romaji || '';
+    const pref = m.pref ? ` · ${m.pref}` : '';
+    return `<span class="combobox-item-name">${name}</span><span class="combobox-item-sub">${sub}${pref}</span>`;
   }
   function createCombobox(wrapper, opts) {
     const trigger = wrapper.querySelector('.combobox-trigger');
@@ -176,12 +229,16 @@
         listEl.innerHTML = '<div class="combobox-empty">No matches</div>';
         return;
       }
-      listEl.innerHTML = filtered.map((o, i) => {
+      // Cap rendered DOM nodes for perf with ~2000 stations.
+      const MAX = 200;
+      const shown = filtered.slice(0, MAX);
+      const overflow = filtered.length - shown.length;
+      listEl.innerHTML = shown.map((o, i) => {
         const cls = ['combobox-item'];
         if (o === value) cls.push('is-selected');
         if (i === activeIdx) cls.push('is-active');
         return `<div class="${cls.join(' ')}" data-i="${i}" role="option">${_renderOption(o)}</div>`;
-      }).join('');
+      }).join('') + (overflow > 0 ? `<div class="combobox-empty">+ ${overflow} more — keep typing to narrow</div>` : '');
       listEl.querySelectorAll('.combobox-item').forEach((el) => {
         el.addEventListener('click', () => choose(filtered[+el.dataset.i]));
         el.addEventListener('mousemove', () => { activeIdx = +el.dataset.i; updateActive(); });
@@ -310,19 +367,34 @@
     state._fareCache = state._fareCache || {};
     if (state._fareCache[key]) return state._fareCache[key];
     const sp = shortestFare(a, b);
-    if (sp) {
+    // Also compute distance-based tariff. We pick the smaller of (graph, tariff)
+    // because graph estimates are upper bounds (real express routes are shorter).
+    const km = _haversineKm(a, b);
+    const tariffYen = km != null ? _tariffYen(km) : null;
+    let r;
+    if (sp && tariffYen != null) {
+      // Both available — pick the lower (tighter upper bound)
+      if (tariffYen <= sp.fare) {
+        r = { fare: tariffYen, source: 'distance', km };
+      } else {
+        const hops = sp.path.length - 1;
+        const via = hops > 1 ? sp.path.slice(1, -1).join('→') : '';
+        r = { fare: sp.fare, source: 'graph', hops, via };
+      }
+    } else if (sp) {
       const hops = sp.path.length - 1;
       const via = hops > 1 ? sp.path.slice(1, -1).join('→') : '';
-      const r = { fare: sp.fare, source: 'graph', hops, via };
-      state._fareCache[key] = r;
-      return r;
+      r = { fare: sp.fare, source: 'graph', hops, via };
+    } else if (tariffYen != null) {
+      r = { fare: tariffYen, source: 'distance', km };
+    } else {
+      const vals = Object.values(state.fares);
+      if (!vals.length) return null;
+      const sorted = vals.slice().sort((x, y) => x - y);
+      r = { fare: sorted[Math.floor(sorted.length / 2)], source: 'estimate' };
     }
-    // Last-resort: median of known fares (rare — only if either station is isolated)
-    const vals = Object.values(state.fares);
-    if (!vals.length) return null;
-    const sorted = vals.slice().sort((x, y) => x - y);
-    const median = sorted[Math.floor(sorted.length / 2)];
-    return { fare: median, source: 'estimate' };
+    state._fareCache[key] = r;
+    return r;
   }
 
   function updateFareDisplay() {
@@ -339,12 +411,14 @@
     const r = lookupFare(from, to);
     if (!r) { setBadge('No data', 'status-skipped'); addBtns.forEach((b) => b.setAttribute('disabled', '')); return; }
     if (r.source === 'known') {
-      setBadge(`${fmtYen(r.fare)} · known IC`, 'status-success');
+      setBadge(`${fmtYen(r.fare)} · verified IC fare`, 'status-success');
+    } else if (r.source === 'distance') {
+      setBadge(`${fmtYen(r.fare)} · est. from ${r.km.toFixed(1)} km (JR tariff)`, 'status-pending');
     } else if (r.source === 'graph') {
       const viaTxt = r.via ? ` via ${r.via}` : '';
-      setBadge(`${fmtYen(r.fare)} · ${r.hops}-hop estimate${viaTxt}`, 'status-pending');
+      setBadge(`${fmtYen(r.fare)} · ${r.hops}-hop graph est.${viaTxt}`, 'status-pending');
     } else {
-      setBadge(`${fmtYen(r.fare)} · rough estimate (no path data)`, 'status-pending');
+      setBadge(`${fmtYen(r.fare)} · rough estimate`, 'status-pending');
     }
     addBtns.forEach((b) => b.removeAttribute('disabled'));
   }
