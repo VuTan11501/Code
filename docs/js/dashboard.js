@@ -27,10 +27,12 @@ function loadCardOrder() {
 
 function saveCardOrder(arr) {
   try { localStorage.setItem(CARD_ORDER_KEY, JSON.stringify(arr)); } catch {}
+  if (window.CloudSync) window.CloudSync.markDirty();
 }
 
 function clearCardOrder() {
   try { localStorage.removeItem(CARD_ORDER_KEY); } catch {}
+  if (window.CloudSync) window.CloudSync.markDirty();
 }
 
 function applyCardOrder(workflowList) {
@@ -75,6 +77,7 @@ function getVisibleCardSet() {
 
 function saveVisibleCardSet(set) {
   try { localStorage.setItem(DASH_VISIBLE_CARDS_KEY, JSON.stringify([...set])); } catch {}
+  if (window.CloudSync) window.CloudSync.markDirty();
 }
 
 function hasCustomVisibility() {
@@ -108,6 +111,7 @@ function toggleCardVisibility(file) {
 
 function resetCardVisibility() {
   try { localStorage.removeItem(DASH_VISIBLE_CARDS_KEY); localStorage.removeItem(DASH_SHOW_INFRA_KEY); } catch {}
+  if (window.CloudSync) window.CloudSync.markDirty();
   renderInfraToggle();
   renderCardPicker();
   const grid = document.getElementById('workflowGrid');
@@ -116,6 +120,21 @@ function resetCardVisibility() {
 }
 
 let _cardPickerOpen = false;
+
+// Called by CloudSync.applyToUI() after a remote pull updates
+// wf_dash_card_order or wf_dash_visible_cards. Re-render the toggle
+// bar + customize modal, then re-render the grid if dashboard is
+// currently visible.
+function applyDashboardSettingsFromCloud() {
+  try { renderInfraToggle(); } catch {}
+  try { if (_cardPickerOpen) renderCardPicker(); } catch {}
+  const page = document.getElementById('page-dashboard');
+  if (page && page.classList.contains('active') && typeof refresh === 'function') {
+    refresh();
+  }
+}
+if (typeof window !== 'undefined') window.applyDashboardSettingsFromCloud = applyDashboardSettingsFromCloud;
+
 function openCardPicker() {
   _cardPickerOpen = true;
   const modal = document.getElementById('dashCustomizeModal');

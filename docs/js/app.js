@@ -224,6 +224,8 @@ function showDashboard() {
     window.CloudSync.register('wf_dash_notif_prefs',    'Notification preferences',  'notif_prefs');
     window.CloudSync.register('sched_pip_filter_v1',    'Schedule filter',           'schedule_filter');
     window.CloudSync.register('wf_dash_theme',          'Theme (light/dark/auto)',   'theme');
+    window.CloudSync.register('wf_dash_card_order',     'Dashboard card order',      'dash_order');
+    window.CloudSync.register('wf_dash_visible_cards',  'Dashboard visible cards',   'dash_visible');
     window.CloudSync.pull().then(r => {
       if (r && r.applied) window.CloudSync.applyToUI();
     });
