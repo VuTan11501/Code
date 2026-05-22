@@ -195,17 +195,13 @@ function lock() {
 function showDashboard() {
   document.getElementById('authScreen').style.display = 'none';
   document.getElementById('dashboard').style.display = 'block';
-  // Always start on dashboard when first entering (ignore stale hash from PWA reopen)
-  const validPages = ['dashboard', 'schedule', 'ai', 'ot', 'settings'];
+  // Honour the URL hash on reload so users stay on the page they were
+  // viewing. Only fall back to #dashboard when no valid hash is set
+  // (e.g. fresh login, or PWA reopened from the home-screen icon).
+  const validPages = ['dashboard', 'schedule', 'ai', 'ot', 'timesheet', 'settings'];
   const hashPage = location.hash.replace('#', '');
   const target = validPages.includes(hashPage) ? location.hash : '#dashboard';
-  // On fresh login/restore, always go to dashboard
-  if (!window._hasNavigated) {
-    window._hasNavigated = true;
-    navigate('#dashboard');
-  } else {
-    navigate(target);
-  }
+  navigate(target);
   startAutoLock();
   startPolling();
   refresh();
