@@ -1890,6 +1890,90 @@
     if (window.Toast) window.Toast.info(`Redone (${_hist.redo.length} left)`);
   }
 
+  // ────── Export schedule as .ics (iCalendar) ──────
+  // Generates ONE event per scheduled trip in the configured month:
+  //   - weekday commute: round-trip morning + evening events
+  //   - weekend leisure: random sample N times where N = (min+max)/2
+  // Calendar can be imported into Google Calendar / Outlook to preview the
+  // synthesized history before generating the PDF.
+  function exportIcs() {
+    const monthInfo = countWeekdaysInMonth(state.settings.month);
+    if (!monthInfo) {
+      if (window.Toast) window.Toast.warning('Set a valid YYYY-MM month first');
+      return;
+    }
+    const [y, m] = state.settings.month.split('-').map(Number);
+    const last = monthInfo.last;
+    const dayKeyByJs = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+    const pad = (n) => String(n).padStart(2, '0');
+    const fmtDt = (yr, mo, d, h, mi) => `${yr}${pad(mo)}${pad(d)}T${pad(h)}${pad(mi)}00`;
+    const lines = [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'PRODID:-//SuicaPlanner//Dashboard//EN',
+      'CALSCALE:GREGORIAN',
+      `X-WR-CALNAME:Suica plan ${state.settings.month}`,
+    ];
+    let eventCount = 0;
+    const addEvent = (date, hour, min, durMin, summary, desc) => {
+      const start = fmtDt(date.getFullYear(), date.getMonth() + 1, date.getDate(), hour, min);
+      const endDate = new Date(date.getTime() + durMin * 60000);
+      const end = fmtDt(endDate.getFullYear(), endDate.getMonth() + 1, endDate.getDate(), endDate.getHours(), endDate.getMinutes());
+      const uid = `${state.settings.month}-${eventCount}-${state.settings.seed}@suica-planner`;
+      lines.push('BEGIN:VEVENT');
+      lines.push(`UID:${uid}`);
+      lines.push(`DTSTAMP:${fmtDt(date.getFullYear(), date.getMonth() + 1, date.getDate(), 0, 0)}Z`);
+      lines.push(`DTSTART:${start}`);
+      lines.push(`DTEND:${end}`);
+      lines.push(`SUMMARY:${summary.replace(/[,;]/g, '\\$&')}`);
+      if (desc) lines.push(`DESCRIPTION:${desc.replace(/[,;]/g, '\\$&').replace(/\n/g, '\\n')}`);
+      lines.push('END:VEVENT');
+      eventCount++;
+    };
+    // Weekday commute: morning ~08:30 + evening ~19:00, 30min duration
+    for (let d = 1; d <= last; d++) {
+      const date = new Date(y, m - 1, d);
+      const dayKey = dayKeyByJs[date.getDay()];
+      const trips = state.pattern[dayKey] || [];
+      trips.forEach((t) => {
+        const fare = fareOf(t.route);
+        addEvent(date, 8, 30, 30, `→ ${t.route}`, `Morning commute · ¥${fare}`);
+        addEvent(date, 19, 0, 30, `← ${t.route}`, `Evening commute · ¥${fare}`);
+      });
+    }
+    // Weekend leisure samples
+    if (state.leisure.length) {
+      const outings = Math.round((+state.settings.leisure_min + +state.settings.leisure_max) / 2);
+      const weekendDates = [];
+      for (let d = 1; d <= last; d++) {
+        const date = new Date(y, m - 1, d);
+        const dow = date.getDay();
+        if (dow === 0 || dow === 6) weekendDates.push(date);
+      }
+      // Deterministic-ish pick using seed
+      let seed = +state.settings.seed || 1;
+      for (let i = 0; i < outings && weekendDates.length; i++) {
+        seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+        const dateIdx = seed % weekendDates.length;
+        const date = weekendDates.splice(dateIdx, 1)[0];
+        seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+        const route = state.leisure[seed % state.leisure.length].route;
+        addEvent(date, 12, 0, 30, `→ ${route}`, `Leisure outing · ¥${fareOf(route)}`);
+        addEvent(date, 18, 0, 30, `← ${route}`, `Leisure return · ¥${fareOf(route)}`);
+      }
+    }
+    lines.push('END:VCALENDAR');
+    const content = lines.join('\r\n');
+    const blob = new Blob([content], { type: 'text/calendar' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `suica-${state.settings.month}.ics`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    if (window.Toast) window.Toast.success(`${eventCount} events · ${state.settings.month}.ics`, { title: 'Calendar exported' });
+  }
+
   function loadSamplePlan() {
     pushHistory();
     state.pattern = {
@@ -2289,6 +2373,11 @@
     if (shareBtn) shareBtn.addEventListener('click', () => {
       copyShareLink();
       const det = shareBtn.closest('details'); if (det) det.removeAttribute('open');
+    });
+    const icsBtn = $('planner-export-ics');
+    if (icsBtn) icsBtn.addEventListener('click', () => {
+      exportIcs();
+      const det = icsBtn.closest('details'); if (det) det.removeAttribute('open');
     });
     renderSnapshots();
     // Offer to import a plan if the URL hash contains one
