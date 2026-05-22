@@ -3320,6 +3320,42 @@
     renderPattern(); renderLeisure(); renderEstimate(); saveState();
   }
 
+  // Apply a weekday pattern preset using the user's currentRoute (if set).
+  // The preset only edits state.pattern[] — leisure / settings untouched.
+  function applyWeekdayPreset(name) {
+    const PRESETS = {
+      office5: { name: 'Office 5d (Mon–Fri)', days: ['monday','tuesday','wednesday','thursday','friday'] },
+      hybrid3: { name: 'Hybrid 3d (Mon Wed Fri)', days: ['monday','wednesday','friday'] },
+      hybrid4: { name: 'Hybrid 4d (no Friday)', days: ['monday','tuesday','wednesday','thursday'] },
+      weekendOnly: { name: 'Weekend trips only', days: [] },
+      holiday: { name: 'Holiday / clear', days: [] },
+    };
+    const preset = PRESETS[name];
+    if (!preset) return;
+    const route = (typeof cbFrom !== 'undefined' && cbFrom && typeof cbTo !== 'undefined' && cbTo)
+      ? pairKey(cbFrom.getValue() || '', cbTo.getValue() || '')
+      : '';
+    if (preset.days.length && (!route || route === '↔')) {
+      if (window.Toast) window.Toast.warning('Pick a From↔To route first, then apply the preset.');
+      return;
+    }
+    pushHistory();
+    const snapshot = {}; DAYS.forEach((d) => { snapshot[d] = state.pattern[d].slice(); });
+    DAYS.forEach((d) => {
+      state.pattern[d] = preset.days.indexOf(d) >= 0 ? [{ route, type: 'commute' }] : [];
+    });
+    renderPattern();
+    renderEstimate();
+    saveState();
+    if (window.Toast) window.Toast.success(`Applied preset: ${preset.name}`, {
+      actionLabel: 'Undo',
+      onAction: () => {
+        DAYS.forEach((d) => { state.pattern[d] = snapshot[d]; });
+        renderPattern(); renderEstimate(); saveState();
+      },
+    });
+  }
+
   function autoSuggest() {
     const status = $('planner-pdf-status');
     const note = (txt, cls) => { if (status) { status.textContent = txt; status.className = 'text-xs ' + (cls || 'text-muted-foreground'); } };
@@ -3676,6 +3712,13 @@
     $('planner-clear').addEventListener('click', clearPlan);
     const sgBtn = $('planner-auto-suggest');
     if (sgBtn) sgBtn.addEventListener('click', autoSuggest);
+    const presetSel = $('planner-pattern-preset');
+    if (presetSel) presetSel.addEventListener('change', () => {
+      const v = presetSel.value;
+      presetSel.value = '';
+      if (!v) return;
+      applyWeekdayPreset(v);
+    });
     const msBtn = $('planner-multi-suggest');
     if (msBtn) msBtn.addEventListener('click', multiSuggest);
     const presetsMenu = $('planner-presets-menu');
