@@ -124,6 +124,12 @@
     list.unshift({ ...meta, when: meta.when || Date.now() });
     saveRecent(list);
     renderRecent();
+    // Smoothly scroll the recent section into view so the user sees the new
+    // entry without manually searching for it.
+    const sec = document.getElementById('planner-recent-section');
+    if (sec && !sec.classList.contains('hidden')) {
+      try { sec.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (_) { sec.scrollIntoView(); }
+    }
   }
   function _renderSparkline(values) {
     if (!values || values.length < 2) return '';
