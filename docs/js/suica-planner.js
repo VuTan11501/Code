@@ -1360,8 +1360,19 @@
           const dots = dotCount > 0
             ? `<div class="flex justify-center gap-0.5 mt-0.5">${Array.from({length: Math.min(3, dotCount)}).map(() => '<span class="w-1 h-1 rounded-full bg-primary"></span>').join('')}${dotCount > 3 ? `<span class="text-[8px] text-primary">+${dotCount-3}</span>` : ''}</div>`
             : '';
-          const tooltip = c.routes.length ? `${c.dayKey}: ${c.routes.join(', ')}` : (c.weekend ? `${c.dayKey}: leisure draw` : `${c.dayKey}: no trips`);
-          return `<div class="aspect-square border rounded ${bg} flex flex-col items-center justify-center" data-tooltip="${tooltip}">
+          const labelMap = { monday:'Mon', tuesday:'Tue', wednesday:'Wed', thursday:'Thu', friday:'Fri', saturday:'Sat', sunday:'Sun' };
+          const dayLabel = labelMap[c.dayKey] || c.dayKey;
+          const fareTotal = c.routes.reduce((s, r) => s + (fareOf(r) || 0), 0);
+          let tooltip;
+          if (c.routes.length) {
+            const breakdown = c.routes.map((r) => `${r} · ${fmtYen(fareOf(r) || 0)}`).join('\n');
+            tooltip = `${dayLabel} ${c.d}\n${breakdown}\nTotal: ${fmtYen(fareTotal)}`;
+          } else if (c.weekend) {
+            tooltip = `${dayLabel} ${c.d}\nWeekend — random leisure pick from ${state.leisure.length} routes`;
+          } else {
+            tooltip = `${dayLabel} ${c.d}\nNo commute trips scheduled`;
+          }
+          return `<div class="aspect-square border rounded ${bg} flex flex-col items-center justify-center" data-tooltip="${tooltip.replace(/"/g, '&quot;')}">
             <div class="font-mono ${c.today ? 'font-bold text-primary' : ''}">${c.d}</div>
             ${dots}
           </div>`;
