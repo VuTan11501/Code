@@ -2947,7 +2947,41 @@
         if (fresh) { fresh.focus(); if (typeof pos === 'number') fresh.setSelectionRange(pos, pos); }
       });
     }
-    const filtered = search ? list.filter((s) => (s.name || '').toLowerCase().indexOf(search) >= 0) : list;
+    // Match snapshot by name or by tag. Supports `tag:foo` prefix for exact-tag filtering.
+    // Tag chip strip — clicking a tag toggles a tag:foo filter so users can
+    // narrow the list to a category. The currently-active tag (if any) is highlighted.
+    const allTags = Array.from(new Set(list.flatMap((s) => s.tags || []))).filter(Boolean).sort();
+    if (allTags.length) {
+      const tagBar = document.createElement('div');
+      tagBar.className = 'flex flex-wrap gap-1 mb-2';
+      const activeTag = /^tag:(.+)$/i.exec(search || '')?.[1].trim().toLowerCase();
+      allTags.forEach((t) => {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        const isActive = activeTag === t.toLowerCase();
+        chip.className = 'status-badge text-[10px] cursor-pointer ' + (isActive ? 'status-info' : 'opacity-70 hover:opacity-100');
+        chip.textContent = '#' + t;
+        chip.title = isActive ? 'Clear tag filter' : `Show snapshots tagged "${t}"`;
+        chip.addEventListener('click', () => {
+          wrap.dataset.snapSearch = isActive ? '' : ('tag:' + t);
+          renderSnapshots();
+        });
+        tagBar.appendChild(chip);
+      });
+      wrap.appendChild(tagBar);
+    }
+    const filtered = (() => {
+      if (!search) return list;
+      const tagMatch = /^tag:(.+)$/i.exec(search);
+      if (tagMatch) {
+        const t = tagMatch[1].trim();
+        return list.filter((s) => (s.tags || []).some((x) => (x || '').toLowerCase() === t));
+      }
+      return list.filter((s) => {
+        if ((s.name || '').toLowerCase().indexOf(search) >= 0) return true;
+        return (s.tags || []).some((t) => (t || '').toLowerCase().indexOf(search) >= 0);
+      });
+    })();
     if (!filtered.length) {
       const empty = document.createElement('div');
       empty.className = 'text-xs text-muted-foreground italic py-2';
@@ -2979,6 +3013,10 @@
             </button>
           </div>
           <div class="text-xs text-muted-foreground">${when} · ${tripCount} commute trips · ${s.leisure.length} leisure · target ¥${(+s.settings.target).toLocaleString('en-US')}</div>
+          <div class="flex flex-wrap gap-1 mt-0.5" data-snap-tags-row="${s.id}">
+            ${(s.tags || []).map((t) => `<span class="status-badge text-[10px]" data-snap-tag="${(t || '').replace(/"/g, '&quot;')}">#${t}<button class="ml-1 hover:text-destructive" data-snap-tag-del data-snap-tag-name="${(t || '').replace(/"/g, '&quot;')}" aria-label="Remove tag ${t}">×</button></span>`).join('')}
+            <button type="button" class="text-[10px] opacity-50 hover:opacity-100 cursor-pointer" data-snap-tag-add="${s.id}" data-tooltip="Add tag(s); comma-separated">+ tag</button>
+          </div>
         </div>
         <button type="button" class="btn btn-ghost sm text-xs" data-snap-compare="${s.id}" data-tooltip="${isCompareA ? 'Cancel compare selection' : (_snapCompareA ? `Diff vs "${_snapCompareA.name}"` : 'Pick as A, then click on another snapshot to diff')}">
           <span data-icon="list" data-size="12"></span><span class="btn-label">${isCompareA ? 'Cancel A' : (_snapCompareA ? 'Compare with A' : 'Compare')}</span>
@@ -3059,6 +3097,33 @@
         }, 400);
       });
     });
+    wrap.querySelectorAll('[data-snap-tag-add]').forEach((b) => b.addEventListener('click', (e) => {
+      const id = e.currentTarget.getAttribute('data-snap-tag-add');
+      const raw = prompt('Add tag(s) — comma-separated:');
+      if (!raw) return;
+      const list = loadSnapshots();
+      const s = list.find((x) => x.id === id);
+      if (!s) return;
+      s.tags = s.tags || [];
+      raw.split(',').map((t) => t.trim().toLowerCase().slice(0, 24)).filter(Boolean).forEach((t) => {
+        if (!s.tags.includes(t)) s.tags.push(t);
+      });
+      saveSnapshots(list);
+      renderSnapshots();
+    }));
+    wrap.querySelectorAll('[data-snap-tag-del]').forEach((b) => b.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const tagName = e.currentTarget.getAttribute('data-snap-tag-name');
+      const row = e.currentTarget.closest('[data-snap-tags-row]');
+      if (!row) return;
+      const id = row.getAttribute('data-snap-tags-row');
+      const list = loadSnapshots();
+      const s = list.find((x) => x.id === id);
+      if (!s || !s.tags) return;
+      s.tags = s.tags.filter((t) => t !== tagName);
+      saveSnapshots(list);
+      renderSnapshots();
+    }));
     if (window.refreshIcons) window.refreshIcons(wrap);
   }
 
