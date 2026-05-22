@@ -799,7 +799,7 @@
         state.pattern[day].forEach((t, idx) => {
           const chip = document.createElement('span');
           chip.className = 'status-badge status-info inline-flex items-center gap-1';
-          chip.innerHTML = `<span class="font-mono">${t.route}</span><button class="ml-1 hover:text-destructive" aria-label="remove">×</button>`;
+          chip.innerHTML = `<span class="font-mono">${t.route}</span><button class="ml-1 hover:text-destructive" aria-label="Remove ${t.route} from ${DAY_LABELS[day]}">×</button>`;
           chip.querySelector('button').addEventListener('click', () => {
             state.pattern[day].splice(idx, 1);
             renderPattern(); renderEstimate(); saveState();
@@ -857,7 +857,7 @@
         <span class="text-xs text-muted-foreground">weight</span>
         <input type="number" min="1" max="20" value="${l.weight}" class="input w-16 text-sm" data-leisure-weight="${idx}">
         <span class="text-xs text-muted-foreground font-mono ml-auto">${fmtYen(fareOf(l.route))}</span>
-        <button class="btn sm btn-ghost" data-leisure-remove="${idx}" aria-label="remove">×</button>
+        <button class="btn sm btn-ghost" data-leisure-remove="${idx}" aria-label="Remove ${l.route} from leisure pool">×</button>
       `;
       wrap.appendChild(row);
     });
@@ -1957,6 +1957,74 @@
     panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
 
+  // ────── Keyboard shortcuts ──────
+  // g  → Generate PDF       a → Auto-suggest      c → Compare 3 options
+  // s  → Save snapshot      r → Re-roll seed      ? → Show this help
+  // Esc → Close any open popover (multi-suggest panel, presets menu, snapshot prompt)
+  // Skipped while user is typing in an input/textarea.
+  function bindKeyboardShortcuts() {
+    const isTyping = (e) => {
+      const t = e.target;
+      if (!t) return false;
+      const tag = (t.tagName || '').toLowerCase();
+      return tag === 'input' || tag === 'textarea' || tag === 'select' || t.isContentEditable;
+    };
+    const triggerClick = (id) => { const el = $(id); if (el && !el.hasAttribute('disabled')) el.click(); };
+    document.addEventListener('keydown', (e) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (isTyping(e)) return;
+      // Single-key shortcuts (lowercase)
+      switch ((e.key || '').toLowerCase()) {
+        case 'g': triggerClick('planner-generate-pdf'); e.preventDefault(); break;
+        case 'a': triggerClick('planner-auto-suggest'); e.preventDefault(); break;
+        case 'c': triggerClick('planner-multi-suggest'); e.preventDefault(); break;
+        case 'r': triggerClick('planner-seed-reroll'); e.preventDefault(); break;
+        case 's': triggerClick('planner-snapshot-save'); e.preventDefault(); break;
+        case '?': showShortcutsHelp(); e.preventDefault(); break;
+        case 'escape': {
+          // Close any open <details> popovers + the multi-suggest panel
+          document.querySelectorAll('details[open]').forEach((d) => d.removeAttribute('open'));
+          const ms = $('planner-multi-suggest-panel'); if (ms && !ms.classList.contains('hidden')) ms.classList.add('hidden');
+          const help = $('planner-shortcuts-help'); if (help && !help.classList.contains('hidden')) help.classList.add('hidden');
+          break;
+        }
+      }
+    });
+  }
+  function showShortcutsHelp() {
+    const wrap = $('planner-shortcuts-help');
+    if (!wrap) return;
+    if (!wrap.dataset.built) {
+      wrap.innerHTML = `
+        <div class="card">
+          <div class="card-header pb-2">
+            <div class="card-title flex items-center gap-2 text-sm">
+              <span data-icon="key" data-size="14"></span> Keyboard shortcuts
+              <button type="button" class="ml-auto btn sm btn-ghost" id="planner-shortcuts-close" aria-label="Close">
+                <span data-icon="x" data-size="12"></span>
+              </button>
+            </div>
+          </div>
+          <div class="card-content">
+            <dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
+              <dt><kbd class="kbd-key">G</kbd></dt><dd>Generate PDF</dd>
+              <dt><kbd class="kbd-key">A</kbd></dt><dd>Auto-suggest from target</dd>
+              <dt><kbd class="kbd-key">C</kbd></dt><dd>Compare 3 options</dd>
+              <dt><kbd class="kbd-key">R</kbd></dt><dd>Re-roll seed</dd>
+              <dt><kbd class="kbd-key">S</kbd></dt><dd>Save snapshot</dd>
+              <dt><kbd class="kbd-key">?</kbd></dt><dd>Show this help</dd>
+              <dt><kbd class="kbd-key">Esc</kbd></dt><dd>Close popovers</dd>
+            </dl>
+          </div>
+        </div>`;
+      wrap.dataset.built = '1';
+      wrap.querySelector('#planner-shortcuts-close').addEventListener('click', () => wrap.classList.add('hidden'));
+      if (window.refreshIcons) window.refreshIcons(wrap);
+    }
+    wrap.classList.remove('hidden');
+    wrap.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
   // ────── Init ──────
   function init() {
     // Restore persisted state BEFORE first render so user sees their plan instantly.
@@ -2073,6 +2141,7 @@
     renderRecent();
 
     renderPattern(); renderLeisure(); renderEstimate();
+    bindKeyboardShortcuts();
     loadFares();
   }
 

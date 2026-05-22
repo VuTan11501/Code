@@ -398,6 +398,9 @@
   <!-- Multi-suggest variant panel (Light / Standard / Heavy) -->
   <section id="planner-multi-suggest-panel" class="card hidden" aria-live="polite"></section>
 
+  <!-- Keyboard shortcuts help (popover) -->
+  <section id="planner-shortcuts-help" class="hidden" aria-label="Keyboard shortcuts"></section>
+
   <!-- Plan snapshots (saved plans) -->
   <section id="planner-snapshots-section" aria-label="Saved snapshots">
     <div class="section-title text-sm font-medium text-muted-foreground mb-4 flex items-center gap-2">
@@ -598,6 +601,10 @@
   <footer class="text-xs text-muted-foreground text-center py-6">
     Read-only viewer. All processing is in-browser. Files never uploaded.
   </footer>
+  <footer class="text-center text-xs text-muted-foreground py-4 opacity-60">
+    Press <kbd class="kbd-key">?</kbd> for keyboard shortcuts
+  </footer>
+
 </main>
 
 <!-- JSZip used client-side to extract the PDF from the artifact zip downloaded
@@ -609,6 +616,6 @@
 <script src="js/suica-history.js?v=6" defer></script>
 <script src="js/log-viewer.js?v=1" defer></script>
 <script>window.SUICA_FARE_API='https://suica-fare-proxy.workflow-dashboard.workers.dev';</script>
-<script src="js/suica-planner.js?v=28" defer></script>
+<script src="js/suica-planner.js?v=29" defer></script>
 </body>
 </html>
