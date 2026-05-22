@@ -21,6 +21,7 @@
   // ────── State ──────
   const state = {
     fares: {},                    // "東京↔新宿" → 210
+    fareOverrides: {},            // "東京↔新宿" → 250 (user-edited; takes precedence over fares)
     fareVerifiedAt: {},           // "東京↔新宿" → ISO date string (when this fare was last verified)
     stations: [],                 // ["東京", "新宿", …] unique, sorted (canonical kanji names)
     stationMeta: {},              // "東京" → { kana, romaji, alt:[] } — for combobox search & display
@@ -60,6 +61,7 @@
           pattern: state.pattern,
           leisure: state.leisure,
           settings: state.settings,
+          fareOverrides: state.fareOverrides || {},
           lastRoute: {
             from: (typeof cbFrom !== 'undefined' && cbFrom) ? cbFrom.getValue() : '',
             to:   (typeof cbTo !== 'undefined' && cbTo)   ? cbTo.getValue()   : '',
@@ -87,6 +89,13 @@
       if (p.settings && typeof p.settings === 'object') {
         Object.keys(state.settings).forEach((k) => {
           if (p.settings[k] != null) state.settings[k] = p.settings[k];
+        });
+      }
+      if (p.fareOverrides && typeof p.fareOverrides === 'object') {
+        state.fareOverrides = {};
+        Object.keys(p.fareOverrides).forEach((k) => {
+          const v = +p.fareOverrides[k];
+          if (isFinite(v) && v > 0 && v <= 20000) state.fareOverrides[k] = v;
         });
       }
       return p;
@@ -542,10 +551,34 @@
   }
 
   function fareOf(routeKey) {
+    if (state.fareOverrides && state.fareOverrides[routeKey] != null) return state.fareOverrides[routeKey];
     if (state.fares[routeKey] != null) return state.fares[routeKey];
     const [a, b] = routeKey.split('↔');
     const r = lookupFare(a, b);
     return r ? r.fare : 0;
+  }
+
+  // Inline-edit a verified fare. Stored separately in state.fareOverrides so
+  // the original verified value (state.fares) is preserved and can be restored.
+  function editFareOverride(routeKey) {
+    const cur = state.fareOverrides && state.fareOverrides[routeKey] != null
+      ? state.fareOverrides[routeKey]
+      : (state.fares[routeKey] || 0);
+    const input = prompt(`Override fare for ${routeKey} (enter 0 or blank to clear override).\nCurrent: ¥${cur.toLocaleString('en-US')}`, String(cur));
+    if (input === null) return; // cancel
+    const v = +input;
+    state.fareOverrides = state.fareOverrides || {};
+    if (!input.trim() || v === 0) {
+      delete state.fareOverrides[routeKey];
+      if (window.Toast) window.Toast.info(`Override cleared for ${routeKey}`, { duration: 2500 });
+    } else if (!isFinite(v) || v < 0 || v > 20000) {
+      if (window.Toast) window.Toast.error('Enter a value between ¥1 and ¥20,000.');
+      return;
+    } else {
+      state.fareOverrides[routeKey] = v;
+      if (window.Toast) window.Toast.success(`Override set: ${routeKey} → ¥${v.toLocaleString('en-US')}`);
+    }
+    updateFareDisplay(); renderEstimate(); saveState();
   }
 
   function lookupFare(a, b) {
@@ -669,21 +702,31 @@
     if (state.fares[key] != null) {
       const at = state.fareVerifiedAt[key];
       const ago = at ? humanAgo(at) : '';
-      setBadge(`${fmtYen(state.fares[key])} · verified IC fare${ago ? ' · ' + ago : ''}`, 'status-success');
+      const overridden = state.fareOverrides && state.fareOverrides[key] != null;
+      const displayFare = overridden ? state.fareOverrides[key] : state.fares[key];
+      const label = overridden
+        ? `${fmtYen(displayFare)} · override (was ${fmtYen(state.fares[key])})`
+        : `${fmtYen(displayFare)} · verified IC fare${ago ? ' · ' + ago : ''}`;
+      setBadge(label, overridden ? 'status-pending' : 'status-success');
       enableAdd();
       // Show refresh-fare button if live API is configured (so user can force re-verify)
       const refreshWrap = $('planner-fare-refresh');
-      if (refreshWrap && FARE_API_URL) {
+      if (refreshWrap) {
         refreshWrap.classList.remove('hidden');
-        refreshWrap.innerHTML = `
+        const editBtnHtml = `
+          <button type="button" id="planner-fare-edit-btn" class="btn btn-ghost sm text-xs" data-tooltip="Override this fare manually (kept locally)">
+            <span data-icon="edit" data-size="12"></span><span class="btn-label">Edit</span>
+          </button>`;
+        const refreshBtnHtml = FARE_API_URL ? `
           <button type="button" id="planner-fare-refresh-btn" class="btn btn-ghost sm text-xs" data-tooltip="Force re-verify against Yahoo!路線情報">
             <span data-icon="refresh" data-size="12"></span><span class="btn-label">Re-verify</span>
-          </button>`;
+          </button>` : '';
+        refreshWrap.innerHTML = editBtnHtml + refreshBtnHtml;
+        const edBtn = refreshWrap.querySelector('#planner-fare-edit-btn');
+        if (edBtn) edBtn.addEventListener('click', () => editFareOverride(key));
         const btn = refreshWrap.querySelector('#planner-fare-refresh-btn');
         if (btn) btn.addEventListener('click', () => forceReverify(from, to));
         if (window.refreshIcons) window.refreshIcons(refreshWrap);
-      } else if (refreshWrap) {
-        refreshWrap.classList.add('hidden');
       }
       return;
     }
