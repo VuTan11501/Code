@@ -48,7 +48,27 @@ class TeikiPass(BaseModel):
 
 class TopupRule(BaseModel):
     threshold: int = 1500   # if balance projected < threshold
-    amount:    int = 3000   # insert オートチャージ of this much
+    amount:    int = 3000   # default オートチャージ amount
+    # If non-empty, each top-up picks a random value from this list instead
+    # of always using `amount`. Real Mobile Suica users charge varied amounts
+    # (¥500/¥1,000/¥1,500/¥2,000/¥3,000…), so a fixed ¥3,000 every time looks
+    # mechanical and is a tell-tale sign of generated data.
+    amount_choices: list[int] = Field(default_factory=lambda: [500, 1000, 1500, 2000, 3000])
+
+
+class ShoppingSpec(BaseModel):
+    """物販 (vending / convenience-store purchase) events sprinkled randomly
+    through the month. Real Mobile Suica statements always have these mixed in
+    with train trips; without them, the output looks like commute-only data
+    which is an obvious tell. Set `enabled=False` to disable."""
+
+    enabled: bool = True
+    monthly_count: tuple[int, int] = (4, 10)
+    amount_choices: list[int] = Field(default_factory=lambda: [
+        110, 130, 150, 180, 220, 250, 320, 400, 480,
+        580, 704, 980, 1100, 1400, 1880, 2400, 2610,
+    ])
+    merchant_label: str = "モバイル"
 
 
 class TimingSpec(BaseModel):
@@ -70,6 +90,7 @@ class GeneratorConfig(BaseModel):
     leisure_monthly_count: tuple[int, int] = (2, 4)
     off_days: list[dt.date] = Field(default_factory=list)
     timing: TimingSpec = Field(default_factory=TimingSpec)
+    shopping: ShoppingSpec = Field(default_factory=ShoppingSpec)
 
     @field_validator("weekly_pattern")
     @classmethod

@@ -21,6 +21,7 @@ from __future__ import annotations
 import importlib.util
 import logging
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -67,6 +68,39 @@ COL_X = {
 }
 BAL_RIGHT = 467.0
 AMT_RIGHT = 536.036
+
+# Mobile Suica truncates station-name cells at ~6 full-width chars before they
+# would overflow into the balance column. Longer names get cut without ellipsis
+# in the real statement (e.g., "スポーツセンター" → "スポーツセン"). We apply the
+# same rule so long-named stations don't visually collide with the ¥ balance.
+ST_MAX_CHARS = 6
+
+
+def _truncate_station(name: str, max_chars: int = ST_MAX_CHARS) -> str:
+    """Truncate a station name to fit the ST column. Strips trailing 出 marker
+    only after truncation so the suffix is preserved when possible."""
+    if not name:
+        return name
+    suffix = ""
+    if name.endswith("出"):
+        suffix = "出"
+        name = name[:-1]
+    if len(name) > max_chars:
+        name = name[:max_chars]
+    return name + suffix
+
+
+def _is_data_row(row: dict) -> bool:
+    """A template row is a real data slot iff its month cell is a 2-digit number
+    or the carryover marker 繰. Header (`月`), page footer (`(1/2)`, dates,
+    `ご利用ありがとう…`, `東日本旅客鉄道株式会社`) all fail this check and are
+    preserved untouched. Without this filter, `_rewrite_row`/`_clear_row` would
+    redact the visual chrome of the template and the output PDF would lose its
+    header row, footer block, and page numbers — a regression vs the real
+    Mobile Suica statement.
+    """
+    month = str(row.get("month") or "").strip()
+    return bool(re.fullmatch(r"\d{2}", month))
 
 
 # ----------------------------------------------------------------------
@@ -221,10 +255,14 @@ class PdfExporter:
 
     def render(self, history: MonthlyHistory, output_pdf: str) -> dict:
         """Render and save PDF. Returns stats dict."""
-        # 1. Parse template to discover row positions
+        # 1. Parse template to discover row positions, then drop chrome rows
+        #    (header, footer, page numbers) so we never redact them.
         su = _load_suica_update()
-        template_rows = su.parse_pdf(self.template_pdf)
-        log.info("Template has %d rows", len(template_rows))
+        all_rows = su.parse_pdf(self.template_pdf)
+        template_rows = [r for r in all_rows if _is_data_row(r)]
+        dropped = len(all_rows) - len(template_rows)
+        log.info("Template has %d parsed rows; kept %d data rows (dropped %d chrome rows)",
+                 len(all_rows), len(template_rows), dropped)
 
         # 2. Collapse IN+OUT pairs from history into single rows
         collapsed = _collapse_in_out(history.entries, history.initial_balance)
@@ -331,9 +369,9 @@ class PdfExporter:
         page.insert_text((COL_X["D"], baseline), new["day"], **fp)
         page.insert_text((COL_X["T"], baseline), new["type"], **fp)
         if new["st_from"]:
-            page.insert_text((COL_X["SF"], baseline), new["st_from"], **fp)
+            page.insert_text((COL_X["SF"], baseline), _truncate_station(new["st_from"]), **fp)
         if new["st_to"]:
-            page.insert_text((COL_X["ST"], baseline), new["st_to"], **fp)
+            page.insert_text((COL_X["ST"], baseline), _truncate_station(new["st_to"]), **fp)
 
         bal_text = _format_balance(new["balance"])
         bal_w = len(bal_text) * GLYPH_W

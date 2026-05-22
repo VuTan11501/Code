@@ -172,7 +172,7 @@ def main(argv: list[str] | None = None) -> int:
     timed = TimingEngine(config, rng).assign(plans, cache.fare_for_trip, cache.duration_for_trip)
 
     log.info("Step 4: building Suica taps")
-    history = TapBuilder(config).build(timed, args.month)
+    history = TapBuilder(config, rng=rng).build(timed, args.month)
 
     print(history.summary())
     write_outputs(history, args.out, template_pdf=args.template,

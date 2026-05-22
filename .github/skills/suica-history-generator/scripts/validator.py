@@ -181,22 +181,26 @@ def _rule_last_train(history: MonthlyHistory, r: ValidationReport) -> None:
 
 
 def _rule_topup_realism(history: MonthlyHistory, r: ValidationReport) -> None:
-    """Auto-topup should only trigger near tap-in (balance low) — flag standalone topups far from IN."""
+    """Auto-topup should be followed by either an IN tap (commute case) or a
+    SHOPPING event (purchase that triggers the top-up). Anything else is a
+    realism red-flag."""
     entries = history.entries
     for i, e in enumerate(entries):
         if e.kind != TapKind.AUTO:
             continue
-        # The next entry should be an IN within a few seconds (same datetime, same station)
+        # The next entry should be an IN or SHOPPING within a few seconds
         nxt = entries[i + 1] if i + 1 < len(entries) else None
-        if nxt is None or nxt.kind != TapKind.IN:
+        if nxt is None or nxt.kind not in (TapKind.IN, TapKind.SHOPPING):
             r.add(Severity.WARNING, "topup_realism",
-                  f"オートチャージ at {e.station} not followed by IN", at=e.at)
+                  f"オートチャージ at {e.station} not followed by IN/物販", at=e.at)
             continue
         gap = (nxt.at - e.at).total_seconds()
         if abs(gap) > 60:
             r.add(Severity.WARNING, "topup_realism",
                   f"オートチャージ at {e.station} not synced with next IN (gap={gap:.0f}s)", at=e.at)
-        if nxt.station != e.station:
+        # Station match only required for the IN case; SHOPPING uses a merchant
+        # label (e.g. "モバイル") which legitimately differs from the topup label.
+        if nxt.kind == TapKind.IN and nxt.station != e.station:
             r.add(Severity.WARNING, "topup_realism",
                   f"オートチャージ at {e.station} but next IN at {nxt.station}", at=e.at)
 
