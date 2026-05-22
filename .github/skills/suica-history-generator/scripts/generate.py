@@ -134,6 +134,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--seed", type=int, default=None, help="Reproducibility seed")
     p.add_argument("--out", type=Path, default=Path("out/history.json"), help="Output file (.json/.csv/.pdf)")
     p.add_argument("--template", type=Path, default=None, help="Template Suica PDF (required for --out *.pdf)")
+    p.add_argument("--rakuraku-out", type=Path, default=None,
+                   help="Also emit a rakuraku-suica-expense trips.json at this path")
     p.add_argument("--no-validate", action="store_true", help="Skip validator pass")
     p.add_argument("-v", "--verbose", action="store_true")
     args = p.parse_args(argv)
@@ -175,6 +177,11 @@ def main(argv: list[str] | None = None) -> int:
     print(history.summary())
     write_outputs(history, args.out, template_pdf=args.template,
                   validate=not args.no_validate)
+    if args.rakuraku_out:
+        from .rakuraku_export import write_trips_json
+        stats = write_trips_json(history, args.rakuraku_out)
+        log.info("Rakuraku trips → %s (%d trips, ¥%s)",
+                 args.rakuraku_out, stats["count"], f"{stats['total_yen']:,}")
     return 0
 
 

@@ -3906,6 +3906,4 @@ body.ai-page-active .ai-dot-grid {
   z-index: 10;
 }
 .workflow-card.drag-over { outline: 2px dashed var(--primary); outline-offset: -2px; }
-.workflow-drag-handle { position: absolute; top: 6px; left: 6px; opacity: 0.35; cursor: grab; padding: 2px; color: var(--muted-foreground); pointer-events: auto; z-index: 2; }
-.workflow-card:hover .workflow-drag-handle { opacity: 0.85; }
-.workflow-drag-handle:active { cursor: grabbing; }
+.workflow-drag-handle { display: none; }
