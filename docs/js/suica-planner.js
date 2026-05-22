@@ -2362,6 +2362,20 @@
       const status = $('planner-pdf-status');
       if (status) { status.textContent = `Seed bumped to ${next} — same plan, different schedule. Click Generate to render.`; status.className = 'text-xs text-primary'; }
     });
+    const tgtShuffle = $('planner-target-shuffle');
+    if (tgtShuffle) tgtShuffle.addEventListener('click', () => {
+      const current = +state.settings.target || 0;
+      if (!current) { if (window.Toast) window.Toast.warning('Set a target first'); return; }
+      // ±15%, snap to nearest ¥500
+      const delta = (Math.random() * 0.30 - 0.15);
+      const raw = current * (1 + delta);
+      const next = Math.max(500, Math.round(raw / 500) * 500);
+      pushHistory();
+      state.settings.target = next;
+      const el = $('planner-target'); if (el) el.value = next;
+      renderEstimate(); saveState();
+      if (window.Toast) window.Toast.success(`¥${current.toLocaleString('en-US')} → ¥${next.toLocaleString('en-US')}`, { title: 'Target randomized' });
+    });
     const snapSave = $('planner-snapshot-save');
     if (snapSave) snapSave.addEventListener('click', () => {
       const name = prompt('Name this snapshot:', `Plan ${new Date().toLocaleDateString()}`);

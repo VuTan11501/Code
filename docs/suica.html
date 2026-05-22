@@ -301,7 +301,12 @@
             </div>
             <div class="field">
               <label class="field-label text-xs text-muted-foreground font-medium block mb-1" for="planner-target">Target (¥)</label>
-              <input id="planner-target" type="number" min="0" step="500" class="input font-mono">
+              <div class="flex items-center gap-1">
+                <input id="planner-target" type="number" min="0" step="500" class="input font-mono flex-1">
+                <button id="planner-target-shuffle" type="button" class="btn btn-ghost sm" data-tooltip="Randomize within ±15% of current target (rounded to ¥500)" aria-label="Randomize target">
+                  <span data-icon="sparkles" data-size="14"></span>
+                </button>
+              </div>
             </div>
             <div class="field">
               <label class="field-label text-xs text-muted-foreground font-medium block mb-1" for="planner-seed" data-tooltip="Random seed. Same seed + same plan = byte-identical PDF every time. Change it to roll a different schedule.">Random seed</label>
@@ -654,6 +659,6 @@
 <script src="js/suica-history.js?v=6" defer></script>
 <script src="js/log-viewer.js?v=1" defer></script>
 <script>window.SUICA_FARE_API='https://suica-fare-proxy.workflow-dashboard.workers.dev';</script>
-<script src="js/suica-planner.js?v=32" defer></script>
+<script src="js/suica-planner.js?v=33" defer></script>
 </body>
 </html>
