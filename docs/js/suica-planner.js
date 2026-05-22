@@ -296,8 +296,16 @@
     const sparkHtml = _renderSparkline(targets);
     if (sparkHtml) {
       const sparkWrap = document.createElement('div');
-      sparkWrap.innerHTML = sparkHtml;
-      wrap.appendChild(sparkWrap.firstElementChild);
+      sparkWrap.className = 'relative';
+      sparkWrap.innerHTML = sparkHtml + `<button type="button" class="btn btn-ghost sm text-[10px] absolute top-0 right-0 opacity-40 hover:opacity-100" data-spark-clear data-tooltip="Clear local run history (sparkline source data)"><span data-icon="trash" data-size="11"></span></button>`;
+      wrap.appendChild(sparkWrap);
+      const clearBtn = sparkWrap.querySelector('[data-spark-clear]');
+      if (clearBtn) clearBtn.addEventListener('click', () => {
+        if (!confirm('Clear all local run history? Snapshots and GitHub Actions runs are not affected.')) return;
+        saveRecent([]);
+        if (window.Toast) window.Toast.info('Run history cleared');
+        renderRecent();
+      });
     }
     if (!filtered.length) {
       const empty = document.createElement('div');
