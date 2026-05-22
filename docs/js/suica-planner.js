@@ -2092,9 +2092,8 @@
   // ────── Bulk-add leisure routes from text input ──────
   // User pastes "東京↔新宿\n渋谷↔横浜" or comma-separated; we validate against
   // state.fares (must be a verified pair) and report skipped count.
-  function bulkAddLeisure() {
-    const raw = prompt('Paste leisure routes (one per line or comma-separated). Use form "東京↔新宿":');
-    if (!raw) return;
+  // Internal: parse a free-form bulk text block into added/skipped/dup counts.
+  function _bulkAddLeisureFromText(raw, sourceLabel) {
     const items = raw.split(/[\n,;]+/).map((s) => s.trim()).filter(Boolean);
     if (!items.length) return;
     pushHistory();
@@ -2109,12 +2108,29 @@
       added++;
     });
     renderLeisure(); renderEstimate(); saveState();
-    const detail = `${added} added · ${duplicate} dup · ${skipped} invalid`;
+    const detail = `${added} added · ${duplicate} dup · ${skipped} invalid${sourceLabel ? ` (from ${sourceLabel})` : ''}`;
     if (window.Toast) {
       if (added && !skipped) window.Toast.success(detail, { title: 'Leisure routes added' });
       else if (added) window.Toast.warning(detail, { title: 'Leisure routes added (partial)' });
       else window.Toast.error(detail, { title: 'No routes added' });
     }
+  }
+
+  function bulkAddLeisure() {
+    const raw = prompt('Paste leisure routes (one per line or comma-separated). Use form "東京↔新宿":\n\nTip: cancel here and use the file picker for CSV/TSV import.');
+    if (!raw) return;
+    _bulkAddLeisureFromText(raw);
+  }
+
+  function bulkAddLeisureFromFile(file) {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const text = String(e.target.result || '');
+      _bulkAddLeisureFromText(text, file.name);
+    };
+    reader.onerror = () => { if (window.Toast) window.Toast.error('Could not read file', { title: 'Import failed' }); };
+    reader.readAsText(file);
   }
 
   function loadSamplePlan() {
@@ -2556,6 +2572,16 @@
     });
     const bulkBtn = $('planner-leisure-bulk');
     if (bulkBtn) bulkBtn.addEventListener('click', bulkAddLeisure);
+    const bulkFileBtn = $('planner-leisure-bulk-file');
+    const bulkFileInput = $('planner-leisure-bulk-file-input');
+    if (bulkFileBtn && bulkFileInput) {
+      bulkFileBtn.addEventListener('click', () => bulkFileInput.click());
+      bulkFileInput.addEventListener('change', (e) => {
+        const f = e.target.files && e.target.files[0];
+        if (f) bulkAddLeisureFromFile(f);
+        e.target.value = '';
+      });
+    }
     const tgtShuffle = $('planner-target-shuffle');
     if (tgtShuffle) tgtShuffle.addEventListener('click', () => {
       const current = +state.settings.target || 0;

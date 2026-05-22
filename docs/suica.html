@@ -309,6 +309,11 @@
               <span data-icon="plus" data-size="12"></span>
               <span class="btn-label">Bulk add</span>
             </button>
+            <button id="planner-leisure-bulk-file" type="button" class="btn btn-ghost sm text-[10px] normal-case tracking-normal" data-tooltip="Load routes from a CSV/TSV file (one route per row, form 東京↔新宿)">
+              <span data-icon="upload" data-size="12"></span>
+              <span class="btn-label">Load CSV…</span>
+            </button>
+            <input type="file" id="planner-leisure-bulk-file-input" accept=".csv,.tsv,.txt,text/csv,text/plain" class="hidden">
           </div>
           <div id="planner-leisure" class="suica-grouped"></div>
           <div class="flex items-center gap-3 mt-3 flex-wrap text-xs">
@@ -693,6 +698,6 @@
 <script src="js/suica-history.js?v=6" defer></script>
 <script src="js/log-viewer.js?v=1" defer></script>
 <script>window.SUICA_FARE_API='https://suica-fare-proxy.workflow-dashboard.workers.dev';</script>
-<script src="js/suica-planner.js?v=42" defer></script>
+<script src="js/suica-planner.js?v=43" defer></script>
 </body>
 </html>
