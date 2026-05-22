@@ -1177,6 +1177,41 @@
         row.appendChild(copyBtn);
         if (window.refreshIcons) window.refreshIcons(copyBtn);
       }
+      // Copy this day to the day-clipboard (for paste-into any other day).
+      if (state.pattern[day].length) {
+        const copyClipBtn = document.createElement('button');
+        copyClipBtn.type = 'button';
+        copyClipBtn.className = 'btn btn-ghost sm text-xs flex-none';
+        copyClipBtn.setAttribute('aria-label', `Copy ${DAY_LABELS[day]} to day-clipboard`);
+        copyClipBtn.setAttribute('data-tooltip', `Copy ${DAY_LABELS[day]} (${state.pattern[day].length} trip${state.pattern[day].length === 1 ? '' : 's'}) to clipboard for pasting elsewhere`);
+        copyClipBtn.textContent = '📋';
+        copyClipBtn.addEventListener('click', () => {
+          _dayClipboard = { day, trips: state.pattern[day].map((t) => ({ ...t })) };
+          renderPattern();
+          if (window.Toast) window.Toast.info(`${DAY_LABELS[day]} (${_dayClipboard.trips.length} trips) copied — click 📥 on another day to paste`, { duration: 5000 });
+        });
+        row.appendChild(copyClipBtn);
+      }
+      // Paste day-clipboard into this day (only when clipboard has content + not same day).
+      if (_dayClipboard && _dayClipboard.day !== day) {
+        const pasteBtn = document.createElement('button');
+        pasteBtn.type = 'button';
+        pasteBtn.className = 'btn btn-ghost sm text-xs flex-none text-primary';
+        pasteBtn.setAttribute('aria-label', `Paste clipboard (${_dayClipboard.trips.length} trips from ${DAY_LABELS[_dayClipboard.day]}) into ${DAY_LABELS[day]}`);
+        pasteBtn.setAttribute('data-tooltip', `Paste ${_dayClipboard.trips.length} trips from ${DAY_LABELS[_dayClipboard.day]} into ${DAY_LABELS[day]} (replaces current)`);
+        pasteBtn.textContent = '📥';
+        pasteBtn.addEventListener('click', () => {
+          pushHistory();
+          state.pattern[day] = _dayClipboard.trips.map((t) => ({ ...t }));
+          renderPattern(); renderEstimate(); saveState();
+          if (window.Toast) window.Toast.info(`${DAY_LABELS[_dayClipboard.day]} → ${DAY_LABELS[day]}`, {
+            duration: 4000,
+            actionLabel: 'Undo',
+            onAction: () => { try { undo(); } catch (_) {} },
+          });
+        });
+        row.appendChild(pasteBtn);
+      }
       wrap.appendChild(row);
     });
   }
@@ -2677,6 +2712,7 @@
   }
   const _dismissedWarnings = new Set();
   const _recentSel = new Set();
+  let _dayClipboard = null; // { day: string, trips: [{route,type}, ...] }
   function pushHistory() {
     if (_hist.suppress) return;
     _hist.stack.push(_snapshotState());
