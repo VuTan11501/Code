@@ -352,61 +352,17 @@ if (document.readyState === 'loading') {
   update();
 })();
 
-// ─── Lazy script loader ────────────────────────────────────────────────
-// Page-specific scripts are not in index.html — we load them on demand
-// when the user navigates to that tab. Greatly reduces initial payload
-// (only dashboard + core utilities load up front).
-const _LAZY_PAGE_SCRIPTS = {
-  schedule:  ['js/schedule.js?v=28'],
-  ot:        ['js/ot-salary.js?v=38', 'js/ot-planner.js?v=54'],
-  timesheet: ['js/timesheet.js?v=19'],
-  ai: [
-    'js/ai-validators.js?v=1',
-    'js/ai-audit.js?v=4',
-    'js/ai-proposals.js?v=2',
-    'js/ai-tools.js?v=99',
-    'js/ai-agent.js?v=31',
-    'js/insights.js?v=1',
-  ],
-  settings:  ['js/settings.js?v=36'],
-};
-const _scriptLoadCache = new Map(); // src -> Promise<void>
-function _loadScriptOnce(src) {
-  if (_scriptLoadCache.has(src)) return _scriptLoadCache.get(src);
-  const p = new Promise((resolve, reject) => {
-    const s = document.createElement('script');
-    s.src = src;
-    s.async = false; // preserve execution order vs other lazy scripts
-    s.onload = () => resolve();
-    s.onerror = () => reject(new Error('Failed to load ' + src));
-    document.head.appendChild(s);
-  });
-  _scriptLoadCache.set(src, p);
-  return p;
-}
-async function ensurePageScripts(page) {
-  const list = _LAZY_PAGE_SCRIPTS[page];
-  if (!list || !list.length) return;
-  // Load sequentially so dependencies (ot-salary before ot-planner,
-  // ai-tools before ai-agent) are honoured.
-  for (const src of list) {
-    try { await _loadScriptOnce(src); }
-    catch (e) { console.error('[lazy-load]', e); }
-  }
-}
-// Pre-warm the AI page bundle in the background once the app is idle —
-// it's the largest set and benefits most from a head start, while still
-// keeping it off the critical path.
-if (typeof requestIdleCallback === 'function') {
-  requestIdleCallback(() => { ensurePageScripts('ai'); }, { timeout: 5000 });
-}
+// ─── Page-script readiness ─────────────────────────────────────────────
+// All page scripts are loaded up-front with `defer`, so by the time
+// `navigate()` runs they are already parsed and their init functions
+// exist. We keep `ensurePageScripts` as a no-op promise for forward
+// compatibility (any caller still using it just gets an immediate
+// resolve).
+function ensurePageScripts(_page) { return Promise.resolve(); }
 
 function navigate(hash) {
   const page = hash.replace('#', '') || 'dashboard';
 
-  // Kick off lazy-load of page-specific scripts in parallel with the
-  // synchronous UI swap below. Init functions are only invoked after
-  // the scripts have actually loaded (see the await below).
   const scriptsReady = ensurePageScripts(page);
 
   // Remember the scroll position of the tab we're leaving (if any).

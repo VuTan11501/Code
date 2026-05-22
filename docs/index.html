@@ -370,11 +370,35 @@
             <button class="btn sm btn-ghost btn-icon" onclick="otNavMonth(1)" aria-label="Next month"><span data-icon="chevronRight" data-size="16"></span></button>
           </div>
         </div>
-        <div id="otStats" class="schedule-stats ot-stats"></div>
-        <div id="otBudget" class="ot-budget"></div>
+        <div id="otStats" class="schedule-stats ot-stats">
+          <div class="skeleton" style="height:28px;width:80px;border-radius:var(--radius-full)"></div>
+          <div class="skeleton" style="height:28px;width:100px;border-radius:var(--radius-full)"></div>
+          <div class="skeleton" style="height:28px;width:120px;border-radius:var(--radius-full)"></div>
+          <div class="skeleton" style="height:28px;width:140px;border-radius:var(--radius-full)"></div>
+        </div>
+        <div id="otBudget" class="ot-budget">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <div class="skeleton" style="height:16px;width:120px"></div>
+            <div class="skeleton" style="height:16px;width:80px"></div>
+          </div>
+          <div class="skeleton" style="height:8px;width:100%;border-radius:var(--radius-full);margin-bottom:12px"></div>
+          <div style="display:flex;gap:8px">
+            <div class="skeleton" style="height:32px;width:33%;border-radius:var(--radius-md)"></div>
+            <div class="skeleton" style="height:32px;width:33%;border-radius:var(--radius-md)"></div>
+            <div class="skeleton" style="height:32px;width:33%;border-radius:var(--radius-md)"></div>
+          </div>
+        </div>
         <div class="card bg-card border border-border rounded-lg overflow-hidden">
           <div class="card-content p-3">
-            <div id="otCalendar" class="ot-cal"></div>
+            <div id="otCalendar" class="ot-cal">
+              <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px">
+                <div class="skeleton ot-cell" style="opacity:0.55"></div><div class="skeleton ot-cell" style="opacity:0.55"></div><div class="skeleton ot-cell" style="opacity:0.55"></div><div class="skeleton ot-cell" style="opacity:0.55"></div><div class="skeleton ot-cell" style="opacity:0.55"></div><div class="skeleton ot-cell" style="opacity:0.55"></div><div class="skeleton ot-cell" style="opacity:0.55"></div>
+                <div class="skeleton ot-cell" style="opacity:0.55"></div><div class="skeleton ot-cell" style="opacity:0.55"></div><div class="skeleton ot-cell" style="opacity:0.55"></div><div class="skeleton ot-cell" style="opacity:0.55"></div><div class="skeleton ot-cell" style="opacity:0.55"></div><div class="skeleton ot-cell" style="opacity:0.55"></div><div class="skeleton ot-cell" style="opacity:0.55"></div>
+                <div class="skeleton ot-cell" style="opacity:0.55"></div><div class="skeleton ot-cell" style="opacity:0.55"></div><div class="skeleton ot-cell" style="opacity:0.55"></div><div class="skeleton ot-cell" style="opacity:0.55"></div><div class="skeleton ot-cell" style="opacity:0.55"></div><div class="skeleton ot-cell" style="opacity:0.55"></div><div class="skeleton ot-cell" style="opacity:0.55"></div>
+                <div class="skeleton ot-cell" style="opacity:0.55"></div><div class="skeleton ot-cell" style="opacity:0.55"></div><div class="skeleton ot-cell" style="opacity:0.55"></div><div class="skeleton ot-cell" style="opacity:0.55"></div><div class="skeleton ot-cell" style="opacity:0.55"></div><div class="skeleton ot-cell" style="opacity:0.55"></div><div class="skeleton ot-cell" style="opacity:0.55"></div>
+                <div class="skeleton ot-cell" style="opacity:0.55"></div><div class="skeleton ot-cell" style="opacity:0.55"></div><div class="skeleton ot-cell" style="opacity:0.55"></div><div class="skeleton ot-cell" style="opacity:0.55"></div><div class="skeleton ot-cell" style="opacity:0.55"></div><div class="skeleton ot-cell" style="opacity:0.55"></div><div class="skeleton ot-cell" style="opacity:0.55"></div>
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -405,7 +429,9 @@
               </tr>
             </thead>
             <tbody id="otTableBody">
-              <tr><td colspan="8" class="text-center text-muted-foreground py-8">Loading...</td></tr>
+              <tr><td class="px-4 py-3"><div class="skeleton" style="height:14px;width:24px"></div></td><td class="px-4 py-3"><div class="skeleton" style="height:14px;width:80px"></div></td><td class="px-4 py-3"><div class="skeleton" style="height:14px;width:90px"></div></td><td class="px-4 py-3"><div class="skeleton" style="height:14px;width:50px"></div></td><td class="px-4 py-3 text-right"><div class="skeleton" style="height:14px;width:70px;margin-left:auto"></div></td><td class="px-4 py-3"><div class="skeleton" style="height:14px;width:80%"></div></td><td class="px-4 py-3"><div class="skeleton" style="height:14px;width:60px"></div></td><td class="px-4 py-3 text-center"><div class="skeleton" style="height:14px;width:60px;margin:0 auto"></div></td></tr>
+              <tr><td class="px-4 py-3"><div class="skeleton" style="height:14px;width:24px"></div></td><td class="px-4 py-3"><div class="skeleton" style="height:14px;width:80px"></div></td><td class="px-4 py-3"><div class="skeleton" style="height:14px;width:90px"></div></td><td class="px-4 py-3"><div class="skeleton" style="height:14px;width:50px"></div></td><td class="px-4 py-3 text-right"><div class="skeleton" style="height:14px;width:70px;margin-left:auto"></div></td><td class="px-4 py-3"><div class="skeleton" style="height:14px;width:80%"></div></td><td class="px-4 py-3"><div class="skeleton" style="height:14px;width:60px"></div></td><td class="px-4 py-3 text-center"><div class="skeleton" style="height:14px;width:60px;margin:0 auto"></div></td></tr>
+              <tr><td class="px-4 py-3"><div class="skeleton" style="height:14px;width:24px"></div></td><td class="px-4 py-3"><div class="skeleton" style="height:14px;width:80px"></div></td><td class="px-4 py-3"><div class="skeleton" style="height:14px;width:90px"></div></td><td class="px-4 py-3"><div class="skeleton" style="height:14px;width:50px"></div></td><td class="px-4 py-3 text-right"><div class="skeleton" style="height:14px;width:70px;margin-left:auto"></div></td><td class="px-4 py-3"><div class="skeleton" style="height:14px;width:80%"></div></td><td class="px-4 py-3"><div class="skeleton" style="height:14px;width:60px"></div></td><td class="px-4 py-3 text-center"><div class="skeleton" style="height:14px;width:60px;margin:0 auto"></div></td></tr>
             </tbody>
           </table>
         </div>
@@ -430,7 +456,12 @@
             <button class="btn sm btn-ghost btn-icon" onclick="tsNavMonth(1)" aria-label="Next month"><span data-icon="chevronRight" data-size="16"></span></button>
           </div>
         </div>
-        <div id="tsSummary" class="ts-summary"></div>
+        <div id="tsSummary" class="ts-summary">
+          <div class="skeleton" style="height:48px;border-radius:var(--radius-md)"></div>
+          <div class="skeleton" style="height:48px;border-radius:var(--radius-md)"></div>
+          <div class="skeleton" style="height:48px;border-radius:var(--radius-md)"></div>
+          <div class="skeleton" style="height:48px;border-radius:var(--radius-md)"></div>
+        </div>
       </section>
 
       <div class="separator h-px w-full bg-border mt-6 mb-4"></div>
@@ -464,7 +495,10 @@
               </tr>
             </thead>
             <tbody id="tsTableBody">
-              <tr><td colspan="12" class="text-center text-muted-foreground py-8">Loading...</td></tr>
+              <tr><td class="px-2 py-2"><div class="skeleton" style="height:12px;width:60px"></div></td><td class="px-2 py-2"><div class="skeleton" style="height:12px;width:40px"></div></td><td class="px-2 py-2"><div class="skeleton" style="height:12px;width:50px"></div></td><td class="px-2 py-2"><div class="skeleton" style="height:12px;width:50px"></div></td><td class="px-2 py-2"><div class="skeleton" style="height:12px;width:40px"></div></td><td class="px-2 py-2"><div class="skeleton" style="height:12px;width:40px"></div></td><td class="px-2 py-2"><div class="skeleton" style="height:12px;width:40px"></div></td><td class="px-2 py-2"><div class="skeleton" style="height:12px;width:40px"></div></td><td class="px-2 py-2"><div class="skeleton" style="height:12px;width:40px"></div></td><td class="px-2 py-2"><div class="skeleton" style="height:12px;width:40px"></div></td><td class="px-2 py-2"><div class="skeleton" style="height:12px;width:40px"></div></td><td class="px-2 py-2"><div class="skeleton" style="height:12px;width:40px"></div></td></tr>
+              <tr><td class="px-2 py-2"><div class="skeleton" style="height:12px;width:60px"></div></td><td class="px-2 py-2"><div class="skeleton" style="height:12px;width:40px"></div></td><td class="px-2 py-2"><div class="skeleton" style="height:12px;width:50px"></div></td><td class="px-2 py-2"><div class="skeleton" style="height:12px;width:50px"></div></td><td class="px-2 py-2"><div class="skeleton" style="height:12px;width:40px"></div></td><td class="px-2 py-2"><div class="skeleton" style="height:12px;width:40px"></div></td><td class="px-2 py-2"><div class="skeleton" style="height:12px;width:40px"></div></td><td class="px-2 py-2"><div class="skeleton" style="height:12px;width:40px"></div></td><td class="px-2 py-2"><div class="skeleton" style="height:12px;width:40px"></div></td><td class="px-2 py-2"><div class="skeleton" style="height:12px;width:40px"></div></td><td class="px-2 py-2"><div class="skeleton" style="height:12px;width:40px"></div></td><td class="px-2 py-2"><div class="skeleton" style="height:12px;width:40px"></div></td></tr>
+              <tr><td class="px-2 py-2"><div class="skeleton" style="height:12px;width:60px"></div></td><td class="px-2 py-2"><div class="skeleton" style="height:12px;width:40px"></div></td><td class="px-2 py-2"><div class="skeleton" style="height:12px;width:50px"></div></td><td class="px-2 py-2"><div class="skeleton" style="height:12px;width:50px"></div></td><td class="px-2 py-2"><div class="skeleton" style="height:12px;width:40px"></div></td><td class="px-2 py-2"><div class="skeleton" style="height:12px;width:40px"></div></td><td class="px-2 py-2"><div class="skeleton" style="height:12px;width:40px"></div></td><td class="px-2 py-2"><div class="skeleton" style="height:12px;width:40px"></div></td><td class="px-2 py-2"><div class="skeleton" style="height:12px;width:40px"></div></td><td class="px-2 py-2"><div class="skeleton" style="height:12px;width:40px"></div></td><td class="px-2 py-2"><div class="skeleton" style="height:12px;width:40px"></div></td><td class="px-2 py-2"><div class="skeleton" style="height:12px;width:40px"></div></td></tr>
+              <tr><td class="px-2 py-2"><div class="skeleton" style="height:12px;width:60px"></div></td><td class="px-2 py-2"><div class="skeleton" style="height:12px;width:40px"></div></td><td class="px-2 py-2"><div class="skeleton" style="height:12px;width:50px"></div></td><td class="px-2 py-2"><div class="skeleton" style="height:12px;width:50px"></div></td><td class="px-2 py-2"><div class="skeleton" style="height:12px;width:40px"></div></td><td class="px-2 py-2"><div class="skeleton" style="height:12px;width:40px"></div></td><td class="px-2 py-2"><div class="skeleton" style="height:12px;width:40px"></div></td><td class="px-2 py-2"><div class="skeleton" style="height:12px;width:40px"></div></td><td class="px-2 py-2"><div class="skeleton" style="height:12px;width:40px"></div></td><td class="px-2 py-2"><div class="skeleton" style="height:12px;width:40px"></div></td><td class="px-2 py-2"><div class="skeleton" style="height:12px;width:40px"></div></td><td class="px-2 py-2"><div class="skeleton" style="height:12px;width:40px"></div></td></tr>
             </tbody>
           </table>
         </div>
@@ -1230,8 +1264,19 @@
 <script defer src="js/locations.js?v=27"></script>
 <script defer src="js/biometric.js?v=2"></script>
 <script defer src="js/cloud-sync.js?v=5"></script>
-<script defer src="js/app.js?v=48"></script>
+<script defer src="js/app.js?v=49"></script>
 <script defer src="js/dashboard.js?v=39"></script>
+<script defer src="js/schedule.js?v=28"></script>
+<script defer src="js/ot-salary.js?v=38"></script>
+<script defer src="js/ot-planner.js?v=54"></script>
+<script defer src="js/timesheet.js?v=19"></script>
+<script defer src="js/ai-validators.js?v=1"></script>
+<script defer src="js/ai-audit.js?v=4"></script>
+<script defer src="js/ai-proposals.js?v=2"></script>
+<script defer src="js/ai-tools.js?v=99"></script>
+<script defer src="js/ai-agent.js?v=31"></script>
+<script defer src="js/insights.js?v=1"></script>
+<script defer src="js/settings.js?v=36"></script>
 <!--
   Page-specific scripts (schedule / ot / timesheet / ai / settings) are
   lazy-loaded on demand by app.js → ensurePageScripts() when the user
