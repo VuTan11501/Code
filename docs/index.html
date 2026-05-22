@@ -183,7 +183,12 @@
     <div class="page" id="page-schedule" role="tabpanel" aria-label="Schedule page">
       <section aria-label="Weekly schedule">
         <div class="section-title text-sm font-medium text-muted-foreground mb-4 flex items-center gap-2"><span data-icon="calendar" data-size="16"></span> Weekly Schedule (JST)</div>
-        <div id="scheduleCalendar"></div>
+        <div id="scheduleCalendar">
+          <div class="sched-cal-skeleton" aria-hidden="true">
+            <div class="skeleton" style="height:32px;width:100%;border-radius:var(--radius-md);margin-bottom:8px"></div>
+            <div class="skeleton" style="height:120px;width:100%;border-radius:var(--radius-md)"></div>
+          </div>
+        </div>
       </section>
 
       <div class="separator h-px w-full bg-border mt-6 mb-4"></div>
@@ -297,7 +302,9 @@
             <button class="btn primary w-full px-4 py-2.5" onclick="addScheduledRun()"><span data-icon="plus" data-size="16"></span> Add Schedule</button>
           </div>
           <div class="scheduler-queue" id="schedulerQueue" aria-label="Scheduled runs queue">
-            <div class="empty text-muted-foreground text-sm p-4 text-center">Loading scheduled runs...</div>
+            <div class="skeleton" style="height:56px;width:100%;border-radius:var(--radius-md);margin-bottom:8px"></div>
+            <div class="skeleton" style="height:56px;width:100%;border-radius:var(--radius-md);margin-bottom:8px"></div>
+            <div class="skeleton" style="height:56px;width:100%;border-radius:var(--radius-md)"></div>
           </div>
         </div>
       </section>
@@ -338,7 +345,9 @@
               </tr>
             </thead>
             <tbody id="scheduleTableBody">
-              <tr><td colspan="8" class="text-center text-muted-foreground py-8">Loading...</td></tr>
+              <tr><td class="px-4 py-3"><div class="skeleton" style="height:14px;width:24px"></div></td><td class="px-4 py-3"><div class="skeleton" style="height:14px;width:60px"></div></td><td class="px-4 py-3"><div class="skeleton" style="height:14px;width:90%"></div></td><td class="px-4 py-3"><div class="skeleton" style="height:14px;width:80%"></div></td><td class="px-4 py-3"><div class="skeleton" style="height:14px;width:70%"></div></td><td class="px-4 py-3"><div class="skeleton" style="height:14px;width:50px"></div></td><td class="px-4 py-3"><div class="skeleton" style="height:14px;width:80px"></div></td><td class="px-4 py-3"><div class="skeleton" style="height:14px;width:60px;margin:0 auto"></div></td></tr>
+              <tr><td class="px-4 py-3"><div class="skeleton" style="height:14px;width:24px"></div></td><td class="px-4 py-3"><div class="skeleton" style="height:14px;width:60px"></div></td><td class="px-4 py-3"><div class="skeleton" style="height:14px;width:90%"></div></td><td class="px-4 py-3"><div class="skeleton" style="height:14px;width:80%"></div></td><td class="px-4 py-3"><div class="skeleton" style="height:14px;width:70%"></div></td><td class="px-4 py-3"><div class="skeleton" style="height:14px;width:50px"></div></td><td class="px-4 py-3"><div class="skeleton" style="height:14px;width:80px"></div></td><td class="px-4 py-3"><div class="skeleton" style="height:14px;width:60px;margin:0 auto"></div></td></tr>
+              <tr><td class="px-4 py-3"><div class="skeleton" style="height:14px;width:24px"></div></td><td class="px-4 py-3"><div class="skeleton" style="height:14px;width:60px"></div></td><td class="px-4 py-3"><div class="skeleton" style="height:14px;width:90%"></div></td><td class="px-4 py-3"><div class="skeleton" style="height:14px;width:80%"></div></td><td class="px-4 py-3"><div class="skeleton" style="height:14px;width:70%"></div></td><td class="px-4 py-3"><div class="skeleton" style="height:14px;width:50px"></div></td><td class="px-4 py-3"><div class="skeleton" style="height:14px;width:80px"></div></td><td class="px-4 py-3"><div class="skeleton" style="height:14px;width:60px;margin:0 auto"></div></td></tr>
             </tbody>
           </table>
         </div>
