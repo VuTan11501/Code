@@ -62,8 +62,30 @@ def _date_str(iso_dt) -> str:
     return ""
 
 
+def _hours_to_hhmm(h) -> str:
+    """Format float hours like 1.5 → '01:30'. Returns '' for None/0."""
+    if h is None:
+        return ""
+    try:
+        f = float(h)
+    except Exception:
+        return ""
+    if f == 0:
+        return ""
+    sign = "-" if f < 0 else ""
+    a = abs(f)
+    hh = int(a)
+    mm = int(round((a - hh) * 60))
+    if mm == 60:
+        hh += 1
+        mm = 0
+    return f"{sign}{hh:02d}:{mm:02d}"
+
+
 def _slim_detail(d: dict) -> dict:
     """Keep only fields the dashboard renders. Cuts payload ~90%."""
+    # OT request: API only returns numeric `otRequestTime` at detail level (no display field).
+    ot_req_num = d.get("otRequestTime") or 0
     return {
         "date":           _date_str(d.get("workingDate") or d.get("partTimeWorkingDate")),
         "dow":            d.get("dayOfWeek") or "",
@@ -78,14 +100,15 @@ def _slim_detail(d: dict) -> dict:
         "otMidnight":     d.get("displayWeekdayLateNightOvertime") or "",
         "otSat":          d.get("displayHolidaysWorkingTime") or "",
         "otSun":          d.get("displaySundayWorkingTime") or "",
-        "otRequest":      d.get("displayOTRequestHours") or "",
-        "specialLeave":   d.get("displaySpecialLeaveHours") or d.get("displaySpecialLeave") or "",
-        "leave":          d.get("displayLeave") or "",
+        "otRequest":      _hours_to_hhmm(ot_req_num),
+        "otRequestNum":   ot_req_num,
+        "specialLeave":   d.get("displaySpecialLeavesTime") or "",
+        "leave":          d.get("displayTotalLeaveTime") or "",
         "isHoliday":      bool(d.get("isFjpHoliday")),
         "isSaturday":     bool(d.get("isSaturday")),
         "isSunday":       bool(d.get("isSunday")),
-        "isWorking":      bool(d.get("isWorking")),
-        "workplace":      d.get("currentWorkingPlace") or d.get("workplace") or "",
+        "isWorking":      bool(d.get("isCalculated")),
+        "hasUnapprovedOT": bool(d.get("hasUnapprovedOTRequest")),
         "description":    d.get("description") or "",
     }
 

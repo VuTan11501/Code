@@ -174,15 +174,14 @@ function renderTimesheet() {
   // ── Summary card ──
   const s = snap.summary || {};
   const chips = [
-    ['Standard', s.displayStandardWorkingHour || '—'],
     ['Working hours', s.displayTotalWorkingHours || '—'],
     ['Actual', s.displayTotalActualWorkingTime || '—'],
     ['OT request', s.displayOTRequestHours || '—'],
-    ['OT normal', s.displayWeekdayNormalOvertime || '—'],
-    ['OT midnight', s.displayWeekdayLateNightOvertime || '—'],
-    ['OT Sat/Hol', s.displayHolidaysWorkingTime || '—'],
-    ['OT Sun', s.displaySundayWorkingTime || '—'],
-    ['Lack', s.displayWeekdayNoWorkingTime || '—'],
+    ['OT total', s.displayTotalOTHours || s.displayOvertimeHours || '—'],
+    ['OT weekday', s.displayOvertimeHours || '—'],
+    ['OT midnight', s.displayNightWorkingHours || '—'],
+    ['OT Sat/Hol', s.displayHolidayOvertimeHours || '—'],
+    ['OT Sun', s.displaySundayOvertimeHours || '—'],
   ];
   let chipsHtml = '';
   for (const [label, val] of chips) {
@@ -334,7 +333,7 @@ async function _waitForTimesheetFetchRun() {
 // ─── Skeletons ──────────────────────────────────────
 function _tsSummarySkeleton() {
   let chips = '';
-  for (let i = 0; i < 9; i++) {
+  for (let i = 0; i < 8; i++) {
     chips += `<div class="skeleton" style="height:48px;border-radius:var(--radius-md)"></div>`;
   }
   return `<div class="ts-summary-grid">${chips}</div>`;
