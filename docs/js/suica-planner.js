@@ -1161,7 +1161,8 @@
     });
     indexed.forEach(({ l, idx }) => {
       const row = document.createElement('div');
-      row.className = 'flex items-center gap-2 py-1.5 border-b border-border last:border-b-0';
+      const muted = +l.weight === 0;
+      row.className = 'flex items-center gap-2 py-1.5 border-b border-border last:border-b-0' + (muted ? ' opacity-50' : '');
       const pop = popularity[l.route] || 0;
       const filled = popMax ? Math.round((pop / popMax) * 5) : 0;
       const dotsStr = (recentList.length && pop)
@@ -1170,19 +1171,34 @@
             ? `<span class="font-mono text-[10px] text-muted-foreground/50" data-tooltip="Not yet picked in the last ${recentList.length} generations">○○○○○</span>`
             : '<span class="font-mono text-[10px] text-muted-foreground/40" data-tooltip="No generation history yet">—</span>');
       row.innerHTML = `
-        <span class="status-badge status-pending font-mono flex-none">${l.route}</span>
+        <button class="btn sm btn-ghost text-xs flex-none" data-leisure-mute="${idx}" data-tooltip="${muted ? 'Re-enable this route in the random pool' : 'Mute (weight=0) — keep in the list but exclude from random picks'}" aria-label="${muted ? 'Unmute' : 'Mute'} ${l.route}">${muted ? '🙈' : '👁'}</button>
+        <span class="status-badge ${muted ? 'status-pending' : 'status-pending'} font-mono flex-none ${muted ? 'line-through' : ''}">${l.route}</span>
         ${dotsStr}
         <span class="text-xs text-muted-foreground">weight</span>
-        <input type="number" min="1" max="20" value="${l.weight}" class="input w-16 text-sm" data-leisure-weight="${idx}">
+        <input type="number" min="0" max="20" value="${l.weight}" class="input w-16 text-sm" data-leisure-weight="${idx}" ${muted ? 'disabled' : ''}>
         <span class="text-xs text-muted-foreground font-mono ml-auto">${fmtYen(fareOf(l.route))}</span>
         <button class="btn sm btn-ghost" data-leisure-remove="${idx}" aria-label="Remove ${l.route} from leisure pool">×</button>
       `;
       wrap.appendChild(row);
     });
+    wrap.querySelectorAll('[data-leisure-mute]').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        const i = +e.currentTarget.dataset.leisureMute;
+        const cur = state.leisure[i];
+        if (+cur.weight === 0) {
+          cur.weight = Math.max(1, +cur._prevWeight || 1);
+          delete cur._prevWeight;
+        } else {
+          cur._prevWeight = +cur.weight;
+          cur.weight = 0;
+        }
+        renderLeisure(); renderEstimate(); saveState();
+      });
+    });
     wrap.querySelectorAll('[data-leisure-weight]').forEach((input) => {
       input.addEventListener('change', (e) => {
         const i = +e.target.dataset.leisureWeight;
-        state.leisure[i].weight = Math.max(1, +e.target.value || 1);
+        state.leisure[i].weight = Math.max(0, +e.target.value || 0);
         renderEstimate();
         saveState();
       });
