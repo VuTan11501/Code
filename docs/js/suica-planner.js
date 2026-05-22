@@ -993,6 +993,30 @@
       });
       if (window.refreshIcons) window.refreshIcons(empty);
     }
+    // Density meter — small 7-bar gauge showing trip count per weekday so a
+    // glance reveals whether the pattern is light or heavy.
+    if (!allEmpty) {
+      const counts = DAYS.map((d) => state.pattern[d].length);
+      const max = Math.max(1, ...counts);
+      const meter = document.createElement('div');
+      meter.className = 'flex items-end gap-1 mb-2 px-1';
+      meter.setAttribute('data-tooltip', `Trip count per day: ${DAYS.map((d, i) => `${DAY_LABELS[d]}=${counts[i]}`).join(' · ')}`);
+      DAYS.forEach((d, i) => {
+        const h = Math.max(3, Math.round((counts[i] / max) * 22));
+        const isWeekend = (d === 'saturday' || d === 'sunday');
+        const bg = counts[i] === 0 ? 'background:var(--muted);opacity:.4' : (isWeekend ? 'background:var(--warning,#eab308)' : 'background:var(--primary,#3b82f6)');
+        const bar = document.createElement('div');
+        bar.style.cssText = `width:14px;height:${h}px;border-radius:2px;${bg};transition:height .2s ease`;
+        bar.title = `${DAY_LABELS[d]}: ${counts[i]} trip${counts[i] === 1 ? '' : 's'}`;
+        meter.appendChild(bar);
+      });
+      const sumLabel = document.createElement('div');
+      sumLabel.className = 'ml-auto text-[10px] text-muted-foreground font-mono';
+      const total = counts.reduce((a, b) => a + b, 0);
+      sumLabel.textContent = `${total} trip${total === 1 ? '' : 's'}/wk`;
+      meter.appendChild(sumLabel);
+      wrap.appendChild(meter);
+    }
     DAYS.forEach((day) => {
       const row = document.createElement('div');
       row.className = 'flex items-center gap-2 py-1.5 border-b border-border last:border-b-0';
