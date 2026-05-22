@@ -2649,7 +2649,10 @@
         <tr class="border-b border-border/40">
           <td class="py-1 pr-3 font-mono text-xs">${r.route}</td>
           <td class="py-1 pr-3 font-mono text-xs text-right">${fmtYen(r.fare)}</td>
-          <td class="py-1 pr-3 font-mono text-xs text-right ${r.override != null ? 'text-warning' : 'text-muted-foreground'}">${r.override != null ? fmtYen(r.override) : '—'}</td>
+          <td class="py-1 pr-3 font-mono text-xs text-right">
+            <input type="number" min="0" step="10" class="input input-sm w-20 text-right font-mono text-xs ${r.override != null ? 'border-warning' : ''}" data-fare-override="${r.route.replace(/"/g, '&quot;')}" value="${r.override != null ? r.override : ''}" placeholder="—">
+            ${r.override != null ? `<button type="button" class="btn btn-ghost sm text-[10px] ml-1 opacity-60 hover:opacity-100" data-fare-clear="${r.route.replace(/"/g, '&quot;')}" data-tooltip="Reset to default ${fmtYen(r.fare)}">×</button>` : ''}
+          </td>
         </tr>
       `).join('');
       card.innerHTML = `
@@ -2685,6 +2688,27 @@
         });
       });
       card.querySelector('[data-close]').addEventListener('click', close);
+      card.querySelectorAll('[data-fare-override]').forEach((inp) => {
+        inp.addEventListener('change', () => {
+          const route = inp.getAttribute('data-fare-override');
+          const v = inp.value === '' ? null : Math.max(0, +inp.value);
+          state.fareOverrides = state.fareOverrides || {};
+          if (v == null || Number.isNaN(v)) delete state.fareOverrides[route];
+          else state.fareOverrides[route] = v;
+          saveState();
+          render();
+          if (window.Toast) window.Toast.info(v == null ? `Override cleared for ${route}` : `${route} → ¥${v.toLocaleString('en-US')}`);
+        });
+      });
+      card.querySelectorAll('[data-fare-clear]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const route = btn.getAttribute('data-fare-clear');
+          if (state.fareOverrides) delete state.fareOverrides[route];
+          saveState();
+          render();
+          if (window.Toast) window.Toast.info(`Override cleared for ${route}`);
+        });
+      });
     }
     overlay.appendChild(card);
     document.body.appendChild(overlay);
