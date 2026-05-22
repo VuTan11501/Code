@@ -1478,6 +1478,34 @@
     }
     renderWarnings({ total, target, commuteSpend, leisureSpend, monthInfo });
     renderCalendar();
+    // Per-day spend breakdown bars (commute only — leisure is randomized).
+    const dayBd = document.getElementById('planner-estimate-day-breakdown');
+    if (dayBd) {
+      dayBd.innerHTML = '';
+      const perDay = DAYS.map((day) => {
+        const fare = state.pattern[day].reduce((s, t) => s + fareOf(t.route), 0);
+        return fare * (monthInfo.counts[day] || 0);
+      });
+      const maxDay = Math.max(1, ...perDay);
+      const JP = { monday:'月', tuesday:'火', wednesday:'水', thursday:'木', friday:'金', saturday:'土', sunday:'日' };
+      DAYS.forEach((day, i) => {
+        const v = perDay[i];
+        const h = Math.max(2, Math.round((v / maxDay) * 40));
+        const col = document.createElement('div');
+        col.className = 'flex flex-col items-center gap-0.5';
+        col.setAttribute('data-tooltip', `${DAY_LABELS[day]} (${monthInfo.counts[day]}× this month): ${fmtYen(v)} from commute`);
+        const isWk = day === 'saturday' || day === 'sunday';
+        col.innerHTML = `
+          <div style="width:18px;height:${h}px;border-radius:2px;background:${v ? (isWk ? 'var(--warning,#eab308)' : 'var(--primary,#3b82f6)') : 'var(--muted)'};opacity:${v ? 1 : .4};"></div>
+          <div class="font-mono text-[9px] text-muted-foreground">${JP[day]}</div>
+        `;
+        dayBd.appendChild(col);
+      });
+      const tot = document.createElement('div');
+      tot.className = 'flex flex-col items-end ml-2 text-[10px] font-mono text-muted-foreground';
+      tot.innerHTML = `<div>${fmtYen(commuteSpend)}</div><div class="opacity-60">commute/mo</div>`;
+      dayBd.appendChild(tot);
+    }
   }
 
   // ────── Validation: surface non-blocking warnings ──────
