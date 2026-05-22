@@ -2357,7 +2357,31 @@
       return;
     }
     wrap.innerHTML = '';
-    list.slice().reverse().forEach((s) => {
+    // Search box (only when there are enough snapshots to warrant it)
+    const search = (wrap.dataset.snapSearch || '').trim().toLowerCase();
+    if (list.length > 5) {
+      const sb = document.createElement('div');
+      sb.className = 'mb-2';
+      sb.innerHTML = `<input type="search" id="snap-search" class="input input-sm w-full" placeholder="Filter ${list.length} snapshots by name…" value="${(wrap.dataset.snapSearch || '').replace(/"/g, '&quot;')}" autocomplete="off">`;
+      wrap.appendChild(sb);
+      const inp = sb.querySelector('#snap-search');
+      inp.addEventListener('input', () => {
+        const pos = inp.selectionStart;
+        wrap.dataset.snapSearch = inp.value;
+        renderSnapshots();
+        const fresh = document.getElementById('snap-search');
+        if (fresh) { fresh.focus(); if (typeof pos === 'number') fresh.setSelectionRange(pos, pos); }
+      });
+    }
+    const filtered = search ? list.filter((s) => (s.name || '').toLowerCase().indexOf(search) >= 0) : list;
+    if (!filtered.length) {
+      const empty = document.createElement('div');
+      empty.className = 'text-xs text-muted-foreground italic py-2';
+      empty.textContent = `No snapshots match "${search}".`;
+      wrap.appendChild(empty);
+      return;
+    }
+    filtered.slice().reverse().forEach((s) => {
       const row = document.createElement('div');
       row.className = 'flex items-center gap-3 py-2 border-b border-border last:border-b-0 flex-wrap';
       const when = new Date(s.created_at).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' });
