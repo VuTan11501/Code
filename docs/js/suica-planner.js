@@ -2928,6 +2928,23 @@
     bind('planner-leisure-min', 'leisure_min', true);
     bind('planner-leisure-max', 'leisure_max', true);
 
+    // Month +/- step buttons
+    function _stepMonth(delta) {
+      const cur = state.settings.month || '';
+      const m = cur.match(/^(\d{4})-(\d{2})$/);
+      if (!m) return;
+      const d = new Date(+m[1], +m[2] - 1 + delta, 1);
+      const next = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      pushHistory();
+      state.settings.month = next;
+      const el = $('planner-month'); if (el) el.value = next;
+      renderEstimate(); renderCalendar && renderCalendar(); saveState();
+    }
+    const monthPrev = $('planner-month-prev');
+    const monthNext = $('planner-month-next');
+    if (monthPrev) monthPrev.addEventListener('click', () => _stepMonth(-1));
+    if (monthNext) monthNext.addEventListener('click', () => _stepMonth(1));
+
     // Primary: in-browser PDF
     const pdfBtn = $('planner-generate-pdf');
     if (pdfBtn) pdfBtn.addEventListener('click', (e) => generatePDF(e.currentTarget));

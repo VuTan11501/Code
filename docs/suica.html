@@ -346,7 +346,11 @@
           <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
             <div class="field">
               <label class="field-label text-xs text-muted-foreground font-medium block mb-1" for="planner-month">Month</label>
-              <input id="planner-month" type="text" pattern="\d{4}-\d{2}" class="input font-mono" placeholder="2026-06">
+              <div class="flex items-center gap-1">
+                <button id="planner-month-prev" type="button" class="btn btn-ghost sm" data-tooltip="Previous month" aria-label="Previous month">‹</button>
+                <input id="planner-month" type="text" pattern="\d{4}-\d{2}" class="input font-mono flex-1" placeholder="2026-06">
+                <button id="planner-month-next" type="button" class="btn btn-ghost sm" data-tooltip="Next month" aria-label="Next month">›</button>
+              </div>
             </div>
             <div class="field">
               <label class="field-label text-xs text-muted-foreground font-medium block mb-1" for="planner-target">Target (¥)</label>
@@ -726,7 +730,7 @@
 <script src="js/suica-history.js?v=6" defer></script>
 <script src="js/log-viewer.js?v=1" defer></script>
 <script>window.SUICA_FARE_API='https://suica-fare-proxy.workflow-dashboard.workers.dev';</script>
-<script src="js/suica-planner.js?v=58" defer></script>
+<script src="js/suica-planner.js?v=59" defer></script>
 <script>
 // Theme toggle for suica.html (mirrors the dashboard's behavior; uses the same
 // localStorage key so the preference syncs across pages).
