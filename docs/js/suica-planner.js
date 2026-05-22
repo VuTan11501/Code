@@ -132,7 +132,13 @@
     } catch (_) { return []; }
   }
   function saveRecent(arr) {
-    try { localStorage.setItem(RECENT_KEY, JSON.stringify(arr.slice(0, RECENT_MAX))); } catch (_) {}
+    // Pinned runs are kept even if they fall outside the RECENT_MAX window.
+    try {
+      const pinned = arr.filter((r) => r && r.pinned);
+      const unpinned = arr.filter((r) => !r || !r.pinned);
+      const kept = [...pinned, ...unpinned.slice(0, Math.max(0, RECENT_MAX - pinned.length))];
+      localStorage.setItem(RECENT_KEY, JSON.stringify(kept.slice(0, RECENT_MAX + 50)));
+    } catch (_) {}
   }
   function recordGeneration(meta) {
     // meta = { filename, month, target, seed, routes:[…], runUrl, when }
@@ -358,6 +364,8 @@
       wrap.appendChild(empty);
       return;
     }
+    // Pinned recent runs float to the top within the filtered list.
+    filtered.sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
     filtered.forEach((r) => {
       const row = document.createElement('div');
       row.className = 'flex items-start gap-3 py-2 border-b border-border last:border-b-0 flex-wrap';
@@ -394,6 +402,7 @@
         <span class="status-badge status-info font-mono">${r.month}</span>
         <span class="status-badge status-pending font-mono">¥${(+r.target).toLocaleString('en-US')}</span>
         <span class="status-badge font-mono">seed ${r.seed}</span>
+        <button type="button" class="btn btn-ghost sm text-[12px] p-0.5 ${r.pinned ? 'text-primary' : 'opacity-40 hover:opacity-100'}" data-recent-pin data-tooltip="${r.pinned ? 'Unpin run' : 'Pin run (survives history overflow)'}" aria-label="${r.pinned ? 'Unpin run' : 'Pin run'}">📌</button>
         ${r.runUrl ? `<a class="btn btn-ghost sm text-xs" href="${r.runUrl}" target="_blank" rel="noopener" data-tooltip="Open the GitHub Actions run">Run ↗</a>` : ''}
         <button type="button" class="btn btn-ghost sm text-xs" data-restore-recent data-tooltip="Reuse this month + target + seed in the planner">
           <span data-icon="undo" data-size="12"></span>
@@ -410,6 +419,16 @@
         });
         renderEstimate(); saveState();
         const s = $('planner-pdf-status'); if (s) { s.textContent = `Restored settings from ${r.filename || ('run on ' + dt)}`; s.className = 'text-xs text-primary'; }
+      });
+      const pinBtn = row.querySelector('[data-recent-pin]');
+      if (pinBtn) pinBtn.addEventListener('click', () => {
+        const all = loadRecent();
+        const t = all.find((x) => x.when === r.when);
+        if (!t) return;
+        t.pinned = !t.pinned;
+        saveRecent(all);
+        renderRecent();
+        if (window.Toast) window.Toast.info(t.pinned ? '📌 Run pinned' : 'Run unpinned');
       });
       wrap.appendChild(row);
     });
