@@ -538,6 +538,40 @@
     return r;
   }
 
+  // Render station meta hints (kana, romaji, lines) for the current From/To picks.
+  // Pulls from state.stationMeta which was populated from the HeartRails catalogue
+  // at boot. Falls back gracefully when meta is missing.
+  function renderStationHints() {
+    const wrap = $('planner-station-hints');
+    if (!wrap) return;
+    const from = cbFrom ? cbFrom.getValue() : '';
+    const to = cbTo ? cbTo.getValue() : '';
+    if (!from && !to) { wrap.classList.add('hidden'); wrap.innerHTML = ''; return; }
+    const card = (name) => {
+      if (!name) return '';
+      const m = state.stationMeta[name] || {};
+      const lines = (m.lines || []).slice(0, 4);
+      const linesHtml = lines.length
+        ? lines.map((l) => `<span class="status-badge status-info font-mono text-[10px]">${l}</span>`).join(' ')
+        : '<span class="text-[10px] text-muted-foreground italic">no line data</span>';
+      return `
+        <div class="flex-1 min-w-[140px] flex flex-col gap-1">
+          <div class="text-sm font-medium flex items-baseline gap-2">
+            <span>${name}</span>
+            ${m.kana ? `<span class="text-[10px] text-muted-foreground">${m.kana}</span>` : ''}
+            ${m.romaji ? `<span class="text-[10px] text-muted-foreground font-mono uppercase">${m.romaji}</span>` : ''}
+          </div>
+          <div class="flex flex-wrap gap-1">${linesHtml}</div>
+        </div>`;
+    };
+    const fromCard = card(from);
+    const toCard = card(to);
+    if (!fromCard && !toCard) { wrap.classList.add('hidden'); wrap.innerHTML = ''; return; }
+    wrap.classList.remove('hidden');
+    wrap.innerHTML = `<div class="flex flex-wrap gap-4">${fromCard}${toCard ? '<span class="text-muted-foreground self-center">↔</span>' + toCard : ''}</div>`;
+    if (window.refreshIcons) window.refreshIcons(wrap);
+  }
+
   function updateFareDisplay() {
     const from = cbFrom ? cbFrom.getValue() : '';
     const to = cbTo ? cbTo.getValue() : '';
@@ -549,6 +583,7 @@
     };
     const disableAdd = () => addBtns.forEach((b) => b.setAttribute('disabled', ''));
     const enableAdd  = () => addBtns.forEach((b) => b.removeAttribute('disabled'));
+    renderStationHints();
     if (!from || !to)   { setBadge('Pick from & to', 'status-skipped'); disableAdd(); return; }
     if (from === to)    { setBadge('Pick different stations', 'status-failure'); disableAdd(); return; }
     const key = pairKey(from, to);
@@ -1370,7 +1405,7 @@
       const zipBuf = await _downloadArtifact(token, run.id);
       const filename = await _extractAndSavePdf(zipBuf, `suica-${state.settings.month}.pdf`);
       setStatus(`✓ Downloaded ${filename}`, 'text-primary');
-      if (window.toast) window.toast.success(`Saved ${filename}`, {
+      if (window.Toast) window.Toast.success(`Saved ${filename}`, {
         title: 'Suica PDF ready',
         actionLabel: run && run.html_url ? 'View run' : null,
         onAction: run && run.html_url ? () => window.open(run.html_url, '_blank') : null,
@@ -1399,7 +1434,7 @@
     } catch (err) {
       console.error('[suica-planner] generatePDF failed:', err);
       setStatus(`Failed: ${err.message}`, 'text-destructive');
-      if (window.toast) window.toast.error(err.message, { title: 'PDF generation failed' });
+      if (window.Toast) window.Toast.error(err.message, { title: 'PDF generation failed' });
       btn.innerHTML = '<span data-icon="download" data-size="14"></span><span class="btn-label">Generate Suica PDF</span>';
       if (window.refreshIcons) window.refreshIcons(btn);
     } finally {
@@ -1506,9 +1541,9 @@
     const skipped = skippedCommute + skippedLeisure;
     const msg = `Applied "${preset.label}"` + (skipped ? ` — ${skipped} route(s) skipped (no fare data)` : '');
     if (status) { status.textContent = msg; status.className = 'text-xs ' + (skipped ? 'text-warning' : 'text-primary'); }
-    if (window.toast) {
-      if (skipped) window.toast.warning(msg, { title: 'Preset applied (partial)' });
-      else window.toast.success(`Target ¥${preset.target.toLocaleString('en-US')}`, { title: 'Preset applied' });
+    if (window.Toast) {
+      if (skipped) window.Toast.warning(msg, { title: 'Preset applied (partial)' });
+      else window.Toast.success(`Target ¥${preset.target.toLocaleString('en-US')}`, { title: 'Preset applied' });
     }
   }
 
@@ -1639,7 +1674,7 @@
     const msg = `Auto-filled: ${route} weekdays + ${s.leisureCandidates.length} leisure route(s), ~${s.outings} outings/mo`;
     const detail = `Projected ${fmtYen(s.projected)} vs target ${fmtYen(target)}`;
     note(`${msg} → ${detail}`, 'text-primary');
-    if (window.toast) window.toast.success(detail, { title: 'Auto-suggest applied' });
+    if (window.Toast) window.Toast.success(detail, { title: 'Auto-suggest applied' });
   }
 
   // Show 3-card alternatives: Light, Standard, Heavy
@@ -1711,7 +1746,7 @@
         applySuggestion(v.suggestion);
         panel.classList.add('hidden');
         const detail = `${v.label} variant: ${fmtYen(v.suggestion.projected)} (target ${fmtYen(target)})`;
-        if (window.toast) window.toast.success(detail, { title: 'Variant applied' });
+        if (window.Toast) window.Toast.success(detail, { title: 'Variant applied' });
         note(detail, 'text-primary');
       });
     });

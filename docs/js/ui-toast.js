@@ -142,8 +142,10 @@
   }
 
   window.showToast = show;
-  // Convenience shorthand
-  window.toast = {
+  // New rich-API exposed as `window.Toast` to avoid clobbering the legacy
+  // `window.toast(msg, cls)` function declared in app.js (which 100+ callsites
+  // and the smoke test still rely on).
+  window.Toast = {
     info:    (m, o) => show(m, Object.assign({ variant: 'info' }, o)),
     success: (m, o) => show(m, Object.assign({ variant: 'success' }, o)),
     warning: (m, o) => show(m, Object.assign({ variant: 'warning' }, o)),
