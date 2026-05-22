@@ -419,7 +419,7 @@ function renderTimesheet() {
           const lines = [
             `Lost ${_minToHhmm(lost)} (≈ ¥${dayYen.toLocaleString('en-US')} gross)`,
             `Checkin/out didn't fully cover the OT request range.`,
-            `Requested: ${d.otRequest || '—'} · Recognized: ${_minToHhmm(_hhmmToMin(d.otNormal) + _hhmmToMin(d.otSat) + _hhmmToMin(d.otSun))}`,
+            `Requested: ${d.otRequest || '—'} · Be counted: ${_minToHhmm(_hhmmToMin(d.otNormal) + _hhmmToMin(d.otSat) + _hhmmToMin(d.otSun))}`,
           ];
           if (parts.sundayLostMin > 0) lines.push(`+10% Sunday on ${_minToHhmm(parts.sundayLostMin)}`);
           if (parts.nightLostMin > 0)  lines.push(`+25% Night on ${_minToHhmm(parts.nightLostMin)}`);
