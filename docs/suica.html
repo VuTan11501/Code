@@ -276,6 +276,9 @@
       <button id="suica-sound-toggle" type="button" class="btn sm btn-ghost" aria-label="Toggle toast sounds" data-tooltip="Toggle subtle toast sounds (off by default)">
         <span style="font-size:14px;line-height:1" data-sound-icon>🔕</span>
       </button>
+      <button id="suica-yen-toggle" type="button" class="btn sm btn-ghost text-xs font-mono" aria-label="Toggle yen format" data-tooltip="Switch between ¥1,234 and 1,234円">
+        <span data-yen-label>¥</span>
+      </button>
       <select id="suica-lang-select" class="input input-sm w-auto text-xs" aria-label="UI language" data-tooltip="Switch UI language (limited coverage)">
         <option value="en">EN</option>
         <option value="ja">日本語</option>
@@ -828,7 +831,7 @@
 <script src="js/suica-history.js?v=6" defer></script>
 <script src="js/log-viewer.js?v=1" defer></script>
 <script>window.SUICA_FARE_API='https://suica-fare-proxy.workflow-dashboard.workers.dev';</script>
-<script src="js/suica-planner.js?v=118" defer></script>
+<script src="js/suica-planner.js?v=119" defer></script>
 <script>
 // Theme toggle for suica.html (mirrors the dashboard's behavior; uses the same
 // localStorage key so the preference syncs across pages).
@@ -924,6 +927,35 @@
       var on = !(window.Toast && window.Toast.getSound && window.Toast.getSound());
       if (window.Toast && window.Toast.setSound) window.Toast.setSound(on);
       paint();
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();
+</script>
+<script>
+// Yen format toggle — '¥1,234' vs '1,234円'. Persisted to localStorage.
+(function () {
+  var KEY = 'suica-yen-fmt';
+  function getFmt() { try { return localStorage.getItem(KEY) || 'prefix'; } catch (_) { return 'prefix'; } }
+  function setFmt(v) { try { localStorage.setItem(KEY, v); } catch (_) {} }
+  function init() {
+    var btn = document.getElementById('suica-yen-toggle');
+    if (!btn) return;
+    var lbl = btn.querySelector('[data-yen-label]');
+    function paint() {
+      var f = getFmt();
+      if (lbl) lbl.textContent = f === 'suffix' ? '円' : '¥';
+      btn.setAttribute('aria-pressed', f === 'suffix' ? 'true' : 'false');
+      btn.setAttribute('data-tooltip', f === 'suffix' ? 'Switch to ¥-prefix (¥1,234)' : 'Switch to 円-suffix (1,234円)');
+    }
+    paint();
+    btn.addEventListener('click', function () {
+      setFmt(getFmt() === 'suffix' ? 'prefix' : 'suffix');
+      paint();
+      // Trigger a re-render of the planner so existing yen labels update.
+      try { window.dispatchEvent(new CustomEvent('suica:yen-fmt-changed')); } catch (_) {}
+      if (window.SuicaPlanner && window.SuicaPlanner.rerender) window.SuicaPlanner.rerender();
+    });
+  }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
 })();

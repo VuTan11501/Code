@@ -11,7 +11,17 @@
   'use strict';
 
   const $ = (id) => document.getElementById(id);
-  const fmtYen = (n) => '¥' + Math.round(n).toLocaleString('en-US');
+  // Format yen amounts using the user's preferred style: '¥1,234' (default) or
+  // '1,234円' (Japanese). Preference is read from localStorage on every call so
+  // the toggle takes effect immediately on next render.
+  const fmtYen = (n) => {
+    const r = Math.round(n);
+    const abs = Math.abs(r).toLocaleString('en-US');
+    const sign = r < 0 ? '-' : '';
+    let fmt = 'prefix';
+    try { fmt = localStorage.getItem('suica-yen-fmt') || 'prefix'; } catch (_) {}
+    return fmt === 'suffix' ? `${sign}${abs}円` : `${sign}¥${abs}`;
+  };
   const sortPair = (a, b) => [a, b].sort((x, y) => x.localeCompare(y, 'ja'));
   const pairKey = (a, b) => { const [x, y] = sortPair(a, b); return `${x}↔${y}`; };
 
@@ -4203,6 +4213,14 @@
     renderPattern(); renderLeisure(); renderEstimate();
     bindKeyboardShortcuts();
     loadFares();
+    // Public hook so chrome scripts (e.g. yen format toggle) can request a full
+    // re-render after changing a global preference.
+    window.SuicaPlanner = window.SuicaPlanner || {};
+    window.SuicaPlanner.rerender = () => {
+      try {
+        renderPattern(); renderLeisure(); renderEstimate(); renderRecent(); renderSnapshots(); updateFareDisplay && updateFareDisplay();
+      } catch (e) { console.warn('[suica-planner] rerender failed', e); }
+    };
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
