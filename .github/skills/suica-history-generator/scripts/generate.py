@@ -83,7 +83,9 @@ class FareCache:
 
 def write_outputs(history: MonthlyHistory, out_path: Path,
                   template_pdf: Path | None = None,
-                  validate: bool = True) -> None:
+                  validate: bool = True,
+                  verify_target_yen: int | None = None,
+                  verify_tolerance_yen: int = 500) -> None:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     suffix = out_path.suffix.lower()
 
@@ -120,6 +122,27 @@ def write_outputs(history: MonthlyHistory, out_path: Path,
         log.info("Wrote PDF → %s (rendered %d/%d rows, cleared %d, truncated %d)",
                  out_path, stats["rendered"], stats["template_rows"],
                  stats["cleared"], stats["truncated"])
+        # ── Post-render strict verification ───────────────────────────────
+        # Re-open the PDF and confirm: page count, chrome rows, font allow-
+        # list, no leftover redaction annots, pixel-perfect right-alignment
+        # of numeric cells, balance arithmetic, and spend within tolerance.
+        # Any failure exits with code 3 so the workflow step (and the
+        # Actions run) fails before the artifact is uploaded.
+        from .verify_pdf import verify_pdf as _verify_pdf
+        log.info("Verifying generated PDF (structure / fonts / alignment / balance)")
+        ok, vreport = _verify_pdf(
+            out_path, template_pdf,
+            history=history,
+            target_yen=verify_target_yen,
+            tolerance_yen=verify_tolerance_yen,
+            rendered_count=stats.get("rendered"),
+        )
+        if not ok:
+            failed_codes = ", ".join(c.code for c in vreport.failed)
+            log.error("PDF verification FAILED (%d check(s)): %s", len(vreport.failed), failed_codes)
+            sys.exit(3)
+        log.info("PDF verification PASSED (%d/%d checks)",
+                 len(vreport.checks) - len(vreport.failed), len(vreport.checks))
     else:
         log.error("Unsupported output suffix: %s", suffix)
         sys.exit(2)
@@ -176,7 +199,9 @@ def main(argv: list[str] | None = None) -> int:
 
     print(history.summary())
     write_outputs(history, args.out, template_pdf=args.template,
-                  validate=not args.no_validate)
+                  validate=not args.no_validate,
+                  verify_target_yen=args.target,
+                  verify_tolerance_yen=args.tolerance)
     if args.rakuraku_out:
         from .rakuraku_export import write_trips_json
         stats = write_trips_json(history, args.rakuraku_out)

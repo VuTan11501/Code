@@ -90,7 +90,7 @@ jobs:
           python -c "import json,sys; json.load(open('preset.json'));"
           echo "preset.json: $(wc -c < preset.json) bytes"
 
-      - name: Generate Suica PDF
+      - name: Generate Suica PDF (with strict verification)
         env:
           MONTH: ${{ inputs.month }}
           TARGET: ${{ inputs.target }}
@@ -98,6 +98,10 @@ jobs:
         run: |
           cd "${SKILL_ROOT}"
           cp ../../../preset.json preset.json
+          # scripts.generate runs the post-render verifier itself and exits
+          # non-zero (code 3) if structure / fonts / pixel alignment /
+          # balance arithmetic / spend target fail — that fails this step
+          # before the artifact is uploaded.
           python -m scripts.generate \
             --config preset.json \
             --month  "$MONTH" \
@@ -105,36 +109,20 @@ jobs:
             --seed   "$SEED" \
             --template fixtures/template.pdf \
             --out out.pdf \
-            -v
-          ls -la out.pdf
-          # Copy back to workspace root so upload-artifact can find it cleanly
-          cp out.pdf "${GITHUB_WORKSPACE}/suica-${MONTH}.pdf"
-
-      - name: Verify generated PDF (forensic + structural)
-        env:
-          MONTH: ${{ inputs.month }}
-        continue-on-error: true
-        run: |
-          PDF="${GITHUB_WORKSPACE}/suica-${MONTH}.pdf"
-          TEMPLATE="${SKILL_ROOT}/fixtures/template.pdf"
-          MONTH_START="${MONTH}-01"
-          # Compute last day of the month portably
-          MONTH_END=$(python -c "import calendar,sys; y,m=map(int,sys.argv[1].split('-')); print(f'{y:04d}-{m:02d}-{calendar.monthrange(y,m)[1]:02d}')" "$MONTH")
+            -v 2>&1 | tee generate.log
+          GEN_EXIT=${PIPESTATUS[0]}
+          # Append verifier section to the run summary so users can see
+          # which checks passed/failed without opening the raw log.
           echo "### Suica PDF verification" >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
-          python .github/skills/suica-pdf-editor/scripts/suica_update.py verify \
-            "$PDF" \
-            --original "$TEMPLATE" \
-            --date-start "$MONTH_START" \
-            --date-end   "$MONTH_END" \
-            --skip-sun true \
-            --skip-holidays true 2>&1 | tee verify.log
-          VERIFY_EXIT=${PIPESTATUS[0]}
-          cat verify.log >> "$GITHUB_STEP_SUMMARY"
+          grep -E '^\s*[✓✗] \[' generate.log >> "$GITHUB_STEP_SUMMARY" || true
           echo '```' >> "$GITHUB_STEP_SUMMARY"
-          if [ "$VERIFY_EXIT" -ne 0 ]; then
-            echo "::warning::Forensic verify reported issues (exit=$VERIFY_EXIT). PDF is still uploaded; see summary."
+          if [ "$GEN_EXIT" -ne 0 ]; then
+            echo "::error::PDF verification failed (exit $GEN_EXIT). See summary."
+            exit "$GEN_EXIT"
           fi
+          ls -la out.pdf
+          cp out.pdf "${GITHUB_WORKSPACE}/suica-${MONTH}.pdf"
 
       - name: Pixel diff vs template (informational)
         continue-on-error: true
