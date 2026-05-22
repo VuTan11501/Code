@@ -1487,9 +1487,17 @@
 
   async function generatePDF(btn) {
     const status = $('planner-pdf-status');
+    let progressToast = null;
     const setStatus = (txt, cls) => {
       status.textContent = txt || '';
       status.className = 'text-xs ' + (cls || 'text-muted-foreground');
+      if (progressToast && txt) {
+        const variant = cls && cls.includes('destructive') ? 'error'
+                      : cls && cls.includes('warning') ? 'warning'
+                      : cls && cls.includes('primary') ? 'success'
+                      : 'info';
+        progressToast.update(txt, { variant });
+      }
     };
     try {
       const totalRoutes = DAYS.reduce((s, d) => s + state.pattern[d].length, 0) + state.leisure.length;
@@ -1519,6 +1527,12 @@
       if (_logCtx.pollTimer) { clearInterval(_logCtx.pollTimer); _logCtx.pollTimer = null; }
       setStatus('Dispatching workflow…', 'text-muted-foreground');
       _showOverlay('Generating Suica PDF', 'Dispatching workflow…');
+      if (window.Toast) {
+        progressToast = window.Toast.info('Dispatching workflow…', {
+          title: 'Generating Suica PDF',
+          duration: 0,
+        });
+      }
       const dispatchedAt = Date.now();
       await _dispatchWorkflow(token, preset);
       setStatus('Workflow dispatched — waiting for run…', 'text-muted-foreground');
@@ -1528,6 +1542,7 @@
       const zipBuf = await _downloadArtifact(token, run.id);
       const filename = await _extractAndSavePdf(zipBuf, `suica-${state.settings.month}.pdf`);
       setStatus(`✓ Downloaded ${filename}`, 'text-primary');
+      if (progressToast) { progressToast.dismiss(); progressToast = null; }
       if (window.Toast) window.Toast.success(`Saved ${filename}`, {
         title: 'Suica PDF ready',
         actionLabel: run && run.html_url ? 'View run' : null,
@@ -1557,6 +1572,7 @@
     } catch (err) {
       console.error('[suica-planner] generatePDF failed:', err);
       setStatus(`Failed: ${err.message}`, 'text-destructive');
+      if (progressToast) { progressToast.dismiss(); progressToast = null; }
       if (window.Toast) window.Toast.error(err.message, { title: 'PDF generation failed' });
       btn.innerHTML = '<span data-icon="download" data-size="14"></span><span class="btn-label">Generate Suica PDF</span>';
       if (window.refreshIcons) window.refreshIcons(btn);

@@ -135,10 +135,33 @@
       card.style.transform = 'translateY(-8px)';
       setTimeout(() => { if (card.parentNode) card.parentNode.removeChild(card); }, reduceMotion() ? 0 : 180);
     }
+    function update(newMessage, newOpts) {
+      if (dismissed) return;
+      newOpts = newOpts || {};
+      if (typeof newMessage === 'string') msg.textContent = newMessage;
+      if (newOpts.title) {
+        let t = body.firstChild && body.firstChild !== msg ? body.firstChild : null;
+        if (!t) {
+          t = document.createElement('div');
+          t.style.cssText = 'font-weight:600;margin-bottom:.125rem;';
+          body.insertBefore(t, msg);
+        }
+        t.textContent = newOpts.title;
+      }
+      if (newOpts.variant && VARIANT_CLASSES[newOpts.variant]) {
+        badge.className = 'status-badge ' + VARIANT_CLASSES[newOpts.variant];
+        badge.innerHTML = `<span data-icon="${VARIANT_ICONS[newOpts.variant] || 'info'}" data-size="12"></span>`;
+        if (window.refreshIcons) window.refreshIcons(badge);
+      }
+      if (typeof newOpts.duration === 'number') {
+        if (timer) clearTimeout(timer);
+        if (newOpts.duration > 0) timer = setTimeout(dismiss, newOpts.duration);
+      }
+    }
     card.addEventListener('click', dismiss);
     if (duration > 0) timer = setTimeout(dismiss, duration);
 
-    return { dismiss };
+    return { dismiss, update };
   }
 
   window.showToast = show;
