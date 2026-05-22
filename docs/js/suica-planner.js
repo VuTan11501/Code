@@ -1974,6 +1974,34 @@
     if (window.Toast) window.Toast.success(`${eventCount} events · ${state.settings.month}.ics`, { title: 'Calendar exported' });
   }
 
+  // ────── Bulk-add leisure routes from text input ──────
+  // User pastes "東京↔新宿\n渋谷↔横浜" or comma-separated; we validate against
+  // state.fares (must be a verified pair) and report skipped count.
+  function bulkAddLeisure() {
+    const raw = prompt('Paste leisure routes (one per line or comma-separated). Use form "東京↔新宿":');
+    if (!raw) return;
+    const items = raw.split(/[\n,;]+/).map((s) => s.trim()).filter(Boolean);
+    if (!items.length) return;
+    pushHistory();
+    let added = 0, skipped = 0, duplicate = 0;
+    items.forEach((s) => {
+      const m = s.match(/^(.+?)\s*[↔⇄<>↔]+\s*(.+)$/);
+      if (!m) { skipped++; return; }
+      const key = pairKey(m[1].trim(), m[2].trim());
+      if (!state.fares[key]) { skipped++; return; }
+      if (state.leisure.some((l) => l.route === key)) { duplicate++; return; }
+      state.leisure.push({ route: key, weight: 1 });
+      added++;
+    });
+    renderLeisure(); renderEstimate(); saveState();
+    const detail = `${added} added · ${duplicate} dup · ${skipped} invalid`;
+    if (window.Toast) {
+      if (added && !skipped) window.Toast.success(detail, { title: 'Leisure routes added' });
+      else if (added) window.Toast.warning(detail, { title: 'Leisure routes added (partial)' });
+      else window.Toast.error(detail, { title: 'No routes added' });
+    }
+  }
+
   function loadSamplePlan() {
     pushHistory();
     state.pattern = {
@@ -2362,6 +2390,8 @@
       const status = $('planner-pdf-status');
       if (status) { status.textContent = `Seed bumped to ${next} — same plan, different schedule. Click Generate to render.`; status.className = 'text-xs text-primary'; }
     });
+    const bulkBtn = $('planner-leisure-bulk');
+    if (bulkBtn) bulkBtn.addEventListener('click', bulkAddLeisure);
     const tgtShuffle = $('planner-target-shuffle');
     if (tgtShuffle) tgtShuffle.addEventListener('click', () => {
       const current = +state.settings.target || 0;
