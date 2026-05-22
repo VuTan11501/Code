@@ -1256,32 +1256,11 @@
   </div>
 </div>
 
-<!-- Scripts (order matters) -->
-<!-- Core scripts (always loaded, deferred so they run after DOM parse) -->
-<script defer src="js/icons.js?v=47"></script>
-<script defer src="js/no-autofill.js?v=26"></script>
-<script defer src="js/theme.js?v=1"></script>
-<script defer src="js/locations.js?v=27"></script>
-<script defer src="js/biometric.js?v=2"></script>
-<script defer src="js/cloud-sync.js?v=5"></script>
-<script defer src="js/app.js?v=50"></script>
-<script defer src="js/dashboard.js?v=40"></script>
-<script defer src="js/schedule.js?v=28"></script>
-<script defer src="js/ot-salary.js?v=38"></script>
-<script defer src="js/ot-planner.js?v=54"></script>
-<script defer src="js/timesheet.js?v=19"></script>
-<script defer src="js/ai-validators.js?v=1"></script>
-<script defer src="js/ai-audit.js?v=4"></script>
-<script defer src="js/ai-proposals.js?v=2"></script>
-<script defer src="js/ai-tools.js?v=99"></script>
-<script defer src="js/ai-agent.js?v=31"></script>
-<script defer src="js/insights.js?v=1"></script>
-<script defer src="js/settings.js?v=36"></script>
-<!--
-  Page-specific scripts (schedule / ot / timesheet / ai / settings) are
-  lazy-loaded on demand by app.js → ensurePageScripts() when the user
-  navigates to that tab. This shaves ~330KB off the initial payload.
--->
+<!-- Scripts: single minified+obfuscated bundle (built by scripts/build-js.mjs).
+     Source files live in docs/js/* for development; the bundle is what ships.
+     To work on the raw source instead, comment the line below and re-enable
+     the individual <script defer src="js/X.js"> tags (see git history). -->
+<script defer src="dist/app.bundle.min.js?v=1"></script>
 <!-- AI Proposal confirmation modal (Phase 3) -->
 <div id="aiProposalModal" class="proposal-modal" role="dialog" aria-modal="true" aria-labelledby="aiProposalTitle" hidden aria-hidden="true">
   <div class="proposal-modal-backdrop" onclick="AIProposals.closeModal()"></div>

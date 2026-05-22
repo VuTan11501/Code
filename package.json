@@ -5,9 +5,14 @@
   "description": "Static frontend for FJP Workflow Dashboard (gh-pages).",
   "scripts": {
     "build:css": "tailwindcss -i src/tailwind-input.css -o docs/css/tailwind.css --minify",
-    "watch:css": "tailwindcss -i src/tailwind-input.css -o docs/css/tailwind.css --watch"
+    "watch:css": "tailwindcss -i src/tailwind-input.css -o docs/css/tailwind.css --watch",
+    "build:js": "node scripts/build-js.mjs --obfuscate",
+    "build:js:fast": "node scripts/build-js.mjs",
+    "build": "npm run build:css && npm run build:js"
   },
   "devDependencies": {
+    "esbuild": "^0.28.0",
+    "javascript-obfuscator": "^5.4.3",
     "tailwindcss": "^3.4.13"
   }
 }

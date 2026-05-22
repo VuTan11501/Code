@@ -6,6 +6,7 @@ on:
     paths:
       - 'docs/**'
       - 'src/**'
+      - 'scripts/**'
       - 'tailwind.config.js'
       - 'package.json'
       - 'package-lock.json'
@@ -42,6 +43,9 @@ jobs:
 
       - name: Build Tailwind CSS
         run: npm run build:css
+
+      - name: Bundle + minify + obfuscate JS
+        run: npm run build:js
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
