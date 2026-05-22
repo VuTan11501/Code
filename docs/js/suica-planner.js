@@ -2366,12 +2366,34 @@
   // base64-url-safe blob in the URL fragment. We use CompressionStream where
   // available; otherwise plain base64 of JSON. On load, init() inspects the
   // hash and, if present, offers to import.
+  // Defaults used for share-link minification — fields equal to these are
+  // omitted from the encoded payload to keep URLs short.
+  const _SHARE_DEFAULTS = {
+    initial_balance: 3000,
+    topup_threshold: 1500,
+    topup_amount: 3000,
+    leisure_min: 2,
+    leisure_max: 4,
+    seedPinned: false,
+  };
   function planForShare() {
+    // Drop empty weekday arrays — recipient's state.pattern initializer
+    // already supplies them.
+    const slimPattern = {};
+    DAYS.forEach((d) => { if (state.pattern[d] && state.pattern[d].length) slimPattern[d] = state.pattern[d]; });
+    // Settings: drop fields that match defaults; round numerics.
+    const slimSettings = {};
+    Object.keys(state.settings).forEach((k) => {
+      const v = state.settings[k];
+      if (v == null || v === '') return;
+      if (_SHARE_DEFAULTS[k] != null && v === _SHARE_DEFAULTS[k]) return;
+      slimSettings[k] = v;
+    });
     return {
       v: 1,
-      pattern: state.pattern,
+      pattern: slimPattern,
       leisure: state.leisure,
-      settings: state.settings,
+      settings: slimSettings,
       route: currentRoute(),
     };
   }
@@ -2407,10 +2429,19 @@
   }
   async function copyShareLink() {
     try {
-      const blob = await encodePlanToHash(planForShare());
+      const fullJsonBytes = new TextEncoder().encode(JSON.stringify({
+        v: 1, pattern: state.pattern, leisure: state.leisure, settings: state.settings, route: currentRoute(),
+      })).length;
+      const slim = planForShare();
+      const slimJsonBytes = new TextEncoder().encode(JSON.stringify(slim)).length;
+      const blob = await encodePlanToHash(slim);
       const url = `${location.origin}${location.pathname}#p=${blob}`;
       await navigator.clipboard.writeText(url);
-      if (window.Toast) window.Toast.success(`${(url.length/1024).toFixed(1)} KB link copied`, { title: 'Share link copied' });
+      const ratio = fullJsonBytes ? Math.round((1 - slimJsonBytes / fullJsonBytes) * 100) : 0;
+      if (window.Toast) window.Toast.success(
+        `${url.length} chars · JSON ${slimJsonBytes}B (was ${fullJsonBytes}B, −${ratio}%)`,
+        { title: 'Share link copied' }
+      );
     } catch (e) {
       if (window.Toast) window.Toast.error(e.message || 'Could not encode plan', { title: 'Share failed' });
     }
@@ -2423,7 +2454,13 @@
       if (!obj || obj.v !== 1) return;
       const ok = confirm('A shared plan is in this link. Import it now? Your current plan will be replaced.');
       if (!ok) return;
-      if (obj.pattern) state.pattern = obj.pattern;
+      if (obj.pattern) {
+        // Empty pattern object replaces nothing; assignments are per-day so
+        // a slim share link doesn't wipe untouched days.
+        DAYS.forEach((d) => {
+          state.pattern[d] = Array.isArray(obj.pattern[d]) ? obj.pattern[d] : [];
+        });
+      }
       if (obj.leisure) state.leisure = obj.leisure;
       if (obj.settings) state.settings = Object.assign(state.settings, obj.settings);
       if (obj.route && cbFrom && cbTo) {
