@@ -43,6 +43,55 @@
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
   }
 
+  // ────── Persistence ──────
+  // Survives reload via localStorage. We persist only user-authored data:
+  // weekly pattern, leisure pool, settings, and the last-picked route — NOT
+  // fare/station catalogues (those are reloaded from the network each visit).
+  const STORAGE_KEY = 'suica-planner-v2';
+  let _saveTimer = null;
+  function saveState() {
+    if (_saveTimer) return;
+    _saveTimer = setTimeout(() => {
+      _saveTimer = null;
+      try {
+        const payload = {
+          v: 2,
+          pattern: state.pattern,
+          leisure: state.leisure,
+          settings: state.settings,
+          lastRoute: {
+            from: (typeof cbFrom !== 'undefined' && cbFrom) ? cbFrom.getValue() : '',
+            to:   (typeof cbTo !== 'undefined' && cbTo)   ? cbTo.getValue()   : '',
+          },
+        };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+      } catch (_) { /* quota or private-mode — ignore */ }
+    }, 200);
+  }
+  function loadState() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return null;
+      const p = JSON.parse(raw);
+      if (!p || p.v !== 2) return null;
+      // Merge defensively — schema may evolve
+      if (p.pattern && typeof p.pattern === 'object') {
+        DAYS.forEach((d) => {
+          if (Array.isArray(p.pattern[d])) state.pattern[d] = p.pattern[d].filter((t) => t && t.route);
+        });
+      }
+      if (Array.isArray(p.leisure)) {
+        state.leisure = p.leisure.filter((l) => l && l.route).map((l) => ({ route: l.route, weight: Math.max(1, +l.weight || 1) }));
+      }
+      if (p.settings && typeof p.settings === 'object') {
+        Object.keys(state.settings).forEach((k) => {
+          if (p.settings[k] != null) state.settings[k] = p.settings[k];
+        });
+      }
+      return p;
+    } catch (_) { return null; }
+  }
+
   // ────── Load fare data + station catalogue ──────
   async function loadFares() {
     const setStatus = (html, variant) => {
@@ -526,6 +575,7 @@
     });
     renderPattern();
     renderEstimate();
+    saveState();
   }
 
   function addLeisure() {
@@ -534,6 +584,7 @@
     state.leisure.push({ route: r, weight: 1 });
     renderLeisure();
     renderEstimate();
+    saveState();
   }
 
   function currentRoute() {
@@ -574,7 +625,7 @@
           chip.innerHTML = `<span class="font-mono">${t.route}</span><button class="ml-1 hover:text-destructive" aria-label="remove">×</button>`;
           chip.querySelector('button').addEventListener('click', () => {
             state.pattern[day].splice(idx, 1);
-            renderPattern(); renderEstimate();
+            renderPattern(); renderEstimate(); saveState();
           });
           chips.appendChild(chip);
         });
@@ -608,13 +659,14 @@
         const i = +e.target.dataset.leisureWeight;
         state.leisure[i].weight = Math.max(1, +e.target.value || 1);
         renderEstimate();
+        saveState();
       });
     });
     wrap.querySelectorAll('[data-leisure-remove]').forEach((btn) => {
       btn.addEventListener('click', (e) => {
         const i = +e.target.closest('[data-leisure-remove]').dataset.leisureRemove;
         state.leisure.splice(i, 1);
-        renderLeisure(); renderEstimate();
+        renderLeisure(); renderEstimate(); saveState();
       });
     });
   }
@@ -1153,22 +1205,121 @@
       { route: '東京↔上野', weight: 2 },
       { route: '渋谷↔横浜', weight: 2 },
     ];
-    renderPattern(); renderLeisure(); renderEstimate();
+    renderPattern(); renderLeisure(); renderEstimate(); saveState();
   }
 
   function clearPlan() {
     DAYS.forEach((d) => { state.pattern[d] = []; });
     state.leisure = [];
-    renderPattern(); renderLeisure(); renderEstimate();
+    renderPattern(); renderLeisure(); renderEstimate(); saveState();
+  }
+
+  // ────── Auto-suggest from target + current route ──────
+  // Given the currently picked From↔To and state.settings.target, fill Mon-Fri
+  // commute with that route (2 fares/day = round trip) and tune the leisure
+  // pool so total monthly spend lands near the target.
+  // - If no route is picked, try last-used or '東京↔新宿' as fallback.
+  // - Picks leisure variants from known fares around the same endpoint.
+  function autoSuggest() {
+    const status = $('planner-pdf-status');
+    const note = (txt, cls) => { if (status) { status.textContent = txt; status.className = 'text-xs ' + (cls || 'text-muted-foreground'); } };
+    const target = +state.settings.target || 0;
+    if (!target || target < 1000) { note('Set a target (≥ ¥1000) first.', 'text-warning'); return; }
+    let route = currentRoute();
+    if (!route) {
+      // Fall back to last-saved route or sample
+      try {
+        const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+        if (saved && saved.lastRoute && saved.lastRoute.from && saved.lastRoute.to && saved.lastRoute.from !== saved.lastRoute.to) {
+          route = pairKey(saved.lastRoute.from, saved.lastRoute.to);
+          if (cbFrom && cbTo) { cbFrom.setValue(saved.lastRoute.from); cbTo.setValue(saved.lastRoute.to); updateFareDisplay(); }
+        }
+      } catch (_) {}
+    }
+    if (!route && state.stations.includes('東京') && state.stations.includes('新宿')) {
+      route = '東京↔新宿';
+      if (cbFrom && cbTo) { cbFrom.setValue('東京'); cbTo.setValue('新宿'); updateFareDisplay(); }
+    }
+    if (!route) { note('Pick a From and To station first.', 'text-warning'); return; }
+
+    const commuteFare = fareOf(route);
+    if (!commuteFare) { note('Selected route has no verified fare yet — pick a JR-served pair.', 'text-warning'); return; }
+
+    const monthInfo = countWeekdaysInMonth(state.settings.month);
+    if (!monthInfo) { note('Set a valid YYYY-MM month first.', 'text-warning'); return; }
+    const weekdayCount = monthInfo.counts.monday + monthInfo.counts.tuesday + monthInfo.counts.wednesday + monthInfo.counts.thursday + monthInfo.counts.friday;
+
+    // 1) Commute: round-trip every weekday = 2 fares × weekdayCount
+    const commuteSpend = 2 * commuteFare * weekdayCount;
+
+    // 2) Leisure: remainder distributed across 1-3 leisure routes
+    const remainder = Math.max(0, target - commuteSpend);
+    // Pick leisure candidates: prefer existing leisure, else nearby known pairs from one endpoint
+    let leisureCandidates = state.leisure.map((l) => l.route);
+    if (!leisureCandidates.length) {
+      const [a, b] = route.split('↔');
+      const nearby = [];
+      Object.keys(state.fares).forEach((k) => {
+        if (k === route) return;
+        const [x, y] = k.split('↔');
+        if (x === a || x === b || y === a || y === b) {
+          const f = state.fares[k];
+          if (f >= 150 && f <= 800) nearby.push({ k, f });
+        }
+      });
+      nearby.sort((p, q) => Math.abs((remainder/8) - p.f) - Math.abs((remainder/8) - q.f));
+      leisureCandidates = nearby.slice(0, 3).map((n) => n.k);
+    }
+    if (!leisureCandidates.length && state.stations.length) {
+      // Last-ditch fallback: any verified fare ≥ 200
+      const any = Object.keys(state.fares).filter((k) => state.fares[k] >= 200 && state.fares[k] <= 800).slice(0, 2);
+      leisureCandidates = any;
+    }
+
+    // Decide outings count: each outing = 2 fares × avg leisure fare
+    const avgLeisureFare = leisureCandidates.length
+      ? leisureCandidates.reduce((s, k) => s + (state.fares[k] || 0), 0) / leisureCandidates.length
+      : 0;
+    let outings = avgLeisureFare > 0 ? Math.round(remainder / (2 * avgLeisureFare)) : 0;
+    outings = Math.max(0, Math.min(12, outings));
+    const leisureMin = Math.max(0, outings - 1);
+    const leisureMax = Math.min(20, outings + 1);
+
+    // Apply: weekday commute Mon-Fri, leisure with even weights, target settings
+    DAYS.forEach((d, idx) => {
+      state.pattern[d] = (idx < 5) ? [{ route, type: 'commute' }] : [];
+    });
+    state.leisure = leisureCandidates.map((k) => ({ route: k, weight: 2 }));
+    state.settings.leisure_min = leisureMin;
+    state.settings.leisure_max = leisureMax;
+    // Reflect into inputs
+    const minEl = $('planner-leisure-min'); if (minEl) minEl.value = leisureMin;
+    const maxEl = $('planner-leisure-max'); if (maxEl) maxEl.value = leisureMax;
+
+    renderPattern(); renderLeisure(); renderEstimate(); saveState();
+    const projected = commuteSpend + (avgLeisureFare * outings * 2);
+    note(`Auto-filled: ${route} weekdays + ${leisureCandidates.length} leisure route(s), ~${outings} outings/mo → ${fmtYen(projected)} vs target ${fmtYen(target)}`, 'text-primary');
   }
 
   // ────── Init ──────
   function init() {
+    // Restore persisted state BEFORE first render so user sees their plan instantly.
+    const persisted = loadState();
+
     // Wire comboboxes (replaces the old datalist <input>)
     const fromWrap = document.querySelector('[data-combobox-id="planner-from"]');
     const toWrap = document.querySelector('[data-combobox-id="planner-to"]');
-    if (fromWrap) cbFrom = createCombobox(fromWrap, { options: state.stations, placeholder: '東京 / Tokyo', onChange: updateFareDisplay });
-    if (toWrap)   cbTo   = createCombobox(toWrap,   { options: state.stations, placeholder: '新宿 / Shinjuku', onChange: updateFareDisplay });
+    const onComboChange = () => { updateFareDisplay(); saveState(); };
+    if (fromWrap) cbFrom = createCombobox(fromWrap, { options: state.stations, placeholder: '東京 / Tokyo', onChange: onComboChange });
+    if (toWrap)   cbTo   = createCombobox(toWrap,   { options: state.stations, placeholder: '新宿 / Shinjuku', onChange: onComboChange });
+
+    // Restore last-picked route into the comboboxes (best-effort; values may
+    // not be in the catalogue yet if it loads asynchronously — combobox
+    // accepts arbitrary text and will validate on selection)
+    if (persisted && persisted.lastRoute) {
+      if (cbFrom && persisted.lastRoute.from) cbFrom.setValue(persisted.lastRoute.from);
+      if (cbTo && persisted.lastRoute.to) cbTo.setValue(persisted.lastRoute.to);
+    }
 
     $('planner-swap').addEventListener('click', swap);
     $('planner-add-commute').addEventListener('click', addCommute);
@@ -1178,7 +1329,11 @@
     const bind = (id, key, isNum) => {
       const el = $(id); if (!el) return;
       el.value = state.settings[key];
-      el.addEventListener('change', () => { state.settings[key] = isNum ? +el.value : el.value; renderEstimate(); });
+      el.addEventListener('change', () => {
+        state.settings[key] = isNum ? +el.value : el.value;
+        renderEstimate();
+        saveState();
+      });
     };
     bind('planner-month', 'month', false);
     bind('planner-target', 'target', true);
@@ -1211,6 +1366,8 @@
     });
     $('planner-load-sample').addEventListener('click', loadSamplePlan);
     $('planner-clear').addEventListener('click', clearPlan);
+    const sgBtn = $('planner-auto-suggest');
+    if (sgBtn) sgBtn.addEventListener('click', autoSuggest);
 
     renderPattern(); renderLeisure(); renderEstimate();
     loadFares();
