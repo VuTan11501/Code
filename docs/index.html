@@ -32,7 +32,7 @@
 })();
 </script>
 <link rel="stylesheet" href="css/tailwind.css?v=1">
-<link rel="stylesheet" href="css/style.css?v=115">
+<link rel="stylesheet" href="css/style.css?v=116">
 <link rel="preconnect" href="https://api.github.com">
 </head>
 <body class="bg-background text-foreground font-sans text-sm antialiased min-h-dvh overflow-x-hidden">
@@ -149,6 +149,7 @@
     <div class="page active" id="page-dashboard" role="tabpanel" aria-label="Dashboard page">
 
       <div id="dashInfraToggleBar" class="dash-infra-toggle-bar"></div>
+      <div id="dashCardPicker" class="dash-card-picker" aria-live="polite"></div>
 
       <section class="grid" id="workflowGrid" aria-label="Workflow status cards">
         <div class="skeleton skeleton-card"></div>
@@ -1210,7 +1211,7 @@
 <script defer src="js/biometric.js?v=2"></script>
 <script defer src="js/cloud-sync.js?v=4"></script>
 <script defer src="js/app.js?v=46"></script>
-<script defer src="js/dashboard.js?v=35"></script>
+<script defer src="js/dashboard.js?v=36"></script>
 <!--
   Page-specific scripts (schedule / ot / timesheet / ai / settings) are
   lazy-loaded on demand by app.js → ensurePageScripts() when the user

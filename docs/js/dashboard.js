@@ -50,16 +50,129 @@ function applyCardOrder(workflowList) {
   return ordered;
 }
 
-// Dashboard workflow visibility — default: core only. Toggle persists in localStorage.
-const DASH_SHOW_INFRA_KEY = 'wf_dash_show_infra';
-function dashShowInfra() {
-  try { return localStorage.getItem(DASH_SHOW_INFRA_KEY) === '1'; } catch { return false; }
-}
-function getDashboardWorkflows() {
-  return dashShowInfra() ? WORKFLOWS_ALL : WORKFLOWS;
+// Dashboard workflow visibility — default: 3 core cards only.
+// Each user picks which workflows appear via the Customize panel.
+const DASH_VISIBLE_CARDS_KEY = 'wf_dash_visible_cards';
+const DASH_SHOW_INFRA_KEY = 'wf_dash_show_infra';   // legacy (pre-customize) — read for one-time migration
+const DASH_DEFAULT_VISIBLE = ['auto-checkin.yml', 'auto-checkout.yml', 'auto-ot-creator.yml'];
+
+function getVisibleCardSet() {
+  try {
+    const raw = localStorage.getItem(DASH_VISIBLE_CARDS_KEY);
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) return new Set(arr);
+    }
+  } catch {}
+  // One-time migration from old infra toggle: 'show infra' = all; else defaults.
+  try {
+    if (localStorage.getItem(DASH_SHOW_INFRA_KEY) === '1') {
+      return new Set(WORKFLOWS_ALL.map(w => w.file));
+    }
+  } catch {}
+  return new Set(DASH_DEFAULT_VISIBLE);
 }
 
-// Friendly short labels + tooltips for GitHub run events.
+function saveVisibleCardSet(set) {
+  try { localStorage.setItem(DASH_VISIBLE_CARDS_KEY, JSON.stringify([...set])); } catch {}
+}
+
+function hasCustomVisibility() {
+  try { return !!localStorage.getItem(DASH_VISIBLE_CARDS_KEY); } catch { return false; }
+}
+
+function getDashboardWorkflows() {
+  const visible = getVisibleCardSet();
+  // Preserve WORKFLOWS_ALL order so toggling visibility doesn't shuffle cards.
+  return WORKFLOWS_ALL.filter(w => visible.has(w.file));
+}
+
+function toggleCardVisibility(file) {
+  const set = getVisibleCardSet();
+  if (set.has(file)) {
+    if (set.size <= 1) {
+      if (typeof toast === 'function') toast('At least one workflow must remain visible', 'warning');
+      return;
+    }
+    set.delete(file);
+  } else {
+    set.add(file);
+  }
+  saveVisibleCardSet(set);
+  renderInfraToggle();
+  renderCardPicker();
+  const grid = document.getElementById('workflowGrid');
+  if (grid) grid.innerHTML = '<div class="skeleton skeleton-card"></div><div class="skeleton skeleton-card"></div><div class="skeleton skeleton-card"></div>';
+  if (typeof refresh === 'function') refresh();
+}
+
+function resetCardVisibility() {
+  try { localStorage.removeItem(DASH_VISIBLE_CARDS_KEY); localStorage.removeItem(DASH_SHOW_INFRA_KEY); } catch {}
+  renderInfraToggle();
+  renderCardPicker();
+  const grid = document.getElementById('workflowGrid');
+  if (grid) grid.innerHTML = '<div class="skeleton skeleton-card"></div><div class="skeleton skeleton-card"></div><div class="skeleton skeleton-card"></div>';
+  if (typeof refresh === 'function') refresh();
+}
+
+let _cardPickerOpen = false;
+function toggleCardPicker() {
+  _cardPickerOpen = !_cardPickerOpen;
+  renderInfraToggle();
+  renderCardPicker();
+}
+
+function renderCardPicker() {
+  const host = document.getElementById('dashCardPicker');
+  if (!host) return;
+  if (!_cardPickerOpen) { host.innerHTML = ''; host.classList.remove('open'); return; }
+  host.classList.add('open');
+  const visible = getVisibleCardSet();
+  const row = (wf) => {
+    const on = visible.has(wf.file);
+    return `<label class="card-picker-row${on ? ' on' : ''}">
+      <input type="checkbox" ${on ? 'checked' : ''} onchange="toggleCardVisibility('${wf.file}')">
+      <span class="card-picker-name">${ICON(wf.iconName || 'play', 14)} ${wf.name}</span>
+      <span class="card-picker-file">${wf.file}</span>
+    </label>`;
+  };
+  host.innerHTML = `
+    <div class="card-picker-section">
+      <div class="card-picker-section-title">Core (${WORKFLOWS.length})</div>
+      ${WORKFLOWS.map(row).join('')}
+    </div>
+    <div class="card-picker-section">
+      <div class="card-picker-section-title">Infrastructure (${WORKFLOWS_INFRA.length})</div>
+      ${WORKFLOWS_INFRA.map(row).join('')}
+    </div>
+    <div class="card-picker-footer">
+      <button class="btn sm btn-outline" onclick="resetCardVisibility()" data-tooltip="Show only Auto Checkin / Checkout / Request OT">${ICON('undo', 12)} Reset to defaults</button>
+      <button class="btn sm" onclick="toggleCardPicker()">Done</button>
+    </div>
+  `;
+}
+
+function renderInfraToggle() {
+  const bar = document.getElementById('dashInfraToggleBar');
+  if (!bar) return;
+  const visibleCount = getVisibleCardSet().size;
+  const hasCustomOrder = !!localStorage.getItem(CARD_ORDER_KEY);
+  const customVis = hasCustomVisibility();
+  bar.innerHTML = `
+    <span class="dash-infra-label">Showing <strong>${visibleCount}</strong> / ${WORKFLOWS_ALL.length} workflows</span>
+    ${hasCustomOrder ? `<button class="btn sm btn-outline" onclick="resetCardOrder()" data-tooltip="Restore default card order">${ICON('undo', 12)} Reset order</button>` : ''}
+    ${customVis ? `<button class="btn sm btn-outline" onclick="resetCardVisibility()" data-tooltip="Show only the 3 default workflows">${ICON('undo', 12)} Reset cards</button>` : ''}
+    <button type="button"
+            class="btn sm ${_cardPickerOpen ? 'primary' : ''}"
+            onclick="toggleCardPicker()"
+            aria-expanded="${_cardPickerOpen}"
+            aria-controls="dashCardPicker"
+            data-tooltip="Choose which workflows appear on the dashboard">
+      ${ICON('settings', 12)} ${_cardPickerOpen ? 'Close' : 'Customize'}
+    </button>
+  `;
+  renderCardPicker();
+}
 const RUN_EVENT_MAP = {
   workflow_dispatch:    { short: '▶ Manual',  full: 'Manually triggered (workflow_dispatch)' },
   schedule:             { short: '⏰ Cron',    full: 'Scheduled by cron (schedule)' },
@@ -89,34 +202,6 @@ function formatRunEvent(ev) {
   // Fallback: prettify unknown event by replacing underscores and capitalizing.
   const pretty = ev.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
   return `<span class="run-event" data-tooltip="${ev}">${pretty}</span>`;
-}function toggleDashInfra(ev) {
-  const next = !dashShowInfra();
-  try { localStorage.setItem(DASH_SHOW_INFRA_KEY, next ? '1' : '0'); } catch {}
-  renderInfraToggle();
-  // Wipe grid skeletons so the new card set replaces cleanly.
-  const grid = document.getElementById('workflowGrid');
-  if (grid) grid.innerHTML = '<div class="skeleton skeleton-card"></div><div class="skeleton skeleton-card"></div><div class="skeleton skeleton-card"></div>';
-  if (typeof refresh === 'function') refresh();
-}
-function renderInfraToggle() {
-  const bar = document.getElementById('dashInfraToggleBar');
-  if (!bar) return;
-  const on = dashShowInfra();
-  const hasCustomOrder = !!localStorage.getItem(CARD_ORDER_KEY);
-  bar.innerHTML = `
-    <span class="dash-infra-label">Showing <strong>${on ? WORKFLOWS_ALL.length : WORKFLOWS.length}</strong> / ${WORKFLOWS_ALL.length} workflows</span>
-    ${hasCustomOrder ? `<button class="btn sm btn-outline" onclick="resetCardOrder()" data-tooltip="Restore default card order">${ICON('undo', 12)} Reset order</button>` : ''}
-    <span class="dash-infra-hint">Show infrastructure</span>
-    <button type="button"
-            class="switch ${on ? 'active' : ''}"
-            role="switch"
-            aria-checked="${on}"
-            aria-label="Toggle infrastructure workflows"
-            onclick="toggleDashInfra()"
-            data-tooltip="${on ? 'Hide infrastructure workflows (heartbeat, dispatcher, deploy-pages, etc.)' : 'Also show infrastructure workflows (heartbeat, dispatcher, deploy-pages, etc.)'}">
-      <span class="switch-thumb"></span>
-    </button>
-  `;
 }
 
 function resetCardOrder() {
