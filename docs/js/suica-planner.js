@@ -140,11 +140,11 @@
     const lastPrev = values[values.length - 2];
     const trendCls = last >= lastPrev ? 'text-success' : 'text-warning';
     const trendArrow = last >= lastPrev ? '▲' : '▼';
-    const tooltip = `Target ¥ trend (last ${values.length}): ${values.map((v) => '¥' + v.toLocaleString()).join(' → ')}`;
+    const tooltip = `Target ¥ trend (last ${values.length}): ${values.map((v) => '¥' + v.toLocaleString()).join(' → ')} — right-click to save PNG`;
     return `
-      <div class="flex items-center gap-2 mb-2 text-xs text-muted-foreground" data-tooltip="${tooltip}">
+      <div class="flex items-center gap-2 mb-2 text-xs text-muted-foreground" data-tooltip="${tooltip}" data-spark-trend="1">
         <span>Trend:</span>
-        <svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true" style="overflow:visible">
+        <svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true" style="overflow:visible;cursor:context-menu" data-spark-svg="1">
           <polyline fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" points="${pts.join(' ')}" style="color:var(--primary,#3b82f6)"></polyline>
           <circle cx="${pts[pts.length - 1].split(',')[0]}" cy="${pts[pts.length - 1].split(',')[1]}" r="2.5" fill="currentColor" style="color:var(--primary,#3b82f6)"></circle>
         </svg>
@@ -152,6 +152,56 @@
       </div>
     `;
   }
+
+  function _exportSparkAsPng(svgEl) {
+    if (!svgEl) return;
+    // Inline current text colour because the rendered SVG uses currentColor.
+    const cs = getComputedStyle(svgEl);
+    const colour = cs.color || '#3b82f6';
+    const clone = svgEl.cloneNode(true);
+    clone.querySelectorAll('[style*="currentColor"], polyline, circle').forEach((el) => {
+      const s = el.getAttribute('style') || '';
+      el.setAttribute('style', s.replace(/var\(--primary[^)]*\)/g, colour));
+      if (el.getAttribute('stroke') === 'currentColor') el.setAttribute('stroke', colour);
+      if (el.getAttribute('fill') === 'currentColor') el.setAttribute('fill', colour);
+    });
+    const width = +(clone.getAttribute('width') || 120);
+    const height = +(clone.getAttribute('height') || 28);
+    const scale = 4; // upscale for retina
+    const svgStr = new XMLSerializer().serializeToString(clone);
+    const blob = new Blob(['<?xml version="1.0"?>' + svgStr], { type: 'image/svg+xml;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = width * scale; canvas.height = height * scale;
+      const ctx = canvas.getContext('2d');
+      // White background so the PNG looks right on light AND dark surfaces.
+      ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      URL.revokeObjectURL(url);
+      canvas.toBlob((pngBlob) => {
+        if (!pngBlob) { if (window.Toast) window.Toast.error('PNG export failed'); return; }
+        const dl = document.createElement('a');
+        dl.href = URL.createObjectURL(pngBlob);
+        dl.download = `suica-target-trend-${new Date().toISOString().slice(0,10)}.png`;
+        dl.click();
+        setTimeout(() => URL.revokeObjectURL(dl.href), 5000);
+        if (window.Toast) window.Toast.success('Sparkline PNG saved');
+      }, 'image/png');
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); if (window.Toast) window.Toast.error('PNG export failed'); };
+    img.src = url;
+  }
+
+  // Delegate right-click on any rendered sparkline to the PNG exporter so we
+  // don't have to re-bind after every renderRecent.
+  document.addEventListener('contextmenu', (e) => {
+    const svg = e.target.closest && e.target.closest('svg[data-spark-svg]');
+    if (!svg) return;
+    e.preventDefault();
+    _exportSparkAsPng(svg);
+  });
 
   function renderRecent() {
     const section = $('planner-recent-section');
