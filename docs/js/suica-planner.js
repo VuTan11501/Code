@@ -2557,12 +2557,20 @@
   // info and a search/sort UI. Read-only catalogue browser (fare edits still
   // live on the verify badge in the From↔To picker).
   function _openFareTable() {
+    const isMobile = window.innerWidth <= 640;
     const overlay = document.createElement('div');
-    overlay.className = 'modal-overlay open';
-    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9998;display:flex;align-items:center;justify-content:center;padding:1rem;';
+    overlay.className = 'modal-overlay open' + (isMobile ? ' fare-sheet-mobile' : '');
+    overlay.style.cssText = isMobile
+      ? 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9998;display:flex;align-items:flex-end;justify-content:center;'
+      : 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9998;display:flex;align-items:center;justify-content:center;padding:1rem;';
     const card = document.createElement('div');
     card.className = 'card';
-    card.style.cssText = 'max-width:680px;width:100%;max-height:80vh;overflow:auto;padding:1rem;';
+    card.style.cssText = isMobile
+      ? 'width:100%;max-width:100%;max-height:88vh;overflow:auto;padding:1rem 1rem 1.5rem;border-radius:1rem 1rem 0 0;transform:translateY(100%);transition:transform .22s ease-out;'
+      : 'max-width:680px;width:100%;max-height:80vh;overflow:auto;padding:1rem;';
+    if (isMobile) {
+      requestAnimationFrame(() => { card.style.transform = 'translateY(0)'; });
+    }
     const sortKeyAttr = 'data-fare-sort';
     let sortBy = 'route';
     let sortDir = 1;
