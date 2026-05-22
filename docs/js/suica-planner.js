@@ -1237,6 +1237,20 @@
     }
     // Sort toolbar — affects render order only, not state order.
     const sortMode = wrap.dataset.leisureSort || 'manual';
+    const tagFilter = wrap.dataset.leisureTag || '';
+    // Tag filter chip row — only shown when at least one row has a tag.
+    const allTags = Array.from(new Set(state.leisure.map((l) => (l.tag || '').trim()).filter(Boolean))).sort();
+    if (allTags.length) {
+      const tagBar = document.createElement('div');
+      tagBar.className = 'flex items-center gap-1 pb-1.5 text-xs text-muted-foreground flex-wrap';
+      tagBar.innerHTML = `<span class="mr-1">Tag:</span>
+        <button type="button" class="btn xs ${!tagFilter ? 'btn-default' : 'btn-ghost'}" data-leisure-tag-filter="">All</button>
+        ${allTags.map((t) => `<button type="button" class="btn xs ${tagFilter===t?'btn-default':'btn-ghost'}" data-leisure-tag-filter="${t}">${t}</button>`).join('')}`;
+      tagBar.querySelectorAll('[data-leisure-tag-filter]').forEach((b) => {
+        b.addEventListener('click', () => { wrap.dataset.leisureTag = b.dataset.leisureTagFilter; renderLeisure(); });
+      });
+      wrap.appendChild(tagBar);
+    }
     if (state.leisure.length >= 2) {
       const bar = document.createElement('div');
       bar.className = 'flex items-center gap-1 pb-1.5 text-xs text-muted-foreground';
@@ -1252,7 +1266,8 @@
       });
       wrap.appendChild(bar);
     }
-    const indexed = state.leisure.map((l, idx) => ({ l, idx }));
+    const indexed = state.leisure.map((l, idx) => ({ l, idx }))
+      .filter(({ l }) => !tagFilter || (l.tag || '').trim() === tagFilter);
     if (sortMode === 'fare') indexed.sort((a, b) => fareOf(b.l.route) - fareOf(a.l.route));
     else if (sortMode === 'weight') indexed.sort((a, b) => b.l.weight - a.l.weight);
     else if (sortMode === 'name') indexed.sort((a, b) => a.l.route.localeCompare(b.l.route, 'ja'));
@@ -1282,6 +1297,7 @@
         <button class="btn sm btn-ghost text-xs flex-none" data-leisure-mute="${idx}" data-tooltip="${muted ? 'Re-enable this route in the random pool' : 'Mute (weight=0) — keep in the list but exclude from random picks'}" aria-label="${muted ? 'Unmute' : 'Mute'} ${l.route}">${muted ? '🙈' : '👁'}</button>
         <span class="status-badge ${muted ? 'status-pending' : 'status-pending'} font-mono flex-none ${muted ? 'line-through' : ''}">${l.route}</span>
         ${dotsStr}
+        <input type="text" maxlength="14" value="${(l.tag || '').replace(/"/g, '&quot;')}" placeholder="tag" class="input w-20 text-xs" data-leisure-tag="${idx}" data-tooltip="Optional tag (e.g. shopping, family) — filterable">
         <span class="text-xs text-muted-foreground">weight</span>
         <input type="number" min="0" max="20" value="${l.weight}" class="input w-16 text-sm" data-leisure-weight="${idx}" ${muted ? 'disabled' : ''}>
         <span class="text-xs text-muted-foreground font-mono ml-auto">${fmtYen(fareOf(l.route))}</span>
@@ -1309,6 +1325,16 @@
         state.leisure[i].weight = Math.max(0, +e.target.value || 0);
         renderEstimate();
         saveState();
+      });
+    });
+    wrap.querySelectorAll('[data-leisure-tag]').forEach((input) => {
+      input.addEventListener('change', (e) => {
+        const i = +e.target.dataset.leisureTag;
+        const v = String(e.target.value || '').trim().slice(0, 14);
+        if (v) state.leisure[i].tag = v;
+        else delete state.leisure[i].tag;
+        saveState();
+        renderLeisure();
       });
     });
     wrap.querySelectorAll('[data-leisure-remove]').forEach((btn) => {
