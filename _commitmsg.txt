@@ -1,0 +1,13 @@
+fix(dashboard): escape run title/workflow name in run-list innerHTML
+
+A workflow run's display_title is derived from the triggering commit message,
+which is fully user-controlled. dashboard rendered the title and wf.name
+straight into innerHTML of span.run-name, so a commit message containing
+HTML tags actually injected real elements into the dashboard card.
+
+Same for the tooltip attribute (only quotes were escaped before).
+
+Route both occurrences through the existing escapeHtml() helper. Bug fix
+plus XSS hardening in the same patch.
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>

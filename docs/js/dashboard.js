@@ -482,11 +482,11 @@ function renderWorkflowCard(wf, runs) {
         <ul class="run-list">
           ${lastRuns.map((r, i) => {
             const title = r.display_title || r.name || `Run #${r.run_number}`;
-            const titleEsc = title.replace(/"/g, '&quot;');
+            const titleEsc = escapeHtml(title);
             return `
             <li class="run-item" onclick="openLogModal(${r.id}, '${wf.icon} ${wf.name} #${r.run_number}', '${r.status}')">
               <span class="run-dot ${conclusionClass(r.conclusion || r.status)}"></span>
-              <span class="run-name" data-tooltip="${titleEsc}" data-tooltip-truncate-only tabindex="0">${title}</span>
+              <span class="run-name" data-tooltip="${titleEsc}" data-tooltip-truncate-only tabindex="0">${titleEsc}</span>
               <span class="run-meta">
                 ${formatRunEvent(r.event)}
                 <a class="run-num" href="${r.html_url}" target="_blank" onclick="event.stopPropagation()">#${r.run_number}</a>
@@ -1001,7 +1001,7 @@ async function refresh() {
       recentEl.innerHTML = allRuns.slice(0, 12).map(r => `
         <li class="run-item" onclick="openLogModal(${r.id}, '${r._wf.icon} ${r._wf.name} #${r.run_number}', '${r.status}')">
           <span class="run-dot ${conclusionClass(r.conclusion || r.status)}"></span>
-          <span class="run-name">${r._wf.icon} ${r._wf.name}</span>
+          <span class="run-name">${r._wf.icon} ${escapeHtml(r._wf.name)}</span>
           <span class="run-meta">
             ${formatRunEvent(r.event)}
             <a class="run-num" href="${r.html_url}" target="_blank" onclick="event.stopPropagation()">#${r.run_number}</a>
