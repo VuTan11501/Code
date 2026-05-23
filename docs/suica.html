@@ -574,11 +574,20 @@
        hide its main Generate button (the sticky one takes over) but keep
        Batch / status visible there for context. */
     .gen-actions__primary #planner-generate-pdf { display: none; }
+    /* Batch chip — on mobile the primary row only holds the Batch select;
+       give it full width so it doesn't squish next to anything. */
+    .gen-actions__primary { flex-basis: 100%; justify-content: flex-start; gap: 0.5rem; }
+    .gen-actions__batch {
+      display: inline-flex; align-items: center; gap: 0.4rem;
+      white-space: nowrap; flex-wrap: nowrap;
+      min-width: 0;
+    }
+    .gen-actions__batch .shadcn-select-trigger { min-height: 40px; padding: 0.4rem 0.75rem; }
     /* Plan tools group: collapse spacing and let buttons grow */
     .gen-actions__tools { flex-basis: 100%; justify-content: stretch; }
     .gen-actions__tools .btn { flex: 1 1 calc(50% - 0.35rem); justify-content: center; min-height: 40px; }
-    .gen-actions__utils { margin-left: 0; flex-basis: 100%; justify-content: space-between; }
-    .gen-actions__utils .btn { min-height: 40px; }
+    .gen-actions__utils { margin-left: 0; flex-basis: 100%; justify-content: space-between; flex-wrap: wrap; gap: 0.4rem; }
+    .gen-actions__utils .btn { min-height: 40px; flex: 1 1 auto; justify-content: center; }
     /* The big "Generate Suica PDF" full-width override from the older
        mobile block conflicts with our new sticky strategy — neutralize. */
     #planner-auto-suggest, #planner-load-sample, #planner-clear { width: auto !important; }
