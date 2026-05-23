@@ -38,6 +38,7 @@ import json
 import logging
 import random
 import sys
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 from .budget_allocator import BudgetAllocator
@@ -48,6 +49,42 @@ from .timing_engine import TimingEngine
 from .trip_scheduler import TripScheduler
 
 log = logging.getLogger("generate")
+
+# Real Mobile Suica statement filenames follow the pattern
+#   <CARD_ID>_<PERIOD_START_YYYYMMDD>_<EXPORT_TS_YYYYMMDDHHMMSS>.pdf
+# e.g. JE80FE24040823015_20260124_20260523000550.pdf
+# CARD_ID is 17 chars: literal "JE" + 15 hex/digit chars uniquely identifying
+# the Mobile Suica card. The trailing 4 digits also appear in the masked
+# header text "JE*** **** **** 3015", which our template fixture preserves —
+# so the default card ID below ends in 3015 to stay consistent with that
+# header. Override via the SUICA_CARD_ID env var if you want a different one.
+DEFAULT_CARD_ID = "JE80FE24040823015"
+JST = timezone(timedelta(hours=9))
+
+
+def mobile_suica_pdf_filename(month: str,
+                              card_id: str | None = None,
+                              now: datetime | None = None) -> str:
+    """Build a Mobile-Suica-style PDF filename for the given month.
+
+    Args:
+        month:   "YYYY-MM" period covered by the statement.
+        card_id: 17-char Mobile Suica card identifier. Defaults to
+                 SUICA_CARD_ID env var if set, else DEFAULT_CARD_ID.
+        now:     Export timestamp (defaults to current time in JST).
+
+    Returns:
+        e.g. "JE80FE24040823015_20260601_20260523002250.pdf"
+    """
+    import os
+    if card_id is None:
+        card_id = os.environ.get("SUICA_CARD_ID", DEFAULT_CARD_ID)
+    if now is None:
+        now = datetime.now(JST)
+    year, mon = month.split("-")
+    period_start = f"{year}{mon}01"
+    export_ts = now.strftime("%Y%m%d%H%M%S")
+    return f"{card_id}_{period_start}_{export_ts}.pdf"
 
 
 def load_config(path: Path) -> GeneratorConfig:
@@ -211,12 +248,28 @@ def main(argv: list[str] | None = None) -> int:
         a, b = route_name.split("↔", 1)
         expected_fares[(a, b)] = res.consensus_fare
         expected_fares[(b, a)] = res.consensus_fare
-    write_outputs(history, args.out, template_pdf=args.template,
+
+    out_path = args.out
+    # If --out points to an existing directory, or has no file suffix, treat
+    # it as a directory and auto-name using the real Mobile-Suica convention:
+    #   <CARD_ID>_<YYYYMM01>_<EXPORT_TS>.pdf
+    # This keeps generated artifacts indistinguishable from real downloads.
+    # Only triggers for PDF output (template provided); JSON/CSV use the
+    # caller-supplied name verbatim.
+    if args.template is not None:
+        if out_path.is_dir() or out_path.suffix == "":
+            out_path = out_path / mobile_suica_pdf_filename(args.month)
+            log.info("Auto-named PDF output → %s", out_path)
+
+    write_outputs(history, out_path, template_pdf=args.template,
                   validate=not args.no_validate,
                   verify_target_yen=args.target,
                   verify_tolerance_yen=args.tolerance,
                   verify_month=args.month,
                   verify_expected_fares=expected_fares)
+    # Print the final output path on the last line so callers (CI workflow,
+    # shell scripts) can capture it deterministically with `tail -n1`.
+    print(f"OUT_PATH={out_path}")
     if args.rakuraku_out:
         from .rakuraku_export import write_trips_json
         stats = write_trips_json(history, args.rakuraku_out)

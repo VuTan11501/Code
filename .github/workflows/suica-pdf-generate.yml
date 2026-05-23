@@ -108,7 +108,7 @@ jobs:
             --target "$TARGET" \
             --seed   "$SEED" \
             --template fixtures/template.pdf \
-            --out out.pdf \
+            --out out \
             -v 2>&1 | tee generate.log
           GEN_EXIT=${PIPESTATUS[0]}
           # Append verifier section to the run summary so users can see
@@ -121,15 +121,26 @@ jobs:
             echo "::error::PDF verification failed (exit $GEN_EXIT). See summary."
             exit "$GEN_EXIT"
           fi
-          ls -la out.pdf
-          cp out.pdf "${GITHUB_WORKSPACE}/suica-${MONTH}.pdf"
+          # generate.py prints "OUT_PATH=<absolute path>" on its last line
+          # when --out is a directory (real Mobile Suica naming convention:
+          # JE80FE24040823015_<YYYYMM01>_<EXPORT_TS>.pdf). Capture it so we
+          # upload the artifact under the same filename a real download has.
+          OUT_PATH=$(grep '^OUT_PATH=' generate.log | tail -n1 | cut -d= -f2-)
+          if [ -z "$OUT_PATH" ] || [ ! -f "$OUT_PATH" ]; then
+            echo "::error::generate.py did not report a valid OUT_PATH (got '$OUT_PATH')"
+            exit 1
+          fi
+          ls -la "$OUT_PATH"
+          cp "$OUT_PATH" "${GITHUB_WORKSPACE}/$(basename "$OUT_PATH")"
+          # Persist filename for later steps.
+          echo "OUT_FILENAME=$(basename "$OUT_PATH")" >> "$GITHUB_ENV"
 
       - name: Pixel diff vs template (informational)
         continue-on-error: true
         env:
           MONTH: ${{ inputs.month }}
         run: |
-          PDF="${GITHUB_WORKSPACE}/suica-${MONTH}.pdf"
+          PDF="${GITHUB_WORKSPACE}/${OUT_FILENAME}"
           TEMPLATE="${SKILL_ROOT}/fixtures/template.pdf"
           cd "${SKILL_ROOT}"
           echo "### Pixel similarity vs template" >> "$GITHUB_STEP_SUMMARY"
@@ -141,6 +152,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: suica-pdf-${{ github.run_id }}
-          path: suica-*.pdf
+          path: JE*.pdf
           retention-days: 1
           if-no-files-found: error

@@ -148,6 +148,32 @@ python -m scripts.generate `
 # The trips.json can be consumed directly by rakuraku-suica-expense.
 ```
 
+#### Real Mobile-Suica filename (auto-naming)
+
+When `--out` points to a **directory** (no filename), the PDF is auto-named
+using the real Mobile Suica convention so artifacts are indistinguishable
+from genuine downloads:
+
+```
+<CARD_ID>_<YYYYMM01>_<EXPORT_TS>.pdf
+e.g. JE80FE24040823015_20260601_20260523002250.pdf
+```
+
+`CARD_ID` defaults to `JE80FE24040823015` (matches the masked header
+`JE*** **** **** 3015` baked into `fixtures/template.pdf`). Override with
+`SUICA_CARD_ID` env var if needed. Export timestamp is `now()` in JST.
+
+```powershell
+python -m scripts.generate `
+    --config data/presets/tokyo-commuter.json `
+    --month 2026-06 --target 25000 --seed 42 `
+    --out out/ --template fixtures/template.pdf
+# → out/JE80FE24040823015_20260601_20260523002250.pdf
+```
+
+The script prints `OUT_PATH=<absolute>` on its last line so CI / shell
+scripts can capture the generated filename deterministically.
+
 ### Web viewer (CF Pages / gh-pages)
 
 After generation, open `docs/suica.html` in the fjp-workflow-dashboard to
