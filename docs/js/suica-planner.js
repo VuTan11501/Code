@@ -376,50 +376,80 @@
     }
     // Pinned recent runs float to the top within the filtered list.
     filtered.sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
+
+    // Render as a table (easier to scan than per-row flex cards).
+    // Wrapped in overflow-x-auto so the table scrolls horizontally on
+    // narrow viewports without breaking the layout.
+    const tableWrap = document.createElement('div');
+    tableWrap.className = 'overflow-x-auto -mx-1';
+    const table = document.createElement('table');
+    table.className = 'w-full text-xs';
+    table.innerHTML = `
+      <thead class="text-left text-muted-foreground">
+        <tr class="border-b border-border">
+          <th class="py-2 px-2 font-medium w-6"></th>
+          <th class="py-2 px-2 font-medium whitespace-nowrap">When</th>
+          <th class="py-2 px-2 font-medium">File</th>
+          <th class="py-2 px-2 font-medium whitespace-nowrap">Month</th>
+          <th class="py-2 px-2 font-medium text-right whitespace-nowrap">Target</th>
+          <th class="py-2 px-2 font-medium text-right whitespace-nowrap">Seed</th>
+          <th class="py-2 px-2 font-medium">Routes</th>
+          <th class="py-2 px-2 font-medium text-right whitespace-nowrap">Actions</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    `;
+    const tbody = table.querySelector('tbody');
     filtered.forEach((r) => {
-      const row = document.createElement('div');
-      row.className = 'flex items-start gap-3 py-2 border-b border-border last:border-b-0 flex-wrap';
+      const tr = document.createElement('tr');
+      tr.className = 'border-b border-border last:border-b-0 align-top hover:bg-muted/40';
       const when = new Date(r.when);
       const dt = when.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
       const rowId = r.when;
       const isSel = _recentSel.has(rowId);
-      const cb = document.createElement('input');
-      cb.type = 'checkbox';
-      cb.checked = isSel;
-      cb.className = 'mt-1 flex-none';
-      cb.setAttribute('aria-label', 'Select this run for bulk delete');
-      cb.setAttribute('data-tooltip', 'Select for bulk delete');
-      cb.addEventListener('change', () => {
-        if (cb.checked) _recentSel.add(rowId); else _recentSel.delete(rowId);
-        renderRecent();
-      });
-      row.appendChild(cb);
       const routeList = (r.routes || []);
       const visible = routeList.slice(0, 6);
       const remaining = routeList.length - visible.length;
       const chipsHtml = routeList.length
-        ? `<div class="flex flex-wrap gap-1 mt-1" data-tooltip="${routeList.join(', ')}">
+        ? `<div class="flex flex-wrap gap-1" data-tooltip="${routeList.join(', ')}">
              ${visible.map((rt) => `<span class="status-badge font-mono text-[10px]">${rt}</span>`).join('')}
              ${remaining > 0 ? `<span class="status-badge font-mono text-[10px] opacity-70">+${remaining}</span>` : ''}
            </div>`
-        : '<div class="text-xs text-muted-foreground italic mt-1">no routes recorded</div>';
-      row.innerHTML = `
-        <div class="flex flex-col gap-0.5 flex-1 min-w-[220px]">
-          <div class="text-sm font-mono font-medium">${r.filename || ('suica-' + r.month + '.pdf')}</div>
-          <div class="text-xs text-muted-foreground">${dt}</div>
-          ${chipsHtml}
-        </div>
-        <span class="status-badge status-info font-mono">${r.month}</span>
-        <span class="status-badge status-pending font-mono">¥${(+r.target).toLocaleString('en-US')}</span>
-        <span class="status-badge font-mono">seed ${r.seed}</span>
-        <button type="button" class="btn btn-ghost sm text-[12px] p-0.5 ${r.pinned ? 'text-primary' : 'opacity-40 hover:opacity-100'}" data-recent-pin data-tooltip="${r.pinned ? 'Unpin run' : 'Pin run (survives history overflow)'}" aria-label="${r.pinned ? 'Unpin run' : 'Pin run'}">📌</button>
-        ${r.runUrl ? `<a class="btn btn-ghost sm text-xs" href="${r.runUrl}" target="_blank" rel="noopener" data-tooltip="Open the GitHub Actions run">Run ↗</a>` : ''}
-        <button type="button" class="btn btn-ghost sm text-xs" data-restore-recent data-tooltip="Reuse this month + target + seed in the planner">
-          <span data-icon="undo" data-size="12"></span>
-          <span class="btn-label">Reuse</span>
-        </button>
+        : '<span class="text-muted-foreground italic">—</span>';
+      tr.innerHTML = `
+        <td class="py-2 px-2">
+          <input type="checkbox" data-recent-cb ${isSel ? 'checked' : ''}
+                 class="align-middle" aria-label="Select this run for bulk delete"
+                 data-tooltip="Select for bulk delete">
+        </td>
+        <td class="py-2 px-2 text-muted-foreground whitespace-nowrap">${dt}</td>
+        <td class="py-2 px-2 font-mono font-medium break-all">
+          ${r.filename || ('suica-' + r.month + '.pdf')}
+          ${r.pinned ? '<span class="text-primary ml-1" data-tooltip="Pinned">📌</span>' : ''}
+        </td>
+        <td class="py-2 px-2"><span class="status-badge status-info font-mono">${r.month}</span></td>
+        <td class="py-2 px-2 text-right font-mono whitespace-nowrap">¥${(+r.target).toLocaleString('en-US')}</td>
+        <td class="py-2 px-2 text-right font-mono text-muted-foreground whitespace-nowrap">${r.seed}</td>
+        <td class="py-2 px-2 min-w-[140px]">${chipsHtml}</td>
+        <td class="py-2 px-2 text-right whitespace-nowrap">
+          <div class="inline-flex items-center gap-1 justify-end">
+            <button type="button" class="btn btn-ghost sm text-[12px] p-1 ${r.pinned ? 'text-primary' : 'opacity-50 hover:opacity-100'}"
+                    data-recent-pin data-tooltip="${r.pinned ? 'Unpin run' : 'Pin run (survives history overflow)'}"
+                    aria-label="${r.pinned ? 'Unpin run' : 'Pin run'}">📌</button>
+            ${r.runUrl ? `<a class="btn btn-ghost sm text-xs" href="${r.runUrl}" target="_blank" rel="noopener" data-tooltip="Open the GitHub Actions run">Run ↗</a>` : ''}
+            <button type="button" class="btn btn-ghost sm text-xs" data-restore-recent data-tooltip="Reuse this month + target + seed in the planner">
+              <span data-icon="undo" data-size="12"></span>
+              <span class="btn-label">Reuse</span>
+            </button>
+          </div>
+        </td>
       `;
-      const restoreBtn = row.querySelector('[data-restore-recent]');
+      const cb = tr.querySelector('[data-recent-cb]');
+      if (cb) cb.addEventListener('change', () => {
+        if (cb.checked) _recentSel.add(rowId); else _recentSel.delete(rowId);
+        renderRecent();
+      });
+      const restoreBtn = tr.querySelector('[data-restore-recent]');
       if (restoreBtn) restoreBtn.addEventListener('click', () => {
         state.settings.month = r.month;
         state.settings.target = +r.target;
@@ -430,7 +460,7 @@
         renderEstimate(); saveState();
         const s = $('planner-pdf-status'); if (s) { s.textContent = `Restored settings from ${r.filename || ('run on ' + dt)}`; s.className = 'text-xs text-primary'; }
       });
-      const pinBtn = row.querySelector('[data-recent-pin]');
+      const pinBtn = tr.querySelector('[data-recent-pin]');
       if (pinBtn) pinBtn.addEventListener('click', () => {
         const all = loadRecent();
         const t = all.find((x) => x.when === r.when);
@@ -440,8 +470,10 @@
         renderRecent();
         if (window.Toast) window.Toast.info(t.pinned ? '📌 Run pinned' : 'Run unpinned');
       });
-      wrap.appendChild(row);
+      tbody.appendChild(tr);
     });
+    tableWrap.appendChild(table);
+    wrap.appendChild(tableWrap);
     if (window.refreshIcons) window.refreshIcons(wrap);
   }
   function currentPlanRoutes() {
