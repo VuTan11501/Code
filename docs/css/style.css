@@ -1051,9 +1051,13 @@ select option { background: var(--card); color: var(--foreground); }
   width: 36px; height: 36px; border-radius: 50%;
   border: 3px solid var(--border);
   border-top-color: var(--primary);
-  animation: spinner-rotate 0.8s linear infinite;
+  animation: spinner-rotate 0.8s linear infinite !important;
+  will-change: transform;
 }
-@keyframes spinner-rotate { to { transform: rotate(360deg); } }
+@keyframes spinner-rotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .spinner-ring { animation-duration: 1.6s !important; }
+}
 
 /* shadcn/Radix-style spin override — slower & smoother than Tailwind's 1s default.
    Linear timing matches the Radix Spinner aesthetic (constant velocity, no ease). */
