@@ -32,6 +32,10 @@
 <link rel="stylesheet" href="css/style.css?v=124">
 <style>
   /* Page-local helpers; relies on shadcn tokens from style.css + tailwind.css */
+  /* Tailwind v3's .hidden has no !important and style.css's .card {display:flex}
+     comes later in the cascade — same specificity → flex wins → 'card hidden'
+     would render a stray empty card. Force .hidden to always win. */
+  .hidden { display: none !important; }
   .suica-drop { transition: border-color 150ms, background 150ms; cursor: pointer; }
   .suica-drop:hover { border-color: rgba(var(--tint), 0.25); }
   .suica-drop.drop-active { border-color: var(--primary); background: rgba(59,130,246,0.04); }
