@@ -10,7 +10,7 @@
 //   * Update flow: new SW activates → postMessage {type:'sw-updated'} to
 //     all clients. app.js shows a "Reload to update" toast.
 
-const VERSION = 'wf-dash-v5';
+const VERSION = 'wf-dash-v6';
 const SHELL_CACHE = `${VERSION}-shell`;
 const API_CACHE   = `${VERSION}-api`;
 const API_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
@@ -18,6 +18,8 @@ const API_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const SHELL_ASSETS = [
   './',
   './index.html',
+  './suica.html',
+  './remote-setup-guide.html',
   './manifest.json',
   './css/tailwind.css',
   './css/style.css',
@@ -99,11 +101,11 @@ self.addEventListener('fetch', (event) => {
 
 // In-flight revalidations keyed by URL — coalesces concurrent navigation
 // requests so we only fire ONE fetch + ONE 'shell-updated' postMessage per
-// SW lifecycle even if user opens multiple tabs simultaneously. Hash of last
-// notified body also lives here to suppress duplicate notifications if cache
-// fails to persist (Safari quota, private mode, etc.).
+// SW lifecycle even if user opens multiple tabs simultaneously. Per-URL
+// hash map suppresses duplicate notifications when cache.put fails (Safari
+// quota, private mode) or when the same page is navigated multiple times.
 const _swrInFlight = new Map();
-let _lastNotifiedHash = null;
+const _lastNotifiedHash = new Map();
 
 async function _hashText(text) {
   try {
@@ -120,7 +122,19 @@ async function swrShell(req, cacheName) {
   if (!revalidate) {
     revalidate = (async () => {
       try {
-        const resp = await fetch(req);
+        // cache: 'no-store' is CRITICAL — without it, GitHub Pages' CDN can
+        // serve a stale body (Cache-Control: max-age=600) for up to 10 min
+        // after a deploy, making the content-diff comparison falsely match
+        // and never firing 'shell-updated'. We construct a new Request to
+        // override cache mode because some browsers ignore init.cache when
+        // a Request object is passed directly to fetch().
+        const freshReq = new Request(req.url, {
+          method: 'GET',
+          cache: 'no-store',
+          credentials: 'same-origin',
+          headers: { 'Accept': req.headers.get('Accept') || 'text/html,*/*' },
+        });
+        const resp = await fetch(freshReq);
         if (!resp || !resp.ok || resp.type !== 'basic') return resp;
         if (cached) {
           const [oldText, newText] = await Promise.all([
@@ -129,11 +143,11 @@ async function swrShell(req, cacheName) {
           ]);
           if (oldText !== newText) {
             const newHash = await _hashText(newText);
-            if (newHash !== _lastNotifiedHash) {
-              _lastNotifiedHash = newHash;
+            if (_lastNotifiedHash.get(key) !== newHash) {
+              _lastNotifiedHash.set(key, newHash);
               const clients = await self.clients.matchAll({ includeUncontrolled: true });
               for (const c of clients) {
-                try { c.postMessage({ type: 'shell-updated', hash: newHash }); } catch {}
+                try { c.postMessage({ type: 'shell-updated', url: key, hash: newHash }); } catch {}
               }
             }
           }
@@ -182,10 +196,6 @@ async function cacheFirst(req, cacheName) {
     }
     return resp;
   } catch (e) {
-    if (req.mode === 'navigate') {
-      const shell = await cache.match('./index.html');
-      if (shell) return shell;
-    }
     throw e;
   }
 }
