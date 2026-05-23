@@ -8,8 +8,16 @@
 window.AIAgent = (function () {
   'use strict';
 
-  const API_URL = 'https://models.inference.ai.azure.com/chat/completions';
+  // GitHub Models — new host (https://models.github.ai). Old Azure-ML host
+  // (models.inference.ai.azure.com) is on a deprecation path. New host requires
+  // `publisher/model` IDs (e.g. `openai/gpt-4o-mini`); we keep short names in
+  // the UI / sessionStorage and prepend the publisher at the API boundary via
+  // apiModelId() below.
+  const API_URL = 'https://models.github.ai/inference/chat/completions';
   const DEFAULT_MODEL = 'gpt-4o-mini';
+  function apiModelId(m) {
+    return (m && m.includes('/')) ? m : `openai/${m || DEFAULT_MODEL}`;
+  }
   const MAX_TOOL_HOPS = 3;
   const MAX_HISTORY_TURNS = 40;          // user+assistant pair count cap (sessionStorage safety)
   const RATE_LIMIT_MAX = 10;
@@ -1569,7 +1577,7 @@ Hôm nay (JST): ${today}.`;
 
       const isLastHop = hop === MAX_TOOL_HOPS - 1;
       const body = {
-        model,
+        model: apiModelId(model),
         messages: [{ role: 'system', content: systemPrompt() }, ...messages.map(stripInternal)],
         tools: window.AITools ? window.AITools.getToolSchemas() : [],
         tool_choice: isLastHop ? 'none' : 'auto',
