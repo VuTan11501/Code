@@ -640,19 +640,26 @@
             <span data-icon="target" data-size="12"></span>
             <span>Generate settings</span>
           </summary>
-          <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+
+          <!-- Row 1 — what to generate (Month / Target / Seed). 3 equal-width
+               primary fields. On <md viewports they stack 1-col to keep the
+               inline icon-buttons readable. -->
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div class="field">
-              <label class="field-label text-xs text-muted-foreground font-medium block mb-1" for="planner-month">Month</label>
+              <label class="field-label text-xs text-muted-foreground font-medium flex items-center gap-1 mb-1" for="planner-month">Month</label>
               <div class="flex items-center gap-1">
                 <button id="planner-month-prev" type="button" class="btn btn-ghost sm" data-tooltip="Previous month" aria-label="Previous month">‹</button>
-                <input id="planner-month" type="text" pattern="\d{4}-\d{2}" class="input font-mono flex-1" placeholder="2026-06">
+                <input id="planner-month" type="text" pattern="\d{4}-\d{2}" class="input font-mono flex-1 min-w-0" placeholder="2026-06">
                 <button id="planner-month-next" type="button" class="btn btn-ghost sm" data-tooltip="Next month" aria-label="Next month">›</button>
               </div>
             </div>
             <div class="field">
-              <label class="field-label text-xs text-muted-foreground font-medium block mb-1" for="planner-target">Target (¥) <span class="opacity-40 cursor-help" data-tooltip="Your desired monthly spend. The generator tries to land within ±¥500 by mixing commute + leisure trips and optional small top-ups.">ⓘ</span></label>
+              <label class="field-label text-xs text-muted-foreground font-medium flex items-center gap-1 mb-1" for="planner-target">
+                <span>Target (¥)</span>
+                <span data-icon="info" data-size="11" class="opacity-50 cursor-help" data-tooltip="Your desired monthly spend. The generator tries to land within ±¥500 by mixing commute + leisure trips and optional small top-ups."></span>
+              </label>
               <div class="flex items-center gap-1">
-                <input id="planner-target" type="number" min="0" step="500" class="input font-mono flex-1">
+                <input id="planner-target" type="number" min="0" step="500" class="input font-mono flex-1 min-w-0">
                 <button id="planner-target-shuffle" type="button" class="btn btn-ghost sm" data-tooltip="Randomize within ±15% of current target (rounded to ¥500)" aria-label="Randomize target">
                   <span data-icon="sparkles" data-size="14"></span>
                 </button>
@@ -662,9 +669,12 @@
               </div>
             </div>
             <div class="field">
-              <label class="field-label text-xs text-muted-foreground font-medium block mb-1" for="planner-seed" data-tooltip="Random seed. Same seed + same plan = byte-identical PDF every time. Change it to roll a different schedule.">Random seed</label>
+              <label class="field-label text-xs text-muted-foreground font-medium flex items-center gap-1 mb-1" for="planner-seed" data-tooltip="Random seed. Same seed + same plan = byte-identical PDF every time. Change it to roll a different schedule.">
+                <span>Random seed</span>
+                <span data-icon="info" data-size="11" class="opacity-50 cursor-help"></span>
+              </label>
               <div class="flex items-center gap-1">
-                <input id="planner-seed" type="number" min="0" class="input font-mono flex-1" data-tooltip="Same seed + same plan = byte-identical PDF every time.">
+                <input id="planner-seed" type="number" min="0" class="input font-mono flex-1 min-w-0" data-tooltip="Same seed + same plan = byte-identical PDF every time.">
                 <button id="planner-seed-reroll" type="button" class="btn btn-ghost sm" data-tooltip="Try another seed (increments by 1)" aria-label="Roll a different seed">
                   <span data-icon="refresh" data-size="14"></span>
                 </button>
@@ -673,19 +683,39 @@
                 </button>
               </div>
             </div>
-            <div class="field">
-              <label class="field-label text-xs text-muted-foreground font-medium block mb-1" for="planner-initial">Initial balance (¥) <span class="opacity-40 cursor-help" data-tooltip="Suica balance at the start of the month. Most people use ¥2000–¥3000; choose what matches your real card balance.">ⓘ</span></label>
-              <input id="planner-initial" type="number" min="0" step="500" class="input font-mono">
-            </div>
-            <div class="field">
-              <label class="field-label text-xs text-muted-foreground font-medium block mb-1" for="planner-topup-threshold">Auto-topup &lt; (¥) <span class="opacity-40 cursor-help" data-tooltip="When balance dips below this value mid-month, a charge transaction is inserted. Set very low (e.g. 0) to disable automatic top-ups.">ⓘ</span></label>
-              <input id="planner-topup-threshold" type="number" min="0" step="500" class="input font-mono">
-            </div>
-            <div class="field">
-              <label class="field-label text-xs text-muted-foreground font-medium block mb-1" for="planner-topup-amount">Topup amount (¥) <span class="opacity-40 cursor-help" data-tooltip="How much is charged each time the auto-topup triggers. Real Suica machines dispense in increments of ¥1000.">ⓘ</span></label>
-              <input id="planner-topup-amount" type="number" min="0" step="500" class="input font-mono">
-            </div>
           </div>
+
+          <!-- Row 2 — balance behavior. Visually subordinate (fieldset legend)
+               so users see at a glance these are "internal" Suica accounting
+               knobs, not the primary "what to generate" inputs. -->
+          <fieldset class="rounded-md border border-border px-3 pt-1.5 pb-3 mt-4">
+            <legend class="text-[10px] uppercase tracking-wide text-muted-foreground font-medium px-1.5 flex items-center gap-1">
+              <span data-icon="wallet" data-size="11"></span> Balance behavior
+            </legend>
+            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 mt-1">
+              <div class="field">
+                <label class="field-label text-xs text-muted-foreground font-medium flex items-center gap-1 mb-1" for="planner-initial">
+                  <span>Initial balance (¥)</span>
+                  <span data-icon="info" data-size="11" class="opacity-50 cursor-help" data-tooltip="Suica balance at the start of the month. Most people use ¥2000–¥3000; choose what matches your real card balance."></span>
+                </label>
+                <input id="planner-initial" type="number" min="0" step="500" class="input font-mono w-full">
+              </div>
+              <div class="field">
+                <label class="field-label text-xs text-muted-foreground font-medium flex items-center gap-1 mb-1" for="planner-topup-threshold">
+                  <span>Auto-topup &lt; (¥)</span>
+                  <span data-icon="info" data-size="11" class="opacity-50 cursor-help" data-tooltip="When balance dips below this value mid-month, a charge transaction is inserted. Set very low (e.g. 0) to disable automatic top-ups."></span>
+                </label>
+                <input id="planner-topup-threshold" type="number" min="0" step="500" class="input font-mono w-full">
+              </div>
+              <div class="field">
+                <label class="field-label text-xs text-muted-foreground font-medium flex items-center gap-1 mb-1" for="planner-topup-amount">
+                  <span>Topup amount (¥)</span>
+                  <span data-icon="info" data-size="11" class="opacity-50 cursor-help" data-tooltip="How much is charged each time the auto-topup triggers. Real Suica machines dispense in increments of ¥1000."></span>
+                </label>
+                <input id="planner-topup-amount" type="number" min="0" step="500" class="input font-mono w-full">
+              </div>
+            </div>
+          </fieldset>
         </details>
 
         <!-- Estimate -->
