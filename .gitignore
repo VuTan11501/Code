@@ -40,3 +40,9 @@ worker/node_modules/
 todos.md
 msg.tmp
 git_msg.tmp
+
+# scratch / debug dumps from forensic work
+_drw.py
+_meta.py
+_meta.txt
+
