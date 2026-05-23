@@ -1531,9 +1531,9 @@
         <button class="btn sm btn-ghost text-xs flex-none inline-flex items-center justify-center" data-leisure-mute="${idx}" data-tooltip="${muted ? 'Re-enable this route in the random pool' : 'Mute (weight=0) — keep in the list but exclude from random picks'}" aria-label="${muted ? 'Unmute' : 'Mute'} ${l.route}">${muted ? ICON.eyeOff(14) : ICON.eye(14)}</button>
         <span class="status-badge ${muted ? 'status-pending' : 'status-pending'} font-mono flex-none ${muted ? 'line-through' : ''}">${l.route}</span>
         ${dotsStr}
-        <input type="text" maxlength="14" value="${(l.tag || '').replace(/"/g, '&quot;')}" placeholder="tag" class="input w-20 text-xs" data-leisure-tag="${idx}" data-tooltip="Optional tag (e.g. shopping, family) — filterable">
+        <input type="text" maxlength="14" value="${(l.tag || '').replace(/"/g, '&quot;')}" placeholder="tag" class="input input-sm w-20 text-xs" data-leisure-tag="${idx}" data-tooltip="Optional tag (e.g. shopping, family) — filterable">
         <span class="text-xs text-muted-foreground">weight</span>
-        <input type="number" min="0" max="20" value="${l.weight}" class="input w-16 text-sm" data-leisure-weight="${idx}" ${muted ? 'disabled' : ''}>
+        <input type="number" min="0" max="20" value="${l.weight}" class="input input-sm w-16 text-sm" data-leisure-weight="${idx}" ${muted ? 'disabled' : ''}>
         <span class="text-xs text-muted-foreground font-mono ml-auto">${fmtYen(fareOf(l.route))}</span>
         <button class="btn sm btn-ghost inline-flex items-center justify-center" data-leisure-clone="${idx}" aria-label="Duplicate ${l.route}" data-tooltip="Duplicate this row (same route, same weight)">${ICON.copy(14)}</button>
         <button class="btn sm btn-ghost" data-leisure-remove="${idx}" aria-label="Remove ${l.route} from leisure pool">×</button>
