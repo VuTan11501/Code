@@ -1261,11 +1261,11 @@ function checkForNewFailures(allRuns) {
 
 if ('serviceWorker' in navigator) {
   // Bump query string to force update of stale SW on existing PWA installs
-  navigator.serviceWorker.register('sw.js?v=27').then((reg) => {
+  navigator.serviceWorker.register('sw.js?v=28').then((reg) => {
     // Listen for the SW telling us a new version is active.
     navigator.serviceWorker.addEventListener('message', (ev) => {
       const data = ev.data || {};
-      if (data.type === 'sw-updated') {
+      if (data.type === 'sw-updated' || data.type === 'shell-updated') {
         // Only show the reload toast if we already had a controller before
         // (i.e. this is an UPDATE, not the very first install).
         if (window._swSeenController) {

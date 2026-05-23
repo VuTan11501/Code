@@ -10,7 +10,7 @@
 //   * Update flow: new SW activates → postMessage {type:'sw-updated'} to
 //     all clients. app.js shows a "Reload to update" toast.
 
-const VERSION = 'wf-dash-v3';
+const VERSION = 'wf-dash-v4';
 const SHELL_CACHE = `${VERSION}-shell`;
 const API_CACHE   = `${VERSION}-api`;
 const API_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
@@ -81,10 +81,49 @@ self.addEventListener('fetch', (event) => {
   }
   if (url.origin === self.location.origin) {
     if (req.headers.get('range')) return;
+    // Navigation / HTML shell: stale-while-revalidate with content-diff
+    // detection. Instant paint from cache; if the network copy differs we
+    // postMessage clients so app.js can surface the "Reload to update" toast
+    // — meaning fresh CSP / HTML reaches users in ONE invisible reload cycle
+    // without bumping VERSION every deploy.
+    const isShell = req.mode === 'navigate' ||
+      url.pathname === '/' || url.pathname.endsWith('/index.html');
+    if (isShell) {
+      event.respondWith(swrShell(req, SHELL_CACHE));
+      return;
+    }
     event.respondWith(cacheFirst(req, SHELL_CACHE));
     return;
   }
 });
+
+async function swrShell(req, cacheName) {
+  const cache = await caches.open(cacheName);
+  const cached = await cache.match(req) || await cache.match('./index.html');
+  const network = fetch(req).then(async (resp) => {
+    if (!resp || !resp.ok || resp.type !== 'basic') return resp;
+    try {
+      if (cached) {
+        const [oldText, newText] = await Promise.all([
+          cached.clone().text(),
+          resp.clone().text(),
+        ]);
+        if (oldText !== newText) {
+          const clients = await self.clients.matchAll({ includeUncontrolled: true });
+          for (const c of clients) {
+            try { c.postMessage({ type: 'shell-updated' }); } catch {}
+          }
+        }
+      }
+      await cache.put(req, resp.clone());
+    } catch {}
+    return resp;
+  }).catch(() => null);
+  if (cached) return cached;
+  const fresh = await network;
+  if (fresh) return fresh;
+  throw new Error('shell unavailable');
+}
 
 async function cacheFirst(req, cacheName) {
   const cache = await caches.open(cacheName);
