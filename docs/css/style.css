@@ -103,13 +103,23 @@
 /* â”€â”€â”€ DISABLE ZOOM (PWA) â”€â”€â”€ */
 html { touch-action: manipulation; }
 
-/* â”€â”€â”€ FOCUS RING â”€â”€â”€ */
+/* ─── FOCUS RING ─── */
 :focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 2px;
   border-radius: var(--radius-sm);
 }
 :focus:not(:focus-visible) { outline: none; }
+/* Form controls already paint their own 1px ring via box-shadow (--shadow-glow);
+   the global outline+offset stacks on top and looks thick (~5px band).
+   Suppress the global outline for these to keep focus crisp. */
+.input:focus-visible,
+select:focus-visible,
+.select-trigger:focus-visible,
+.combobox-trigger:focus-visible,
+.cal-input:focus-visible,
+.time-input:focus-visible,
+textarea:focus-visible { outline: none; }
 
 /* Reduced motion */
 @media (prefers-reduced-motion: reduce) {
