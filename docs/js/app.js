@@ -206,14 +206,14 @@ function showDashboard() {
       if (safe) {
         // Strip any leading "/Code/" base so it works under project-site deploys.
         var basePath = location.pathname.replace(/[^/]*$/, ''); // ".../Code/"
-        var target = next;
+        var redirectTo = next;
         if (next.charAt(0) === '/') {
           // Absolute path — keep as-is so /Code/suica.html still works.
-          target = next;
+          redirectTo = next;
         } else {
-          target = basePath + next;
+          redirectTo = basePath + next;
         }
-        location.replace(target);
+        location.replace(redirectTo);
         return;
       }
     }
