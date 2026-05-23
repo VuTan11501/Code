@@ -70,36 +70,89 @@
     font-size: 0.75rem;
   }
   .suica-settings-row > span:first-child { color: var(--muted-foreground); }
+  .suica-settings > summary:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--ring);
+  }
+  .suica-settings-panel {
+    /* override the early definition: use shadcn popover semantics so light
+       mode shows the proper popover surface instead of a flat card */
+    background: var(--popover, var(--card));
+    color: var(--popover-foreground, var(--card-foreground));
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-md, 0 4px 12px rgba(0,0,0,0.12));
+  }
+  /* Accent color picker — shadcn radio swatch pattern.
+     - Default: neutral border, subtle shadow on hover.
+     - aria-checked=true: solid ring in foreground color.
+     - focus-visible: ring offset for keyboard nav. */
+  #suica-accent-row > button {
+    width: 16px; height: 16px; border-radius: 9999px;
+    border: 1px solid var(--border);
+    box-shadow: 0 0 0 0 var(--background), 0 0 0 0 currentColor;
+    transition: box-shadow 150ms, transform 150ms;
+    cursor: pointer;
+  }
+  #suica-accent-row > button:hover { transform: scale(1.1); }
+  #suica-accent-row > button:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--ring);
+  }
+  #suica-accent-row > button[aria-checked="true"] {
+    box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--foreground);
+  }
   /* Tab bar (Phase A) — segmented control style.
      Panels hidden via CSS based on aria-selected on tabs. Tab switch is
-     pure DOM (tiny inline script at end of body) — state persists in LS. */
+     pure DOM (tiny inline script at end of body) — state persists in LS.
+     Matches shadcn .tabs-trigger.active pattern: --background fill,
+     --shadow-sm, 1px border. */
   .suica-tabs {
     display: flex; gap: 0.25rem; padding: 0.25rem;
-    background: var(--muted); border-radius: 0.5rem;
+    background: var(--muted); border-radius: var(--radius-md);
     margin-top: 1rem;
   }
   .suica-tabs > button {
     flex: 1 1 auto;
     padding: 0.5rem 0.75rem;
-    border-radius: 0.375rem;
+    border-radius: var(--radius-sm);
     font-size: 0.875rem; font-weight: 500;
     color: var(--muted-foreground);
     background: transparent;
-    border: 0;
+    border: 1px solid transparent;
     cursor: pointer;
-    transition: background 150ms, color 150ms;
+    transition: background var(--duration-fast), color var(--duration-fast), box-shadow var(--duration-fast);
     display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem;
   }
   .suica-tabs > button:hover { color: var(--foreground); }
+  .suica-tabs > button:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--ring);
+  }
   .suica-tabs > button[aria-selected="true"] {
-    background: var(--card); color: var(--foreground);
-    box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+    background: var(--background); color: var(--foreground);
+    box-shadow: var(--shadow-sm);
+    border-color: var(--border);
   }
   .suica-panel { display: none; }
   .suica-panel.is-active { display: block; }
   /* Re-establish vertical rhythm inside panels (since space-y-5 on <main>
      no longer applies to sections wrapped in panels). */
   .suica-panel > * + * { margin-top: 1.25rem; }
+  /* Drop zone (loader) — shadcn empty-state look. */
+  .suica-drop {
+    transition: border-color 150ms, background 150ms;
+    cursor: pointer;
+    border-radius: var(--radius-md);
+  }
+  .suica-drop:hover { border-color: var(--ring); background: rgba(var(--tint), 0.03); }
+  /* Floating Action Button — uses shadcn card surface + shadow tokens
+     instead of hard-coded rgba shadows from inline styles. */
+  #planner-kbd-fab:hover { transform: translateY(-1px); box-shadow: var(--shadow-md, 0 6px 16px rgba(0,0,0,0.18)) !important; }
+  #planner-kbd-fab:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--ring) !important;
+  }
   /* Range slider — shadcn-style (matches .switch/.input look) */
   .suica-slider {
     -webkit-appearance: none; appearance: none;
@@ -327,12 +380,12 @@
         <div class="suica-settings-panel" role="menu" aria-label="Settings">
           <div class="suica-settings-row">
             <span>Accent</span>
-            <div id="suica-accent-row" class="flex items-center gap-1" role="radiogroup" aria-label="Accent color">
-              <button type="button" data-accent="" class="rounded-full w-4 h-4 border border-border" style="background:#3b82f6" title="Default blue" aria-label="Default blue"></button>
-              <button type="button" data-accent="violet" class="rounded-full w-4 h-4 border border-border" style="background:#8b5cf6" title="Violet" aria-label="Violet"></button>
-              <button type="button" data-accent="emerald" class="rounded-full w-4 h-4 border border-border" style="background:#10b981" title="Emerald" aria-label="Emerald"></button>
-              <button type="button" data-accent="rose" class="rounded-full w-4 h-4 border border-border" style="background:#f43f5e" title="Rose" aria-label="Rose"></button>
-              <button type="button" data-accent="amber" class="rounded-full w-4 h-4 border border-border" style="background:#f59e0b" title="Amber" aria-label="Amber"></button>
+            <div id="suica-accent-row" class="flex items-center gap-1.5" role="radiogroup" aria-label="Accent color">
+              <button type="button" data-accent="" style="background:#3b82f6" title="Default blue" aria-label="Default blue"></button>
+              <button type="button" data-accent="violet" style="background:#8b5cf6" title="Violet" aria-label="Violet"></button>
+              <button type="button" data-accent="emerald" style="background:#10b981" title="Emerald" aria-label="Emerald"></button>
+              <button type="button" data-accent="rose" style="background:#f43f5e" title="Rose" aria-label="Rose"></button>
+              <button type="button" data-accent="amber" style="background:#f59e0b" title="Amber" aria-label="Amber"></button>
             </div>
           </div>
           <div class="suica-settings-row">
@@ -1143,6 +1196,16 @@
   function apply(key) {
     var c = MAP[key] || MAP[''];
     document.documentElement.style.setProperty('--primary', c.primary);
+    // Sync aria-checked across the radiogroup so the shadcn-style ring on
+    // the active swatch reflects current selection.
+    var row = document.getElementById('suica-accent-row');
+    if (row) {
+      row.querySelectorAll('[data-accent]').forEach(function (b) {
+        var k = b.getAttribute('data-accent') || '';
+        b.setAttribute('aria-checked', String(k === key));
+        b.setAttribute('role', 'radio');
+      });
+    }
   }
   function init() {
     var row = document.getElementById('suica-accent-row');
