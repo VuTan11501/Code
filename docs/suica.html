@@ -41,6 +41,65 @@
     position: sticky; top: 0; background: var(--card);
     border-bottom: 1px solid var(--border);
   }
+  /* Sticky page header — sits above content with subtle blur */
+  .suica-page-header {
+    position: sticky; top: 0; z-index: 30;
+    margin: -1.25rem -1.25rem 0;
+    padding: 0.75rem 1.25rem;
+    background: color-mix(in srgb, var(--background) 92%, transparent);
+    backdrop-filter: saturate(180%) blur(10px);
+    -webkit-backdrop-filter: saturate(180%) blur(10px);
+    border-bottom: 1px solid var(--border);
+  }
+  /* Settings dropdown — native <details> based, closes via summary click.
+     We hide the default disclosure triangle and position the panel absolutely. */
+  .suica-settings { position: relative; }
+  .suica-settings > summary { list-style: none; cursor: pointer; }
+  .suica-settings > summary::-webkit-details-marker { display: none; }
+  .suica-settings[open] > summary { background: var(--muted); }
+  .suica-settings-panel {
+    position: absolute; right: 0; top: calc(100% + 6px);
+    min-width: 240px; z-index: 40;
+    background: var(--card); color: var(--card-foreground);
+    border: 1px solid var(--border); border-radius: 0.5rem;
+    padding: 0.75rem; box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+    display: grid; gap: 0.65rem;
+  }
+  .suica-settings-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
+    font-size: 0.75rem;
+  }
+  .suica-settings-row > span:first-child { color: var(--muted-foreground); }
+  /* Tab bar (Phase A) — segmented control style.
+     Panels hidden via CSS based on aria-selected on tabs. Tab switch is
+     pure DOM (tiny inline script at end of body) — state persists in LS. */
+  .suica-tabs {
+    display: flex; gap: 0.25rem; padding: 0.25rem;
+    background: var(--muted); border-radius: 0.5rem;
+    margin-top: 1rem;
+  }
+  .suica-tabs > button {
+    flex: 1 1 auto;
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.375rem;
+    font-size: 0.875rem; font-weight: 500;
+    color: var(--muted-foreground);
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+    transition: background 150ms, color 150ms;
+    display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem;
+  }
+  .suica-tabs > button:hover { color: var(--foreground); }
+  .suica-tabs > button[aria-selected="true"] {
+    background: var(--card); color: var(--foreground);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+  }
+  .suica-panel { display: none; }
+  .suica-panel.is-active { display: block; }
+  /* Re-establish vertical rhythm inside panels (since space-y-5 on <main>
+     no longer applies to sections wrapped in panels). */
+  .suica-panel > * + * { margin-top: 1.25rem; }
   /* Range slider — shadcn-style (matches .switch/.input look) */
   .suica-slider {
     -webkit-appearance: none; appearance: none;
@@ -246,50 +305,97 @@
 
 <main class="max-w-6xl mx-auto p-5 space-y-5">
 
-  <!-- Header -->
-  <header class="flex items-baseline justify-between flex-wrap gap-3 pb-2">
-    <div>
+  <!-- Header (sticky) -->
+  <header class="suica-page-header flex items-center justify-between flex-wrap gap-3">
+    <div class="min-w-0">
       <h1 class="text-xl font-semibold tracking-tight flex items-center gap-2">
         <span data-icon="mapPin" data-size="20"></span>
         <span data-i18n="title">Suica History Viewer</span>
       </h1>
-      <p class="text-xs text-muted-foreground mt-1">
+      <p class="text-xs text-muted-foreground mt-1 hidden sm:block">
         Companion viewer for the <code class="font-mono">suica-history-generator</code> skill. All processing is in-browser.
       </p>
     </div>
     <div class="flex items-center gap-2">
       <span id="planner-save-badge" class="status-badge status-success text-[10px] hidden sm:inline-flex" title="Plan autosave status">✓ Saved</span>
-      <div id="suica-accent-row" class="hidden sm:flex items-center gap-1" role="radiogroup" aria-label="Accent color">
-        <button type="button" data-accent="" class="rounded-full w-4 h-4 border border-border" style="background:#3b82f6" title="Default blue" aria-label="Default blue"></button>
-        <button type="button" data-accent="violet" class="rounded-full w-4 h-4 border border-border" style="background:#8b5cf6" title="Violet" aria-label="Violet"></button>
-        <button type="button" data-accent="emerald" class="rounded-full w-4 h-4 border border-border" style="background:#10b981" title="Emerald" aria-label="Emerald"></button>
-        <button type="button" data-accent="rose" class="rounded-full w-4 h-4 border border-border" style="background:#f43f5e" title="Rose" aria-label="Rose"></button>
-        <button type="button" data-accent="amber" class="rounded-full w-4 h-4 border border-border" style="background:#f59e0b" title="Amber" aria-label="Amber"></button>
-      </div>
-      <button id="suica-theme-toggle" type="button" class="btn sm btn-ghost" aria-label="Toggle light/dark theme" data-tooltip="Toggle light/dark theme (T)">
-        <span data-icon="sun" data-size="14" data-theme-icon="light"></span>
-        <span data-icon="moon" data-size="14" data-theme-icon="dark" class="hidden"></span>
-      </button>
-      <button id="suica-density-toggle" type="button" class="btn sm btn-ghost" aria-label="Toggle compact density" data-tooltip="Toggle compact / comfortable density">
-        <span style="font-size:14px;line-height:1">▤</span>
-      </button>
-      <button id="suica-sound-toggle" type="button" class="btn sm btn-ghost" aria-label="Toggle toast sounds" data-tooltip="Toggle subtle toast sounds (off by default)">
-        <span style="font-size:14px;line-height:1" data-sound-icon>🔕</span>
-      </button>
-      <button id="suica-yen-toggle" type="button" class="btn sm btn-ghost text-xs font-mono" aria-label="Toggle yen format" data-tooltip="Switch between ¥1,234 and 1,234円">
-        <span data-yen-label>¥</span>
-      </button>
-      <select id="suica-lang-select" class="input input-sm w-auto text-xs" aria-label="UI language" data-tooltip="Switch UI language (limited coverage)">
-        <option value="en">EN</option>
-        <option value="ja">日本語</option>
-        <option value="vi">Tiếng Việt</option>
-      </select>
+
+      <!-- Settings dropdown (collapses 5+ misc controls behind a single ⚙ button) -->
+      <details class="suica-settings">
+        <summary class="btn sm btn-ghost" aria-label="Settings" data-tooltip="Display & locale settings">
+          <span style="font-size:14px;line-height:1">⚙</span>
+        </summary>
+        <div class="suica-settings-panel" role="menu" aria-label="Settings">
+          <div class="suica-settings-row">
+            <span>Accent</span>
+            <div id="suica-accent-row" class="flex items-center gap-1" role="radiogroup" aria-label="Accent color">
+              <button type="button" data-accent="" class="rounded-full w-4 h-4 border border-border" style="background:#3b82f6" title="Default blue" aria-label="Default blue"></button>
+              <button type="button" data-accent="violet" class="rounded-full w-4 h-4 border border-border" style="background:#8b5cf6" title="Violet" aria-label="Violet"></button>
+              <button type="button" data-accent="emerald" class="rounded-full w-4 h-4 border border-border" style="background:#10b981" title="Emerald" aria-label="Emerald"></button>
+              <button type="button" data-accent="rose" class="rounded-full w-4 h-4 border border-border" style="background:#f43f5e" title="Rose" aria-label="Rose"></button>
+              <button type="button" data-accent="amber" class="rounded-full w-4 h-4 border border-border" style="background:#f59e0b" title="Amber" aria-label="Amber"></button>
+            </div>
+          </div>
+          <div class="suica-settings-row">
+            <span>Theme</span>
+            <button id="suica-theme-toggle" type="button" class="btn sm btn-ghost" aria-label="Toggle light/dark theme" data-tooltip="Toggle light/dark theme (T)">
+              <span data-icon="sun" data-size="14" data-theme-icon="light"></span>
+              <span data-icon="moon" data-size="14" data-theme-icon="dark" class="hidden"></span>
+            </button>
+          </div>
+          <div class="suica-settings-row">
+            <span>Density</span>
+            <button id="suica-density-toggle" type="button" class="btn sm btn-ghost" aria-label="Toggle compact density" data-tooltip="Toggle compact / comfortable density">
+              <span style="font-size:14px;line-height:1">▤</span>
+            </button>
+          </div>
+          <div class="suica-settings-row">
+            <span>Sound</span>
+            <button id="suica-sound-toggle" type="button" class="btn sm btn-ghost" aria-label="Toggle toast sounds" data-tooltip="Toggle subtle toast sounds (off by default)">
+              <span style="font-size:14px;line-height:1" data-sound-icon>🔕</span>
+            </button>
+          </div>
+          <div class="suica-settings-row">
+            <span>Yen format</span>
+            <button id="suica-yen-toggle" type="button" class="btn sm btn-ghost text-xs font-mono" aria-label="Toggle yen format" data-tooltip="Switch between ¥1,234 and 1,234円">
+              <span data-yen-label>¥</span>
+            </button>
+          </div>
+          <div class="suica-settings-row">
+            <span>Language</span>
+            <select id="suica-lang-select" class="input input-sm w-auto text-xs" aria-label="UI language" data-tooltip="Switch UI language (limited coverage)">
+              <option value="en">EN</option>
+              <option value="ja">日本語</option>
+              <option value="vi">Tiếng Việt</option>
+            </select>
+          </div>
+        </div>
+      </details>
+
       <a href="index.html" class="btn sm btn-ghost no-underline">
         <span data-icon="chevronLeft" data-size="14"></span>
         <span class="btn-label">Back to dashboard</span>
       </a>
     </div>
   </header>
+
+  <!-- Tab bar (Analyze / Generate / History) — see Phase A in suica.html CSS -->
+  <nav class="suica-tabs" role="tablist" aria-label="Workspace">
+    <button type="button" role="tab" data-tab-target="analyze" aria-selected="true">
+      <span data-icon="barChart" data-size="14"></span>
+      <span>Analyze</span>
+    </button>
+    <button type="button" role="tab" data-tab-target="generate" aria-selected="false">
+      <span data-icon="sparkles" data-size="14"></span>
+      <span>Generate</span>
+    </button>
+    <button type="button" role="tab" data-tab-target="history" aria-selected="false">
+      <span data-icon="history" data-size="14"></span>
+      <span>History</span>
+    </button>
+  </nav>
+
+  <!-- ═══ TAB: GENERATE (Trip Planner workflow) ═══════════════════════ -->
+  <div class="suica-panel" data-tab="generate" role="tabpanel" aria-labelledby="tab-generate">
 
   <!-- Trip Planner -->
   <section aria-label="Trip planner">
@@ -608,6 +714,11 @@
   <!-- Keyboard shortcuts help (popover) -->
   <section id="planner-shortcuts-help" class="hidden" aria-label="Keyboard shortcuts"></section>
 
+  </div><!-- /tab generate -->
+
+  <!-- ═══ TAB: HISTORY (saved snapshots + recent generations) ═════════ -->
+  <div class="suica-panel" data-tab="history" role="tabpanel" aria-labelledby="tab-history">
+
   <!-- Plan snapshots (saved plans) -->
   <section id="planner-snapshots-section" aria-label="Saved snapshots">
     <div class="section-title text-sm font-medium text-muted-foreground mb-4 flex items-center gap-2">
@@ -640,6 +751,11 @@
       </div>
     </div>
   </section>
+
+  </div><!-- /tab history -->
+
+  <!-- ═══ TAB: ANALYZE (load JSON + view report) ══════════════════════ -->
+  <div class="suica-panel is-active" data-tab="analyze" role="tabpanel" aria-labelledby="tab-analyze">
 
   <!-- Loader card -->
   <section aria-label="Load history">
@@ -810,6 +926,8 @@
 
   </div>
 
+  </div><!-- /tab analyze -->
+
   <footer class="text-xs text-muted-foreground text-center py-6">
     Read-only viewer. All processing is in-browser. Files never uploaded.
   </footer>
@@ -818,6 +936,60 @@
   </footer>
 
 </main>
+
+<!-- Tab switcher (Phase A) — tiny inline script, persists choice in LS.
+     Runs immediately so panels are correctly shown/hidden before user interacts. -->
+<script>
+(function () {
+  const KEY = 'suica_tab_v1';
+  const tabs = document.querySelectorAll('[role="tab"][data-tab-target]');
+  const panels = document.querySelectorAll('.suica-panel[data-tab]');
+  function activate(target) {
+    let matched = false;
+    tabs.forEach(t => {
+      const on = t.dataset.tabTarget === target;
+      t.setAttribute('aria-selected', String(on));
+      t.setAttribute('tabindex', on ? '0' : '-1');
+      if (on) matched = true;
+    });
+    panels.forEach(p => p.classList.toggle('is-active', p.dataset.tab === target));
+    if (matched) {
+      try { localStorage.setItem(KEY, target); } catch {}
+    }
+  }
+  tabs.forEach(t => {
+    t.addEventListener('click', () => activate(t.dataset.tabTarget));
+    t.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+        e.preventDefault();
+        const list = Array.from(tabs);
+        const i = list.indexOf(t);
+        const next = list[(i + (e.key === 'ArrowRight' ? 1 : -1) + list.length) % list.length];
+        next.focus();
+        activate(next.dataset.tabTarget);
+      }
+    });
+  });
+  let saved = null;
+  try { saved = localStorage.getItem(KEY); } catch {}
+  // Auto-switch to Analyze if a report becomes visible (e.g. user loaded JSON
+  // while on another tab). Watches the #report element's `hidden` class.
+  const report = document.getElementById('report');
+  if (report) {
+    const obs = new MutationObserver(() => {
+      if (!report.classList.contains('hidden')) {
+        // Only auto-switch if user hasn't manually picked a different tab in
+        // this session — respects user intent.
+        const cur = document.querySelector('[role="tab"][aria-selected="true"]');
+        if (cur && cur.dataset.tabTarget !== 'analyze') return;
+        activate('analyze');
+      }
+    });
+    obs.observe(report, { attributes: true, attributeFilter: ['class'] });
+  }
+  activate(saved && ['analyze','generate','history'].includes(saved) ? saved : 'analyze');
+})();
+</script>
 
 <!-- JSZip used client-side to extract the PDF from the artifact zip downloaded
      from the Suica PDF Generate workflow (see js/suica-planner.js). -->
