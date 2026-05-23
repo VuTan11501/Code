@@ -177,13 +177,14 @@
   }
   /* Info box (matches index.html vault-info-box pattern) */
   .suica-info-box {
-    display: flex; align-items: flex-start; gap: 12px;
-    padding: 10px 12px; border-radius: var(--radius-md);
+    display: flex; align-items: center; gap: 8px;
+    padding: 4px 10px; border-radius: var(--radius-sm);
     border: 1px solid var(--border);
     background: color-mix(in srgb, var(--muted) 30%, transparent);
     font-size: var(--fs-xs); color: var(--muted-foreground);
+    line-height: 1.3;
   }
-  .suica-info-box [data-icon] { color: var(--primary); margin-top: 2px; flex-shrink: 0; }
+  .suica-info-box [data-icon] { color: var(--primary); flex-shrink: 0; }
   /* Planner row separators inside grouped lists */
   .suica-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--border); }
   .suica-row:last-child { border-bottom: 0; }
@@ -441,9 +442,15 @@
     <div class="flex items-center gap-2">
       <span id="planner-save-badge" class="status-badge status-success text-[10px] hidden sm:inline-flex" title="Plan autosave status">✓ Saved</span>
 
-      <!-- Settings dropdown (collapses 5+ misc controls behind a single ⚙ button) -->
+      <!-- Theme toggle (same .toggle style as index.html header) -->
+      <button class="toggle" id="suica-theme-toggle" type="button"
+              data-tooltip="Toggle theme (T)" aria-label="Toggle theme">
+        <span id="suica-theme-icon" data-icon="sun" data-size="16"></span>
+      </button>
+
+      <!-- Settings dropdown (collapses 4 misc controls behind a single ⚙ button) -->
       <details class="suica-settings">
-        <summary class="btn sm btn-ghost" aria-label="Settings" data-tooltip="Display & locale settings">
+        <summary class="btn sm btn-ghost" aria-label="Settings" data-tooltip="Display settings">
           <span style="font-size:14px;line-height:1">⚙</span>
         </summary>
         <div class="suica-settings-panel" role="menu" aria-label="Settings">
@@ -456,13 +463,6 @@
               <button type="button" data-accent="rose" style="background:#f43f5e" title="Rose" aria-label="Rose"></button>
               <button type="button" data-accent="amber" style="background:#f59e0b" title="Amber" aria-label="Amber"></button>
             </div>
-          </div>
-          <div class="suica-settings-row">
-            <span>Theme</span>
-            <button id="suica-theme-toggle" type="button" class="btn sm btn-ghost" aria-label="Toggle light/dark theme" data-tooltip="Toggle light/dark theme (T)">
-              <span data-icon="sun" data-size="14" data-theme-icon="light"></span>
-              <span data-icon="moon" data-size="14" data-theme-icon="dark" class="hidden"></span>
-            </button>
           </div>
           <div class="suica-settings-row">
             <span>Density</span>
@@ -481,14 +481,6 @@
             <button id="suica-yen-toggle" type="button" class="btn sm btn-ghost text-xs font-mono" aria-label="Toggle yen format" data-tooltip="Switch between ¥1,234 and 1,234円">
               <span data-yen-label>¥</span>
             </button>
-          </div>
-          <div class="suica-settings-row">
-            <span>Language</span>
-            <select id="suica-lang-select" class="input input-sm w-auto text-xs" aria-label="UI language" data-tooltip="Switch UI language (limited coverage)">
-              <option value="en">EN</option>
-              <option value="ja">日本語</option>
-              <option value="vi">Tiếng Việt</option>
-            </select>
           </div>
         </div>
       </details>
@@ -1215,18 +1207,18 @@
 <script src="js/suica-planner.js?v=124" defer></script>
 <script>
 // Theme toggle for suica.html (mirrors the dashboard's behavior; uses the same
-// localStorage key so the preference syncs across pages).
+// localStorage key so the preference syncs across pages). Same sun/moon icon
+// swap as index.html's themeBtn.
 (function () {
   function applyTheme(t) {
     document.documentElement.setAttribute('data-theme', t);
     var meta = document.querySelector('meta[name="theme-color"]');
     if (meta) meta.setAttribute('content', t === 'light' ? '#ffffff' : '#09090b');
-    var btn = document.getElementById('suica-theme-toggle');
-    if (btn) {
-      var lightIcon = btn.querySelector('[data-theme-icon="light"]');
-      var darkIcon  = btn.querySelector('[data-theme-icon="dark"]');
-      if (lightIcon) lightIcon.classList.toggle('hidden', t !== 'dark');
-      if (darkIcon)  darkIcon.classList.toggle('hidden', t === 'dark');
+    var iconEl = document.getElementById('suica-theme-icon');
+    if (iconEl) {
+      iconEl.setAttribute('data-icon', t === 'dark' ? 'sun' : 'moon');
+      iconEl.removeAttribute('data-icon-rendered');
+      if (window.refreshIcons) window.refreshIcons(iconEl.parentElement);
     }
   }
   function currentTheme() {
@@ -1385,64 +1377,9 @@
 })();
 </script>
 <script>
-// Minimal i18n for top-level chrome. Strings keyed by data-i18n attribute.
-// Stored under localStorage suica-lang. Only a few cards/sections covered;
-// rest of the planner UI stays in English by design.
-(function () {
-  var KEY = 'suica-lang';
-  var DICT = {
-    en: {
-      'title': 'Commutation Management',
-      'section.planner': 'Trip Planner',
-      'planner.designTitle': 'Design a Suica history',
-      'card.topStations': 'Top stations',
-      'card.topStationsDesc': 'Most frequent IC tap stations',
-      'card.topRoutes': 'Top routes (IN → OUT)',
-      'card.topRoutesDesc': 'Common origin → destination pairs',
-    },
-    ja: {
-      'title': '通勤管理',
-      'section.planner': '行程プランナー',
-      'planner.designTitle': 'Suica履歴をデザイン',
-      'card.topStations': '駅ランキング',
-      'card.topStationsDesc': 'タップ回数が多い駅',
-      'card.topRoutes': '区間ランキング（入場→出場）',
-      'card.topRoutesDesc': '頻出の入出場ペア',
-    },
-    vi: {
-      'title': 'Quản lý đi lại',
-      'section.planner': 'Bộ lập kế hoạch chuyến đi',
-      'planner.designTitle': 'Thiết kế lịch sử Suica',
-      'card.topStations': 'Top ga',
-      'card.topStationsDesc': 'Các ga có lượt quét IC nhiều nhất',
-      'card.topRoutes': 'Top tuyến (vào → ra)',
-      'card.topRoutesDesc': 'Các cặp ga vào → ra phổ biến',
-    },
-  };
-  function apply(lang) {
-    var dict = DICT[lang] || DICT.en;
-    document.querySelectorAll('[data-i18n]').forEach(function (el) {
-      var k = el.getAttribute('data-i18n');
-      if (dict[k] != null) el.textContent = dict[k];
-    });
-    document.documentElement.lang = lang === 'en' ? 'en' : (lang === 'ja' ? 'ja' : 'vi');
-  }
-  function init() {
-    var sel = document.getElementById('suica-lang-select');
-    if (!sel) return;
-    var saved = (function () { try { return localStorage.getItem(KEY); } catch (_) { return null; } })() || 'en';
-    sel.value = saved;
-    apply(saved);
-    sel.addEventListener('change', function () {
-      var v = sel.value;
-      try { localStorage.setItem(KEY, v); } catch (_) {}
-      apply(v);
-      if (window.Toast) window.Toast.info('Language: ' + v.toUpperCase());
-    });
-  }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
-  else init();
-})();
+// Language switching removed — page is English-only. Static data-i18n
+// attributes on a few elements remain (they fall through to their HTML
+// default English text) but no JS reads them anymore.
 </script>
 <button id="planner-kbd-fab" type="button" aria-label="Keyboard shortcuts (press ?)" data-tooltip="Keyboard shortcuts (press ?)"
   style="position:fixed;right:16px;bottom:16px;width:44px;height:44px;border-radius:50%;border:1px solid var(--border);background:var(--card);color:var(--card-foreground);box-shadow:0 4px 12px rgba(0,0,0,0.15);cursor:pointer;font-family:monospace;font-size:18px;font-weight:600;z-index:60;display:flex;align-items:center;justify-content:center;transition:transform .15s ease, box-shadow .15s ease;">?</button>
