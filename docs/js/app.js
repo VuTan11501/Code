@@ -193,6 +193,16 @@ function lock() {
 }
 
 function showDashboard() {
+  // If the user was bounced here from a protected page (e.g. /suica.html),
+  // honour the ?next= query param and redirect back after unlock.
+  try {
+    var params = new URLSearchParams(location.search);
+    var next = params.get('next');
+    if (next && /^\/[a-zA-Z0-9_\-./?#=&%]*$/.test(next)) {
+      location.replace(next);
+      return;
+    }
+  } catch (_) {}
   document.getElementById('authScreen').style.display = 'none';
   document.getElementById('dashboard').style.display = 'block';
   // Honour the URL hash on reload so users stay on the page they were

@@ -1715,7 +1715,11 @@
     let commuteSpend = 0;
     DAYS.forEach((day) => {
       const trips = state.pattern[day];
-      const dayFare = trips.reduce((sum, t) => sum + fareOf(t.route), 0);
+      const dayFare = trips.reduce((sum, t) => {
+        const route = (t && t.route) ? t.route : (typeof t === 'string' ? t : '');
+        const isCommute = !t || typeof t === 'string' || (t && t.type === 'commute');
+        return sum + fareOf(route) * (isCommute ? 2 : 1);
+      }, 0);
       commuteSpend += dayFare * monthInfo.counts[day];
     });
     const totW = state.leisure.reduce((s, l) => s + l.weight, 0);
@@ -1764,7 +1768,7 @@
     if (dayBd) {
       dayBd.innerHTML = '';
       const perDay = DAYS.map((day) => {
-        const fare = state.pattern[day].reduce((s, t) => s + fareOf(t.route), 0);
+        const fare = state.pattern[day].reduce((s, t) => s + fareOf(t.route) * 2, 0);
         return fare * (monthInfo.counts[day] || 0);
       });
       const maxDay = Math.max(1, ...perDay);
@@ -1844,7 +1848,11 @@
     //    "balance went negative" in CI: target ¥22k, actual ¥54k spend.
     let commuteSpend = 0;
     DAYS.forEach((day) => {
-      const dayFare = state.pattern[day].reduce((sum, t) => sum + fareOf(t.route), 0);
+      const dayFare = state.pattern[day].reduce((sum, t) => {
+        const route = (t && t.route) ? t.route : (typeof t === 'string' ? t : '');
+        const isCommute = !t || typeof t === 'string' || (t && t.type === 'commute');
+        return sum + fareOf(route) * (isCommute ? 2 : 1);
+      }, 0);
       commuteSpend += dayFare * monthInfo.counts[day];
     });
     if (target && commuteSpend > target * 1.25) {
@@ -1882,7 +1890,11 @@
       // "balance went negative" cases server-side validation would flag.
       const dayFareCache = {};
       DAYS.forEach((d) => {
-        dayFareCache[d] = state.pattern[d].reduce((s, t) => s + (fareOf(t.route) || 0), 0);
+        dayFareCache[d] = state.pattern[d].reduce((s, t) => {
+          const route = (t && t.route) ? t.route : (typeof t === 'string' ? t : '');
+          const isCommute = !t || typeof t === 'string' || (t && t.type === 'commute');
+          return s + (fareOf(route) || 0) * (isCommute ? 2 : 1);
+        }, 0);
       });
       const [yy, mm] = state.settings.month.split('-').map(Number);
       const totalDays = new Date(yy, mm, 0).getDate();
@@ -1965,7 +1977,7 @@
     // No weekend trips and target requires them
     if (target && totalTrips && !state.leisure.length) {
       const weekdaySpend = DAYS.slice(0, 5).reduce((s, d) => {
-        return s + state.pattern[d].reduce((ss, t) => ss + (fareOf(t.route) || 0), 0) * (monthInfo?.counts[d] || 0);
+        return s + state.pattern[d].reduce((ss, t) => ss + ((fareOf(t.route) || 0) * 2), 0) * (monthInfo?.counts[d] || 0);
       }, 0);
       if (weekdaySpend < target * 0.6) {
         out.push({ severity: 'info', msg: 'Weekdays alone cover <60% of target — add leisure routes for variety' });
@@ -2197,9 +2209,13 @@
   const GH_WF_FILE = 'suica-pdf-generate.yml';
 
   function getSessionToken() {
-    try { return sessionStorage.getItem('wf_dash_session') || null; }
-    catch (_) { return null; }
-  }
+      try {
+        if (window.Auth && typeof window.Auth.getToken === 'function') {
+          return window.Auth.getToken();
+        }
+        return sessionStorage.getItem('wf_dash_session') || null;
+      } catch (_) { return null; }
+    }
   function ghHeaders(token) {
     return {
       'Authorization': `Bearer ${token}`,
@@ -2512,6 +2528,12 @@
       // Clear the force flag on successful pre-flight (so next click re-checks)
       delete btn.dataset.forceGenerate;
 
+      // If no session token, bounce to login (index.html). We rely on
+      // window.Auth.requireLogin (loaded at top of suica.html) to redirect
+      // — but double-check here so a stale tab doesn't dispatch a workflow.
+      if (window.Auth && typeof window.Auth.requireLogin === 'function') {
+        if (!window.Auth.requireLogin('generate')) return;
+      }
       const token = getSessionToken();
       if (!token) {
         setStatus('Open & unlock the main dashboard first (session token required).', 'text-warning');
@@ -4101,7 +4123,7 @@
     // Wire comboboxes (replaces the old datalist <input>)
     const fromWrap = document.querySelector('[data-combobox-id="planner-from"]');
     const toWrap = document.querySelector('[data-combobox-id="planner-to"]');
-    const onComboChange = () => { updateFareDisplay(); saveState(); if (typeof applyFareRangeFilter === 'function') applyFareRangeFilter(); renderPattern(); };
+    const onComboChange = () => { updateFareDisplay(); saveState(); if (typeof applyFareRangeFilter === 'function') applyFareRangeFilter(); renderPattern(); renderEstimate(); };
     if (fromWrap) cbFrom = createCombobox(fromWrap, { options: state.stations, placeholder: '東京 / Tokyo', onChange: onComboChange });
     if (toWrap)   cbTo   = createCombobox(toWrap,   { options: state.stations, placeholder: '新宿 / Shinjuku', onChange: onComboChange });
 

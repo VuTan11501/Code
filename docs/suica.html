@@ -14,6 +14,20 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script>
+/* Auth guard — runs synchronously before anything else paints.
+   If the session token isn't present, bounce to the login page (index.html)
+   and remember where to return to via ?next=. We use sessionStorage so the
+   token stays scoped to the current browser session only. */
+(function () {
+  try {
+    if (!sessionStorage.getItem('wf_dash_session')) {
+      var next = encodeURIComponent(location.pathname + location.search + location.hash);
+      location.replace('/?next=' + next + '&reason=suica');
+    }
+  } catch (e) {}
+})();
+</script>
+<script>
 /* Theme init — runs before CSS so first paint matches user pref */
 (function () {
   try {
@@ -597,6 +611,27 @@
     #planner-estimate-total { font-size: 1.5rem; }
     .suica-info-box .text-sm.font-mono { font-size: 0.95rem; }
   }
+
+/* Overlay modal safe-area fixes — ensure action buttons are visible on phones */
+#suicaPdfOverlay, #suicaLogModal {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+#suicaPdfOverlay .card, #suicaLogModal .card {
+  max-height: calc(100vh - 120px);
+  overflow: auto;
+  width: min(720px, 100%);
+  box-sizing: border-box;
+}
+@media (max-width: 640px) {
+  #suicaPdfOverlay, #suicaLogModal { align-items: flex-start; padding-top: 12px; padding-bottom: calc(1rem + env(safe-area-inset-bottom)); }
+  #suicaPdfOverlay .card, #suicaLogModal .card { margin-top: 12px; margin-bottom: calc(64px + env(safe-area-inset-bottom)); }
+}
 </style>
 </head>
 <body class="bg-background text-foreground font-sans text-sm antialiased min-h-dvh overflow-x-hidden">
@@ -1441,8 +1476,19 @@
 })();
 </script>
 <script src="js/log-viewer.js?v=2" defer></script>
+<style>
+/* Ensure PDF overlay actions (View logs) visible on mobile */
+#suicaPdfOverlay { z-index: 99999 !important; position: fixed !important; inset: 0 !important; display: none; align-items: flex-start; justify-content: center; }
+#suicaPdfOverlay.open { display:flex !important; }
+#suicaPdfOverlay .spinner-overlay-content { z-index: 100000 !important; max-width: 92vw; margin: 12px; }
+#suicaPdfOverlay .spinner-overlay-actions { position: relative; z-index:100001; }
+@media (max-width:640px) {
+  #suicaPdfOverlay .spinner-overlay-actions { position: fixed !important; bottom: 16px !important; left: 50% !important; transform: translateX(-50%) !important; }
+}
+</style>
+<script src="js/auth.js?v=2" defer></script>
 <script>window.SUICA_FARE_API='https://suica-fare-proxy.workflow-dashboard.workers.dev';</script>
-<script src="js/suica-planner.js?v=130" defer></script>
+<script src="js/suica-planner.js?v=131" defer></script>
 <script defer>
 // Wire the date-range popover to the planner Month/Schedule field.
 // Strategy:
