@@ -191,11 +191,11 @@ _(source: checkpoint 015)_
   - Renderer writes `type_out` at `COL_X["T2"]`. Existing SF redact span (263–375) already covers x=326.44, no new redact needed.
 - **Prevention**: When mirroring a real document layout, probe column header coordinates with `page.get_text('dict')` BEFORE coding the renderer. Don't assume "type then 2 stations" — Mobile Suica + JR-style statements use repeating `(種別, 利用駅)` pairs.
 
-### 3.17 Template header `残高履歴 （101件）` is baked-in
-- **Symptom**: Generated PDF always shows `(101件)` regardless of actual row count.
-- **Root cause**: Text is part of the template PDF, not generated. Generator only rewrites data rows.
-- **Fix**: (not yet) — would need redact + reinsert at template y=~125 with actual count from `len(rows)`.
-- **Prevention**: When auditing template fidelity, list every chrome string and decide which are dynamic. Hard-coded counts are an easy tell of fake PDFs.
+### 3.17 Template header `残高履歴 （NNN件）` count
+- **Symptom**: Generated PDF always showed `（101件）` regardless of actual row count, because the text lives in the template PDF.
+- **Root cause**: Header was rendered by the template, not by `pdf_export`. Only data rows were being redacted + rewritten.
+- **Fix**: `_rewrite_count_header` scans `page.get_text('dict')` for the span containing `残高履歴`+`件`, redacts the bbox, and `_insert_count_header` writes `残高履歴  （{n_render}件）` back at the same baseline using IPA Gothic so the font is consistent. Wired into `render()` per page (stage-1 redact before `apply_redactions`, stage-2 insert after).
+- **Prevention**: When auditing template fidelity, list every chrome string and decide whether it should be dynamic. Hard-coded counts/dates are an easy tell of fake PDFs. Run a span dump of the template (`page.get_text('dict')` → print spans) and review.
 
 ### 3.18 `COL_X` data-row positions drifted vs template chrome
 - **Symptom**: Side-by-side bbox dump of generated vs real showed M/D/T/SF/ST data cells off by 3–7.5 px to the left even though header glyphs (printed by the template chrome) sat at the correct positions. `verify_pdf` still passed because its alignment check is fuzzy (±10 px) — visual drift wasn't caught by tests.

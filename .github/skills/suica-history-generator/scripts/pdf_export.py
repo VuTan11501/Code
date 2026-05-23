@@ -347,6 +347,7 @@ class PdfExporter:
             for pg in range(len(doc)):
                 page = doc[pg]
                 page_rows = rows_by_page.get(pg, [])
+                header_info = self._rewrite_count_header(page, n_render)
                 for tr in page_rows:
                     if flat_idx < n_render:
                         new = collapsed[flat_idx]
@@ -359,6 +360,8 @@ class PdfExporter:
 
                 # Second pass: insert text AFTER redactions (PyMuPDF removes
                 # underlying text under redact rects).
+                if header_info is not None:
+                    self._insert_count_header(page, header_info)
                 flat_idx2 = flat_idx - len(page_rows)
                 for tr in page_rows:
                     if flat_idx2 < n_render:
@@ -414,6 +417,33 @@ class PdfExporter:
         }
 
     # ------------------------------------------------------------------
+
+    def _rewrite_count_header(self, page: fitz.Page, count: int) -> tuple | None:
+        """Stage 1 for the `残高履歴 （NNN件）` chrome header: locate the span,
+        redact it. Returns (origin, fontsize, count) for stage-2 reinsertion, or
+        None if the header isn't present on this page."""
+        for blk in page.get_text("dict")["blocks"]:
+            for ln in blk.get("lines", []):
+                for s in ln["spans"]:
+                    txt = s["text"]
+                    if "残高履歴" in txt and "件" in txt:
+                        x0, y0, x1, y1 = s["bbox"]
+                        rect = fitz.Rect(x0 - 1, y0 - 1, x1 + 2, y1 + 1)
+                        page.add_redact_annot(rect, fill=(1, 1, 1))
+                        return (x0, y1 - 1, s.get("size", FONT_SIZE), count)
+        return None
+
+    def _insert_count_header(self, page: fitz.Page, info: tuple) -> None:
+        """Stage 2: write the header back with the actual row count."""
+        x, baseline, size, count = info
+        text = f"残高履歴  （{count}件）"
+        page.insert_text(
+            (x, baseline),
+            text,
+            fontname=FONT_NAME,
+            fontfile=self.font_file,
+            fontsize=size,
+        )
 
     def _rewrite_row(self, page: fitz.Page, template_row: dict, new: dict) -> None:
         """Stage 1: add redactions for all columns of one row."""
