@@ -554,6 +554,10 @@
       state.stations = Array.from(set).sort((x, y) => x.localeCompare(y, 'ja'));
       buildFareGraph();
       populateComboboxes();
+      // Fare table is now ready — re-paint the "verified IC fare" badge for
+      // any route that was restored from localStorage during init (setValue()
+      // doesn't trigger onChange, so updateFareDisplay was never invoked).
+      try { updateFareDisplay(); } catch (_) {}
       const ageMs = Date.now() - new Date(OFFICIAL_FARE_DATE).getTime();
       const ageDays = Math.max(0, Math.floor(ageMs / 86400000));
       const ageLabel = ageDays < 1 ? 'today'
