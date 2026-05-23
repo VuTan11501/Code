@@ -816,12 +816,12 @@
           </button>
           <label class="text-xs text-muted-foreground flex items-center gap-1" data-tooltip="Generate this many consecutive months in one batch (month increments, seed +1 each)">
             <span>Batch:</span>
-            <select id="planner-batch-months" class="input input-sm select-trigger w-14">
-              <option value="1" selected>1</option>
-              <option value="2">2</option>
-              <option value="3">3</option>
-              <option value="6">6</option>
-            </select>
+            <div id="planner-batch-months" class="shadcn-select">
+              <button type="button" class="shadcn-select-trigger" aria-haspopup="listbox" aria-expanded="false">
+                <span class="shadcn-select-value">1</span>
+                <span data-icon="chevronDown" data-size="12" class="shadcn-select-chev"></span>
+              </button>
+            </div>
             <span>mo.</span>
           </label>
           <span id="planner-pdf-status" class="text-xs text-muted-foreground"></span>
@@ -1251,7 +1251,7 @@
 </script>
 <script src="js/log-viewer.js?v=2" defer></script>
 <script>window.SUICA_FARE_API='https://suica-fare-proxy.workflow-dashboard.workers.dev';</script>
-<script src="js/suica-planner.js?v=128" defer></script>
+<script src="js/suica-planner.js?v=129" defer></script>
 <script defer>
 // Wire the date-range popover to the planner Month/Schedule field.
 // Strategy:

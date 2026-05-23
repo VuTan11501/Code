@@ -776,7 +776,10 @@
 
   // ────── Shadcn-style Select (lightweight; no search field) ──────
   // Replaces a native <select> wrapper with a fully-styled popover that
-  // matches the rest of the UI. Returns { setValue, getValue, setOptions }.
+  // matches the rest of the UI. Returns { setValue, getValue, setOptions,
+  // addOption } and also attaches the instance to root._shadcnSelect so
+  // existing code paths that previously read selectEl.value can be ported
+  // by calling root._shadcnSelect.getValue() instead.
   function createShadcnSelect(root, opts) {
     const trigger = root.querySelector('.shadcn-select-trigger');
     const valueEl = root.querySelector('.shadcn-select-value');
@@ -786,7 +789,7 @@
     let panel = null;
 
     function labelFor(v) {
-      const o = options.find((x) => x.value === v);
+      const o = options.find((x) => String(x.value) === String(v));
       return o ? o.label : '';
     }
     function render() {
@@ -800,7 +803,7 @@
       panel.className = 'shadcn-select-panel';
       panel.setAttribute('role', 'listbox');
       panel.innerHTML = options.map((o) => `
-        <div class="shadcn-select-item${o.value === value ? ' is-selected' : ''}" role="option" data-v="${o.value.replace(/"/g, '&quot;')}">${o.label}</div>
+        <div class="shadcn-select-item${String(o.value) === String(value) ? ' is-selected' : ''}" role="option" data-v="${String(o.value).replace(/"/g, '&quot;')}">${o.label}</div>
       `).join('');
       root.appendChild(panel);
       trigger.setAttribute('aria-expanded', 'true');
@@ -828,11 +831,17 @@
     }
     trigger.addEventListener('click', (e) => { e.preventDefault(); panel ? close() : open(); });
     render();
-    return {
-      setValue(v) { value = v || ''; render(); },
+    const inst = {
+      setValue(v) { value = v == null ? '' : String(v); render(); },
       getValue() { return value; },
       setOptions(arr) { options = arr.slice(); render(); },
+      addOption(v, label) {
+        const sv = String(v);
+        if (!options.some((o) => String(o.value) === sv)) options.push({ value: v, label: label || sv });
+      },
     };
+    root._shadcnSelect = inst;
+    return inst;
   }
 
   function populateComboboxes() {
@@ -2335,7 +2344,8 @@
       // iterate the month + seed locally between dispatches and restore the
       // originals at the end so the UI looks unchanged.
       const batchEl = $('planner-batch-months');
-      const batchN = Math.max(1, Math.min(12, +(batchEl && batchEl.value) || 1));
+      const batchVal = batchEl && batchEl._shadcnSelect ? batchEl._shadcnSelect.getValue() : (batchEl && batchEl.value);
+      const batchN = Math.max(1, Math.min(12, +batchVal || 1));
       const origMonth = state.settings.month;
       const origSeed = +state.settings.seed;
       const monthInput = $('planner-month');
@@ -4061,6 +4071,18 @@
         },
       });
     }
+    const batchSel = $('planner-batch-months');
+    if (batchSel) {
+      createShadcnSelect(batchSel, {
+        options: [
+          { value: 1, label: '1' },
+          { value: 2, label: '2' },
+          { value: 3, label: '3' },
+          { value: 6, label: '6' },
+        ],
+        value: 1,
+      });
+    }
     const msBtn = $('planner-multi-suggest');
     if (msBtn) msBtn.addEventListener('click', multiSuggest);
     const presetsMenu = $('planner-presets-menu');
@@ -4208,8 +4230,11 @@
       state.settings.target = per;
       const el = $('planner-target'); if (el) el.value = per;
       const batchEl = $('planner-batch-months');
-      if (batchEl) {
-        // Add the option on demand if it isn't present.
+      if (batchEl && batchEl._shadcnSelect) {
+        batchEl._shadcnSelect.addOption(n, `× ${n}`);
+        batchEl._shadcnSelect.setValue(n);
+      } else if (batchEl) {
+        // Fallback for native <select> (in case init didn't enhance yet).
         const wanted = String(n);
         if (!Array.from(batchEl.options).some((o) => o.value === wanted)) {
           const opt = document.createElement('option'); opt.value = wanted; opt.textContent = `× ${wanted}`;
