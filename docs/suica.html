@@ -286,11 +286,7 @@
   /* ─── Mobile (<=640px) responsive polish ─── */
   @media (max-width: 640px) {
     main { padding: 12px !important; }
-    /* Primary generate button + auto-suggest go full-width on small screens */
-    #planner-generate-pdf,
-    #planner-auto-suggest,
-    #planner-load-sample,
-    #planner-clear { width: 100%; justify-content: center; }
+    /* (Primary Generate button is now in a sticky bottom bar — see .gen-mobile-cta) */
     /* Drop the inline tip text; it's covered by the chevron tooltip */
     .planner-tip-inline { display: none; }
     /* Recent generations cards: stack badges below the title row */
@@ -465,6 +461,142 @@
   }
   .suica-dr-status { font-size: 0.8rem; color: var(--foreground); font-variant-numeric: tabular-nums; }
   .suica-dr-actions { display: flex; gap: 0.5rem; }
+
+  /* ═══ Generate-tab action bar (refactor 2026-05) ═══
+     Three visually distinct groups: Primary CTA / Plan tools / Utilities.
+     On desktop they sit on one row; on mobile they stack and the primary CTA
+     becomes a sticky bottom bar so it's always reachable with one thumb. */
+  .gen-actions {
+    display: flex; flex-wrap: wrap; align-items: center;
+    gap: 0.5rem 0.75rem;
+    padding-top: 0.25rem;
+  }
+  .gen-actions__primary {
+    display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;
+    min-width: 0;
+  }
+  .gen-actions__primary #planner-generate-pdf {
+    font-weight: 600; min-height: 44px; padding-inline: 1rem;
+  }
+  .gen-actions__batch {
+    display: inline-flex; align-items: center; gap: 0.35rem;
+    font-size: var(--fs-xs); color: var(--muted-foreground);
+    white-space: nowrap;
+  }
+  .gen-actions__tools {
+    display: inline-flex; align-items: center; gap: 0.35rem; flex-wrap: wrap;
+    padding: 0.25rem; border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--muted) 40%, transparent);
+    border: 1px solid var(--border);
+  }
+  .gen-actions__tools .btn { min-height: 36px; }
+  .gen-actions__utils {
+    display: inline-flex; align-items: center; gap: 0.35rem; margin-left: auto;
+  }
+  .gen-actions__status {
+    font-size: var(--fs-xs); color: var(--muted-foreground);
+    flex-basis: 100%;
+    min-height: 1rem;
+  }
+
+  /* Compact icon-only chip button used inside grouped sections */
+  .gen-chip-btn {
+    height: 32px; min-width: 32px; padding: 0 0.5rem;
+    display: inline-flex; align-items: center; justify-content: center; gap: 0.3rem;
+    border-radius: var(--radius-sm); border: 1px solid var(--border);
+    background: var(--card); color: var(--foreground);
+    cursor: pointer; font-size: var(--fs-xs);
+    transition: background var(--duration-fast), border-color var(--duration-fast);
+  }
+  .gen-chip-btn:hover { background: var(--accent); border-color: color-mix(in srgb, var(--primary) 30%, var(--border)); }
+
+  /* Collapsible "Filter by fare ▾" chip — replaces the always-visible row */
+  .gen-fare-filter {
+    margin-top: 0.5rem;
+  }
+  .gen-fare-filter > summary {
+    list-style: none; cursor: pointer; display: inline-flex; align-items: center;
+    gap: 0.35rem; padding: 0.25rem 0.6rem; border-radius: 999px;
+    border: 1px dashed var(--border); background: transparent;
+    font-size: var(--fs-xs); color: var(--muted-foreground);
+    transition: background var(--duration-fast), border-color var(--duration-fast);
+  }
+  .gen-fare-filter > summary:hover { background: var(--accent); border-color: var(--border); color: var(--foreground); }
+  .gen-fare-filter > summary::-webkit-details-marker { display: none; }
+  .gen-fare-filter[open] > summary {
+    background: color-mix(in srgb, var(--primary) 8%, transparent);
+    border-style: solid; color: var(--foreground);
+  }
+  .gen-fare-filter__body {
+    display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap;
+    margin-top: 0.5rem;
+  }
+
+  /* ─── Sticky mobile primary CTA bar (<640px) ───
+     The Generate button is the user's most important action; on phones we
+     anchor a slim bar to the bottom of the viewport so it's always thumb-
+     reachable while they tweak the plan above. */
+  .gen-mobile-cta {
+    display: none;
+  }
+  @media (max-width: 640px) {
+    .gen-mobile-cta {
+      display: flex;
+      position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
+      align-items: center; gap: 0.5rem;
+      padding: 0.5rem 0.75rem calc(0.5rem + env(safe-area-inset-bottom, 0px));
+      background: color-mix(in srgb, var(--background) 92%, transparent);
+      backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+      border-top: 1px solid var(--border);
+      box-shadow: 0 -4px 12px -8px rgba(0,0,0,0.3);
+    }
+    .gen-mobile-cta .btn { min-height: 46px; font-size: 0.95rem; font-weight: 600; }
+    .gen-mobile-cta .gen-mobile-cta__primary { flex: 1 1 auto; justify-content: center; }
+    /* Push main content above the sticky bar so last card isn't hidden */
+    body:has(.gen-mobile-cta:not([hidden])) main { padding-bottom: 88px !important; }
+    /* On mobile, the in-card primary action row becomes secondary —
+       hide its main Generate button (the sticky one takes over) but keep
+       Batch / status visible there for context. */
+    .gen-actions__primary #planner-generate-pdf { display: none; }
+    /* Plan tools group: collapse spacing and let buttons grow */
+    .gen-actions__tools { flex-basis: 100%; justify-content: stretch; }
+    .gen-actions__tools .btn { flex: 1 1 calc(50% - 0.35rem); justify-content: center; min-height: 40px; }
+    .gen-actions__utils { margin-left: 0; flex-basis: 100%; justify-content: space-between; }
+    .gen-actions__utils .btn { min-height: 40px; }
+    /* The big "Generate Suica PDF" full-width override from the older
+       mobile block conflicts with our new sticky strategy — neutralize. */
+    #planner-auto-suggest, #planner-load-sample, #planner-clear { width: auto !important; }
+  }
+
+  /* ─── Route section mobile polish ─── */
+  @media (max-width: 640px) {
+    /* From / Swap / To: stack From above To with Swap as a centered icon */
+    #planner-swap { align-self: center; margin: -0.25rem auto; }
+    /* "Add as weekday commute" and "Add to weekend trip pool" full-width stacked */
+    [data-planner-add] { flex: 1 1 100%; justify-content: center; min-height: 42px; }
+  }
+
+  /* ─── Weekend pool bulk-actions dropdown (mirrors Backup pattern) ─── */
+  .gen-bulk-menu {
+    position: relative; margin-left: auto;
+  }
+  .gen-bulk-menu > summary {
+    list-style: none; cursor: pointer;
+  }
+  .gen-bulk-menu > summary::-webkit-details-marker { display: none; }
+  .gen-bulk-menu__panel {
+    position: absolute; right: 0; top: calc(100% + 4px);
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: var(--radius-md); box-shadow: var(--shadow-md);
+    padding: 0.25rem; z-index: 20; min-width: 200px;
+    display: flex; flex-direction: column; gap: 0.125rem;
+  }
+
+  /* ─── Estimate panel: prioritise Total on mobile ─── */
+  @media (max-width: 640px) {
+    #planner-estimate-total { font-size: 1.5rem; }
+    .suica-info-box .text-sm.font-mono { font-size: 0.95rem; }
+  }
 </style>
 </head>
 <body class="bg-background text-foreground font-sans text-sm antialiased min-h-dvh overflow-x-hidden">
@@ -614,14 +746,20 @@
             <div class="flex-1">Loading fare data…</div>
           </div>
           <div id="planner-station-hints" class="rounded-md border border-border bg-muted/20 px-3 py-2 mt-3 hidden" aria-live="polite"></div>
-          <div class="flex items-center gap-2 mt-3 text-xs flex-wrap" id="planner-fare-range-row">
-            <span class="text-muted-foreground" data-tooltip="Limit the To-station dropdown to candidates whose verified fare from the selected From-station falls within this range.">Fare range filter:</span>
-            <input id="planner-fare-min" type="number" class="input input-sm w-24" placeholder="min ¥" min="0" step="10" autocomplete="off">
-            <span class="text-muted-foreground">–</span>
-            <input id="planner-fare-max" type="number" class="input input-sm w-24" placeholder="max ¥" min="0" step="10" autocomplete="off">
-            <button id="planner-fare-range-clear" class="btn btn-ghost sm text-[10px]" type="button">Clear</button>
-            <span id="planner-fare-range-status" class="text-muted-foreground"></span>
-          </div>
+          <details class="gen-fare-filter" id="planner-fare-range-row">
+            <summary data-tooltip="Limit the To-station dropdown to candidates whose verified fare from the selected From-station falls within this range.">
+              <span data-icon="filter" data-size="12"></span>
+              <span>Filter by fare</span>
+              <span data-icon="chevronDown" data-size="10" class="opacity-60"></span>
+              <span id="planner-fare-range-status" class="text-muted-foreground ml-1"></span>
+            </summary>
+            <div class="gen-fare-filter__body">
+              <input id="planner-fare-min" type="number" class="input input-sm w-24" placeholder="min ¥" min="0" step="10" autocomplete="off">
+              <span class="text-muted-foreground">–</span>
+              <input id="planner-fare-max" type="number" class="input input-sm w-24" placeholder="max ¥" min="0" step="10" autocomplete="off">
+              <button id="planner-fare-range-clear" class="btn btn-ghost sm text-[10px]" type="button">Clear</button>
+            </div>
+          </details>
         </div>
 
         <div class="separator h-px w-full bg-border"></div>
@@ -645,22 +783,32 @@
         <div>
           <div class="text-xs text-muted-foreground font-medium mb-2 flex items-center gap-2 uppercase tracking-wide">
             <span data-icon="sparkles" data-size="14"></span> Weekend trip pool (random picks on Sat/Sun)
-            <button id="planner-leisure-bulk" type="button" class="ml-auto btn btn-ghost sm text-[10px] normal-case tracking-normal" data-tooltip="Paste multiple routes at once (one per line or comma-separated)">
-              <span data-icon="plus" data-size="12"></span>
-              <span class="btn-label">Bulk add</span>
-            </button>
-            <button id="planner-leisure-bulk-file" type="button" class="btn btn-ghost sm text-[10px] normal-case tracking-normal" data-tooltip="Load routes from a CSV/TSV file (one route per row, form 東京↔新宿)">
-              <span data-icon="upload" data-size="12"></span>
-              <span class="btn-label">Load CSV…</span>
-            </button>
-            <button id="planner-leisure-bulk-paste" type="button" class="btn btn-ghost sm text-[10px] normal-case tracking-normal" data-tooltip="Paste a list of routes (one per line, optionally route,weight)">
-              <span data-icon="copy" data-size="12"></span>
-              <span class="btn-label">Paste…</span>
-            </button>
-            <button id="planner-leisure-clear" type="button" class="btn btn-ghost sm text-[10px] normal-case tracking-normal text-destructive" data-tooltip="Remove every route from the weekend trip pool (undoable)">
-              <span data-icon="trash" data-size="12"></span>
-              <span class="btn-label">Clear all</span>
-            </button>
+            <details class="gen-bulk-menu">
+              <summary class="btn btn-ghost sm text-[10px] normal-case tracking-normal" data-tooltip="Bulk import / clear actions for the weekend trip pool">
+                <span data-icon="moreVertical" data-size="12"></span>
+                <span class="btn-label">Bulk actions</span>
+                <span data-icon="chevronDown" data-size="10"></span>
+              </summary>
+              <div class="gen-bulk-menu__panel">
+                <button id="planner-leisure-bulk" type="button" class="btn btn-ghost sm justify-start" data-tooltip="Paste multiple routes at once (one per line or comma-separated)">
+                  <span data-icon="plus" data-size="14"></span>
+                  <span class="btn-label">Bulk add…</span>
+                </button>
+                <button id="planner-leisure-bulk-file" type="button" class="btn btn-ghost sm justify-start" data-tooltip="Load routes from a CSV/TSV file (one route per row, form 東京↔新宿)">
+                  <span data-icon="upload" data-size="14"></span>
+                  <span class="btn-label">Load CSV…</span>
+                </button>
+                <button id="planner-leisure-bulk-paste" type="button" class="btn btn-ghost sm justify-start" data-tooltip="Paste a list of routes (one per line, optionally route,weight)">
+                  <span data-icon="copy" data-size="14"></span>
+                  <span class="btn-label">Paste…</span>
+                </button>
+                <div class="separator h-px w-full bg-border my-1"></div>
+                <button id="planner-leisure-clear" type="button" class="btn btn-ghost sm justify-start text-destructive" data-tooltip="Remove every route from the weekend trip pool (undoable)">
+                  <span data-icon="trash" data-size="14"></span>
+                  <span class="btn-label">Clear all</span>
+                </button>
+              </div>
+            </details>
             <input type="file" id="planner-leisure-bulk-file-input" accept=".csv,.tsv,.txt,text/csv,text/plain" class="hidden">
           </div>
           <div id="planner-leisure" class="suica-grouped"></div>
@@ -808,94 +956,104 @@
         <!-- Plan validation warnings (populated by computeWarnings) -->
         <div id="planner-warnings" class="rounded-md border border-border bg-muted/30 p-3 hidden" role="status" aria-live="polite"></div>
 
-        <!-- Output actions -->
-        <div class="flex flex-wrap gap-2 items-center">
-          <button id="planner-generate-pdf" class="btn primary" type="button" data-tooltip="Dispatches the Suica PDF Generate workflow on GitHub and downloads the resulting PDF (~30-60s)">
-            <span data-icon="download" data-size="14"></span>
-            <span class="btn-label">Generate Suica PDF</span>
-          </button>
-          <label class="text-xs text-muted-foreground flex items-center gap-1" data-tooltip="Generate this many consecutive months in one batch (month increments, seed +1 each)">
-            <span>Batch:</span>
-            <div id="planner-batch-months" class="shadcn-select">
-              <button type="button" class="shadcn-select-trigger" aria-haspopup="listbox" aria-expanded="false">
-                <span class="shadcn-select-value">1</span>
-                <span data-icon="chevronDown" data-size="12" class="shadcn-select-chev"></span>
-              </button>
-            </div>
-            <span>mo.</span>
-          </label>
-          <span id="planner-pdf-status" class="text-xs text-muted-foreground"></span>
-          <div class="flex-1"></div>
-          <details class="relative">
-            <summary class="btn sm btn-outline cursor-pointer list-none" data-tooltip="Backup or share the raw plan / generated history">
-              <span data-icon="moreVertical" data-size="14"></span>
-              <span class="btn-label">Backup</span>
-            </summary>
-            <div class="absolute right-0 top-full mt-1 bg-card border border-border rounded-md shadow-lg p-1 z-20 min-w-[220px] flex flex-col gap-1">
-              <button id="planner-download" class="btn btn-ghost sm justify-start" type="button" data-tooltip="Save the trip plan so you can reload it later">
-                <span data-icon="download" data-size="14"></span>
-                <span class="btn-label">Download preset.json</span>
-              </button>
-              <button id="planner-download-json" class="btn btn-ghost sm justify-start" type="button" data-tooltip="Save the in-browser preview as JSON (useful for analysis)">
-                <span data-icon="download" data-size="14"></span>
-                <span class="btn-label">Download history.json</span>
-              </button>
-              <div class="separator h-px w-full bg-border my-1"></div>
-              <button id="planner-snapshot-save" class="btn btn-ghost sm justify-start" type="button" data-tooltip="Save the current plan into browser storage for one-click restore later">
-                <span data-icon="save" data-size="14"></span>
-                <span class="btn-label">Save snapshot…</span>
-              </button>
-              <button id="planner-snapshots-export" class="btn btn-ghost sm justify-start" type="button" data-tooltip="Download all snapshots as a JSON file (back up before clearing browser data)">
-                <span data-icon="download" data-size="14"></span>
-                <span class="btn-label">Export snapshots…</span>
-              </button>
-              <button id="planner-snapshots-import" class="btn btn-ghost sm justify-start" type="button" data-tooltip="Restore snapshots from a previously-exported JSON file (merges; existing IDs win)">
-                <span data-icon="upload" data-size="14"></span>
-                <span class="btn-label">Import snapshots…</span>
-              </button>
-              <button id="planner-share-link" class="btn btn-ghost sm justify-start" type="button" data-tooltip="Copy a URL that encodes the full plan; opening it on another browser asks to import">
-                <span data-icon="copy" data-size="14"></span>
-                <span class="btn-label">Copy share link</span>
-              </button>
-              <button id="planner-share-qr" class="btn btn-ghost sm justify-start" type="button" data-tooltip="Generate a scannable QR code of the share link — useful for opening this plan on your phone">
-                <span data-icon="qr" data-size="14"></span>
-                <span class="btn-label">Share via QR…</span>
-              </button>
-              <button id="planner-export-ics" class="btn btn-ghost sm justify-start" type="button" data-tooltip="Download an .ics calendar file with one event per scheduled trip — import into Google Calendar to preview the schedule">
-                <span data-icon="calendar" data-size="14"></span>
-                <span class="btn-label">Export .ics calendar</span>
-              </button>
-              <div class="separator h-px w-full bg-border my-1"></div>
-              <button id="planner-fare-table" class="btn btn-ghost sm justify-start" type="button" data-tooltip="Browse every known IC fare in the catalogue, sort by route or amount, see which ones you've overridden">
-                <span data-icon="list" data-size="14"></span>
-                <span class="btn-label">Fare table…</span>
-              </button>
-            </div>
-          </details>
-          <button id="planner-auto-suggest" class="btn sm btn-outline" type="button" data-tooltip="Auto-fill weekday commute (current From↔To) and tune leisure to hit your ¥ target">
-            <span data-icon="wand" data-size="14"></span>
-            <span class="btn-label">Auto-suggest from target</span>
-          </button>
-          <button id="planner-multi-suggest" class="btn sm btn-outline" type="button" data-tooltip="Show 3 alternative plans (Light / Standard / Heavy) — pick the one you like">
-            <span data-icon="list" data-size="14"></span>
-            <span class="btn-label">Compare 3 options</span>
-          </button>
-          <details class="relative">
-            <summary class="btn sm btn-outline cursor-pointer list-none" data-tooltip="Pre-built scenarios — apply with one click">
-              <span data-icon="zap" data-size="14"></span>
-              <span class="btn-label">Quick presets</span>
-              <span data-icon="chevronDown" data-size="12"></span>
-            </summary>
-            <div id="planner-presets-menu" class="absolute right-0 top-full mt-1 bg-card border border-border rounded-md shadow-lg p-1 z-20 min-w-[260px] flex flex-col gap-1"></div>
-          </details>
-          <button id="planner-load-sample" class="btn sm btn-ghost" type="button">
-            <span data-icon="sparkles" data-size="14"></span>
-            <span class="btn-label">Load sample plan</span>
-          </button>
-          <button id="planner-clear" class="btn sm btn-ghost" type="button">
-            <span data-icon="trash" data-size="14"></span>
-            <span class="btn-label">Clear</span>
-          </button>
+        <!-- Output actions — three groups: Primary CTA / Plan tools / Utilities.
+             On mobile the primary "Generate Suica PDF" is duplicated in a
+             sticky bottom bar (.gen-mobile-cta) so it's always reachable. -->
+        <div class="gen-actions">
+          <div class="gen-actions__primary">
+            <button id="planner-generate-pdf" class="btn primary" type="button" data-tooltip="Dispatches the Suica PDF Generate workflow on GitHub and downloads the resulting PDF (~30-60s)">
+              <span data-icon="download" data-size="14"></span>
+              <span class="btn-label">Generate Suica PDF</span>
+            </button>
+            <label class="gen-actions__batch" data-tooltip="Generate this many consecutive months in one batch (month increments, seed +1 each)">
+              <span>Batch:</span>
+              <div id="planner-batch-months" class="shadcn-select">
+                <button type="button" class="shadcn-select-trigger" aria-haspopup="listbox" aria-expanded="false">
+                  <span class="shadcn-select-value">1</span>
+                  <span data-icon="chevronDown" data-size="12" class="shadcn-select-chev"></span>
+                </button>
+              </div>
+              <span>mo.</span>
+            </label>
+          </div>
+
+          <div class="gen-actions__tools" role="group" aria-label="Plan tools">
+            <button id="planner-auto-suggest" class="btn sm btn-ghost" type="button" data-tooltip="Auto-fill weekday commute (current From↔To) and tune leisure to hit your ¥ target">
+              <span data-icon="wand" data-size="14"></span>
+              <span class="btn-label">Auto-suggest</span>
+            </button>
+            <button id="planner-multi-suggest" class="btn sm btn-ghost" type="button" data-tooltip="Show 3 alternative plans (Light / Standard / Heavy) — pick the one you like">
+              <span data-icon="list" data-size="14"></span>
+              <span class="btn-label">Compare 3</span>
+            </button>
+            <details class="relative">
+              <summary class="btn sm btn-ghost cursor-pointer list-none" data-tooltip="Pre-built scenarios — apply with one click">
+                <span data-icon="zap" data-size="14"></span>
+                <span class="btn-label">Presets</span>
+                <span data-icon="chevronDown" data-size="12"></span>
+              </summary>
+              <div id="planner-presets-menu" class="absolute right-0 top-full mt-1 bg-card border border-border rounded-md shadow-lg p-1 z-20 min-w-[260px] flex flex-col gap-1"></div>
+            </details>
+            <button id="planner-load-sample" class="btn sm btn-ghost" type="button" data-tooltip="Load a demo plan to see how everything fits together">
+              <span data-icon="sparkles" data-size="14"></span>
+              <span class="btn-label">Sample</span>
+            </button>
+          </div>
+
+          <div class="gen-actions__utils">
+            <details class="relative">
+              <summary class="btn sm btn-outline cursor-pointer list-none" data-tooltip="Backup or share the raw plan / generated history">
+                <span data-icon="moreVertical" data-size="14"></span>
+                <span class="btn-label">Backup</span>
+              </summary>
+              <div class="absolute right-0 top-full mt-1 bg-card border border-border rounded-md shadow-lg p-1 z-20 min-w-[220px] flex flex-col gap-1">
+                <button id="planner-download" class="btn btn-ghost sm justify-start" type="button" data-tooltip="Save the trip plan so you can reload it later">
+                  <span data-icon="download" data-size="14"></span>
+                  <span class="btn-label">Download preset.json</span>
+                </button>
+                <button id="planner-download-json" class="btn btn-ghost sm justify-start" type="button" data-tooltip="Save the in-browser preview as JSON (useful for analysis)">
+                  <span data-icon="download" data-size="14"></span>
+                  <span class="btn-label">Download history.json</span>
+                </button>
+                <div class="separator h-px w-full bg-border my-1"></div>
+                <button id="planner-snapshot-save" class="btn btn-ghost sm justify-start" type="button" data-tooltip="Save the current plan into browser storage for one-click restore later">
+                  <span data-icon="save" data-size="14"></span>
+                  <span class="btn-label">Save snapshot…</span>
+                </button>
+                <button id="planner-snapshots-export" class="btn btn-ghost sm justify-start" type="button" data-tooltip="Download all snapshots as a JSON file (back up before clearing browser data)">
+                  <span data-icon="download" data-size="14"></span>
+                  <span class="btn-label">Export snapshots…</span>
+                </button>
+                <button id="planner-snapshots-import" class="btn btn-ghost sm justify-start" type="button" data-tooltip="Restore snapshots from a previously-exported JSON file (merges; existing IDs win)">
+                  <span data-icon="upload" data-size="14"></span>
+                  <span class="btn-label">Import snapshots…</span>
+                </button>
+                <button id="planner-share-link" class="btn btn-ghost sm justify-start" type="button" data-tooltip="Copy a URL that encodes the full plan; opening it on another browser asks to import">
+                  <span data-icon="copy" data-size="14"></span>
+                  <span class="btn-label">Copy share link</span>
+                </button>
+                <button id="planner-share-qr" class="btn btn-ghost sm justify-start" type="button" data-tooltip="Generate a scannable QR code of the share link — useful for opening this plan on your phone">
+                  <span data-icon="qr" data-size="14"></span>
+                  <span class="btn-label">Share via QR…</span>
+                </button>
+                <button id="planner-export-ics" class="btn btn-ghost sm justify-start" type="button" data-tooltip="Download an .ics calendar file with one event per scheduled trip — import into Google Calendar to preview the schedule">
+                  <span data-icon="calendar" data-size="14"></span>
+                  <span class="btn-label">Export .ics calendar</span>
+                </button>
+                <div class="separator h-px w-full bg-border my-1"></div>
+                <button id="planner-fare-table" class="btn btn-ghost sm justify-start" type="button" data-tooltip="Browse every known IC fare in the catalogue, sort by route or amount, see which ones you've overridden">
+                  <span data-icon="list" data-size="14"></span>
+                  <span class="btn-label">Fare table…</span>
+                </button>
+              </div>
+            </details>
+            <button id="planner-clear" class="btn sm btn-ghost" type="button" data-tooltip="Reset the entire plan (commute + weekend pool + settings)">
+              <span data-icon="trash" data-size="14"></span>
+              <span class="btn-label sr-only sm:not-sr-only">Clear</span>
+            </button>
+          </div>
+
+          <span id="planner-pdf-status" class="gen-actions__status" role="status" aria-live="polite"></span>
         </div>
       </div>
     </div>
@@ -908,6 +1066,39 @@
   <section id="planner-shortcuts-help" class="hidden" aria-label="Keyboard shortcuts"></section>
 
   </div><!-- /tab generate -->
+
+  <!-- Sticky mobile CTA — visible only on <=640px viewports. Forwards click
+       to the in-card #planner-generate-pdf so all existing JS hooks work
+       unchanged. The in-card button is hidden via CSS at the same breakpoint
+       to avoid duplicate visuals. -->
+  <div class="gen-mobile-cta" id="planner-mobile-cta" aria-hidden="false">
+    <button type="button" class="btn primary gen-mobile-cta__primary"
+            data-forwards-to="planner-generate-pdf"
+            aria-label="Generate Suica PDF">
+      <span data-icon="download" data-size="16"></span>
+      <span class="btn-label">Generate PDF</span>
+    </button>
+  </div>
+  <script>
+    // Forward sticky-CTA click → in-card primary button (preserves all JS hooks)
+    (function () {
+      var src = document.querySelector('[data-forwards-to="planner-generate-pdf"]');
+      if (src) src.addEventListener('click', function () {
+        var dst = document.getElementById('planner-generate-pdf');
+        if (dst && !dst.disabled) dst.click();
+      });
+      // Hide sticky CTA when not on the generate tab
+      var tabs = document.querySelectorAll('[data-tab-target]');
+      var cta  = document.getElementById('planner-mobile-cta');
+      function sync() {
+        var active = document.querySelector('.suica-panel.is-active');
+        if (!cta) return;
+        cta.hidden = !(active && active.getAttribute('data-tab') === 'generate');
+      }
+      tabs.forEach(function (t) { t.addEventListener('click', function () { setTimeout(sync, 0); }); });
+      sync();
+    })();
+  </script>
 
   <!-- ═══ TAB: HISTORY (saved snapshots + recent generations) ═════════ -->
   <div class="suica-panel" data-tab="history" role="tabpanel" aria-labelledby="tab-history">
