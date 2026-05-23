@@ -1831,10 +1831,11 @@
         <span data-icon="calendar" data-size="12"></span> ${state.settings.month} preview
         <span class="ml-auto text-[10px] normal-case tracking-normal text-muted-foreground/70">${last} days · ${monthInfo.counts.saturday + monthInfo.counts.sunday} weekend days</span>
       </div>
+      <div class="max-w-[430px]">
       <div class="grid grid-cols-7 gap-1 text-[10px]">
         ${HEADERS.map((h, i) => `<div class="text-center text-muted-foreground font-medium pb-1 ${weekendIdx.has(i) ? 'text-warning/80' : ''}">${h}</div>`).join('')}
         ${cells.map((c) => {
-          if (c.blank) return '<div class="aspect-square"></div>';
+          if (c.blank) return '<div class="h-11"></div>';
           const bg = c.today ? 'bg-primary/20 border-primary' :
                      c.weekend ? 'bg-muted/40 border-border' :
                      'bg-card border-border';
@@ -1854,11 +1855,12 @@
           } else {
             tooltip = `${dayLabel} ${c.d}\nNo commute trips scheduled`;
           }
-          return `<div class="aspect-square border rounded ${bg} flex flex-col items-center justify-center" data-tooltip="${tooltip.replace(/"/g, '&quot;')}">
+          return `<div class="h-11 border rounded ${bg} flex flex-col items-center justify-center" data-tooltip="${tooltip.replace(/"/g, '&quot;')}">
             <div class="font-mono ${c.today ? 'font-bold text-primary' : ''}">${c.d}</div>
             ${dots}
           </div>`;
         }).join('')}
+      </div>
       </div>`;
     wrap.innerHTML = html;
     if (window.refreshIcons) window.refreshIcons(wrap);

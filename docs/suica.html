@@ -247,7 +247,7 @@
 <main class="max-w-6xl mx-auto p-5 space-y-5">
 
   <!-- Header -->
-  <header class="flex items-baseline justify-between flex-wrap gap-3 pb-2">
+  <header class="sticky top-0 z-40 -mx-2 px-2 py-2 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 border-b border-border/60 flex items-baseline justify-between flex-wrap gap-3">
     <div>
       <h1 class="text-xl font-semibold tracking-tight flex items-center gap-2">
         <span data-icon="mapPin" data-size="20"></span>
@@ -831,7 +831,7 @@
 <script src="js/suica-history.js?v=6" defer></script>
 <script src="js/log-viewer.js?v=1" defer></script>
 <script>window.SUICA_FARE_API='https://suica-fare-proxy.workflow-dashboard.workers.dev';</script>
-<script src="js/suica-planner.js?v=121" defer></script>
+<script src="js/suica-planner.js?v=123" defer></script>
 <script>
 // Theme toggle for suica.html (mirrors the dashboard's behavior; uses the same
 // localStorage key so the preference syncs across pages).
