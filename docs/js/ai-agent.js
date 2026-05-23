@@ -1730,10 +1730,29 @@ Hôm nay (JST): ${today}.`;
     }
     let userMsg = 'Lỗi gọi AI.';
     if (e.name === 'AbortError') userMsg = 'Đã hủy.';
+    else if (e.status === 400) {
+      // GitHub Models returns useful JSON in the body — surface it briefly.
+      const detail = (e.message || '').replace(/^API 400:\s*/, '').slice(0, 160);
+      userMsg = detail
+        ? `Yêu cầu sai format. ${detail}`
+        : 'Yêu cầu sai format — model name có thể không hợp lệ (cần `publisher/model`).';
+    }
     else if (e.status === 401 || e.status === 403) userMsg = 'PAT không có quyền GitHub Models. Check token scope (cần `repo`).';
+    else if (e.status === 404) userMsg = 'Endpoint hoặc model không tồn tại. Có thể model đã bị deprecate.';
+    else if (e.status === 408) userMsg = 'Server timeout. Thử lại với câu hỏi ngắn hơn.';
+    else if (e.status === 413) userMsg = 'Conversation quá dài. Dùng /clear để reset.';
     else if (e.status === 429) userMsg = 'Bị rate-limit từ server. Đợi vài giây rồi thử lại.';
-    else if (e.status >= 500) userMsg = 'Server AI lỗi tạm thời. Thử lại sau.';
-    else if (e.message && e.message.includes('Failed to fetch')) userMsg = 'Mất kết nối mạng.';
+    else if (e.status >= 500 && e.status < 600) userMsg = 'Server AI lỗi tạm thời. Thử lại sau.';
+    else if (e.message && e.message.includes('Failed to fetch')) {
+      if (navigator.onLine === false) {
+        userMsg = 'Mất kết nối mạng — bạn đang offline.';
+      } else {
+        // Browser blocked the request BEFORE it hit the network → almost
+        // always CSP/proxy/firewall/adblocker. Generic "Failed to fetch" gives
+        // no status code because the fetch never left the renderer.
+        userMsg = 'Request bị chặn trước khi gửi. Có thể CSP / adblocker / proxy company. Mở DevTools Console để xem chi tiết.';
+      }
+    }
     else if (e.message) userMsg = e.message;
     setComposerMeta(`❌ ${userMsg}`, 'err');
     // If there's still a user message to retry from, surface an inline Retry

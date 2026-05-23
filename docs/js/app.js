@@ -1267,8 +1267,11 @@ if ('serviceWorker' in navigator) {
       const data = ev.data || {};
       if (data.type === 'sw-updated' || data.type === 'shell-updated') {
         // Only show the reload toast if we already had a controller before
-        // (i.e. this is an UPDATE, not the very first install).
-        if (window._swSeenController) {
+        // (i.e. this is an UPDATE, not the very first install) AND we haven't
+        // already shown it this page session (avoid toast spam if SW fires
+        // multiple events for the same update).
+        if (window._swSeenController && !window._swUpdateToastShown) {
+          window._swUpdateToastShown = true;
           if (typeof toast === 'function') {
             toast('🔄 New version available', 'success', {
               duration: 15000,

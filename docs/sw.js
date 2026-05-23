@@ -97,30 +97,56 @@ self.addEventListener('fetch', (event) => {
   }
 });
 
+// In-flight revalidations keyed by URL — coalesces concurrent navigation
+// requests so we only fire ONE fetch + ONE 'shell-updated' postMessage per
+// SW lifecycle even if user opens multiple tabs simultaneously. Hash of last
+// notified body also lives here to suppress duplicate notifications if cache
+// fails to persist (Safari quota, private mode, etc.).
+const _swrInFlight = new Map();
+let _lastNotifiedHash = null;
+
+async function _hashText(text) {
+  try {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+    return Array.from(new Uint8Array(buf), b => b.toString(16).padStart(2, '0')).join('');
+  } catch { return String(text.length); }
+}
+
 async function swrShell(req, cacheName) {
   const cache = await caches.open(cacheName);
   const cached = await cache.match(req) || await cache.match('./index.html');
-  const network = fetch(req).then(async (resp) => {
-    if (!resp || !resp.ok || resp.type !== 'basic') return resp;
-    try {
-      if (cached) {
-        const [oldText, newText] = await Promise.all([
-          cached.clone().text(),
-          resp.clone().text(),
-        ]);
-        if (oldText !== newText) {
-          const clients = await self.clients.matchAll({ includeUncontrolled: true });
-          for (const c of clients) {
-            try { c.postMessage({ type: 'shell-updated' }); } catch {}
+  const key = req.url;
+  let revalidate = _swrInFlight.get(key);
+  if (!revalidate) {
+    revalidate = (async () => {
+      try {
+        const resp = await fetch(req);
+        if (!resp || !resp.ok || resp.type !== 'basic') return resp;
+        if (cached) {
+          const [oldText, newText] = await Promise.all([
+            cached.clone().text(),
+            resp.clone().text(),
+          ]);
+          if (oldText !== newText) {
+            const newHash = await _hashText(newText);
+            if (newHash !== _lastNotifiedHash) {
+              _lastNotifiedHash = newHash;
+              const clients = await self.clients.matchAll({ includeUncontrolled: true });
+              for (const c of clients) {
+                try { c.postMessage({ type: 'shell-updated', hash: newHash }); } catch {}
+              }
+            }
           }
         }
-      }
-      await cache.put(req, resp.clone());
-    } catch {}
-    return resp;
-  }).catch(() => null);
+        await cache.put(req, resp.clone());
+        return resp;
+      } catch { return null; }
+      finally { _swrInFlight.delete(key); }
+    })();
+    _swrInFlight.set(key, revalidate);
+  }
   if (cached) return cached;
-  const fresh = await network;
+  const fresh = await revalidate;
   if (fresh) return fresh;
   throw new Error('shell unavailable');
 }
