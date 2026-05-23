@@ -19,10 +19,11 @@
 
   function showError(msg) {
     const el = $('loader-error');
+    if (!el) return;
     el.textContent = msg;
     el.classList.remove('hidden');
   }
-  function clearError() { $('loader-error').classList.add('hidden'); }
+  function clearError() { const el = $('loader-error'); if (el) el.classList.add('hidden'); }
 
   async function handleFile(file) {
     clearError();
@@ -37,17 +38,21 @@
   }
 
   const loader = $('loader');
-  loader.addEventListener('dragover', (e) => {
-    e.preventDefault(); loader.classList.add('drop-active');
-  });
-  loader.addEventListener('dragleave', () => loader.classList.remove('drop-active'));
-  loader.addEventListener('drop', (e) => {
-    e.preventDefault(); loader.classList.remove('drop-active');
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
-  });
-  $('file-input').addEventListener('change', (e) => handleFile(e.target.files[0]));
+  if (loader) {
+    loader.addEventListener('dragover', (e) => {
+      e.preventDefault(); loader.classList.add('drop-active');
+    });
+    loader.addEventListener('dragleave', () => loader.classList.remove('drop-active'));
+    loader.addEventListener('drop', (e) => {
+      e.preventDefault(); loader.classList.remove('drop-active');
+      if (e.dataTransfer.files && e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+    });
+  }
+  const fileInput = $('file-input');
+  if (fileInput) fileInput.addEventListener('change', (e) => handleFile(e.target.files[0]));
 
-  $('load-from-url').addEventListener('click', async () => {
+  const loadFromUrlBtn = $('load-from-url');
+  if (loadFromUrlBtn) loadFromUrlBtn.addEventListener('click', async () => {
     const url = prompt('JSON URL?');
     if (!url) return;
     clearError();
@@ -58,7 +63,8 @@
     } catch (e) { showError(String(e.message || e)); }
   });
 
-  $('load-sample').addEventListener('click', () => render(sampleData()));
+  const loadSampleBtn = $('load-sample');
+  if (loadSampleBtn) loadSampleBtn.addEventListener('click', () => render(sampleData()));
 
   // ─── Sample (small synthetic) ───────────────────────────
   function sampleData() {

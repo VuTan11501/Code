@@ -494,13 +494,13 @@
 
   <!-- Tab bar (Analyze / Generate / History) — see Phase A in suica.html CSS -->
   <nav class="suica-tabs" role="tablist" aria-label="Workspace">
-    <button type="button" role="tab" data-tab-target="analyze" aria-selected="true">
-      <span data-icon="barChart" data-size="14"></span>
-      <span>Analyze</span>
-    </button>
-    <button type="button" role="tab" data-tab-target="generate" aria-selected="false">
+    <button type="button" role="tab" data-tab-target="generate" aria-selected="true">
       <span data-icon="sparkles" data-size="14"></span>
       <span>Generate</span>
+    </button>
+    <button type="button" role="tab" data-tab-target="analyze" aria-selected="false">
+      <span data-icon="barChart" data-size="14"></span>
+      <span>Report</span>
     </button>
     <button type="button" role="tab" data-tab-target="history" aria-selected="false">
       <span data-icon="history" data-size="14"></span>
@@ -509,7 +509,7 @@
   </nav>
 
   <!-- ═══ TAB: GENERATE (Trip Planner workflow) ═══════════════════════ -->
-  <div class="suica-panel" data-tab="generate" role="tabpanel" aria-labelledby="tab-generate">
+  <div class="suica-panel is-active" data-tab="generate" role="tabpanel" aria-labelledby="tab-generate">
 
   <!-- Trip Planner -->
   <section aria-label="Trip planner">
@@ -906,42 +906,10 @@
 
   </div><!-- /tab history -->
 
-  <!-- ═══ TAB: ANALYZE (load JSON + view report) ══════════════════════ -->
-  <div class="suica-panel is-active" data-tab="analyze" role="tabpanel" aria-labelledby="tab-analyze">
+  <!-- ═══ TAB: ANALYZE (Report viewer for generated JSON) ═════════════ -->
+  <div class="suica-panel" data-tab="analyze" role="tabpanel" aria-labelledby="tab-analyze">
 
-  <!-- Loader card -->
-  <section aria-label="Load history">
-    <div class="section-title text-sm font-medium text-muted-foreground mb-4 flex items-center gap-2">
-      <span data-icon="upload" data-size="16"></span> Load a generated history
-    </div>
-    <div class="card">
-      <div class="card-content">
-        <label id="loader" for="file-input"
-               class="suica-drop block rounded-md border-2 border-dashed border-border p-6 text-center"
-               role="button" tabindex="0" aria-label="Drop a JSON file here or click to browse">
-          <div class="flex flex-col items-center gap-2">
-            <span data-icon="upload" data-size="28" class="text-muted-foreground"></span>
-            <div class="text-sm font-medium">Drop a <code class="font-mono">.json</code> file here</div>
-            <div class="text-xs text-muted-foreground">or click to browse — files never leave your browser</div>
-          </div>
-          <input id="file-input" type="file" accept=".json" class="hidden" aria-label="Suica history JSON file">
-        </label>
-        <div class="flex flex-wrap gap-2 pt-4">
-          <button id="load-sample" class="btn btn-outline sm">
-            <span data-icon="sparkles" data-size="14"></span>
-            <span class="btn-label">Load sample</span>
-          </button>
-          <button id="load-from-url" class="btn btn-outline sm">
-            <span data-icon="download" data-size="14"></span>
-            <span class="btn-label">Load from URL…</span>
-          </button>
-        </div>
-        <div id="loader-error" class="status-badge status-failure hidden mt-3"></div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Report (hidden until data loaded) -->
+  <!-- Report (hidden until data loaded — populated automatically when Generate produces JSON) -->
   <div id="report" class="hidden space-y-5 animate-page-in">
 
     <!-- KPI grid -->
@@ -1105,7 +1073,7 @@
      Runs immediately so panels are correctly shown/hidden before user interacts. -->
 <script>
 (function () {
-  const KEY = 'suica_tab_v1';
+  const KEY = 'suica_tab_v2';
   const tabs = document.querySelectorAll('[role="tab"][data-tab-target]');
   const panels = document.querySelectorAll('.suica-panel[data-tab]');
   function activate(target) {
@@ -1151,7 +1119,7 @@
     });
     obs.observe(report, { attributes: true, attributeFilter: ['class'] });
   }
-  activate(saved && ['analyze','generate','history'].includes(saved) ? saved : 'analyze');
+  activate(saved && ['analyze','generate','history'].includes(saved) ? saved : 'generate');
 })();
 </script>
 
@@ -1161,7 +1129,7 @@
 <script src="js/icons.js?v=1" defer></script>
 <script src="js/theme.js?v=1" defer></script>
 <script src="js/ui-toast.js?v=2" defer></script>
-<script src="js/suica-history.js?v=7" defer></script>
+<script src="js/suica-history.js?v=8" defer></script>
 <script src="js/suica-date-range.js?v=1" defer></script>
 <script defer>
 // Wire the date-range popover to the entries table. Hides rows whose
