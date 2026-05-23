@@ -1,0 +1,103 @@
+name: PR Gate
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  commit-lint:
+    name: Lint PR title (conventional commit + scope)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate PR title
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          set -e
+          echo "PR title: $PR_TITLE"
+          # Allowed types
+          TYPE_RE='^(feat|fix|chore|docs|refactor|test|ci|revert|perf|style)'
+          # Allowed scopes (must stay in sync with KNOWLEDGE.md §2 and scripts/precommit-check.ps1)
+          SCOPE_RE='\((suica-pdf|suica-ui|suica-planner|suica-history|suica-fare|dokokin|ot|rakuraku|dashboard|dashboard-ui|i18n|worker|ci|agents-ui|docs|repo)\)'
+          FULL_RE="${TYPE_RE}${SCOPE_RE}!?: .+"
+          if ! [[ "$PR_TITLE" =~ $FULL_RE ]]; then
+            echo "::error::PR title must match: <type>(<scope>): <subject>"
+            echo "Allowed types: feat|fix|chore|docs|refactor|test|ci|revert|perf|style"
+            echo "Allowed scopes: see KNOWLEDGE.md §2"
+            echo "Got: $PR_TITLE"
+            exit 2
+          fi
+          echo "PR title OK."
+
+  changed-files:
+    name: Detect changed paths
+    runs-on: ubuntu-latest
+    outputs:
+      suica_pdf: ${{ steps.filter.outputs.suica_pdf }}
+      docs_js: ${{ steps.filter.outputs.docs_js }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            suica_pdf:
+              - '.github/skills/suica-history-generator/**'
+            docs_js:
+              - 'docs/js/**'
+
+  suica-pdf-tests:
+    name: Suica PDF pytest
+    needs: changed-files
+    if: needs.changed-files.outputs.suica_pdf == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install deps
+        working-directory: .github/skills/suica-history-generator
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install pytest PyMuPDF
+      - name: Install IPAGothic (matches production runner)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fonts-ipafont-gothic
+      - name: Run pytest
+        working-directory: .github/skills/suica-history-generator
+        run: pytest scripts/tests/ -q
+
+  docs-js-syntax:
+    name: docs/js node --check
+    needs: changed-files
+    if: needs.changed-files.outputs.docs_js == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Syntax-check all docs/js/*.js (skip .min.js)
+        run: |
+          set -e
+          shopt -s globstar nullglob
+          fail=0
+          for f in docs/js/**/*.js; do
+            case "$f" in
+              *.min.js) continue ;;
+            esac
+            echo "node --check $f"
+            if ! node --check "$f"; then
+              fail=1
+            fi
+          done
+          exit $fail

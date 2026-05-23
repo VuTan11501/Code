@@ -124,6 +124,62 @@ Each entry: **symptom → root cause → fix → prevention**. Add new ones as y
 - **Fix**: Over-spend uses tight tolerance (`max(user_tolerance, 1000)`); under-spend allows up to 70% below target. Code in `verify_pdf._check_spend_target`.
 - **Prevention**: When designing a tolerance check, ask "is the failure mode symmetric in cost?" — if no, make the tolerance asymmetric.
 
+### 3.8 DokoKin `TotalOfBreakTime` is decimal hours, not minutes
+- **Symptom**: Checkout shows `60:00` break instead of `01:00`.
+- **Root cause**: `TotalOfBreakTime` is sent as decimal **hours** (`1.0`), but worker treated it as minutes and posted `60`.
+- **Fix**: `.github/scripts/gh_checkin.py` → `do_dakoku()`: send `break_hours` as `float`; keep shift-threshold logic in hours (`1.0`, `0.75`, `0.0`).
+- **Prevention**: Always verify API field units against the Flutter app source (or a successful real session payload) before mirroring.
+_(source: checkpoint 003)_
+
+### 3.9 DokoKin `WorkingType` is backend-derived from `(CheckinType, CheckoutType, IsCheckinDakoku)`
+- **Symptom**: Timesheet "Working Place" column stays blank even though workplace is set in profile.
+- **Root cause**: Backend derives `WorkingType` from a truth table over checkin/checkout type pairs PLUS the counter-intuitive rule `IsCheckinDakoku = (lat==0 && lon==0)`. Mismatched type/GPS combos fall to `-1`.
+- **Fix**: Payload builder in `.github/scripts/gh_checkin.py` must match the backend derivation table exactly (or intentionally force a known-good type pair).
+- **Prevention**: Treat backend-derived columns as **computed** state; don't assume posting a profile field will populate them.
+_(source: checkpoint 004)_
+
+### 3.10 GitHub Actions `cron` can be silently skipped for hours
+- **Symptom**: Checkout scheduled for `03:30 JST` fires at `04:33`; sometimes skipped entirely.
+- **Root cause**: GitHub Actions cron is best-effort. Both dispatcher and watchdog crons can be skipped; a single self-loop restart hides the gap but extends drift.
+- **Fix**: `.github/workflows/scheduled-dispatch.yml` + `dispatcher-watchdog.yml` use multi-offset cron, short self-loop, and an external (off-GitHub) heartbeat fallback.
+- **Prevention**: Never rely on a single cron source for time-sensitive automation. Always have at least one off-GitHub heartbeat.
+_(source: checkpoints 004, 005)_
+
+### 3.11 Suica parser returns chrome rows mixed with data rows
+- **Symptom**: Generated PDF loses header/footer/page-number chrome; only row data survives.
+- **Root cause**: `suica_update.parse_pdf()` returns **all** extracted text rows including chrome (page headers, footers). Naive mutators rewrote chrome too.
+- **Fix**: `.github/skills/suica-history-generator/scripts/pdf_export.py` → `_is_data_row()` filter; only data rows go through `render()` mutation.
+- **Prevention**: Never feed a parser's "all extracted rows" directly into a mutator without a chrome-vs-data discriminator.
+_(source: checkpoint 014)_
+
+### 3.12 Mobile Suica truncates station names to 6 characters
+- **Symptom**: Long station names (`スポーツセンター`) overflow into the next column on generated PDFs.
+- **Root cause**: The official Mobile Suica app truncates station text at 6 chars (preserving trailing `入`/`出` direction marker). Our renderer wrote the full string.
+- **Fix**: `.github/skills/suica-history-generator/scripts/pdf_export.py` → `_truncate_station()` caps text, preserving direction marker.
+- **Prevention**: When mirroring an existing UI, encode its **truncation/abbreviation rules**, not just its character set.
+_(source: checkpoint 014)_
+
+### 3.13 Adding event types breaks chronological ordering invariants
+- **Symptom**: Validator rejects generated history; `物販` (shopping) events appear inside trip windows.
+- **Root cause**: New event types (shopping, top-up) were inserted without re-verifying ordering constraints against existing trip events. Shopping inside trips, missing AUTO top-up before SHOPPING when balance was low.
+- **Fix**: `.github/skills/suica-history-generator/scripts/tap_builder.py` → `_generate_shopping_events()` keeps shopping outside trip windows; `flush_shopping_up_to()` emits AUTO top-up before SHOPPING when needed.
+- **Prevention**: Adding a new event class? Enumerate every existing class and verify ordering rules with each pair.
+_(source: checkpoint 014)_
+
+### 3.14 `log-viewer.js` re-render must not toggle step open/close state
+- **Symptom**: Per-step logs collapse/re-open inconsistently while polling.
+- **Root cause**: `loadRunJobs()` mixed state restoration (`openKeys`) with toggle side-effects in the same render pass.
+- **Fix**: `docs/js/log-viewer.js` → `loadRunJobs()` simplifies re-render: refresh content only; never call toggle helpers during re-render.
+- **Prevention**: Don't mix state **restoration** with toggle **side-effects** in the same render pass. Render = idempotent function of state.
+_(source: checkpoint 014)_
+
+### 3.15 `TapEntry.at` not `.datetime`
+- **Symptom**: Verifier or generator crashes with `AttributeError: 'TapEntry' object has no attribute 'datetime'`.
+- **Root cause**: The dataclass field is named `at`. Code copy-pasted from elsewhere assumed `datetime`.
+- **Fix**: `.github/skills/suica-history-generator/scripts/models.py` is source of truth — all readers use `TapEntry.at`.
+- **Prevention**: Before wiring new logic against a dataclass, open the model file. Don't infer field names from the domain noun.
+_(source: checkpoint 015)_
+
 ---
 
 ## 4. Build & test commands
