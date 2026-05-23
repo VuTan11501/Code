@@ -10,7 +10,7 @@
 //   * Update flow: new SW activates → postMessage {type:'sw-updated'} to
 //     all clients. app.js shows a "Reload to update" toast.
 
-const VERSION = 'wf-dash-v4';
+const VERSION = 'wf-dash-v5';
 const SHELL_CACHE = `${VERSION}-shell`;
 const API_CACHE   = `${VERSION}-api`;
 const API_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
@@ -114,7 +114,7 @@ async function _hashText(text) {
 
 async function swrShell(req, cacheName) {
   const cache = await caches.open(cacheName);
-  const cached = await cache.match(req) || await cache.match('./index.html');
+  const cached = await cache.match(req);
   const key = req.url;
   let revalidate = _swrInFlight.get(key);
   if (!revalidate) {
@@ -146,8 +146,13 @@ async function swrShell(req, cacheName) {
     _swrInFlight.set(key, revalidate);
   }
   if (cached) return cached;
+  // No cached copy yet — wait for network. Only fall back to the app shell
+  // (index.html) if the network ALSO failed, so requests for other HTML pages
+  // like suica.html still resolve to their actual content on first visit.
   const fresh = await revalidate;
   if (fresh) return fresh;
+  const shellFallback = await cache.match('./index.html');
+  if (shellFallback) return shellFallback;
   throw new Error('shell unavailable');
 }
 
