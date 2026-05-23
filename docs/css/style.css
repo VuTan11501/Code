@@ -100,8 +100,22 @@
 :root { color-scheme: dark; }
 [data-theme="light"] { color-scheme: light; }
 
-/* â”€â”€â”€ DISABLE ZOOM (PWA) â”€â”€â”€ */
+/* ─── DISABLE ZOOM (PWA) ─── */
 html { touch-action: manipulation; }
+
+/* ─── DISABLE HORIZONTAL PAGE SWIPE ON MOBILE ───
+   Prevents accidental left/right page panning (and the browser's
+   swipe-to-go-back gesture on iOS) while keeping vertical scroll.
+   Inner scrollable containers (.overflow-x-auto, tables, etc.) still
+   scroll horizontally because they set their own touch-action via
+   overflow:auto. */
+@media (max-width: 1024px) {
+  html, body {
+    overflow-x: hidden !important;
+    overscroll-behavior-x: none;
+    touch-action: pan-y;
+  }
+}
 
 /* ─── FOCUS RING ─── */
 :focus-visible {
