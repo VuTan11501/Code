@@ -1789,6 +1789,135 @@
     }
   }
 
+  // ────── Pre-flight blockers ──────
+  // Returns a list of validation errors that MUST be fixed before we waste
+  // a GitHub Actions run. Each entry: { code, msg, hint? }. Empty array = OK
+  // to dispatch. The intent is to catch in-browser the same errors that
+  // would otherwise only surface after ~30s of CI runtime (negative balance,
+  // estimate wildly off target, etc.).
+  function computeBlockers() {
+    const errs = [];
+    const monthInfo = countWeekdaysInMonth(state.settings.month);
+    const target = +state.settings.target || 0;
+    const initial = +state.settings.initial_balance || 0;
+    const topupThr = +state.settings.topup_threshold || 0;
+    const topupAmt = +state.settings.topup_amount || 0;
+
+    // 1) Plan must have at least one route
+    const totalTrips = DAYS.reduce((s, d) => s + (state.pattern[d]?.length || 0), 0) + state.leisure.length;
+    if (!totalTrips) {
+      errs.push({ code: 'EMPTY_PLAN', msg: 'Plan is empty — add at least one commute or weekend route.' });
+    }
+
+    // 2) Valid month
+    if (!monthInfo) {
+      errs.push({ code: 'BAD_MONTH', msg: `Month '${state.settings.month}' is not a valid YYYY-MM.` });
+    }
+
+    // 3) Target must be positive
+    if (!target || target < 1000) {
+      errs.push({ code: 'BAD_TARGET', msg: `Target ¥${target.toLocaleString()} is too low — set at least ¥1,000.` });
+    }
+
+    // 4) Missing fare data — would crash the generator
+    const missing = new Set();
+    DAYS.forEach((d) => state.pattern[d].forEach((t) => { if (!state.fares[t.route]) missing.add(t.route); }));
+    state.leisure.forEach((l) => { if (!state.fares[l.route]) missing.add(l.route); });
+    if (missing.size) {
+      errs.push({ code: 'MISSING_FARES', msg: `Missing fare data for: ${Array.from(missing).slice(0,3).join(', ')}${missing.size > 3 ? ` (+${missing.size-3} more)` : ''}.`, hint: 'Pick the route in the From/To picker — fare will auto-resolve.' });
+    }
+
+    // 5) Leisure min > max
+    if (+state.settings.leisure_min > +state.settings.leisure_max) {
+      errs.push({ code: 'LEISURE_RANGE', msg: `Weekend trips min (${state.settings.leisure_min}) > max (${state.settings.leisure_max}).` });
+    }
+
+    // 6) Top-up threshold ≥ amount → balance never recovers above threshold
+    if (topupThr > 0 && topupAmt > 0 && topupAmt < topupThr) {
+      errs.push({ code: 'TOPUP_LOOP', msg: `Top-up amount ¥${topupAmt} is less than threshold ¥${topupThr} — balance will stay below trigger forever, causing infinite recharges.`, hint: 'Set top-up amount ≥ threshold (typically ¥1,000–¥3,000).' });
+    }
+
+    if (!monthInfo) return errs; // can't simulate without month
+
+    // 7) Estimated commute already exceeds target — generator cannot trim
+    //    commute trips (they're mandatory). This is the case that produced
+    //    "balance went negative" in CI: target ¥22k, actual ¥54k spend.
+    let commuteSpend = 0;
+    DAYS.forEach((day) => {
+      const dayFare = state.pattern[day].reduce((sum, t) => sum + fareOf(t.route), 0);
+      commuteSpend += dayFare * monthInfo.counts[day];
+    });
+    if (target && commuteSpend > target * 1.25) {
+      const over = commuteSpend - target;
+      errs.push({
+        code: 'COMMUTE_OVER_TARGET',
+        msg: `Commute alone is ¥${commuteSpend.toLocaleString()} (¥${over.toLocaleString()} over target ¥${target.toLocaleString()}). The generator cannot remove commute trips — increase target or use cheaper routes.`,
+        hint: 'Click "Auto-suggest" to rebuild the plan around your target.',
+      });
+    }
+
+    // 8) Balance simulation — predicts whether balance ever goes negative
+    //    given initial + auto-topup behaviour. Mirrors the server-side check
+    //    that produced "balance_nonneg" errors.
+    const totW = state.leisure.reduce((s, l) => s + l.weight, 0);
+    const avgLeisureFare = totW ? state.leisure.reduce((s, l) => s + fareOf(l.route) * l.weight, 0) / totW : 0;
+    const avgOutings = (+state.settings.leisure_min + +state.settings.leisure_max) / 2;
+    const leisureSpend = avgLeisureFare * avgOutings * 2;
+    const totalSpend = commuteSpend + leisureSpend;
+    // Worst-case: largest single fare in the plan must always be affordable
+    let maxFare = 0;
+    DAYS.forEach((d) => state.pattern[d].forEach((t) => { maxFare = Math.max(maxFare, fareOf(t.route) || 0); }));
+    state.leisure.forEach((l) => { maxFare = Math.max(maxFare, fareOf(l.route) || 0); });
+    if (maxFare && initial < maxFare && (topupAmt < maxFare || topupThr <= 0)) {
+      errs.push({
+        code: 'BALANCE_INSUFFICIENT',
+        msg: `Initial balance ¥${initial.toLocaleString()} is less than the most expensive fare ¥${maxFare.toLocaleString()}, and auto-topup ${topupThr > 0 ? `¥${topupAmt}` : 'is disabled'} won't cover it. Will trigger "balance went negative" in the generator.`,
+        hint: `Raise initial balance to ≥¥${maxFare.toLocaleString()}, or set top-up amount ≥¥${maxFare.toLocaleString()}.`,
+      });
+    } else if (totalSpend > 0) {
+      // Day-by-day simulator (more accurate than uniform daily average).
+      // Walks the actual month: each weekday spends the configured commute
+      // total; each Sat/Sun spends a fraction of leisure (avgOutings/(Sat+Sun)).
+      // Mirrors generator.py behaviour close enough to catch the same
+      // "balance went negative" cases server-side validation would flag.
+      const dayFareCache = {};
+      DAYS.forEach((d) => {
+        dayFareCache[d] = state.pattern[d].reduce((s, t) => s + (fareOf(t.route) || 0), 0);
+      });
+      const [yy, mm] = state.settings.month.split('-').map(Number);
+      const totalDays = new Date(yy, mm, 0).getDate();
+      // Distribute the avg total leisure trips over Sat+Sun proportionally
+      const weekendCount = monthInfo.counts.saturday + monthInfo.counts.sunday;
+      const leisurePerWeekendDay = weekendCount > 0 ? (avgOutings * 2 * avgLeisureFare) / weekendCount : 0;
+      const DAY_NAMES = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
+      let bal = initial;
+      let minBal = bal;
+      let minDate = '';
+      const enableTopup = topupThr > 0 && topupAmt > 0;
+      for (let d = 1; d <= totalDays; d++) {
+        const dow = new Date(yy, mm - 1, d).getDay();
+        const dayKey = DAY_NAMES[dow];
+        const spend = (dayFareCache[dayKey] || 0) + ((dow === 0 || dow === 6) ? leisurePerWeekendDay : 0);
+        if (!spend) continue;
+        // Charge for the largest single tap first (worst case for going negative)
+        bal -= spend;
+        if (bal < minBal) { minBal = bal; minDate = `${state.settings.month}-${String(d).padStart(2,'0')}`; }
+        if (enableTopup && bal < topupThr) bal += topupAmt;
+      }
+      if (minBal < 0) {
+        errs.push({
+          code: 'BALANCE_NEGATIVE',
+          msg: `Predicted balance would go to ¥${Math.round(minBal).toLocaleString()} on ${minDate || 'a busy day'} (initial ¥${initial.toLocaleString()}${enableTopup ? `, top-up +¥${topupAmt} when <¥${topupThr}` : ', auto top-up disabled'}).`,
+          hint: enableTopup
+            ? `Raise top-up amount, raise initial balance, or remove an expensive route.`
+            : `Enable auto top-up (set threshold > 0 and amount > 0) or raise initial balance.`,
+        });
+      }
+    }
+
+    return errs;
+  }
+
   // ────── Validation: surface non-blocking warnings ──────
   // Pure: looks at current state + computed totals and returns an array of
   // {severity:'warn'|'error'|'info', msg, fix?}. Rendered into #planner-warnings.
@@ -2324,6 +2453,64 @@
     try {
       const totalRoutes = DAYS.reduce((s, d) => s + state.pattern[d].length, 0) + state.leisure.length;
       if (!totalRoutes) { setStatus('Add at least one commute or leisure route first.', 'text-warning'); return; }
+
+      // ───── Pre-flight validation ─────
+      // Run the same checks the server would (balance simulation, target
+      // sanity, fare data) BEFORE wasting a ~30-60s GitHub Actions run.
+      // Honour a session-level override so users can force-dispatch after
+      // explicitly acknowledging the issues.
+      const blockers = computeBlockers();
+      if (blockers.length && !btn.dataset.forceGenerate) {
+        const lines = blockers.map((e, i) => `${i + 1}. ${e.msg}${e.hint ? `\n   → ${e.hint}` : ''}`).join('\n\n');
+        setStatus(`Pre-flight check failed: ${blockers.length} error${blockers.length > 1 ? 's' : ''} — fix and retry.`, 'text-destructive');
+        // Surface inline next to the Generate button + scroll into view
+        try {
+          const panel = $('planner-warnings');
+          if (panel) {
+            panel.classList.remove('hidden');
+            panel.innerHTML = `
+              <div class="text-xs font-medium text-destructive mb-2 flex items-center gap-2 uppercase tracking-wide">
+                <span data-icon="alertTriangle" data-size="12"></span> Pre-flight blockers (${blockers.length}) — would waste a CI run
+              </div>
+              <ul class="flex flex-col gap-2">
+                ${blockers.map((e) => `
+                  <li class="flex items-start gap-2 text-xs text-destructive">
+                    <span data-icon="alertTriangle" data-size="12" class="mt-0.5 flex-none"></span>
+                    <div class="flex-1">
+                      <div class="font-medium">${e.msg}</div>
+                      ${e.hint ? `<div class="text-muted-foreground mt-0.5">→ ${e.hint}</div>` : ''}
+                    </div>
+                  </li>`).join('')}
+              </ul>
+              <div class="mt-3 flex items-center gap-2 flex-wrap">
+                <button type="button" data-warn-fix="auto-suggest" class="btn sm btn-outline">
+                  <span data-icon="wand" data-size="12"></span> Auto-suggest a valid plan
+                </button>
+                <button type="button" data-blocker-force class="btn sm btn-ghost text-destructive" data-tooltip="Dispatch the workflow anyway. You'll still be billed for the run even if it fails.">
+                  Force generate anyway
+                </button>
+              </div>`;
+            if (window.refreshIcons) window.refreshIcons(panel);
+            panel.querySelectorAll('[data-warn-fix="auto-suggest"]').forEach((b) => {
+              b.addEventListener('click', () => { const real = $('planner-auto-suggest'); if (real) real.click(); });
+            });
+            panel.querySelectorAll('[data-blocker-force]').forEach((b) => {
+              b.addEventListener('click', () => {
+                if (!confirm(`Dispatch anyway despite ${blockers.length} pre-flight error${blockers.length > 1 ? 's' : ''}?\n\nThis will use GitHub Actions minutes and most likely fail.`)) return;
+                btn.dataset.forceGenerate = '1';
+                btn.click();
+              });
+            });
+            panel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        } catch (_) {}
+        if (window.Toast) {
+          window.Toast.error(`Pre-flight check failed:\n${lines}`, { title: 'Plan has blocking errors', duration: 8000 });
+        }
+        return;
+      }
+      // Clear the force flag on successful pre-flight (so next click re-checks)
+      delete btn.dataset.forceGenerate;
 
       const token = getSessionToken();
       if (!token) {
