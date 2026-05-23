@@ -124,6 +124,54 @@ def _load_suica_update():
 
 
 # ----------------------------------------------------------------------
+# Post-save ToUnicode CMap patcher
+# ----------------------------------------------------------------------
+
+
+def _fix_tounicode_soft_hyphen(doc: "fitz.Document") -> int:
+    """Patch ToUnicode CMap streams to remap U+00AD → U+002D.
+
+    PyMuPDF's `subset_fonts()` sometimes emits a bfchar entry whose Unicode
+    target for the hyphen-minus glyph is U+00AD (SOFT HYPHEN). The glyph
+    renders fine but every text extractor reads `\\u00ad`, which trips
+    NO-SOFT-HYPHEN and breaks downstream parsers that expect ASCII `-`.
+
+    Walks every PDF object, finds anything that looks like a ToUnicode CMap
+    stream (contains `beginbfchar` / `beginbfrange` markers), and rewrites
+    `<00AD>` → `<002D>` in-place via `update_stream`. Returns the number of
+    streams patched.
+    """
+    fixed = 0
+    try:
+        n = doc.xref_length()
+    except Exception:
+        return 0
+    for xref in range(1, n):
+        try:
+            data = doc.xref_stream(xref)
+        except Exception:
+            continue
+        if not data:
+            continue
+        # Only touch CMap-shaped streams; substring filter is fast and avoids
+        # mis-patching content streams that happen to contain "<00AD>" hex
+        # literals (shouldn't, but be defensive).
+        if b"beginbfchar" not in data and b"beginbfrange" not in data:
+            continue
+        if b"<00AD>" not in data and b"<00ad>" not in data:
+            continue
+        try:
+            new = data.replace(b"<00AD>", b"<002D>").replace(b"<00ad>", b"<002D>")
+            doc.update_stream(xref, new)
+            fixed += 1
+        except Exception as e:  # noqa: BLE001
+            log.warning("ToUnicode CMap patch failed for xref %s: %s", xref, e)
+    if fixed:
+        log.info("Patched %d ToUnicode CMap stream(s) to remap U+00AD → U+002D", fixed)
+    return fixed
+
+
+# ----------------------------------------------------------------------
 # Formatting helpers
 # ----------------------------------------------------------------------
 
@@ -319,6 +367,24 @@ class PdfExporter:
                 doc.subset_fonts()
             except Exception as e:
                 log.warning("subset_fonts() failed (continuing without subset): %s", e)
+
+            # Post-subset ToUnicode CMap patch. PyMuPDF's subset_fonts() on
+            # Linux IPAGothic occasionally emits a ToUnicode bfchar entry that
+            # maps the hyphen-minus glyph to U+00AD (SOFT HYPHEN) instead of
+            # U+002D (HYPHEN-MINUS). The PDF *renders* correctly because the
+            # glyph data is intact, but every text extractor (PyMuPDF,
+            # pdfplumber, downstream parsers) then sees `\u00ad2,920` for
+            # negative amounts. Our verify_pdf's NO-SOFT-HYPHEN check trips,
+            # and the suica_update parser fails to recognise the amount cell
+            # as numeric (cascading into NO-EMPTY-CELLS failures).
+            #
+            # Rewrite the affected CMap entries in-place: the ToUnicode bfchar
+            # block is stored as plain text inside a stream (FlateDecode after
+            # save with deflate_fonts=True, but xref_stream returns inflated
+            # bytes). Mobile Suica never legitimately uses U+00AD, so this
+            # substitution is safe.
+            _fix_tounicode_soft_hyphen(doc)
+
             doc.save(
                 output_pdf,
                 deflate=True,
