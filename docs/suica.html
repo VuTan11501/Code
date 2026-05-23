@@ -17,12 +17,14 @@
 /* Auth guard — runs synchronously before anything else paints.
    If the session token isn't present, bounce to the login page (index.html)
    and remember where to return to via ?next=. We use sessionStorage so the
-   token stays scoped to the current browser session only. */
+   token stays scoped to the current browser session only.
+   Use a relative redirect so this works under both root and project-site
+   deployments (e.g. github.io/Code/). */
 (function () {
   try {
     if (!sessionStorage.getItem('wf_dash_session')) {
       var next = encodeURIComponent(location.pathname + location.search + location.hash);
-      location.replace('/?next=' + next + '&reason=suica');
+      location.replace('index.html?next=' + next + '&reason=suica');
     }
   } catch (e) {}
 })();
@@ -1488,7 +1490,7 @@
 </style>
 <script src="js/auth.js?v=2" defer></script>
 <script>window.SUICA_FARE_API='https://suica-fare-proxy.workflow-dashboard.workers.dev';</script>
-<script src="js/suica-planner.js?v=131" defer></script>
+<script src="js/suica-planner.js?v=132" defer></script>
 <script defer>
 // Wire the date-range popover to the planner Month/Schedule field.
 // Strategy:

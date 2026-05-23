@@ -193,14 +193,29 @@ function lock() {
 }
 
 function showDashboard() {
-  // If the user was bounced here from a protected page (e.g. /suica.html),
-  // honour the ?next= query param and redirect back after unlock.
+  // If the user was bounced here from a protected page (e.g. suica.html),
+  // honour the ?next= query param and redirect back after unlock. Accept
+  // relative paths only (no scheme, no //) to avoid open-redirect.
   try {
     var params = new URLSearchParams(location.search);
     var next = params.get('next');
-    if (next && /^\/[a-zA-Z0-9_\-./?#=&%]*$/.test(next)) {
-      location.replace(next);
-      return;
+    if (next) {
+      var safe = /^[a-zA-Z0-9_\-./?#=&%]+$/.test(next)
+              && next.indexOf('//') === -1
+              && next.indexOf(':') === -1;
+      if (safe) {
+        // Strip any leading "/Code/" base so it works under project-site deploys.
+        var basePath = location.pathname.replace(/[^/]*$/, ''); // ".../Code/"
+        var target = next;
+        if (next.charAt(0) === '/') {
+          // Absolute path — keep as-is so /Code/suica.html still works.
+          target = next;
+        } else {
+          target = basePath + next;
+        }
+        location.replace(target);
+        return;
+      }
     }
   } catch (_) {}
   document.getElementById('authScreen').style.display = 'none';
