@@ -103,18 +103,22 @@
 /* ─── DISABLE ZOOM (PWA) ─── */
 html { touch-action: manipulation; }
 
-/* ─── DISABLE HORIZONTAL PAGE SWIPE ON MOBILE ───
+/* ─── DISABLE HORIZONTAL PAGE SWIPE ───
    Prevents accidental left/right page panning (and the browser's
    swipe-to-go-back gesture on iOS) while keeping vertical scroll.
    Inner scrollable containers (.overflow-x-auto, tables, etc.) still
    scroll horizontally because they set their own touch-action via
    overflow:auto. */
-@media (max-width: 1024px) {
-  html, body {
-    overflow-x: hidden !important;
-    overscroll-behavior-x: none;
-    touch-action: pan-y;
-  }
+html, body {
+  overflow-x: clip !important;
+  overscroll-behavior-x: none;
+  max-width: 100vw;
+  width: 100%;
+}
+body { touch-action: pan-y; }
+/* Block iOS Safari edge-swipe back/forward */
+@supports (-webkit-touch-callout: none) {
+  html, body { overscroll-behavior-x: contain; }
 }
 
 /* ─── FOCUS RING ─── */
