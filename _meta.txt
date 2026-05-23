@@ -1,0 +1,77 @@
+=== GENERATED ===
+{
+  "pages": 2,
+  "metadata": {
+    "format": "PDF 1.5",
+    "title": "",
+    "author": "",
+    "subject": "",
+    "keywords": "",
+    "creator": "GrapeCity ActiveReports (tm) for .NET",
+    "producer": "ActiveReports for .NET 12.0J",
+    "creationDate": "D:20260523002250+09'00'",
+    "modDate": "",
+    "trapped": "",
+    "encryption": null
+  },
+  "page_size": [
+    720.0,
+    792.0
+  ],
+  "fonts_p1": [
+    [
+      3,
+      "ttf",
+      "Type0",
+      "DDACTR+MSGothic",
+      "F2",
+      "Identity-H"
+    ],
+    [
+      12,
+      "ttf",
+      "Type0",
+      "FBFWKX+MS Gothic Regular",
+      "msgo",
+      "Identity-H"
+    ]
+  ],
+  "images_p1": 0,
+  "drawings_p1": 1,
+  "annots_p1": 0
+}
+
+=== REAL ===
+{
+  "pages": 2,
+  "metadata": {
+    "format": "PDF 1.3",
+    "title": "",
+    "author": "",
+    "subject": "",
+    "keywords": "",
+    "creator": "GrapeCity ActiveReports (tm) for .NET",
+    "producer": "ActiveReports for .NET 12.0J",
+    "creationDate": "D:20260523002250+09'00'",
+    "modDate": "",
+    "trapped": "",
+    "encryption": null
+  },
+  "page_size": [
+    720.0,
+    792.0
+  ],
+  "fonts_p1": [
+    [
+      4,
+      "ttf",
+      "Type0",
+      "DDACTR+MSGothic",
+      "F2",
+      "Identity-H"
+    ]
+  ],
+  "images_p1": 0,
+  "drawings_p1": 1,
+  "annots_p1": 0
+}

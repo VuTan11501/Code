@@ -203,6 +203,17 @@ _(source: checkpoint 015)_
 - **Fix**: Probe **every** data column from `fixtures/template.pdf` by dumping `page.get_text('dict')` of the first data row (y≈106 carryover or y≈117 first IN row) and copy x-coords verbatim into `COL_X`.
 - **Prevention**: Whenever touching column geometry, dump and diff the bbox of generated vs `fixtures/template.pdf` for the same row — header positions alone don't guarantee data positions are right. Consider tightening `verify_pdf` ALIGN-PIXEL tolerance to ±2 px so this kind of drift fails CI.
 
+### 3.19 PDF object metadata fingerprints (version, drawings, fonts)
+- **Symptom**: `fitz.open(...).metadata["format"]` and `get_drawings()` / `get_fonts()` revealed three forensic tells in the generated PDF that the real Mobile Suica statement does not have:
+  1. **PDF version**: generated reported `PDF 1.5`, real is `PDF 1.3`.
+  2. **Drawings count**: generated had 359 vector drawings vs real's 1 — every extra drawing was a white-filled rectangle left behind by `add_redact_annot(rect, fill=(1,1,1))`.
+  3. **Fonts count**: generated embedded 2 fonts (`DDACTR+MSGothic` from the template + `FBFWKX+MS Gothic Regular` from our `insert_font`), real has only 1.
+- **Root cause / fix**:
+  1. `doc.save(..., use_objstms=1)` requires PDF 1.5 (object streams). Switching to `use_objstms=0` lets PyMuPDF emit PDF 1.3.
+  2. The `fill=(1,1,1)` argument on `add_redact_annot` forces PyMuPDF to draw a white rect over the redacted area, which `apply_redactions` flushes as a permanent drawing. Removing the `fill` argument leaves a clean redaction (text simply removed, no overlay), so drawings count returns to 1.
+  3. Font count: **NOT FIXED** — we register IPA Gothic / MS Gothic via `insert_font` for new text insertions, which always embeds as a separate subset (`FBFWKX+...`). Reusing the template's existing font (`fontname="F2"`) renders new glyphs as `\x00` because the embedded font is subsetted to only the original template glyphs. Properly fixing this requires re-embedding a unified subset that includes both old and new glyphs — non-trivial.
+- **Prevention**: Before considering layout work done, always diff metadata via `fitz.open(...).metadata`, `get_drawings()`, `get_fonts()`, `get_images()`. These are cheap, deterministic forensic tells that visual inspection won't catch. Document any unfixable fingerprints (like the 2-fonts case) in this file so future contributors don't re-spend hours on them.
+
 ---
 
 ## 4. Build & test commands

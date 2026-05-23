@@ -231,7 +231,7 @@
   .combobox-item:hover, .combobox-item.is-active {
     background: var(--accent); color: var(--foreground);
   }
-  .combobox-item.is-selected::before { content: '✓ '; color: var(--primary); margin-right: 4px; }
+  .combobox-item.is-selected::before { content: '› '; color: var(--primary); margin-right: 4px; }
   .combobox-item-name { flex: 0 0 auto; }
   .combobox-item-sub {
     margin-left: auto; font-size: var(--fs-xs); color: var(--muted-foreground);
@@ -432,7 +432,7 @@
   <header class="suica-page-header flex items-center justify-between flex-wrap gap-3">
     <div class="min-w-0">
       <h1 class="text-xl font-semibold tracking-tight flex items-center gap-2">
-        <span data-icon="mapPin" data-size="20"></span>
+        <span data-icon="mapPin" data-size="22"></span>
         <span data-i18n="title">Commutation Management</span>
       </h1>
       <p class="text-xs text-muted-foreground mt-1 hidden sm:block">
@@ -440,7 +440,7 @@
       </p>
     </div>
     <div class="flex items-center gap-2">
-      <span id="planner-save-badge" class="status-badge status-success text-[10px] hidden sm:inline-flex" title="Plan autosave status">✓ Saved</span>
+      <span id="planner-save-badge" class="status-badge status-success text-[10px] hidden sm:inline-flex items-center gap-1" title="Plan autosave status"><span data-icon="check" data-size="12"></span>Saved</span>
 
       <!-- Theme toggle (same .toggle style as index.html header) -->
       <button class="toggle" id="suica-theme-toggle" type="button"
@@ -448,7 +448,7 @@
         <span id="suica-theme-icon" data-icon="sun" data-size="16"></span>
       </button>
 
-      <!-- Settings dropdown (collapses 4 misc controls behind a single ⚙ button) -->
+      <!-- Settings dropdown (collapses 4 misc controls behind a single settings button) -->
       <details class="suica-settings">
         <summary class="btn sm btn-ghost" aria-label="Settings" data-tooltip="Display settings">
           <span data-icon="settings" data-size="14"></span>
@@ -467,13 +467,13 @@
           <div class="suica-settings-row">
             <span>Density</span>
             <button id="suica-density-toggle" type="button" class="btn sm btn-ghost" aria-label="Toggle compact density" data-tooltip="Toggle compact / comfortable density">
-              <span style="font-size:14px;line-height:1">▤</span>
+              <span data-icon="menu" data-size="14"></span>
             </button>
           </div>
           <div class="suica-settings-row">
             <span>Sound</span>
             <button id="suica-sound-toggle" type="button" class="btn sm btn-ghost" aria-label="Toggle toast sounds" data-tooltip="Toggle subtle toast sounds (off by default)">
-              <span style="font-size:14px;line-height:1" data-sound-icon>🔕</span>
+              <span data-icon="bellOff" data-size="14" data-sound-icon></span>
             </button>
           </div>
           <div class="suica-settings-row">
@@ -648,7 +648,7 @@
             <div class="field">
               <label class="field-label text-xs text-muted-foreground font-medium flex items-center gap-1 mb-1" for="planner-month-trigger">
                 <span>Schedule</span>
-                <span data-icon="info" data-size="11" class="opacity-50 cursor-help" data-tooltip="Pick one month, or a date range to batch-generate consecutive months (auto-sets the Batch count below)."></span>
+                <span data-icon="info" data-size="12" class="opacity-50 cursor-help" data-tooltip="Pick one month, or a date range to batch-generate consecutive months (auto-sets the Batch count below)."></span>
               </label>
               <button type="button" id="planner-month-trigger"
                 class="btn btn-outline w-full justify-between suica-dr-trigger"
@@ -664,7 +664,7 @@
             <div class="field">
               <label class="field-label text-xs text-muted-foreground font-medium flex items-center gap-1 mb-1" for="planner-target">
                 <span>Target (¥)</span>
-                <span data-icon="info" data-size="11" class="opacity-50 cursor-help" data-tooltip="Your desired monthly spend. The generator tries to land within ±¥500 by mixing commute + leisure trips and optional small top-ups."></span>
+                <span data-icon="info" data-size="12" class="opacity-50 cursor-help" data-tooltip="Your desired monthly spend. The generator tries to land within ±¥500 by mixing commute + leisure trips and optional small top-ups."></span>
               </label>
               <div class="flex items-center gap-1">
                 <input id="planner-target" type="number" min="0" step="500" class="input font-mono flex-1 min-w-0">
@@ -679,7 +679,7 @@
             <div class="field">
               <label class="field-label text-xs text-muted-foreground font-medium flex items-center gap-1 mb-1" for="planner-seed" data-tooltip="Random seed. Same seed + same plan = byte-identical PDF every time. Change it to roll a different schedule.">
                 <span>Random seed</span>
-                <span data-icon="info" data-size="11" class="opacity-50 cursor-help"></span>
+                <span data-icon="info" data-size="12" class="opacity-50 cursor-help"></span>
               </label>
               <div class="flex items-center gap-1">
                 <input id="planner-seed" type="number" min="0" class="input font-mono flex-1 min-w-0" data-tooltip="Same seed + same plan = byte-identical PDF every time.">
@@ -687,7 +687,7 @@
                   <span data-icon="refresh" data-size="14"></span>
                 </button>
                 <button id="planner-seed-pin" type="button" class="btn btn-ghost sm" data-tooltip="Pin this seed so reroll/randomize won't change it" aria-label="Pin seed" aria-pressed="false">
-                  📌
+                  <span data-icon="pin" data-size="14"></span>
                 </button>
               </div>
             </div>
@@ -698,27 +698,27 @@
                knobs, not the primary "what to generate" inputs. -->
           <fieldset class="rounded-md border border-border px-3 pt-1.5 pb-3 mt-4">
             <legend class="text-[10px] uppercase tracking-wide text-muted-foreground font-medium px-1.5 flex items-center gap-1">
-              <span data-icon="wallet" data-size="11"></span> Balance behavior
+              <span data-icon="wallet" data-size="12"></span> Balance behavior
             </legend>
             <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 mt-1">
               <div class="field">
                 <label class="field-label text-xs text-muted-foreground font-medium flex items-center gap-1 mb-1" for="planner-initial">
                   <span>Initial balance (¥)</span>
-                  <span data-icon="info" data-size="11" class="opacity-50 cursor-help" data-tooltip="Suica balance at the start of the month. Most people use ¥2000–¥3000; choose what matches your real card balance."></span>
+                  <span data-icon="info" data-size="12" class="opacity-50 cursor-help" data-tooltip="Suica balance at the start of the month. Most people use ¥2000–¥3000; choose what matches your real card balance."></span>
                 </label>
                 <input id="planner-initial" type="number" min="0" step="500" class="input font-mono w-full">
               </div>
               <div class="field">
                 <label class="field-label text-xs text-muted-foreground font-medium flex items-center gap-1 mb-1" for="planner-topup-threshold">
                   <span>Auto-topup &lt; (¥)</span>
-                  <span data-icon="info" data-size="11" class="opacity-50 cursor-help" data-tooltip="When balance dips below this value mid-month, a charge transaction is inserted. Set very low (e.g. 0) to disable automatic top-ups."></span>
+                  <span data-icon="info" data-size="12" class="opacity-50 cursor-help" data-tooltip="When balance dips below this value mid-month, a charge transaction is inserted. Set very low (e.g. 0) to disable automatic top-ups."></span>
                 </label>
                 <input id="planner-topup-threshold" type="number" min="0" step="500" class="input font-mono w-full">
               </div>
               <div class="field">
                 <label class="field-label text-xs text-muted-foreground font-medium flex items-center gap-1 mb-1" for="planner-topup-amount">
                   <span>Topup amount (¥)</span>
-                  <span data-icon="info" data-size="11" class="opacity-50 cursor-help" data-tooltip="How much is charged each time the auto-topup triggers. Real Suica machines dispense in increments of ¥1000."></span>
+                  <span data-icon="info" data-size="12" class="opacity-50 cursor-help" data-tooltip="How much is charged each time the auto-topup triggers. Real Suica machines dispense in increments of ¥1000."></span>
                 </label>
                 <input id="planner-topup-amount" type="number" min="0" step="500" class="input font-mono w-full">
               </div>
@@ -1126,7 +1126,7 @@
 <!-- JSZip used client-side to extract the PDF from the artifact zip downloaded
      from the Suica PDF Generate workflow (see js/suica-planner.js). -->
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js" defer></script>
-<script src="js/icons.js?v=1" defer></script>
+<script src="js/icons.js?v=2" defer></script>
 <script src="js/theme.js?v=1" defer></script>
 <script src="js/ui-toast.js?v=2" defer></script>
 <script src="js/suica-history.js?v=8" defer></script>
@@ -1210,7 +1210,7 @@
 </script>
 <script src="js/log-viewer.js?v=1" defer></script>
 <script>window.SUICA_FARE_API='https://suica-fare-proxy.workflow-dashboard.workers.dev';</script>
-<script src="js/suica-planner.js?v=124" defer></script>
+<script src="js/suica-planner.js?v=125" defer></script>
 <script defer>
 // Wire the date-range popover to the planner Month/Schedule field.
 // Strategy:
@@ -1382,7 +1382,11 @@
     var icon = btn.querySelector('[data-sound-icon]');
     function paint() {
       var on = window.Toast && window.Toast.getSound && window.Toast.getSound();
-      if (icon) icon.textContent = on ? '🔔' : '🔕';
+      if (icon) {
+        icon.setAttribute('data-icon', on ? 'bell' : 'bellOff');
+        icon.removeAttribute('data-icon-rendered');
+        if (window.refreshIcons) window.refreshIcons(icon.parentElement);
+      }
       btn.setAttribute('aria-pressed', on ? 'true' : 'false');
     }
     paint();

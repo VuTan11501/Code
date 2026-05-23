@@ -71,8 +71,8 @@
       el.className = 'status-badge status-pending text-[10px]';
       el.title = 'Persisting plan to localStorage';
     } else {
-      el.textContent = '✓ Saved';
-      el.className = 'status-badge status-success text-[10px]';
+      el.innerHTML = (window.ICON ? window.ICON.check(12) : '') + ' Saved';
+      el.className = 'status-badge status-success text-[10px] inline-flex items-center gap-1';
       el.title = 'Last saved ' + now.toLocaleTimeString();
     }
   }
@@ -425,7 +425,7 @@
         <td class="py-2 px-2 text-muted-foreground whitespace-nowrap">${dt}</td>
         <td class="py-2 px-2 font-mono font-medium break-all">
           ${r.filename || ('suica-' + r.month + '.pdf')}
-          ${r.pinned ? '<span class="text-primary ml-1" data-tooltip="Pinned">📌</span>' : ''}
+          ${r.pinned ? `<span class="text-primary ml-1 inline-flex align-middle" data-tooltip="Pinned">${ICON.pin(12)}</span>` : ''}
         </td>
         <td class="py-2 px-2"><span class="status-badge status-info font-mono">${r.month}</span></td>
         <td class="py-2 px-2 text-right font-mono whitespace-nowrap">¥${(+r.target).toLocaleString('en-US')}</td>
@@ -435,7 +435,7 @@
           <div class="inline-flex items-center gap-1 justify-end">
             <button type="button" class="btn btn-ghost sm text-[12px] p-1 ${r.pinned ? 'text-primary' : 'opacity-50 hover:opacity-100'}"
                     data-recent-pin data-tooltip="${r.pinned ? 'Unpin run' : 'Pin run (survives history overflow)'}"
-                    aria-label="${r.pinned ? 'Unpin run' : 'Pin run'}">📌</button>
+                    aria-label="${r.pinned ? 'Unpin run' : 'Pin run'}">${ICON.pin(12)}</button>
             ${r.runUrl ? `<a class="btn btn-ghost sm text-xs" href="${r.runUrl}" target="_blank" rel="noopener" data-tooltip="Open the GitHub Actions run">Run ↗</a>` : ''}
             <button type="button" class="btn btn-ghost sm text-xs" data-restore-recent data-tooltip="Reuse this month + target + seed in the planner">
               <span data-icon="undo" data-size="12"></span>
@@ -468,7 +468,7 @@
         t.pinned = !t.pinned;
         saveRecent(all);
         renderRecent();
-        if (window.Toast) window.Toast.info(t.pinned ? '📌 Run pinned' : 'Run unpinned');
+        if (window.Toast) window.Toast.info(t.pinned ? 'Run pinned' : 'Run unpinned');
       });
       tbody.appendChild(tr);
     });
@@ -1081,7 +1081,7 @@
           if (e && e.name === 'AbortError') { resolve(null); return; }
           const stillCurrent = cbFrom && cbTo && cbFrom.getValue() === from && cbTo.getValue() === to;
           if (stillCurrent && setBadge) {
-            setBadge('⚠ Verification failed — try again or pick a JR-served station', 'status-failure');
+            setBadge('Verification failed — try again or pick a JR-served station', 'status-failure');
           }
           resolve(null);
         } finally {
@@ -1363,11 +1363,11 @@
         copyClipBtn.className = 'btn btn-ghost sm text-xs flex-none';
         copyClipBtn.setAttribute('aria-label', `Copy ${DAY_LABELS[day]} to day-clipboard`);
         copyClipBtn.setAttribute('data-tooltip', `Copy ${DAY_LABELS[day]} (${state.pattern[day].length} trip${state.pattern[day].length === 1 ? '' : 's'}) to clipboard for pasting elsewhere`);
-        copyClipBtn.textContent = '📋';
+        copyClipBtn.innerHTML = ICON.copy(14);
         copyClipBtn.addEventListener('click', () => {
           _dayClipboard = { day, trips: state.pattern[day].map((t) => ({ ...t })) };
           renderPattern();
-          if (window.Toast) window.Toast.info(`${DAY_LABELS[day]} (${_dayClipboard.trips.length} trips) copied — click 📥 on another day to paste`, { duration: 5000 });
+          if (window.Toast) window.Toast.info(`${DAY_LABELS[day]} (${_dayClipboard.trips.length} trips) copied — use the paste button on another day to paste`, { duration: 5000 });
         });
         row.appendChild(copyClipBtn);
       }
@@ -1378,7 +1378,7 @@
         pasteBtn.className = 'btn btn-ghost sm text-xs flex-none text-primary';
         pasteBtn.setAttribute('aria-label', `Paste clipboard (${_dayClipboard.trips.length} trips from ${DAY_LABELS[_dayClipboard.day]}) into ${DAY_LABELS[day]}`);
         pasteBtn.setAttribute('data-tooltip', `Paste ${_dayClipboard.trips.length} trips from ${DAY_LABELS[_dayClipboard.day]} into ${DAY_LABELS[day]} (replaces current)`);
-        pasteBtn.textContent = '📥';
+        pasteBtn.innerHTML = ICON.download(14);
         pasteBtn.addEventListener('click', () => {
           pushHistory();
           state.pattern[day] = _dayClipboard.trips.map((t) => ({ ...t }));
@@ -1528,14 +1528,14 @@
             ? `<span class="font-mono text-[10px] text-muted-foreground/50" data-tooltip="Not yet picked in the last ${recentList.length} generations">○○○○○</span>`
             : '<span class="font-mono text-[10px] text-muted-foreground/40" data-tooltip="No generation history yet">—</span>');
       row.innerHTML = `
-        <button class="btn sm btn-ghost text-xs flex-none" data-leisure-mute="${idx}" data-tooltip="${muted ? 'Re-enable this route in the random pool' : 'Mute (weight=0) — keep in the list but exclude from random picks'}" aria-label="${muted ? 'Unmute' : 'Mute'} ${l.route}">${muted ? '🙈' : '👁'}</button>
+        <button class="btn sm btn-ghost text-xs flex-none inline-flex items-center justify-center" data-leisure-mute="${idx}" data-tooltip="${muted ? 'Re-enable this route in the random pool' : 'Mute (weight=0) — keep in the list but exclude from random picks'}" aria-label="${muted ? 'Unmute' : 'Mute'} ${l.route}">${muted ? ICON.eyeOff(14) : ICON.eye(14)}</button>
         <span class="status-badge ${muted ? 'status-pending' : 'status-pending'} font-mono flex-none ${muted ? 'line-through' : ''}">${l.route}</span>
         ${dotsStr}
         <input type="text" maxlength="14" value="${(l.tag || '').replace(/"/g, '&quot;')}" placeholder="tag" class="input w-20 text-xs" data-leisure-tag="${idx}" data-tooltip="Optional tag (e.g. shopping, family) — filterable">
         <span class="text-xs text-muted-foreground">weight</span>
         <input type="number" min="0" max="20" value="${l.weight}" class="input w-16 text-sm" data-leisure-weight="${idx}" ${muted ? 'disabled' : ''}>
         <span class="text-xs text-muted-foreground font-mono ml-auto">${fmtYen(fareOf(l.route))}</span>
-        <button class="btn sm btn-ghost" data-leisure-clone="${idx}" aria-label="Duplicate ${l.route}" data-tooltip="Duplicate this row (same route, same weight)">⎘</button>
+        <button class="btn sm btn-ghost inline-flex items-center justify-center" data-leisure-clone="${idx}" aria-label="Duplicate ${l.route}" data-tooltip="Duplicate this row (same route, same weight)">${ICON.copy(14)}</button>
         <button class="btn sm btn-ghost" data-leisure-remove="${idx}" aria-label="Remove ${l.route} from leisure pool">×</button>
       `;
       wrap.appendChild(row);
@@ -1791,7 +1791,7 @@
         <span data-icon="alert" data-size="12"></span> Plan checks (${warns.length}${hidden ? ` · ${hidden} hidden` : ''})
         <span class="ml-auto flex items-center gap-1 normal-case tracking-normal">
           ${chip('all', 'All', visible.length)}
-          ${counts.error ? chip('error', '✕', counts.error) : ''}
+          ${counts.error ? chip('error', 'x', counts.error) : ''}
           ${counts.warn ? chip('warn', '!', counts.warn) : ''}
           ${counts.info ? chip('info', 'i', counts.info) : ''}
         </span>
@@ -2253,7 +2253,7 @@
 
       const token = getSessionToken();
       if (!token) {
-        setStatus('🔒 Open & unlock the main dashboard first (session token required).', 'text-warning');
+        setStatus('Open & unlock the main dashboard first (session token required).', 'text-warning');
         return;
       }
       if (typeof JSZip === 'undefined') {
@@ -2336,7 +2336,7 @@
         const zipBuf = await _downloadArtifact(token, run.id);
         const filename = await _extractAndSavePdf(zipBuf, `suica-${state.settings.month}.pdf`);
         filenames.push(filename);
-        setStatus(`✓ Downloaded ${filename}${tag}`, 'text-primary');
+        setStatus(`Downloaded ${filename}${tag}`, 'text-primary');
 
         // Record this generation for the "Recent" panel
         try {
@@ -2961,11 +2961,11 @@
       row.innerHTML = `
         <div class="flex flex-col gap-0.5 flex-1 min-w-[160px]">
           <div class="text-sm font-medium flex items-center gap-1.5">
-            <button type="button" class="btn btn-ghost sm text-[12px] p-0.5 ${s.pinned ? 'text-primary' : 'opacity-40 hover:opacity-100'}" data-snap-pin="${s.id}" aria-label="${s.pinned ? 'Unpin snapshot' : 'Pin snapshot to top'}" data-tooltip="${s.pinned ? 'Unpin snapshot' : 'Pin to top of list'}">📌</button>
-            <button type="button" class="btn btn-ghost sm text-[12px] p-0.5 ${s.favorite ? '' : 'opacity-40 hover:opacity-100'}" data-snap-fav="${s.id}" aria-label="${s.favorite ? 'Unfavorite snapshot' : 'Favorite snapshot'}" data-tooltip="${s.favorite ? 'Remove from favorites' : 'Mark as favorite'}">${s.favorite ? '⭐' : '☆'}</button>
+            <button type="button" class="btn btn-ghost sm text-[12px] p-0.5 inline-flex items-center justify-center ${s.pinned ? 'text-primary' : 'opacity-40 hover:opacity-100'}" data-snap-pin="${s.id}" aria-label="${s.pinned ? 'Unpin snapshot' : 'Pin snapshot to top'}" data-tooltip="${s.pinned ? 'Unpin snapshot' : 'Pin to top of list'}">${ICON.pin(12)}</button>
+            <button type="button" class="btn btn-ghost sm text-[12px] p-0.5 inline-flex items-center justify-center ${s.favorite ? 'text-warning' : 'opacity-40 hover:opacity-100'}" data-snap-fav="${s.id}" aria-label="${s.favorite ? 'Unfavorite snapshot' : 'Favorite snapshot'}" data-tooltip="${s.favorite ? 'Remove from favorites' : 'Mark as favorite'}">${ICON.star(12)}</button>
             <span data-snap-name data-snap-name-id="${s.id}" tabindex="0" role="button" title="Double-click to rename" class="cursor-text hover:underline decoration-dotted underline-offset-2">${s.name}</span>${isCompareA ? '<span class="status-badge status-info text-[10px]">A</span>' : ''}
             <button type="button" class="btn btn-ghost sm text-[10px] p-0.5 opacity-50 hover:opacity-100" data-snap-rename="${s.id}" aria-label="Rename snapshot" data-tooltip="Rename snapshot">
-              <span data-icon="edit" data-size="11"></span>
+              <span data-icon="edit" data-size="12"></span>
             </button>
           </div>
           <div class="text-xs text-muted-foreground">${when} · ${tripCount} commute trips · ${s.leisure.length} leisure · target ¥${(+s.settings.target).toLocaleString('en-US')}</div>
@@ -3170,7 +3170,7 @@
           <div class="font-semibold text-sm">Share via QR</div>
           <button type="button" class="btn btn-ghost sm" data-qr-close aria-label="Close">×</button>
         </div>
-        ${tooLong ? `<div class="status-badge status-warning text-[10px] mb-2 block">⚠ Link is ${url.length} chars — QR may be hard to scan. Consider simplifying the plan first.</div>` : ''}
+        ${tooLong ? `<div class="status-badge status-warning text-[10px] mb-2 block">Link is ${url.length} chars — QR may be hard to scan. Consider simplifying the plan first.</div>` : ''}
         <div class="flex justify-center bg-white p-3 rounded mb-2" style="min-height:${qrSize + 24}px;">
           <img alt="QR code for share link" width="${qrSize}" height="${qrSize}" src="${qrSrc}"
                onerror="this.replaceWith(Object.assign(document.createElement('div'), {className:'text-xs text-destructive p-4 text-center', textContent:'QR service unreachable — copy the link instead.'}))">
@@ -4007,7 +4007,7 @@
     const seedReroll = $('planner-seed-reroll');
     if (seedReroll) seedReroll.addEventListener('click', () => {
       if (state.settings.seedPinned) {
-        if (window.Toast) window.Toast.warning('Seed is pinned. Unpin (📌) to change it.');
+        if (window.Toast) window.Toast.warning('Seed is pinned. Unpin (pin button) to change it.');
         return;
       }
       const seedEl = $('planner-seed');

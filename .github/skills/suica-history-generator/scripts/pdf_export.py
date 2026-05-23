@@ -402,7 +402,7 @@ class PdfExporter:
                 deflate_fonts=True,
                 garbage=4,
                 clean=True,
-                use_objstms=1,
+                use_objstms=0,
             )
         finally:
             doc.close()
@@ -429,7 +429,7 @@ class PdfExporter:
                     if "残高履歴" in txt and "件" in txt:
                         x0, y0, x1, y1 = s["bbox"]
                         rect = fitz.Rect(x0 - 1, y0 - 1, x1 + 2, y1 + 1)
-                        page.add_redact_annot(rect, fill=(1, 1, 1))
+                        page.add_redact_annot(rect)
                         return (x0, y1 - 1, s.get("size", FONT_SIZE), count)
         return None
 
@@ -461,14 +461,14 @@ class PdfExporter:
         ]
         for _, x0, x1 in spans_to_redact:
             rect = fitz.Rect(x0, y - 1, x1, y + h)
-            page.add_redact_annot(rect, fill=(1, 1, 1))
+            page.add_redact_annot(rect)
 
     def _clear_row(self, page: fitz.Page, template_row: dict) -> None:
         """Empty an unused template row (just redact, no re-insert)."""
         y = template_row["y"]
         h = FONT_SIZE + 2
         rect = fitz.Rect(COL_X["M"] - 2, y - 1, AMT_RIGHT + 2, y + h)
-        page.add_redact_annot(rect, fill=(1, 1, 1))
+        page.add_redact_annot(rect)
 
     def _insert_row_text(self, page: fitz.Page, template_row: dict, new: dict) -> None:
         """Stage 2: insert new text after redactions are applied."""
