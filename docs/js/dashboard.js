@@ -232,11 +232,9 @@ function renderInfraToggle() {
   if (!bar) return;
   const visibleCount = getVisibleCardSet().size;
   const hasCustomOrder = !!localStorage.getItem(CARD_ORDER_KEY);
-  const customVis = hasCustomVisibility();
   bar.innerHTML = `
     <span class="dash-infra-label">Showing <strong>${visibleCount}</strong> / ${WORKFLOWS_ALL.length} workflows</span>
     ${hasCustomOrder ? `<button class="btn sm btn-outline" onclick="resetCardOrder()" data-tooltip="Restore default card order">${ICON('undo', 12)} Reset order</button>` : ''}
-    ${customVis ? `<button class="btn sm btn-outline" onclick="resetCardVisibility()" data-tooltip="Show only the 3 default workflows">${ICON('undo', 12)} Reset cards</button>` : ''}
     <button type="button"
             class="btn sm"
             onclick="openCardPicker()"
