@@ -49,6 +49,14 @@ window.SuicaDateRange = (function () {
     popover.hidden = true;
     document.body.appendChild(popover);
 
+    // Stop ALL clicks inside the popover from bubbling to document.
+    // Without this, clicking a day cell triggers render() which replaces
+    // the cell's DOM node; by the time the click bubbles up to document,
+    // e.target is detached and popover.contains(e.target) is false,
+    // so the outside-click handler incorrectly closes the popover.
+    popover.addEventListener('mousedown', (e) => e.stopPropagation());
+    popover.addEventListener('click',     (e) => e.stopPropagation());
+
     function buildMonth(viewDate, isRight) {
       const y = viewDate.getFullYear();
       const m = viewDate.getMonth();
