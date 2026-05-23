@@ -1653,7 +1653,6 @@
       if (barWrap) barWrap.setAttribute('aria-hidden', 'true');
     }
     renderWarnings({ total, target, commuteSpend, leisureSpend, monthInfo });
-    renderCalendar();
     // Per-day spend breakdown bars (commute only — leisure is randomized).
     const dayBd = document.getElementById('planner-estimate-day-breakdown');
     if (dayBd) {
@@ -1789,83 +1788,6 @@
       b.addEventListener('click', () => { panel.dataset.sevFilter = b.dataset.warnSev; renderWarnings(ctx); });
     });
   }
-
-  // ────── Calendar preview ──────
-  // Renders a 7-column month grid for state.settings.month. Each cell shows
-  // the date, and a small dot/badge per scheduled trip on that weekday so
-  // the user can see at-a-glance how dense the month will be. Weekends are
-  // shaded; today is highlighted.
-  function renderCalendar() {
-    const wrap = $('planner-calendar');
-    if (!wrap) return;
-    const monthInfo = countWeekdaysInMonth(state.settings.month);
-    if (!monthInfo) { wrap.classList.add('hidden'); wrap.innerHTML = ''; return; }
-    wrap.classList.remove('hidden');
-    const [y, m] = state.settings.month.split('-').map(Number);
-    const first = new Date(y, m - 1, 1);
-    const startDow = first.getDay(); // 0=Sun..6=Sat
-    const last = monthInfo.last;
-    const today = new Date();
-    const isToday = (d) => today.getFullYear() === y && today.getMonth() + 1 === m && today.getDate() === d;
-    const dayKeyByJs = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-    const weekendIdx = new Set([0, 6]); // Sun, Sat
-    const cells = [];
-    // Leading blanks (Sun-aligned)
-    for (let i = 0; i < startDow; i++) cells.push({ blank: true });
-    for (let d = 1; d <= last; d++) {
-      const js = new Date(y, m - 1, d).getDay();
-      const dayKey = dayKeyByJs[js];
-      const trips = state.pattern[dayKey] || [];
-      cells.push({
-        d, dayKey, weekend: weekendIdx.has(js),
-        today: isToday(d),
-        tripCount: trips.length,
-        leisureChance: weekendIdx.has(js) ? (state.leisure.length > 0 ? 1 : 0) : 0,
-        routes: trips.map((t) => t.route),
-      });
-    }
-    while (cells.length % 7) cells.push({ blank: true });
-    const HEADERS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    const html = `
-      <div class="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-2 uppercase tracking-wide">
-        <span data-icon="calendar" data-size="12"></span> ${state.settings.month} preview
-        <span class="ml-auto text-[10px] normal-case tracking-normal text-muted-foreground/70">${last} days · ${monthInfo.counts.saturday + monthInfo.counts.sunday} weekend days</span>
-      </div>
-      <div class="max-w-[430px]">
-      <div class="grid grid-cols-7 gap-1 text-[10px]">
-        ${HEADERS.map((h, i) => `<div class="text-center text-muted-foreground font-medium pb-1 ${weekendIdx.has(i) ? 'text-warning/80' : ''}">${h}</div>`).join('')}
-        ${cells.map((c) => {
-          if (c.blank) return '<div class="h-11"></div>';
-          const bg = c.today ? 'bg-primary/20 border-primary' :
-                     c.weekend ? 'bg-muted/40 border-border' :
-                     'bg-card border-border';
-          const dotCount = c.tripCount + (c.weekend && c.leisureChance ? 1 : 0);
-          const dots = dotCount > 0
-            ? `<div class="flex justify-center gap-0.5 mt-0.5">${Array.from({length: Math.min(3, dotCount)}).map(() => '<span class="w-1 h-1 rounded-full bg-primary"></span>').join('')}${dotCount > 3 ? `<span class="text-[8px] text-primary">+${dotCount-3}</span>` : ''}</div>`
-            : '';
-          const labelMap = { monday:'Mon', tuesday:'Tue', wednesday:'Wed', thursday:'Thu', friday:'Fri', saturday:'Sat', sunday:'Sun' };
-          const dayLabel = labelMap[c.dayKey] || c.dayKey;
-          const fareTotal = c.routes.reduce((s, r) => s + (fareOf(r) || 0), 0);
-          let tooltip;
-          if (c.routes.length) {
-            const breakdown = c.routes.map((r) => `${r} · ${fmtYen(fareOf(r) || 0)}`).join('\n');
-            tooltip = `${dayLabel} ${c.d}\n${breakdown}\nTotal: ${fmtYen(fareTotal)}`;
-          } else if (c.weekend) {
-            tooltip = `${dayLabel} ${c.d}\nWeekend — random leisure pick from ${state.leisure.length} routes`;
-          } else {
-            tooltip = `${dayLabel} ${c.d}\nNo commute trips scheduled`;
-          }
-          return `<div class="h-11 border rounded ${bg} flex flex-col items-center justify-center" data-tooltip="${tooltip.replace(/"/g, '&quot;')}">
-            <div class="font-mono ${c.today ? 'font-bold text-primary' : ''}">${c.d}</div>
-            ${dots}
-          </div>`;
-        }).join('')}
-      </div>
-      </div>`;
-    wrap.innerHTML = html;
-    if (window.refreshIcons) window.refreshIcons(wrap);
-  }
-
 
   function buildPreset() {
     const pattern = {};
@@ -3991,7 +3913,7 @@
       pushHistory();
       state.settings.month = next;
       const el = $('planner-month'); if (el) el.value = next;
-      renderEstimate(); renderCalendar && renderCalendar(); saveState();
+      renderEstimate(); saveState();
     }
     const monthPrev = $('planner-month-prev');
     const monthNext = $('planner-month-next');
