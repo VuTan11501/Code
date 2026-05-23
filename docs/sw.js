@@ -10,7 +10,7 @@
 //   * Update flow: new SW activates → postMessage {type:'sw-updated'} to
 //     all clients. app.js shows a "Reload to update" toast.
 
-const VERSION = 'wf-dash-v6';
+const VERSION = 'wf-dash-v7';
 const SHELL_CACHE = `${VERSION}-shell`;
 const API_CACHE   = `${VERSION}-api`;
 const API_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
@@ -91,10 +91,10 @@ self.addEventListener('fetch', (event) => {
     const isShell = req.mode === 'navigate' ||
       url.pathname === '/' || url.pathname.endsWith('/index.html');
     if (isShell) {
-      event.respondWith(swrShell(req, SHELL_CACHE));
+      event.respondWith(swrShell(req, SHELL_CACHE, event));
       return;
     }
-    event.respondWith(cacheFirst(req, SHELL_CACHE));
+    event.respondWith(cacheFirst(req, SHELL_CACHE, event));
     return;
   }
 });
@@ -114,7 +114,7 @@ async function _hashText(text) {
   } catch { return String(text.length); }
 }
 
-async function swrShell(req, cacheName) {
+async function swrShell(req, cacheName, event) {
   const cache = await caches.open(cacheName);
   const cached = await cache.match(req);
   const key = req.url;
@@ -136,10 +136,17 @@ async function swrShell(req, cacheName) {
         });
         const resp = await fetch(freshReq);
         if (!resp || !resp.ok || resp.type !== 'basic') return resp;
+        // Always cache.put FIRST, then notify. If postMessage fails or the
+        // SW dies mid-flight, at least the cache is updated so the next
+        // navigation serves the fresh body (was: notify before put → SW
+        // could be killed before cache.put completes → cache stays stale
+        // forever and user stuck on old build).
+        const freshClone = resp.clone();
+        await cache.put(req, resp.clone());
         if (cached) {
           const [oldText, newText] = await Promise.all([
             cached.clone().text(),
-            resp.clone().text(),
+            freshClone.text(),
           ]);
           if (oldText !== newText) {
             const newHash = await _hashText(newText);
@@ -152,14 +159,23 @@ async function swrShell(req, cacheName) {
             }
           }
         }
-        await cache.put(req, resp.clone());
         return resp;
       } catch { return null; }
       finally { _swrInFlight.delete(key); }
     })();
     _swrInFlight.set(key, revalidate);
   }
-  if (cached) return cached;
+  if (cached) {
+    // CRITICAL: extend SW lifetime via waitUntil so the revalidate fetch +
+    // cache.put actually completes. Without this, the browser can terminate
+    // the SW the instant respondWith resolves (returning cached), aborting
+    // the in-flight fetch and leaving the cache stale forever — which is
+    // why "reload many times still shows old version" was reproducible.
+    if (event && event.waitUntil) {
+      try { event.waitUntil(revalidate); } catch {}
+    }
+    return cached;
+  }
   // No cached copy yet — wait for network. Only fall back to the app shell
   // (index.html) if the network ALSO failed, so requests for other HTML pages
   // like suica.html still resolve to their actual content on first visit.
@@ -170,7 +186,7 @@ async function swrShell(req, cacheName) {
   throw new Error('shell unavailable');
 }
 
-async function cacheFirst(req, cacheName) {
+async function cacheFirst(req, cacheName, event) {
   const cache = await caches.open(cacheName);
   const url = new URL(req.url);
   // Honor cache-busting query strings (e.g. `dist/app.bundle.min.js?v=5`) for
@@ -182,11 +198,15 @@ async function cacheFirst(req, cacheName) {
   const matchOpts = sameOrigin ? {} : { ignoreSearch: true };
   const cached = await cache.match(req, matchOpts);
   if (cached) {
-    fetch(req).then(resp => {
+    // Background revalidate (same SW-lifetime fix as swrShell).
+    const revalidate = fetch(req).then(resp => {
       if (resp && resp.ok && resp.type === 'basic') {
-        cache.put(req, resp.clone()).catch(() => {});
+        return cache.put(req, resp.clone()).catch(() => {});
       }
     }).catch(() => {});
+    if (event && event.waitUntil) {
+      try { event.waitUntil(revalidate); } catch {}
+    }
     return cached;
   }
   try {
