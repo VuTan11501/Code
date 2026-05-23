@@ -362,7 +362,7 @@
   .suica-dr-trigger [data-dr-label] { font-variant-numeric: tabular-nums; }
   .suica-dr-popover {
     position: fixed; z-index: 60;
-    background: var(--popover); color: var(--popover-foreground);
+    background: var(--popover, var(--card)); color: var(--popover-foreground, var(--foreground));
     border: 1px solid var(--border); border-radius: var(--radius-md);
     box-shadow: var(--shadow-md);
     padding: 0.75rem;
