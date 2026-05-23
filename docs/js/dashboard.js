@@ -782,9 +782,18 @@ async function ensureJobLogCache(jobId) {
   try {
     // NOTE: do NOT set Accept: text/plain — GitHub responds 415.
     // Default Accept works; endpoint 302-redirects to Azure Blob (text/plain).
-    const r = await fetch(`${API}/repos/${OWNER}/${REPO}/actions/jobs/${jobId}/logs`, {
+    //
+    // 401 workaround: fetch follows the 302 and Chrome forwards our
+    // `Authorization: Bearer <gh_token>` to Azure Blob, which rejects it (401).
+    // If the final response.url is NOT api.github.com, the API itself succeeded
+    // and we just hit the blob-storage auth bounce → retry the blob URL with no
+    // Authorization header (the presigned URL embeds its own SAS in the query).
+    let r = await fetch(`${API}/repos/${OWNER}/${REPO}/actions/jobs/${jobId}/logs`, {
       headers: { 'Authorization': `Bearer ${sessionToken}` }
     });
+    if (r.status === 401 && r.url && !/api\.github\.com/.test(r.url)) {
+      r = await fetch(r.url); // re-fetch blob URL sans Authorization
+    }
     if (r.status === 404) {
       const empty = { raw: '', groups: [], error: null, notReady: true };
       return empty;
