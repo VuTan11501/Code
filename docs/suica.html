@@ -646,12 +646,20 @@
                inline icon-buttons readable. -->
           <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div class="field">
-              <label class="field-label text-xs text-muted-foreground font-medium flex items-center gap-1 mb-1" for="planner-month">Month</label>
-              <div class="flex items-center gap-1">
-                <button id="planner-month-prev" type="button" class="btn btn-ghost sm" data-tooltip="Previous month" aria-label="Previous month">‹</button>
-                <input id="planner-month" type="text" pattern="\d{4}-\d{2}" class="input font-mono flex-1 min-w-0" placeholder="2026-06">
-                <button id="planner-month-next" type="button" class="btn btn-ghost sm" data-tooltip="Next month" aria-label="Next month">›</button>
-              </div>
+              <label class="field-label text-xs text-muted-foreground font-medium flex items-center gap-1 mb-1" for="planner-month-trigger">
+                <span>Schedule</span>
+                <span data-icon="info" data-size="11" class="opacity-50 cursor-help" data-tooltip="Pick one month, or a date range to batch-generate consecutive months (auto-sets the Batch count below)."></span>
+              </label>
+              <button type="button" id="planner-month-trigger"
+                class="btn btn-outline w-full justify-between suica-dr-trigger"
+                aria-label="Choose month or range">
+                <span class="flex items-center gap-2 min-w-0">
+                  <span data-icon="calendar" data-size="14" class="opacity-70 flex-shrink-0"></span>
+                  <span data-dr-label class="truncate text-muted-foreground">Pick month</span>
+                </span>
+                <span data-icon="chevronDown" data-size="12" class="opacity-50 flex-shrink-0"></span>
+              </button>
+              <input id="planner-month" type="hidden" value="">
             </div>
             <div class="field">
               <label class="field-label text-xs text-muted-foreground font-medium flex items-center gap-1 mb-1" for="planner-target">
@@ -1235,6 +1243,90 @@
 <script src="js/log-viewer.js?v=1" defer></script>
 <script>window.SUICA_FARE_API='https://suica-fare-proxy.workflow-dashboard.workers.dev';</script>
 <script src="js/suica-planner.js?v=124" defer></script>
+<script defer>
+// Wire the date-range popover to the planner Month/Schedule field.
+// Strategy:
+//  - Hidden <input id="planner-month"> stays the JS source of truth
+//    (suica-planner.js reads/writes .value all over the place).
+//  - SuicaDateRange popover mounts on the new trigger button.
+//  - onChange picks the START month for planner-month, and if user
+//    picked a real range, auto-sets planner-batch-months to the smallest
+//    available option (1/2/3/6) that covers the span.
+//  - To keep the trigger label in sync when planner-planner.js writes
+//    .value programmatically (snapshot restore, etc.), we intercept the
+//    .value setter and re-sync the picker label.
+(function () {
+  function init() {
+    const trigger = document.getElementById('planner-month-trigger');
+    const monthInput = document.getElementById('planner-month');
+    const batchSelect = document.getElementById('planner-batch-months');
+    if (!trigger || !monthInput || !window.SuicaDateRange) return;
+
+    function parseMonth(v) {
+      const m = /^(\d{4})-(\d{2})$/.exec(v || '');
+      if (!m) return null;
+      return new Date(+m[1], +m[2] - 1, 1);
+    }
+    function fmtMonth(d) {
+      return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+    }
+
+    let suppressSync = false;
+    const initFrom = parseMonth(monthInput.value);
+
+    const picker = window.SuicaDateRange.mount(trigger, {
+      label: 'Schedule month or range',
+      placeholder: 'Pick month',
+      initialFrom: initFrom,
+      onChange: ({ from, to }) => {
+        if (!from) return;
+        suppressSync = true;
+        monthInput.value = fmtMonth(from);
+        suppressSync = false;
+        // dispatch input + change so planner.js auto-save / estimate refresh
+        monthInput.dispatchEvent(new Event('input', { bubbles: true }));
+        monthInput.dispatchEvent(new Event('change', { bubbles: true }));
+
+        if (batchSelect) {
+          let target = 1;
+          if (to) {
+            const months = (to.getFullYear() * 12 + to.getMonth())
+                         - (from.getFullYear() * 12 + from.getMonth()) + 1;
+            const opts = [1, 2, 3, 6];
+            target = opts.find((o) => o >= months) || 6;
+            if (window.Toast && months > 6) {
+              window.Toast.info(`Range spans ${months} months — batch capped at 6.`);
+            }
+          }
+          if (batchSelect.value !== String(target)) {
+            batchSelect.value = String(target);
+            batchSelect.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+        }
+      },
+    });
+
+    // Intercept programmatic value assignments so the trigger label
+    // stays correct after snapshot restore / state reload.
+    const desc = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+    Object.defineProperty(monthInput, 'value', {
+      get() { return desc.get.call(this); },
+      set(v) {
+        desc.set.call(this, v);
+        if (suppressSync) return;
+        const d = parseMonth(v);
+        if (d) picker.setRange(d, null);
+      },
+      configurable: true,
+    });
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
+</script>
 <script>
 // Theme toggle for suica.html (mirrors the dashboard's behavior; uses the same
 // localStorage key so the preference syncs across pages). Same sun/moon icon
