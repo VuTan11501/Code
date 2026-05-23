@@ -64,6 +64,7 @@ COL_X = {
     "D":  180.0,
     "T":  205.0,
     "SF": 265.0,
+    "T2": 326.44,
     "ST": 380.0,
 }
 BAL_RIGHT = 467.0
@@ -235,6 +236,7 @@ def _collapse_in_out(entries: list[TapEntry], initial_balance: int) -> list[dict
         "day":   f"{first_at.day:02d}" if first_at else "",
         "type": "繰",
         "st_from": "",
+        "type_out": "",
         "st_to": "",
         "amount": None,
         "balance": initial_balance,
@@ -252,7 +254,8 @@ def _collapse_in_out(entries: list[TapEntry], initial_balance: int) -> list[dict
                 "month": f"{pending_in.at.month:02d}",
                 "day":   f"{pending_in.at.day:02d}",
                 "type": "入",
-                "st_from": f"{pending_in.station}出",
+                "st_from": pending_in.station,
+                "type_out": "出",
                 "st_to": e.station,
                 "amount": -e.fare_yen if e.fare_yen > 0 else 0,
                 "balance": e.balance_yen,
@@ -268,18 +271,23 @@ def _collapse_in_out(entries: list[TapEntry], initial_balance: int) -> list[dict
                 "day":   f"{e.at.day:02d}",
                 "type": "ｶｰﾄﾞ",  # Suica top-up: half-width "card"
                 "st_from": "モバイル",  # full-width "mobile"
+                "type_out": "",
                 "st_to": "",
                 "amount": +e.fare_yen,
                 "balance": e.balance_yen,
             })
         elif e.kind == TapKind.SHOPPING:
+            # Real Mobile Suica leaves BOTH 利用駅 columns empty for 物販 rows.
+            # The merchant label ("モバイル") is an internal model field, not
+            # a printed value — never emit it in the PDF.
             rows.append({
                 "at": e.at,
                 "kind": TapKind.SHOPPING,
                 "month": f"{e.at.month:02d}",
                 "day":   f"{e.at.day:02d}",
                 "type": "物販",
-                "st_from": e.station,
+                "st_from": "",
+                "type_out": "",
                 "st_to": "",
                 "amount": -e.fare_yen,
                 "balance": e.balance_yen,
@@ -443,6 +451,8 @@ class PdfExporter:
         page.insert_text((COL_X["T"], baseline), new["type"], **fp)
         if new["st_from"]:
             page.insert_text((COL_X["SF"], baseline), _truncate_station(new["st_from"]), **fp)
+        if new.get("type_out"):
+            page.insert_text((COL_X["T2"], baseline), new["type_out"], **fp)
         if new["st_to"]:
             page.insert_text((COL_X["ST"], baseline), _truncate_station(new["st_to"]), **fp)
 

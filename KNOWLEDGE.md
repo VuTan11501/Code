@@ -180,6 +180,23 @@ _(source: checkpoint 014)_
 - **Prevention**: Before wiring new logic against a dataclass, open the model file. Don't infer field names from the domain noun.
 _(source: checkpoint 015)_
 
+### 3.16 Real Mobile Suica PDF has **4 station/kind columns**, not 3
+- **Symptom**: Generated PDF showed `入 | 横浜出 | (blank) | 東京` — the `出` marker stuffed into the entry station cell, the kind-out column blank. Also `物販 モバイル` rendered the merchant label into the station column when real PDF leaves both station cells empty for shopping.
+- **Root cause**: `_collapse_in_out` schema only had `type`/`st_from`/`st_to`. To match real layout (`月 日 種別1 利用駅1 種別2 利用駅2 残高 入金`), `出` was concatenated as suffix to `st_from`, and `SHOPPING.st_from = e.station` printed the internal merchant label `"モバイル"`.
+- **Fix**:
+  - Add `COL_X["T2"] = 326.44` (probed from `fixtures/template.pdf` via `page.get_text('dict')` looking for `出` X-coord).
+  - Add `type_out` field to row dicts; `"出"` for IN→OUT collapsed, `""` elsewhere.
+  - `st_from` stores raw station name (no `出` suffix).
+  - SHOPPING rows: `st_from = ""` (merchant label is internal-only).
+  - Renderer writes `type_out` at `COL_X["T2"]`. Existing SF redact span (263–375) already covers x=326.44, no new redact needed.
+- **Prevention**: When mirroring a real document layout, probe column header coordinates with `page.get_text('dict')` BEFORE coding the renderer. Don't assume "type then 2 stations" — Mobile Suica + JR-style statements use repeating `(種別, 利用駅)` pairs.
+
+### 3.17 Template header `残高履歴 （101件）` is baked-in
+- **Symptom**: Generated PDF always shows `(101件)` regardless of actual row count.
+- **Root cause**: Text is part of the template PDF, not generated. Generator only rewrites data rows.
+- **Fix**: (not yet) — would need redact + reinsert at template y=~125 with actual count from `len(rows)`.
+- **Prevention**: When auditing template fidelity, list every chrome string and decide which are dynamic. Hard-coded counts are an easy tell of fake PDFs.
+
 ---
 
 ## 4. Build & test commands
