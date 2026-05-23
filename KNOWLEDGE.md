@@ -1,8 +1,13 @@
 # 📚 Project Knowledge Base
 
-> Living knowledge base for this monorepo. Update it whenever you discover a
-> non-obvious gotcha, decide on a convention, or learn a lesson the hard way.
-> If you find yourself debugging the same class of bug twice, **write it here**.
+> **Living document.** Update it whenever you discover a non-obvious gotcha,
+> decide on a convention, or learn a lesson the hard way. **If a bug class
+> takes >15 minutes to root-cause, or recurs across sessions, APPEND TO §3.**
+> Goal: never debug the same class of bug twice.
+>
+> See `AGENTS.md` (local) for the full living-document protocol: triggers,
+> mandatory entry format (Symptom / Root cause / Fix / Prevention), and
+> update rules for other sections.
 
 ---
 
