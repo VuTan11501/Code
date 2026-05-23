@@ -197,6 +197,12 @@ _(source: checkpoint 015)_
 - **Fix**: (not yet) — would need redact + reinsert at template y=~125 with actual count from `len(rows)`.
 - **Prevention**: When auditing template fidelity, list every chrome string and decide which are dynamic. Hard-coded counts are an easy tell of fake PDFs.
 
+### 3.18 `COL_X` data-row positions drifted vs template chrome
+- **Symptom**: Side-by-side bbox dump of generated vs real showed M/D/T/SF/ST data cells off by 3–7.5 px to the left even though header glyphs (printed by the template chrome) sat at the correct positions. `verify_pdf` still passed because its alignment check is fuzzy (±10 px) — visual drift wasn't caught by tests.
+- **Root cause**: `COL_X` values (M=155, D=180, T=205, SF=265, ST=380) were eyeballed approximations. The template's real data-row anchors are M=158.5, D=185.5, T=212.5, SF=263.8, ST=376.8 (only T2=326.4 was probed precisely in §3.16).
+- **Fix**: Probe **every** data column from `fixtures/template.pdf` by dumping `page.get_text('dict')` of the first data row (y≈106 carryover or y≈117 first IN row) and copy x-coords verbatim into `COL_X`.
+- **Prevention**: Whenever touching column geometry, dump and diff the bbox of generated vs `fixtures/template.pdf` for the same row — header positions alone don't guarantee data positions are right. Consider tightening `verify_pdf` ALIGN-PIXEL tolerance to ±2 px so this kind of drift fails CI.
+
 ---
 
 ## 4. Build & test commands
