@@ -221,6 +221,9 @@
       const tr = document.createElement('tr');
       tr.className = 'border-t border-border';
       const ts = (e.datetime || '').replace('T', ' ').slice(0, 16);
+      // Stamp the row date so external filters (e.g. suica-date-range)
+      // can show/hide rows without parsing the rendered text.
+      tr.dataset.date = (e.datetime || '').slice(0, 10);
       const badge = kindBadge(e.kind);
       tr.innerHTML =
         `<td class="py-1 px-3 text-muted-foreground">${i + 1}</td>` +

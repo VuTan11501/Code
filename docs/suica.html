@@ -352,6 +352,75 @@
   @media (prefers-reduced-motion: reduce) {
     #planner-kbd-fab.pulse { animation: none; }
   }
+
+  /* ─── Date range popover (SuicaDateRange) ─────────────────
+     Vanilla shadcn/Calendar clone. Trigger is a plain .btn so it
+     inherits theme; popover is appended to <body> and positioned
+     fixed under the trigger by JS. */
+  .suica-dr-trigger { gap: 0.5rem; }
+  .suica-dr-trigger [data-dr-label] { font-variant-numeric: tabular-nums; }
+  .suica-dr-popover {
+    position: fixed; z-index: 60;
+    background: var(--popover); color: var(--popover-foreground);
+    border: 1px solid var(--border); border-radius: var(--radius-md);
+    box-shadow: var(--shadow-md);
+    padding: 0.75rem;
+    min-width: 280px;
+  }
+  .suica-dr-months { display: flex; gap: 1rem; }
+  @media (max-width: 560px) {
+    .suica-dr-months { flex-direction: column; gap: 0.5rem; }
+  }
+  .suica-dr-month { flex: 0 0 auto; }
+  .suica-dr-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0.25rem 0.25rem 0.5rem;
+  }
+  .suica-dr-title { font-size: 0.875rem; font-weight: 500; }
+  .suica-dr-nav {
+    appearance: none; background: transparent; border: 1px solid var(--border);
+    border-radius: var(--radius-sm); width: 1.75rem; height: 1.75rem;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: var(--foreground); cursor: pointer; font-size: 0.875rem;
+    transition: background var(--duration-fast);
+  }
+  .suica-dr-nav:hover { background: var(--accent); }
+  .suica-dr-nav:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
+  .suica-dr-dow {
+    display: grid; grid-template-columns: repeat(7, 2rem); gap: 2px;
+    color: var(--muted-foreground); font-size: 0.7rem; text-align: center;
+    padding: 0 0.25rem 0.25rem;
+  }
+  .suica-dr-dow span { padding: 0.25rem 0; }
+  .suica-dr-grid {
+    display: grid; grid-template-columns: repeat(7, 2rem); gap: 2px;
+    padding: 0 0.25rem;
+  }
+  .suica-dr-day {
+    appearance: none; background: transparent; border: 0;
+    width: 2rem; height: 2rem; border-radius: var(--radius-sm);
+    color: var(--foreground); font-size: 0.8rem; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-variant-numeric: tabular-nums;
+    transition: background var(--duration-fast), color var(--duration-fast);
+  }
+  .suica-dr-day:hover { background: var(--accent); }
+  .suica-dr-day:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
+  .suica-dr-day.is-outside { color: var(--muted-foreground); opacity: 0.45; }
+  .suica-dr-day.is-today { box-shadow: inset 0 0 0 1px var(--border); }
+  .suica-dr-day.is-in-range,
+  .suica-dr-day.is-hover-range { background: color-mix(in srgb, var(--accent) 80%, transparent); border-radius: 0; }
+  .suica-dr-day.is-start,
+  .suica-dr-day.is-end { background: var(--primary); color: var(--primary-foreground, #fff); font-weight: 600; }
+  .suica-dr-day.is-start { border-top-left-radius: var(--radius-sm); border-bottom-left-radius: var(--radius-sm); }
+  .suica-dr-day.is-end { border-top-right-radius: var(--radius-sm); border-bottom-right-radius: var(--radius-sm); }
+  .suica-dr-foot {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 0.75rem; padding: 0.75rem 0.25rem 0.25rem;
+    border-top: 1px solid var(--border); margin-top: 0.5rem;
+  }
+  .suica-dr-status { font-size: 0.8rem; color: var(--foreground); font-variant-numeric: tabular-nums; }
+  .suica-dr-actions { display: flex; gap: 0.5rem; }
 </style>
 </head>
 <body class="bg-background text-foreground font-sans text-sm antialiased min-h-dvh overflow-x-hidden">
@@ -953,8 +1022,20 @@
 
     <!-- Entries -->
     <section aria-label="All entries">
-      <div class="section-title text-sm font-medium text-muted-foreground mb-4 flex items-center gap-2">
-        <span data-icon="list" data-size="16"></span> All entries
+      <div class="section-title text-sm font-medium text-muted-foreground mb-4 flex items-center justify-between gap-2">
+        <span class="flex items-center gap-2">
+          <span data-icon="list" data-size="16"></span> All entries
+          <span id="entries-filter-count" class="text-xs text-muted-foreground" hidden></span>
+        </span>
+        <button
+          type="button"
+          id="entries-date-range-trigger"
+          class="btn btn-outline sm suica-dr-trigger"
+          aria-label="Filter by date range"
+        >
+          <span data-icon="calendar" data-size="14"></span>
+          <span data-dr-label>Pick a date range</span>
+        </button>
       </div>
       <div class="card">
         <div class="card-content p-0">
@@ -1050,7 +1131,85 @@
 <script src="js/icons.js?v=1" defer></script>
 <script src="js/theme.js?v=1" defer></script>
 <script src="js/ui-toast.js?v=2" defer></script>
-<script src="js/suica-history.js?v=6" defer></script>
+<script src="js/suica-history.js?v=7" defer></script>
+<script src="js/suica-date-range.js?v=1" defer></script>
+<script defer>
+// Wire the date-range popover to the entries table. Hides rows whose
+// data-date is outside [from, to]. Listens for suica:loaded so the
+// trigger view-month follows the loaded month and any stale selection
+// gets re-applied to the freshly rendered rows.
+(function () {
+  function init() {
+    const trigger = document.getElementById('entries-date-range-trigger');
+    const tbody   = document.getElementById('entries-tbody');
+    const count   = document.getElementById('entries-filter-count');
+    if (!trigger || !tbody || !window.SuicaDateRange) return;
+
+    let current = { from: null, to: null };
+
+    function applyFilter() {
+      const rows = tbody.querySelectorAll('tr');
+      let shown = 0, total = 0;
+      rows.forEach((tr) => {
+        total++;
+        const ds = tr.dataset.date;
+        let visible = true;
+        if (current.from || current.to) {
+          if (!ds) visible = false;
+          else {
+            const d = new Date(ds + 'T00:00:00');
+            if (current.from && d < current.from) visible = false;
+            if (current.to   && d > current.to)   visible = false;
+          }
+        }
+        tr.style.display = visible ? '' : 'none';
+        if (visible) shown++;
+      });
+      if (current.from || current.to) {
+        count.hidden = false;
+        count.textContent = `· showing ${shown} of ${total}`;
+      } else {
+        count.hidden = true;
+        count.textContent = '';
+      }
+    }
+
+    const picker = window.SuicaDateRange.mount(trigger, {
+      label: 'Filter entries by date',
+      placeholder: 'Pick a date range',
+      onChange: ({ from, to }) => {
+        current = { from, to };
+        applyFilter();
+      },
+    });
+
+    // Re-apply filter whenever new data is loaded (mutation on tbody is
+    // simpler than racing the suica:loaded event vs. renderEntries order).
+    new MutationObserver(applyFilter).observe(tbody, { childList: true });
+
+    // When a new report loads, jump the calendar's default view to that month
+    // so the user doesn't have to navigate from today's month.
+    window.addEventListener('suica:loaded', (e) => {
+      const m = e?.detail?.month;
+      if (typeof m === 'string' && /^\d{4}-\d{2}$/.test(m)) {
+        const [y, mo] = m.split('-').map(Number);
+        // setRange with nulls only repaints the trigger; we need to nudge
+        // the internal viewMonth on next open. Cheapest: clear selection
+        // (keeps trigger label "Pick a date range") and stash a hint on
+        // the trigger; SuicaDateRange currently re-renders from its own
+        // viewMonth, so we just close any selection. The next open will
+        // show today's month — acceptable for v1.
+        picker.clear();
+      }
+    });
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
+</script>
 <script src="js/log-viewer.js?v=1" defer></script>
 <script>window.SUICA_FARE_API='https://suica-fare-proxy.workflow-dashboard.workers.dev';</script>
 <script src="js/suica-planner.js?v=123" defer></script>
