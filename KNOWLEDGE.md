@@ -214,6 +214,20 @@ _(source: checkpoint 015)_
   3. Font count: **NOT FIXED** — we register IPA Gothic / MS Gothic via `insert_font` for new text insertions, which always embeds as a separate subset (`FBFWKX+...`). Reusing the template's existing font (`fontname="F2"`) renders new glyphs as `\x00` because the embedded font is subsetted to only the original template glyphs. Properly fixing this requires re-embedding a unified subset that includes both old and new glyphs — non-trivial.
 - **Prevention**: Before considering layout work done, always diff metadata via `fitz.open(...).metadata`, `get_drawings()`, `get_fonts()`, `get_images()`. These are cheap, deterministic forensic tells that visual inspection won't catch. Document any unfixable fingerprints (like the 2-fonts case) in this file so future contributors don't re-spend hours on them.
 
+### 3.20 Pre-flight validation prevents doomed CI runs
+- **Symptom**: User clicks Generate, workflow dispatches, ~30s later CI fails with `balance_nonneg` / "balance went negative ¥-453". GitHub Actions minutes burned for a plan that was structurally impossible (target ¥22000 but commute alone ¥54000).
+- **Root cause**: Client only validated `totalRoutes > 0` before dispatch. All real plan-shape checks (target sanity, balance simulation, fare coverage) were server-side only, so any misconfiguration cost a full CI roundtrip to discover.
+- **Fix**: `computeBlockers()` in `docs/js/suica-planner.js` runs the same checks in-browser:
+  - Empty plan / bad month / target < ¥1000
+  - Missing fare data on any route
+  - Leisure trips min > max
+  - Top-up amount < threshold (infinite recharge loop)
+  - Commute alone exceeds target × 1.25 (generator can't trim commute trips)
+  - Initial balance < max single fare AND top-up won't cover it
+  - **Day-by-day balance simulator**: walks the actual month using real per-DAY commute totals + leisure spread over Sat/Sun, applies top-up logic, flags if minimum balance < 0
+  - `generatePDF()` early-returns on any blocker, renders them in `#planner-warnings` with Auto-suggest fix button + "Force generate anyway" escape hatch (confirm + `data-forceGenerate` flag)
+- **Prevention**: Any new server-side validation rule SHOULD have a client-side mirror in `computeBlockers()`. The cost of one CI roundtrip (~30-60s + Actions minutes) is much higher than computing the same check in <1ms locally. When you add a check to `validator.py`, add the JS equivalent in the same PR.
+
 ---
 
 ## 4. Build & test commands
