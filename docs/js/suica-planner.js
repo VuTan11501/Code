@@ -774,6 +774,67 @@
 
   let cbFrom = null, cbTo = null;
 
+  // ────── Shadcn-style Select (lightweight; no search field) ──────
+  // Replaces a native <select> wrapper with a fully-styled popover that
+  // matches the rest of the UI. Returns { setValue, getValue, setOptions }.
+  function createShadcnSelect(root, opts) {
+    const trigger = root.querySelector('.shadcn-select-trigger');
+    const valueEl = root.querySelector('.shadcn-select-value');
+    const placeholder = (opts && opts.placeholder) || valueEl.textContent;
+    let options = (opts && opts.options) || [];
+    let value = (opts && opts.value) || '';
+    let panel = null;
+
+    function labelFor(v) {
+      const o = options.find((x) => x.value === v);
+      return o ? o.label : '';
+    }
+    function render() {
+      const lab = labelFor(value);
+      if (lab) { valueEl.textContent = lab; valueEl.classList.remove('placeholder'); }
+      else { valueEl.textContent = placeholder; valueEl.classList.add('placeholder'); }
+    }
+    function open() {
+      if (panel) return;
+      panel = document.createElement('div');
+      panel.className = 'shadcn-select-panel';
+      panel.setAttribute('role', 'listbox');
+      panel.innerHTML = options.map((o) => `
+        <div class="shadcn-select-item${o.value === value ? ' is-selected' : ''}" role="option" data-v="${o.value.replace(/"/g, '&quot;')}">${o.label}</div>
+      `).join('');
+      root.appendChild(panel);
+      trigger.setAttribute('aria-expanded', 'true');
+      panel.addEventListener('mousedown', (e) => e.stopPropagation());
+      panel.querySelectorAll('.shadcn-select-item').forEach((el) => {
+        el.addEventListener('click', () => choose(el.dataset.v));
+      });
+      document.addEventListener('mousedown', onOutside);
+      document.addEventListener('keydown', onKey);
+    }
+    function close() {
+      if (!panel) return;
+      panel.remove(); panel = null;
+      trigger.setAttribute('aria-expanded', 'false');
+      document.removeEventListener('mousedown', onOutside);
+      document.removeEventListener('keydown', onKey);
+    }
+    function onOutside(e) { if (!root.contains(e.target)) close(); }
+    function onKey(e) { if (e.key === 'Escape') { e.preventDefault(); close(); trigger.focus(); } }
+    function choose(v) {
+      value = v;
+      render();
+      close();
+      if (opts && opts.onChange) opts.onChange(value);
+    }
+    trigger.addEventListener('click', (e) => { e.preventDefault(); panel ? close() : open(); });
+    render();
+    return {
+      setValue(v) { value = v || ''; render(); },
+      getValue() { return value; },
+      setOptions(arr) { options = arr.slice(); render(); },
+    };
+  }
+
   function populateComboboxes() {
     if (cbFrom) cbFrom.setOptions(state.stations);
     if (cbTo) cbTo.setOptions(state.stations);
@@ -3981,12 +4042,25 @@
     const sgBtn = $('planner-auto-suggest');
     if (sgBtn) sgBtn.addEventListener('click', autoSuggest);
     const presetSel = $('planner-pattern-preset');
-    if (presetSel) presetSel.addEventListener('change', () => {
-      const v = presetSel.value;
-      presetSel.value = '';
-      if (!v) return;
-      applyWeekdayPreset(v);
-    });
+    if (presetSel) {
+      const presetSelInst = createShadcnSelect(presetSel, {
+        placeholder: 'Apply preset…',
+        options: [
+          { value: 'office5',     label: 'Office 5d (Mon–Fri)' },
+          { value: 'hybrid3',     label: 'Hybrid 3d (Mon Wed Fri)' },
+          { value: 'hybrid4',     label: 'Hybrid 4d (no Fri)' },
+          { value: 'weekendOnly', label: 'Weekend trips only' },
+          { value: 'holiday',     label: 'Holiday / clear week' },
+        ],
+        onChange: (v) => {
+          if (!v) return;
+          applyWeekdayPreset(v);
+          // Revert to placeholder so the same preset can be picked again,
+          // and so the trigger doesn't pretend to hold persistent state.
+          presetSelInst.setValue('');
+        },
+      });
+    }
     const msBtn = $('planner-multi-suggest');
     if (msBtn) msBtn.addEventListener('click', multiSuggest);
     const presetsMenu = $('planner-presets-menu');
