@@ -593,6 +593,25 @@
     #planner-auto-suggest, #planner-load-sample, #planner-clear { width: auto !important; }
   }
 
+  /* Dropdown menus rendered inside .gen-actions (Presets, Backup) — Tailwind's
+     z-20 sits below the mobile sticky CTA bar (z-40); raise them. */
+  .gen-actions details > div[class*="absolute"] { z-index: 70 !important; }
+  /* shadcn-select panel must also clear the sticky CTA (z-40) and FAB (z-60). */
+  .shadcn-select-panel { z-index: 200 !important; }
+  /* Mobile: clamp dropdown width to viewport and right-anchor so they
+     don't overflow past the screen edge. */
+  @media (max-width: 640px) {
+    .gen-actions details > div[class*="absolute"] {
+      right: 0 !important; left: auto !important;
+      min-width: min(260px, calc(100vw - 32px)) !important;
+      max-width: calc(100vw - 32px) !important;
+    }
+    .gen-actions__batch { font-size: 11px; }
+    .gen-actions__batch .shadcn-select-trigger {
+      min-width: 56px; padding: 0.4rem 0.5rem;
+    }
+  }
+
   /* ─── Route section mobile polish ─── */
   @media (max-width: 640px) {
     /* From / Swap / To: stack From above To with Swap as a centered icon */
