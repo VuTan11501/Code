@@ -413,7 +413,12 @@
      Vanilla shadcn/Calendar clone. Trigger is a plain .btn so it
      inherits theme; popover is appended to <body> and positioned
      fixed under the trigger by JS. */
-  .suica-dr-trigger { gap: 0.5rem; }
+  .suica-dr-trigger {
+    display: flex; align-items: center; gap: 0.5rem;
+    height: 2.5rem; padding: 0.5rem 0.75rem; border-radius: var(--radius-md);
+    border: 1px solid var(--input); background: transparent; color: var(--foreground);
+    font-size: var(--fs-sm); width: 100%; text-align: left; justify-content: space-between;
+  }
   .suica-dr-trigger [data-dr-label] { font-variant-numeric: tabular-nums; }
   .suica-dr-popover {
     position: fixed; z-index: 60;
