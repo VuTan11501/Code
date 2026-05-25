@@ -640,6 +640,18 @@
   /* Dropdown menus rendered inside .gen-actions (Presets, Backup) — Tailwind's
      z-20 sits below the mobile sticky CTA bar (z-40); raise them. */
   .gen-actions details > div[class*="absolute"] { z-index: 70 !important; }
+  /* The parent .card has `overflow: hidden`, which clips any popover that
+     extends past its rounded corners (e.g. the Presets / Backup menus).
+     Allow overflow on cards/sections that host .gen-actions so dropdowns
+     can escape. Falls back gracefully where :has() is unsupported (those
+     browsers already had the clipping bug). */
+  .card:has(.gen-actions),
+  .card:has(.gen-actions) .card-content,
+  .card:has(.gen-actions) > * { overflow: visible; }
+  /* Ensure the <details> wrapper establishes its own stacking context above
+     siblings while open so the menu paints over neighbouring cells/buttons. */
+  .gen-actions__tools > details { position: relative; }
+  .gen-actions__tools > details[open] { z-index: 80; }
   /* shadcn-select panel must also clear the sticky CTA (z-40) and FAB (z-60). */
   .shadcn-select-panel { z-index: 200 !important; }
   /* Mobile: clamp dropdown width to viewport and right-anchor so they
