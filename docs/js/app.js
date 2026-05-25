@@ -1,10 +1,10 @@
 // ═══════════════════════════════════════════════════
 //  CONFIGURATION
 // ═══════════════════════════════════════════════════
-const OWNER = 'VuTan11501';
-const REPO = 'Code';
+const OWNER = localStorage.getItem('wf_dash_owner') || 'VuTan11501';
+const REPO = localStorage.getItem('wf_dash_repo') || 'Code';
 const API = 'https://api.github.com';
-const GIST_ID = 'abc2a47c0a396025a72a6580227ff493';
+const GIST_ID = localStorage.getItem('wf_dash_gist_id') || 'abc2a47c0a396025a72a6580227ff493';
 const WORKFLOWS = [
   { name: 'Auto Checkin', icon: '📥', iconName: 'logIn', file: 'auto-checkin.yml' },
   { name: 'Auto Checkout', icon: '📤', iconName: 'logOut', file: 'auto-checkout.yml' },

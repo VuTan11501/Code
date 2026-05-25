@@ -32,7 +32,7 @@ jobs:
         env:
           AZURE_REFRESH_TOKEN: ${{ secrets.AZURE_REFRESH_TOKEN }}
           GH_TOKEN: ${{ secrets.GH_PAT }}
-          GIST_ID: 'abc2a47c0a396025a72a6580227ff493'
+          GIST_ID: ${{ vars.GIST_ID || 'abc2a47c0a396025a72a6580227ff493' }}
         run: python .github/scripts/token_monitor.py --gist
 
       - name: Update secret if token rotated

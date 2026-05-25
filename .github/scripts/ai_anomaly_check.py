@@ -26,16 +26,15 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import anomaly_rules
 import ai_client
 import line_notify
+from user_config import (
+    EMPLOYEE_ID, GIST_ID, API_BASE, AZURE_APP_ID, AZURE_TENANT,
+)
 
 _PREFIX = "[anomaly]"
 JST = timezone(timedelta(hours=9))
 
 # ── Config ──
-AZURE_APP_ID = os.environ.get("AZURE_APP_ID", "f5be0f68-7285-4365-b979-10af0f3f4106")
-AZURE_TENANT = os.environ.get("AZURE_TENANT_ID", "f01e930a-b52e-42b1-b70f-a8882b5d043b")
 AZURE_SCOPE = f"api://{AZURE_APP_ID}/openid user.read offline_access"
-API_BASE = "https://api.fjpservice.com/api/"
-GIST_ID = "abc2a47c0a396025a72a6580227ff493"
 
 
 def log(msg):

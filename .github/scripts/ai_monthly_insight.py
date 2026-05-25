@@ -32,13 +32,12 @@ from email.mime.multipart import MIMEMultipart
 
 # Make sibling modules importable
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from user_config import (  # noqa: E402
+    GIST_ID, API_BASE, AZURE_APP_ID, AZURE_TENANT, BASE_HOURLY_RATE, EMPLOYEE_ID,
+)
 
 JST = timezone(timedelta(hours=9))
-GIST_ID = "abc2a47c0a396025a72a6580227ff493"
 INSIGHTS_FILE = "monthly-insights.json"
-API_BASE = "https://api.fjpservice.com/api/"
-AZURE_APP_ID = os.environ.get("AZURE_APP_ID", "f5be0f68-7285-4365-b979-10af0f3f4106")
-AZURE_TENANT = os.environ.get("AZURE_TENANT_ID", "f01e930a-b52e-42b1-b70f-a8882b5d043b")
 AZURE_SCOPE = f"api://{AZURE_APP_ID}/openid user.read offline_access"
 
 # OT Rate multipliers (same as ot_report.py / ot-salary.js)
@@ -48,7 +47,7 @@ RATES = {
     "sunday_day": 1.35,
     "weekday_sat": 1.25,
 }
-BASE_HOURLY = 1563  # ¥/h base (standard for EmpID 8883)
+BASE_HOURLY = BASE_HOURLY_RATE
 
 
 def log(msg, prefix="[insight]"):

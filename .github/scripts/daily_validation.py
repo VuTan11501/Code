@@ -17,10 +17,10 @@ from datetime import date, datetime, timedelta, timezone
 
 JST = timezone(timedelta(hours=9))
 
-AZURE_APP_ID = "f5be0f68-7285-4365-b979-10af0f3f4106"
-AZURE_TENANT = "f01e930a-b52e-42b1-b70f-a8882b5d043b"
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from user_config import API_BASE, AZURE_APP_ID, AZURE_TENANT  # noqa: E402
+
 AZURE_SCOPE = f"api://{AZURE_APP_ID}/openid user.read offline_access"
-API_BASE = "https://api.fjpservice.com/api/"
 
 
 def http_post(url, data=None, headers=None):

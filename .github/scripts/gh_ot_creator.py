@@ -13,19 +13,18 @@ import smtplib
 
 JST = timezone(timedelta(hours=9))
 
-# ── Config ──
-AZURE_APP_ID = "f5be0f68-7285-4365-b979-10af0f3f4106"
-AZURE_TENANT = "f01e930a-b52e-42b1-b70f-a8882b5d043b"
+# ── Config (from centralized user_config) ──
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from user_config import (  # noqa: E402
+    EMPLOYEE_ID, GIST_ID, API_BASE, AZURE_APP_ID, AZURE_TENANT,
+)
 AZURE_SCOPE = f"api://{AZURE_APP_ID}/openid user.read offline_access"
-API_BASE = "https://api.fjpservice.com/api/"
 
-EMPLOYEE_ID = 8883
-APPROVER = "HuyNQ23"
-ACCOUNT = "tanvc"
+APPROVER = os.environ.get("OT_APPROVER", "HuyNQ23")
+ACCOUNT = os.environ.get("DOKOKIN_ACCOUNT", "tanvc")
 CREATION_WINDOW_DAYS = 7   # forward: today + 7 days
 BACKWARD_DAYS = 1          # backward: today - 1 day (yesterday allowed by DokoKin)
 
-GIST_ID = "abc2a47c0a396025a72a6580227ff493"
 OT_GIST_FILE = "ot-requests.json"
 
 LOG_LINES = []

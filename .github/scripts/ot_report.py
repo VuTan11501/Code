@@ -18,6 +18,7 @@ from datetime import date, datetime, timedelta
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from ot_gist import load_ot_from_gist  # noqa: E402
+from user_config import BASE_HOURLY_RATE  # noqa: E402
 
 DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
@@ -28,7 +29,7 @@ RATES = {
     "weekday_sat": {"label": "Weekday/Saturday", "rate": 1.25, "color": "#2563eb"},
 }
 
-BASE_HOURLY = 1600  # Base hourly rate in JPY (example, adjustable)
+BASE_HOURLY = BASE_HOURLY_RATE
 
 
 def classify_ot_entry(entry):

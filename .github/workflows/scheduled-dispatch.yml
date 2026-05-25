@@ -29,7 +29,7 @@ jobs:
       - name: Self-looping dispatcher (checks every 30s)
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
-          GIST_ID: 'abc2a47c0a396025a72a6580227ff493'
+          GIST_ID: ${{ vars.GIST_ID || 'abc2a47c0a396025a72a6580227ff493' }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           LOOP_MINUTES: ${{ inputs.loop_minutes || '120' }}
         run: |

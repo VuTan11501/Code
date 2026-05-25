@@ -6,9 +6,12 @@ Zero external dependencies (stdlib only).
 """
 import json
 import os
+import sys
 import urllib.request
 
-GIST_ID = "abc2a47c0a396025a72a6580227ff493"
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from user_config import GIST_ID  # noqa: E402
+
 INSIGHTS_FILE = "monthly-insights.json"
 
 

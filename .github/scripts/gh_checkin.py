@@ -12,18 +12,18 @@ import smtplib
 
 # Make sibling modules in same dir importable when run via `python path/to/script.py`
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from ot_gist import load_ot_from_gist, GIST_ID  # noqa: E402
+from user_config import (  # noqa: E402
+    EMPLOYEE_ID, GIST_ID, API_BASE, AZURE_APP_ID, AZURE_TENANT,
+)
+from ot_gist import load_ot_from_gist  # noqa: E402
 from gist_safety import (  # noqa: E402
     read_gist_file, safe_patch_gist_file, validate_scheduled_runs_shape,
 )
 
 JST = timezone(timedelta(hours=9))
 
-# ── Azure AD / DokoKin config ──
-AZURE_APP_ID = "f5be0f68-7285-4365-b979-10af0f3f4106"
-AZURE_TENANT = "f01e930a-b52e-42b1-b70f-a8882b5d043b"
+# ── Azure AD scope (derived from config) ──
 AZURE_SCOPE = f"api://{AZURE_APP_ID}/openid user.read offline_access"
-API_BASE = "https://api.fjpservice.com/api/"
 
 LOG_LINES = []
 
@@ -196,7 +196,7 @@ def do_dakoku(token, checkin_type, lat, lon, is_checkout=False,
     """
     now = datetime.now(JST)
     body = {
-        "employeeId": 8883,
+        "employeeId": EMPLOYEE_ID,
         "appId": "com.fjp.portal",
         "logTime": now.strftime("%Y-%m-%dT%H:%M:%S"),
         "isCheckoutYesterday": is_checkout_yesterday,

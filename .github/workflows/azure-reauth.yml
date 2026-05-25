@@ -32,6 +32,6 @@ jobs:
       - name: Run device-code flow
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
-          GIST_ID: 'abc2a47c0a396025a72a6580227ff493'
+          GIST_ID: ${{ vars.GIST_ID || 'abc2a47c0a396025a72a6580227ff493' }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: python .github/scripts/azure_reauth.py
