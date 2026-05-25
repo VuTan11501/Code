@@ -1466,6 +1466,16 @@ async function loadEntriesFromGist() {
   return fileContent ? JSON.parse(fileContent) : [];
 }
 
+// Load OT requests from Gist for conflict detection (best-effort, returns [] on failure)
+async function _loadOtRequestsForConflicts() {
+  try {
+    const gist = await apiFetch(`/gists/${GIST_ID}`);
+    const file = gist.files['ot-requests.json'];
+    const content = file ? (window.readGistFile ? await window.readGistFile(file) : file.content || '') : '';
+    return content ? JSON.parse(content) : [];
+  } catch { return []; }
+}
+
 async function addScheduledRun() {
   if (!sessionToken) { toast('⚠️ Not authenticated'); return; }
   const workflow = document.getElementById('schedWorkflow').value;
@@ -1524,8 +1534,14 @@ async function addScheduledRun() {
 async function saveScheduledEntry(newEntry) {
   try {
     const entries = await loadEntriesFromGist();
-    const conflict = detectCheckinConflict(newEntry, entries, -1);
-    if (conflict && !await uiConfirm({ title: 'Checkin conflict', message: conflict + '\n\nProceed anyway?', confirmText: 'Add anyway', danger: true })) return;
+    const otRequests = await _loadOtRequestsForConflicts();
+    const conflicts = detectScheduleConflicts(newEntry, entries, -1, otRequests);
+    if (conflicts.length) {
+      const hasErrors = conflicts.some(c => c.severity === 'error');
+      const title = hasErrors ? '🚨 Schedule Conflict' : '⚠️ Schedule Warning';
+      const msg = _formatConflictsMessage(conflicts) + '\n\nProceed anyway?';
+      if (!await uiConfirm({ title, message: msg, confirmText: hasErrors ? 'Add anyway (risky)' : 'Add anyway', danger: hasErrors })) return;
+    }
     entries.push(newEntry);
     await saveToGist(entries);
     toast('✅ Schedule added');
@@ -1578,6 +1594,204 @@ function _ciDaySet(entry) {
   else if (r.pattern === 'weekly') { (r.days || []).forEach(i => out.add(`dow:${i}`)); }
   // monthly: rare, hard to compare with weekly. Skip — server-side will catch on API call.
   return out;
+}
+
+// ═══════════════════════════════════════════════════
+//  SMART CONFLICT DETECTION (Rule 2 + Holiday + Duplicate)
+// ═══════════════════════════════════════════════════
+
+// Japanese national holidays 2026-2027 (hardcoded, covers 2 years)
+const JP_HOLIDAYS = new Set([
+  // 2026
+  '2026-01-01','2026-01-12','2026-02-11','2026-02-23','2026-03-20',
+  '2026-04-29','2026-05-03','2026-05-04','2026-05-05','2026-05-06',
+  '2026-07-20','2026-08-11','2026-09-21','2026-09-22','2026-09-23',
+  '2026-10-12','2026-11-03','2026-11-23','2026-12-23',
+  // 2027
+  '2027-01-01','2027-01-11','2027-02-11','2027-02-23','2027-03-21',
+  '2027-04-29','2027-05-03','2027-05-04','2027-05-05',
+  '2027-07-19','2027-08-11','2027-09-20','2027-09-23',
+  '2027-10-11','2027-11-03','2027-11-23','2027-12-23',
+]);
+
+/**
+ * Comprehensive conflict detection for schedule entries.
+ * Returns array of { severity: 'error'|'warning', type: string, message: string }
+ * @param {object} newEntry - Entry being added/edited
+ * @param {object[]} existingEntries - Current Gist entries
+ * @param {number} excludeIdx - Index to exclude (for edits), -1 for new
+ * @param {object[]} otRequests - OT requests array (from ot-requests.json)
+ */
+function detectScheduleConflicts(newEntry, existingEntries, excludeIdx, otRequests) {
+  const conflicts = [];
+  if (!newEntry || newEntry.enabled === false) return conflicts;
+
+  // ── Rule 1: Double CI (reuse existing logic, convert to array format) ──
+  const rule1 = detectCheckinConflict(newEntry, existingEntries, excludeIdx);
+  if (rule1) conflicts.push({ severity: 'error', type: 'rule1-double-ci', message: rule1 });
+
+  // ── Rule 2: CO before OT end (cross-midnight danger) ──
+  if (newEntry.workflow === 'auto-checkout.yml' && otRequests && otRequests.length) {
+    const coConflicts = _detectCOBeforeOT(newEntry, otRequests);
+    conflicts.push(...coConflicts);
+  }
+
+  // ── Holiday warning: CI/CO on JP national holiday ──
+  if (['auto-checkin.yml', 'auto-checkout.yml'].includes(newEntry.workflow)) {
+    const holConflicts = _detectHolidayConflict(newEntry);
+    conflicts.push(...holConflicts);
+  }
+
+  // ── Duplicate: same workflow, same time, same day pattern ──
+  const dupConflicts = _detectDuplicateSchedule(newEntry, existingEntries, excludeIdx);
+  conflicts.push(...dupConflicts);
+
+  return conflicts;
+}
+
+// Rule 2: Check if a CO entry would fire BEFORE OT ends on a cross-midnight OT day
+function _detectCOBeforeOT(coEntry, otRequests) {
+  const results = [];
+  const coTime = _getEntryTime(coEntry);
+  if (!coTime) return results;
+
+  const coDays = _entryActiveDates(coEntry, 30);
+
+  for (const otReq of otRequests) {
+    if (!otReq.date || !otReq.start || !otReq.end) continue;
+    const [startH, startM] = otReq.start.split(':').map(Number);
+    const [endH, endM] = otReq.end.split(':').map(Number);
+    const isCrossMidnight = (endH * 60 + endM) < (startH * 60 + startM);
+
+    if (!isCrossMidnight) continue; // same-day OT — CO after work hours is fine
+
+    const otDate = otReq.date;
+    if (!coDays.has(otDate)) continue;
+
+    // For cross-midnight OT, ANY CO on the workday closes the session before OT ends next day.
+    results.push({
+      severity: 'error',
+      type: 'rule2-co-before-ot',
+      message: `🚨 Rule 2 violation: CO at ${coTime} on ${otDate} will close the work session BEFORE cross-midnight OT ${otReq.start}→${otReq.end} finishes.\n\nThe OT hours will be LOST. Add ${otDate} to skip_dates or move CO to after ${otReq.end} next day.`
+    });
+  }
+  return results;
+}
+
+// Holiday detection
+function _detectHolidayConflict(entry) {
+  const results = [];
+  const dates = _entryActiveDates(entry, 60); // check 60 days ahead
+
+  for (const d of dates) {
+    if (JP_HOLIDAYS.has(d)) {
+      const wfName = entry.workflow === 'auto-checkin.yml' ? 'Checkin' : 'Checkout';
+      results.push({
+        severity: 'warning',
+        type: 'holiday-schedule',
+        message: `📅 ${wfName} scheduled on JP holiday (${d}). Are you sure you want to work this day?`
+      });
+      break; // only show first occurrence to avoid spam
+    }
+  }
+  return results;
+}
+
+// Duplicate detection: same workflow + same time + overlapping days
+function _detectDuplicateSchedule(newEntry, existing, excludeIdx) {
+  const results = [];
+  const newTime = _getEntryTime(newEntry);
+  if (!newTime) return results;
+  const newWf = newEntry.workflow;
+
+  for (let i = 0; i < existing.length; i++) {
+    if (i === excludeIdx) continue;
+    const e = existing[i];
+    if (e.enabled === false) continue;
+    if (e.type === 'once' && e.dispatched) continue;
+    if (e.workflow !== newWf) continue;
+
+    const eTime = _getEntryTime(e);
+    if (eTime !== newTime) continue;
+
+    // Same workflow, same time — check day overlap
+    const newDays = _ciDaySet(newEntry);
+    const eDays = _ciDaySet(e);
+    const overlap = [...newDays].filter(d => eDays.has(d));
+    if (overlap.length) {
+      results.push({
+        severity: 'warning',
+        type: 'duplicate-schedule',
+        message: `⚠️ Duplicate: same workflow (${_wfLabel(newWf)}) at ${newTime} already exists on overlapping days. This may cause redundant dispatches.`
+      });
+      break;
+    }
+  }
+  return results;
+}
+
+// Helper: get time string from entry ("HH:MM")
+function _getEntryTime(entry) {
+  if (entry.type === 'once') return (entry.run_at || '').slice(11, 16);
+  return entry.recurrence?.time || null;
+}
+
+// Helper: compute set of concrete YYYY-MM-DD dates this entry fires on (next N days)
+function _entryActiveDates(entry, daysAhead) {
+  const dates = new Set();
+  const now = jstNow();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+  if (entry.type === 'once') {
+    const d = (entry.run_at || '').slice(0, 10);
+    if (d) dates.add(d);
+    return dates;
+  }
+
+  const r = entry.recurrence || {};
+  const startLimit = r.start_date ? new Date(r.start_date + 'T00:00:00+09:00') : null;
+  const endLimit = r.end_date ? new Date(r.end_date + 'T00:00:00+09:00') : null;
+  const skipSet = new Set(r.skip_dates || []);
+
+  for (let i = 0; i < daysAhead; i++) {
+    const d = new Date(today.getTime() + i * 86400000);
+    if (startLimit && d < startLimit) continue;
+    if (endLimit && d > endLimit) continue;
+
+    const dow = d.getDay(); // JS: Sun=0
+    const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    if (skipSet.has(dateStr)) continue;
+
+    let match = false;
+    if (r.pattern === 'daily') match = true;
+    else if (r.pattern === 'weekdays') match = dow >= 1 && dow <= 5;
+    else if (r.pattern === 'weekly') match = (r.days || []).includes(dow);
+    else if (r.pattern === 'monthly') match = (r.dates || []).includes(d.getDate());
+
+    if (match) dates.add(dateStr);
+  }
+  return dates;
+}
+
+// Helper: workflow file → friendly label
+function _wfLabel(wf) {
+  const map = { 'auto-checkin.yml': 'Checkin', 'auto-checkout.yml': 'Checkout', 'auto-ot-creator.yml': 'OT Creator' };
+  return map[wf] || wf;
+}
+
+// ── Format conflict array into rich confirm message ──
+function _formatConflictsMessage(conflicts) {
+  const errors = conflicts.filter(c => c.severity === 'error');
+  const warnings = conflicts.filter(c => c.severity === 'warning');
+  let msg = '';
+  if (errors.length) {
+    msg += errors.map(c => c.message).join('\n\n');
+  }
+  if (warnings.length) {
+    if (msg) msg += '\n\n───────────────\n\n';
+    msg += warnings.map(c => c.message).join('\n\n');
+  }
+  return msg;
 }
 
 async function deleteScheduledRun(index) {
@@ -1907,8 +2121,14 @@ async function saveEditSchedule() {
 
   try {
     const entries = await loadEntriesFromGist();
-    const conflict = detectCheckinConflict(updatedEntry, entries, index);
-    if (conflict && !await uiConfirm({ title: 'Checkin conflict', message: conflict + '\n\nProceed anyway?', confirmText: 'Save anyway', danger: true })) return;
+    const otRequests = await _loadOtRequestsForConflicts();
+    const conflicts = detectScheduleConflicts(updatedEntry, entries, index, otRequests);
+    if (conflicts.length) {
+      const hasErrors = conflicts.some(c => c.severity === 'error');
+      const title = hasErrors ? '🚨 Schedule Conflict' : '⚠️ Schedule Warning';
+      const msg = _formatConflictsMessage(conflicts) + '\n\nProceed anyway?';
+      if (!await uiConfirm({ title, message: msg, confirmText: hasErrors ? 'Save anyway (risky)' : 'Save anyway', danger: hasErrors })) return;
+    }
     entries[index] = updatedEntry;
     await saveToGist(entries);
     toast('✅ Schedule updated');
