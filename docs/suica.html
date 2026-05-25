@@ -359,7 +359,7 @@
     .planner-snapshots-section, .planner-recent-section,
     #planner-fare-range-row, #planner-load-status,
     #suicaPdfOverlay, #suicaLogModal, #app-toast-host,
-    .btn, .combobox-panel, button { display: none !important; }
+    .btn, .combobox-panel { /* buttons and panels visible; avoid hiding all buttons globally */ display: initial; }
     /* Keep the at-a-glance estimate readable on paper */
     main { max-width: none !important; padding: 0 !important; }
     .card { box-shadow: none !important; border: 1px solid #ccc !important; page-break-inside: avoid; }
