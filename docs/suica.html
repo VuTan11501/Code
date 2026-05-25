@@ -626,8 +626,8 @@
     .route-row .field { flex: 1 1 100%; min-width: 0; }
     /* Slightly larger touch target for swap on mobile */
     #planner-swap { width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center; }
-    /* Ensure icon rotation class for swapped arrow */
-    .icon.swap-arrow { transform: rotate(90deg); }
+    /* swap-arrow: two-way icon — no rotation needed */
+    .icon.swap-arrow { transform: none; }
     /* "Add as weekday commute" and "Add to weekend trip pool" full-width stacked */
     [data-planner-add] { flex: 1 1 100%; justify-content: center; min-height: 42px; }
   }
@@ -794,7 +794,7 @@
               </div>
             </div>
             <button id="planner-swap" class="btn sm btn-ghost btn-icon self-end" type="button" aria-label="Swap from and to" title="Swap from ↔ to">
-              <span data-icon="chevronRight" data-size="14" data-icon-class="swap-arrow"></span>
+              <span data-icon="swapHoriz" data-size="16"></span>
             </button>
             <div class="field flex-1 min-w-[180px]">
               <label class="field-label text-xs text-muted-foreground font-medium block mb-1" id="planner-to-label">To station</label>
