@@ -590,6 +590,15 @@
     .gen-actions__batch .shadcn-select-trigger { min-height: 40px; padding: 0.4rem 0.75rem; }
     /* Plan tools group: collapse spacing and let buttons grow */
     .gen-actions__tools { flex-basis: 100%; justify-content: stretch; }
+    /* Mobile: make batch selector and plan tool buttons readable with labels */
+    .gen-actions__batch { flex: 1 1 auto; min-width: 0; }
+    .gen-actions__batch .shadcn-select-trigger { min-width: 64px; padding: 0.4rem 0.75rem; }
+    /* Make plan tool buttons wrap to two columns and show labels on mobile */
+    .gen-actions__tools { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+    .gen-actions__tools .btn { flex: 1 1 calc(50% - 0.5rem); min-width: 0; justify-content: center; }
+    .gen-actions__tools .btn .btn-label { display: inline-block; margin-left: 0.5rem; }
+    /* Ensure the sticky mobile CTA shows its label */
+    .gen-mobile-cta .btn-label { display: inline-block; margin-left: 0.5rem; }
     .gen-actions__tools .btn { flex: 1 1 calc(50% - 0.35rem); justify-content: center; min-height: 40px; }
     .gen-actions__utils { margin-left: 0; flex-basis: 100%; justify-content: space-between; flex-wrap: wrap; gap: 0.4rem; }
     .gen-actions__utils .btn { min-height: 40px; flex: 1 1 auto; justify-content: center; }
