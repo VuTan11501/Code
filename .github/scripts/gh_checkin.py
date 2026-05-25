@@ -4,7 +4,7 @@ Zero external dependencies (stdlib only).
 Reads schedule.json, matches current JST time, executes checkin/checkout via API.
 Optionally sends email notification via SMTP.
 """
-import os, sys, json, urllib.request, urllib.parse, traceback, time
+import os, sys, json, urllib.request, urllib.parse, traceback, time, uuid
 from datetime import datetime, timezone, timedelta, date
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -12,7 +12,10 @@ import smtplib
 
 # Make sibling modules in same dir importable when run via `python path/to/script.py`
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from ot_gist import load_ot_from_gist  # noqa: E402
+from ot_gist import load_ot_from_gist, GIST_ID  # noqa: E402
+from gist_safety import (  # noqa: E402
+    read_gist_file, safe_patch_gist_file, validate_scheduled_runs_shape,
+)
 
 JST = timezone(timedelta(hours=9))
 
@@ -478,7 +481,6 @@ def set_output(key, value):
         with open(output_file, "a") as f:
             # Use multiline syntax for values that might contain special chars
             if "\n" in str(value):
-                import uuid
                 delim = f"ghadelimiter_{uuid.uuid4()}"
                 f.write(f"{key}<<{delim}\n{value}\n{delim}\n")
             else:
@@ -491,6 +493,180 @@ def set_summary(markdown):
     if summary_file:
         with open(summary_file, "a") as f:
             f.write(markdown + "\n")
+
+
+# ═══════════════════════════════════════════════════════════
+#  OT-AWARE CHECKOUT SCHEDULING
+# ═══════════════════════════════════════════════════════════
+
+SCHEDULED_RUNS_FILE = "scheduled-runs.json"
+
+
+def _compute_ot_co_time(ot_entry):
+    """Compute the required checkout datetime (JST) that covers an OT entry's end.
+
+    For cross-midnight OT (end time < start time or end <= 06:00), the CO is on the
+    next calendar day. Returns a tz-aware datetime in JST.
+    """
+    ot_date = datetime.strptime(ot_entry["date"], "%Y-%m-%d").date()
+    end_parts = ot_entry["end"].split(":")
+    end_h, end_m = int(end_parts[0]), int(end_parts[1])
+    start_parts = ot_entry["start"].split(":")
+    start_h, start_m = int(start_parts[0]), int(start_parts[1])
+
+    end_total_min = end_h * 60 + end_m
+    start_total_min = start_h * 60 + start_m
+
+    # Cross-midnight: end is earlier in day than start, or end is <= 06:00 with late start
+    is_cross_midnight = (end_total_min < start_total_min) or (end_h <= 6 and start_h >= 18)
+    if is_cross_midnight:
+        co_date = ot_date + timedelta(days=1)
+    else:
+        co_date = ot_date
+
+    return datetime(co_date.year, co_date.month, co_date.day,
+                    end_h, end_m, tzinfo=JST)
+
+
+def _find_existing_co_entry(entries, ot_co_dt, tolerance_min=30):
+    """Check if a scheduled CO entry already covers the OT end time.
+
+    Looks for any auto-checkout entry (once or recurring) that fires at or within
+    `tolerance_min` minutes AFTER ot_co_dt. Returns True if covered.
+    """
+    co_date_str = ot_co_dt.strftime("%Y-%m-%d")
+    co_dow_js = ot_co_dt.isoweekday() % 7  # JS convention: Sun=0..Sat=6
+
+    for entry in entries:
+        if entry.get("dispatched"):
+            continue
+        if entry.get("enabled") is False:
+            continue
+        wf = entry.get("workflow", "")
+        if "checkout" not in wf:
+            continue
+
+        if entry.get("type") == "once" and entry.get("run_at"):
+            try:
+                run_at = datetime.fromisoformat(entry["run_at"])
+                if run_at.tzinfo is None:
+                    run_at = run_at.replace(tzinfo=JST)
+                # CO must be at or after OT end (0 <= diff, no negative tolerance)
+                diff = (run_at - ot_co_dt).total_seconds() / 60
+                if 0 <= diff <= tolerance_min:
+                    return True
+            except (ValueError, TypeError):
+                continue
+        elif entry.get("type") == "recurring":
+            rec = entry.get("recurrence", {})
+            entry_time = rec.get("time") or entry.get("time", "")
+            if not entry_time:
+                continue
+            t_parts = entry_time.split(":")
+            if len(t_parts) < 2:
+                continue
+            e_h, e_m = int(t_parts[0]), int(t_parts[1])
+
+            # Validate recurrence pattern runs on ot_co_dt's date
+            pattern = rec.get("pattern", "daily")
+            if pattern == "weekdays" and co_dow_js in (0, 6):
+                continue  # weekdays-only won't run on Sat/Sun
+            elif pattern == "weekly":
+                days = rec.get("days", [])
+                if co_dow_js not in days:
+                    continue
+            elif pattern == "monthly":
+                dates = rec.get("dates", [])
+                if ot_co_dt.day not in dates:
+                    continue
+
+            # Check date range
+            start_date = rec.get("start_date")
+            end_date = rec.get("end_date")
+            if start_date and co_date_str < start_date:
+                continue
+            if end_date and co_date_str > end_date:
+                continue
+
+            # Check skip_dates
+            skip_dates = set(rec.get("skip_dates", []))
+            if co_date_str in skip_dates:
+                continue
+
+            # Build datetime for comparison on the same day as ot_co_dt
+            entry_dt = ot_co_dt.replace(hour=e_h, minute=e_m, second=0)
+            diff = (entry_dt - ot_co_dt).total_seconds() / 60
+            if 0 <= diff <= tolerance_min:
+                return True
+
+    return False
+
+
+def ensure_ot_checkout_scheduled(ot_entries_today, now_jst, location_key="home"):
+    """Ensure a checkout entry exists in Gist scheduled-runs.json covering OT end.
+
+    Called after successful checkin or when early-CO is skipped.
+    Creates a once-type entry in the Gist if no existing CO covers the OT end time.
+
+    Returns list of created entry descriptions (for logging).
+    """
+    pat = os.environ.get("GH_PAT")
+    if not pat:
+        log("  ⚠️ GH_PAT not set — cannot create OT checkout schedule")
+        return []
+
+    created = []
+    for ot_entry in ot_entries_today:
+        ot_co_dt = _compute_ot_co_time(ot_entry)
+
+        # Only schedule future COs
+        if ot_co_dt <= now_jst:
+            log(f"  ⏭️ OT CO time {ot_co_dt.strftime('%m-%d %H:%M')} already passed, skip")
+            continue
+
+        # Read current Gist schedule
+        try:
+            snapshot = read_gist_file(pat, GIST_ID, SCHEDULED_RUNS_FILE, log=log)
+        except Exception as e:
+            log(f"  ⚠️ Failed to read Gist scheduled-runs: {e}")
+            return created
+
+        entries = snapshot["parsed"] if isinstance(snapshot.get("parsed"), list) else []
+
+        # Check if CO already covered
+        if _find_existing_co_entry(entries, ot_co_dt):
+            log(f"  ✅ OT CO at {ot_co_dt.strftime('%m-%d %H:%M')} already scheduled")
+            continue
+
+        # Create new once-type CO entry
+        new_entry = {
+            "id": str(uuid.uuid4())[:8],
+            "type": "once",
+            "workflow": "auto-checkout.yml",
+            "run_at": ot_co_dt.isoformat(),
+            "location": location_key,
+            "note": f"OT CO (auto-created by CI flow, OT {ot_entry['start']}→{ot_entry['end']})",
+            "created": now_jst.isoformat(timespec="seconds"),
+            "dispatched": False,
+        }
+        entries.append(new_entry)
+
+        # Write back to Gist with safety
+        new_content = json.dumps(entries, indent=2, ensure_ascii=False)
+        try:
+            safe_patch_gist_file(
+                pat, GIST_ID, SCHEDULED_RUNS_FILE,
+                new_content, snapshot,
+                shape_validator=validate_scheduled_runs_shape,
+                log=log,
+            )
+            desc = f"CO @ {ot_co_dt.strftime('%Y-%m-%d %H:%M')} JST"
+            log(f"  📅 Created OT checkout schedule: {desc}")
+            created.append(desc)
+        except Exception as e:
+            log(f"  ⚠️ Failed to write OT CO schedule: {e}")
+
+    return created
 
 
 # ═══════════════════════════════════════════════════════════
@@ -707,22 +883,31 @@ def main():
                 ).replace(tzinfo=JST)
             except (ValueError, KeyError):
                 pass
-            is_early_co = entry_dt_for_check is None or entry_dt_for_check.hour < 20
+            # Compare CO time against actual OT end (not static hour < 20)
             note_marks_ot = any(k in (note or "").lower() for k in ("ot", "night"))
-            if has_ot_today and is_early_co and not note_marks_ot:
+            if has_ot_today and not note_marks_ot:
                 ot_entry = next(ot for ot in pending_ot if ot["date"] == today_str)
-                log(
-                    f"⏭️ Skip early CO — {today_str} has scheduled OT "
-                    f"{ot_entry.get('start','?')}→{ot_entry.get('end','?')}. "
-                    f"OT CO at 03:30 next-day will close the shift."
-                )
-                set_output("skipped", "true")
-                set_summary(
-                    f"⏭️ **Skipped early CO** — OT scheduled today "
-                    f"({ot_entry.get('start','?')}→{ot_entry.get('end','?')}). "
-                    f"Will CO at 03:30 next-day instead."
-                )
-                return  # No email for routine domain-rule skips
+                ot_co_dt = _compute_ot_co_time(ot_entry)
+                is_early_co = entry_dt_for_check is None or entry_dt_for_check < ot_co_dt
+                if is_early_co:
+                    log(
+                        f"⏭️ Skip early CO — {today_str} has scheduled OT "
+                        f"{ot_entry.get('start','?')}→{ot_entry.get('end','?')}. "
+                        f"OT CO at end-time will close the shift."
+                    )
+                    # Ensure the later OT checkout is actually scheduled in Gist
+                    ot_today_list = [ot for ot in pending_ot if ot["date"] == today_str]
+                    created = ensure_ot_checkout_scheduled(ot_today_list, now_jst, location_key)
+                    if created:
+                        log(f"  📅 Auto-created OT CO entries: {', '.join(created)}")
+                    set_output("skipped", "true")
+                    set_summary(
+                        f"⏭️ **Skipped early CO** — OT scheduled today "
+                        f"({ot_entry.get('start','?')}→{ot_entry.get('end','?')}). "
+                        f"Will CO at OT end time instead."
+                        + (f"\n📅 Auto-scheduled: {', '.join(created)}" if created else "")
+                    )
+                    return  # No email for routine domain-rule skips
 
         # ── Execute (with retry on server errors) ──
         emoji = "📥" if action == "checkin" else "📤"
@@ -748,6 +933,36 @@ def main():
             ci_after, co_after = get_dakoku_status(dokokin_token, verify_date)
             if ci_after:
                 log(f"  Verified: CI={ci_after}, CO={co_after or 'pending'}")
+
+            # ── OT-aware CO scheduling ──
+            # After successful CI: check if today has OT, ensure CO covers OT end.
+            # After successful CO: check if CO time < OT end → schedule later CO.
+            if action == "checkin":
+                ot_data = load_ot_from_gist(log=log)
+                if ot_data is None:
+                    ot_data = schedule.get("pending_ot", []) or []
+                ot_today = [ot for ot in ot_data if ot.get("date") == today_str]
+                if ot_today:
+                    log(f"🔍 OT-aware check: {len(ot_today)} OT request(s) today")
+                    created = ensure_ot_checkout_scheduled(ot_today, now_jst, location_key)
+                    if created:
+                        result_detail += f" | Auto-scheduled CO: {', '.join(created)}"
+            elif action == "checkout" and not is_checkout_yesterday:
+                # CO just executed. Check if we still need a later CO for OT.
+                ot_data = load_ot_from_gist(log=log)
+                if ot_data is None:
+                    ot_data = schedule.get("pending_ot", []) or []
+                ot_today = [ot for ot in ot_data if ot.get("date") == today_str]
+                if ot_today:
+                    # Check if our CO time is before OT end
+                    for ot in ot_today:
+                        ot_co_dt = _compute_ot_co_time(ot)
+                        if now_jst < ot_co_dt:
+                            log(f"⚠️ CO at {now_jst.strftime('%H:%M')} is before OT end "
+                                f"{ot_co_dt.strftime('%m-%d %H:%M')} — scheduling later CO")
+                            created = ensure_ot_checkout_scheduled([ot], now_jst, location_key)
+                            if created:
+                                result_detail += f" | Auto-scheduled later CO: {', '.join(created)}"
 
             set_output("success", "true")
             set_summary(
