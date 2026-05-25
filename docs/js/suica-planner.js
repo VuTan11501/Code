@@ -2050,7 +2050,9 @@
       auto_topup: { threshold: +state.settings.topup_threshold, amount: +state.settings.topup_amount },
       teiki: [],
       weekly_pattern: pattern,
-      leisure_pool: state.leisure.map((l) => ({ route: l.route, weight: +l.weight })),
+      leisure_pool: state.leisure
+        .filter((l) => l && l.route)
+        .map((l) => ({ route: l.route, weight: Math.max(1, Number(l.weight) || 1) })),
       leisure_monthly_count: [+state.settings.leisure_min, +state.settings.leisure_max],
       off_days: [],
       timing: {
