@@ -219,7 +219,9 @@
   .btn.btn-outline:hover { color: var(--foreground); background: var(--accent); border-color: var(--input); }
 
   /* ───── Combobox (shadcn-style) ───── */
-  .combobox-wrapper { position: relative; width: 100%; }
+  .combobox-wrapper { position: relative; width: 100%; z-index: 200; }
+  /* Ensure combobox trigger is above nearby controls and accepts pointer events */
+  .combobox-trigger { position: relative; z-index: 201; pointer-events: auto; }
   .combobox-trigger {
     display: flex; align-items: center; width: 100%; height: 2.5rem;
     padding: 0.5rem 2rem 0.5rem 0.75rem;
