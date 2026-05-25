@@ -220,6 +220,10 @@
 
   /* ───── Combobox (shadcn-style) ───── */
   .combobox-wrapper { position: relative; width: 100%; z-index: 200; }
+  /* When open or focused, raise the wrapper above sibling comboboxes so the
+     dropdown panel paints on top of the next trigger. */
+  .combobox-wrapper:focus-within,
+  .combobox-wrapper.is-open { z-index: 400; }
   /* Ensure combobox trigger is above nearby controls and accepts pointer events */
   .combobox-trigger { position: relative; z-index: 201; pointer-events: auto; }
   .combobox-trigger {
@@ -236,11 +240,14 @@
   .combobox-trigger:focus, .combobox-trigger.is-open { outline: none; border-color: var(--ring); box-shadow: var(--shadow-glow); }
   .combobox-trigger .combobox-placeholder { color: var(--muted-foreground); }
   .combobox-panel {
-    position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 50;
-    background: var(--card); border: 1px solid var(--border);
+    position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 500;
+    background: var(--popover, var(--card)); border: 1px solid var(--border);
     border-radius: var(--radius-md); box-shadow: var(--shadow-lg, 0 10px 24px rgba(0,0,0,0.3));
     padding: 6px; max-height: 300px; display: flex; flex-direction: column;
     animation: picker-slide 200ms cubic-bezier(0.16,1,0.3,1);
+    /* Solid backdrop so content underneath never bleeds through. */
+    background-color: var(--popover, var(--card));
+    backdrop-filter: none;
   }
   .combobox-search { margin-bottom: 6px; }
   .combobox-list { overflow-y: auto; flex: 1; min-height: 40px; }
@@ -421,6 +428,14 @@
     border: 1px solid var(--input); background: transparent; color: var(--foreground);
     font-size: var(--fs-sm); width: 100%; text-align: left; justify-content: space-between;
   }
+  /* When used as a small button (e.g. in section headers), match .btn.sm sizing
+     so it doesn't tower over neighbouring small buttons. */
+  .suica-dr-trigger.sm {
+    height: auto; min-height: 30px;
+    padding: 0.375rem 0.75rem; font-size: var(--fs-xs);
+    border-radius: var(--radius-sm);
+    width: auto;
+  }
   .suica-dr-trigger [data-dr-label] { font-variant-numeric: tabular-nums; }
   .suica-dr-popover {
     position: fixed; z-index: 60;
@@ -591,17 +606,30 @@
     }
     .gen-actions__batch .shadcn-select-trigger { min-height: 40px; padding: 0.4rem 0.75rem; }
     /* Plan tools group: collapse spacing and let buttons grow */
-    .gen-actions__tools { flex-basis: 100%; justify-content: stretch; }
+    .gen-actions__tools { flex-basis: 100%; }
     /* Mobile: make batch selector and plan tool buttons readable with labels */
     .gen-actions__batch { flex: 1 1 auto; min-width: 0; }
     .gen-actions__batch .shadcn-select-trigger { min-width: 64px; padding: 0.4rem 0.75rem; }
-    /* Make plan tool buttons wrap to two columns and show labels on mobile */
-    .gen-actions__tools { display: flex; flex-wrap: wrap; gap: 0.5rem; }
-    .gen-actions__tools .btn { flex: 1 1 calc(50% - 0.5rem); min-width: 0; justify-content: center; }
-    .gen-actions__tools .btn .btn-label { display: inline-block; margin-left: 0.5rem; }
+    /* Plan tools = 4 actions (3 buttons + 1 <details>); display as a 2×2 grid
+       so every cell is exactly equal width regardless of label length. */
+    .gen-actions__tools {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.5rem;
+      padding: 0.35rem;
+    }
+    /* Every direct child of the tools group spans one grid cell evenly,
+       and any button (including the <summary> inside <details>) fills its cell. */
+    .gen-actions__tools > * { width: 100%; min-width: 0; }
+    .gen-actions__tools > details { position: relative; }
+    .gen-actions__tools > details > summary,
+    .gen-actions__tools .btn {
+      width: 100%; justify-content: center; min-height: 40px;
+      padding-inline: 0.5rem;
+    }
+    .gen-actions__tools .btn-label { display: inline-block; margin-left: 0.4rem; }
     /* Ensure the sticky mobile CTA shows its label */
     .gen-mobile-cta .btn-label { display: inline-block; margin-left: 0.5rem; }
-    .gen-actions__tools .btn { flex: 1 1 calc(50% - 0.35rem); justify-content: center; min-height: 40px; }
     .gen-actions__utils { margin-left: 0; flex-basis: 100%; justify-content: space-between; flex-wrap: wrap; gap: 0.4rem; }
     .gen-actions__utils .btn { min-height: 40px; flex: 1 1 auto; justify-content: center; }
     /* The big "Generate Suica PDF" full-width override from the older
