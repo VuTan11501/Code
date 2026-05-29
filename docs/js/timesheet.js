@@ -194,34 +194,6 @@ function _calcLostForDay(d) {
 // Back-compat shim for any callers still using the old signature.
 function _calcLostMinForDay(d) { return _calcLostForDay(d).lostMin; }
 
-// Render the "OT Request" cell with an approval-status icon next to the
-// requested hours. 3 visual states (rejected/approved/pending) are based on:
-//   • d.otRequestStatus  — explicit integer from server enrichment (if
-//     present), 2=approved, 3=rejected, anything else=pending
-//   • d.hasUnapprovedOT  — fallback boolean when status not enriched
-// When otRequest is empty/0, no icon is shown.
-function _otRequestCell(d) {
-  const hhmm = d.otRequest || '';
-  if (!hhmm || _hhmmToMin(hhmm) <= 0) return '';
-  let icon, tip, color;
-  const st = typeof d.otRequestStatus === 'number' ? d.otRequestStatus : null;
-  if (st === 3) {
-    icon = 'x'; color = 'var(--destructive)';
-    tip  = 'OT request was rejected — credit will not be paid';
-  } else if (st === 2 || (st == null && d.hasUnapprovedOT === false)) {
-    icon = 'check'; color = 'var(--success)';
-    tip  = 'OT request approved';
-  } else {
-    icon = 'hourglass'; color = 'var(--warning)';
-    tip  = 'OT request pending manager approval';
-  }
-  return `<span class="inline-flex items-center gap-1">
-    <span>${hhmm}</span>
-    <span class="tooltip-trigger" data-tooltip="${tip.replace(/"/g, '&quot;')}" style="color:${color};display:inline-flex"
-      data-icon="${icon}" data-size="12" aria-label="${tip.replace(/"/g, '&quot;')}"></span>
-  </span>`;
-}
-
 // Yen value of one day's lost OT — applies same 3-line formula as
 // OT_SALARY.calcMonthlySummary: base 125% + Sunday +10% + Night +25%.
 function _lostYenFromDay(parts) {
@@ -496,7 +468,7 @@ function renderTimesheet() {
             <td class="ts-cell">${d.out || ''}</td>
             <td class="ts-cell text-muted-foreground">${d.break || ''}</td>
             <td class="ts-cell">${d.actualWorking || ''}</td>
-            <td class="ts-cell font-medium">${_otRequestCell(d)}</td>
+            <td class="ts-cell font-medium">${d.otRequest || ''}</td>
             <td class="ts-cell">${d.otNormal || ''}</td>
             <td class="ts-cell">${d.otMidnight || ''}</td>
             <td class="ts-cell">${d.otSat || ''}</td>
