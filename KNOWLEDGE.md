@@ -349,12 +349,18 @@ After a multi-phase refactor that touches workers / dispatcher / Gist writes, ru
 2. **Lease**: `gh api /gists/{GIST_ID} --jq '.files["dispatcher-lease.json"].content'` → expect a single owner + recent `heartbeat_at`.
 3. **Pending token rotation queue**: `gh api /gists/{GIST_ID} --jq '.files["pending_token_rotation.json"].content'` → should be `{queue: []}` most of the time; if non-empty, next `token-monitor` (`*/30`) drains it.
 4. **Manual checkin** via PWA → expect 1 dispatch → 1 worker run → email summary. No "Working Place blank" on the next-day timesheet.
-5. **Checkout idempotency**: trigger `auto-checkout` workflow twice in 1 min → second run should log `Already checked out... Skipping update (set FORCE_UPDATE_CO=1 to overwrite)`.
-6. **OT cross-midnight**: create OT 22:00→03:30 via AI Coach or planner → confirm `add_skip_date` sub-action ran (skip_dates includes the workday). Recurring 18:00 CO should NOT fire that day.
-7. **AI Coach XSS regression**: open dashboard with `#test=ai-md` → all fixtures pass.
-8. **CloudSync**: change theme on Device A, change location on Device B within 30s → both changes propagate (per-key LWW).
-9. **PWA install + biometric**: install as PWA, enroll Face ID, lock + auto-unlock. Test "Re-enroll" button.
-10. **Tab keyboard nav**: focus bottom nav, ArrowLeft/Right cycle, Home/End jump, Enter activates. Pinch-zoom now works.
+5. **Checkout idempotency by source**:
+   - Manual workflow_dispatch from dashboard OR `repository_dispatch` (Siri) → expect CO to be OVERWRITTEN with the new time (TRIGGER_SOURCE=manual auto-enables FORCE_UPDATE_CO). Re-run should log `update CO from HH:MM → HH:MM`.
+   - Recurring 18:00 CO via `scheduled-dispatch.yml` → second fire same day should log `Already checked out... Skipping update` (TRIGGER_SOURCE=recurring keeps default-skip).
+6. **Token monitor stale-env recovery**: simulate by setting `AZURE_REFRESH_TOKEN` to an already-rotated token AND queuing a fresh token via `python .github/scripts/pending_rotation.py --write <fresh> --source manual-test`. Trigger `token-monitor.yml` → expect `↻ env token rejected; trying queued candidate #1` then success. Queue should retain entries newer than chosen.
+7. **Watchdog zombie cancel**: hard to simulate live; verify by reading heartbeat.yml log after a real lease-stale + in_progress event → should see `🧟 in_progress but lease stale Xm — cancelling zombie run #...`.
+8. **Worker rotation alert**: simulate by revoking GH_PAT mid-workflow → next worker that rotates token should fail queue-write AND send an SMTP alert `🚨 Pending rotation queue write FAILED — <source>`.
+9. **OT cross-midnight**: create OT 22:00→03:30 via AI Coach or planner → confirm `add_skip_date` sub-action ran (skip_dates includes the workday). Recurring 18:00 CO should NOT fire that day.
+10. **AI Coach XSS regression**: open dashboard with `#test=ai-md` → all fixtures pass.
+11. **CloudSync concurrent write**: change theme on Device A, change location on Device B within 30s → both changes propagate (per-key LWW + If-Match prevents overwrite).
+12. **AI proposal If-Match**: open AI Coach, propose an update_schedule; before clicking Apply, edit the same entry from another device → on Apply, expect a 412 retry message + conflict surfaced in the modal (not silent clobber).
+13. **PWA install + biometric**: install as PWA, enroll Face ID, lock + auto-unlock. Test "Re-enroll" button.
+14. **Tab keyboard nav**: focus bottom nav, ArrowLeft/Right cycle, Home/End jump, Enter activates. Pinch-zoom now works.
 
 If any step fails, capture the workflow log via `pwsh scripts/fetch-run-logs.ps1 -RunId <id>` and cross-reference §3 entries.
 
