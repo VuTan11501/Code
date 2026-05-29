@@ -165,6 +165,26 @@ function _calcLostForDay(d) {
   }
   const actual = _hhmmToMin(d.otNormal) + _hhmmToMin(d.otSat) + _hhmmToMin(d.otSun);
   const gap = req - actual;
+
+  // ── Awaiting-approval check (highest priority) ─────────────────────────
+  // If the OT request is unapproved, the day is Pending regardless of
+  // whether DokoKin has already provisionally credited otNormal/otSat/otSun.
+  // Rejection by the manager could revoke that credit, so a ✓ would be
+  // misleading. Show ⏳ until the approval lands.
+  if (d.hasUnapprovedOT) {
+    const provisional = gap <= LOST_OT_TOLERANCE_MIN;
+    return {
+      lostMin: 0,
+      sundayLostMin: 0,
+      nightLostMin: 0,
+      pendingMin: Math.max(gap, 0),
+      awaitingApproval: true,
+      pendingReason: provisional
+        ? 'OT request not yet approved — provisional credit may change on rejection'
+        : 'OT request not yet approved + credit not yet applied',
+    };
+  }
+
   if (gap <= LOST_OT_TOLERANCE_MIN) {
     return { lostMin: 0, sundayLostMin: 0, nightLostMin: 0, pendingMin: 0 };
   }
@@ -172,25 +192,20 @@ function _calcLostForDay(d) {
   // ── Pending-credit detection ───────────────────────────────────────────
   // workingHours = expected total (standard + OT request) per DokoKin API.
   // If actualWorking covers that within tolerance, the user was physically
-  // present for the full OT span. The missing credit is because:
-  //   (a) the OT request hasn't been approved yet, OR
-  //   (b) DokoKin's nightly batch hasn't re-credited the day yet.
-  // In both cases the OT is NOT permanently lost — flag as Pending instead.
+  // present for the full OT span. The missing credit is because DokoKin's
+  // nightly batch hasn't re-credited the day yet (approval already in since
+  // hasUnapprovedOT is false here).
   const actualWorkMin   = _hhmmToMin(d.actualWorking);
   const expectedWorkMin = _hhmmToMin(d.workingHours);
   const presenceCovers  = actualWorkMin > 0
                         && expectedWorkMin > 0
                         && actualWorkMin >= (expectedWorkMin - LOST_OT_TOLERANCE_MIN);
-  if (presenceCovers || d.hasUnapprovedOT) {
-    let reason;
-    if (d.hasUnapprovedOT && presenceCovers) {
-      reason = 'OT request not yet approved — credit will appear after approval + nightly batch';
-    } else if (d.hasUnapprovedOT) {
-      reason = 'OT request not yet approved';
-    } else {
-      reason = 'Check-in/out covers the OT span — credit will appear after approval + nightly batch';
-    }
-    return { lostMin: 0, sundayLostMin: 0, nightLostMin: 0, pendingMin: gap, pendingReason: reason };
+  if (presenceCovers) {
+    return {
+      lostMin: 0, sundayLostMin: 0, nightLostMin: 0,
+      pendingMin: gap,
+      pendingReason: 'Check-in/out covers the OT span — credit will appear after next nightly batch',
+    };
   }
 
   // Night portion lost: per-day requested midnight − actual recognized midnight
@@ -463,13 +478,16 @@ function renderTimesheet() {
           if (parts.nightLostMin > 0)  lines.push(`+25% Night on ${_minToHhmm(parts.nightLostMin)}`);
           const tip = lines.join('\n').replace(/"/g, '&quot;');
           deltaCell = `<td class="ts-cell ts-cell-delta text-destructive font-semibold tooltip-trigger" data-tooltip="${tip}">−${_minToHhmm(lost)}</td>`;
-        } else if (parts.pendingMin > 0) {
+        } else if (parts.pendingMin > 0 || parts.awaitingApproval) {
+          const label = parts.pendingMin > 0 ? `⏳ ${_minToHhmm(parts.pendingMin)}` : '⏳ Awaiting';
           const tip = [
-            `Pending ${_minToHhmm(parts.pendingMin)} credit`,
-            parts.pendingReason || 'OT credit not yet applied',
+            parts.pendingMin > 0
+              ? `Pending ${_minToHhmm(parts.pendingMin)} credit`
+              : 'Awaiting approval (credit provisional)',
+            parts.pendingReason || 'OT credit not yet finalized',
             `Requested: ${d.otRequest || '—'} · Be counted: ${_minToHhmm(_hhmmToMin(d.otNormal) + _hhmmToMin(d.otSat) + _hhmmToMin(d.otSun))}`,
           ].join('\n').replace(/"/g, '&quot;');
-          deltaCell = `<td class="ts-cell ts-cell-delta text-warning font-medium tooltip-trigger" data-tooltip="${tip}">⏳ ${_minToHhmm(parts.pendingMin)}</td>`;
+          deltaCell = `<td class="ts-cell ts-cell-delta text-warning font-medium tooltip-trigger" data-tooltip="${tip}">${label}</td>`;
         } else if (isFuture && d.otRequest && _hhmmToMin(d.otRequest) > 0) {
           deltaCell = `<td class="ts-cell ts-cell-delta text-muted-foreground tooltip-trigger" data-tooltip="Future date — OT not yet worked, lost status unknown">?</td>`;
         } else {
