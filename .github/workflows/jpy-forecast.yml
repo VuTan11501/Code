@@ -70,9 +70,22 @@ jobs:
           if git diff --quiet finance/data/models/usdjpy_meta.json 2>/dev/null; then
             echo "No model changes to commit"
           else
-            git add finance/data/models/usdjpy_meta.json || true
-            git commit -m "chore: update ML model metadata [skip ci]" || true
-            git push || true
+            git add finance/data/models/usdjpy_meta.json
+            git commit -m "chore: update ML model metadata [skip ci]" || { echo "Nothing to commit (race)"; exit 0; }
+            # Retry push with rebase up to 3 times to handle concurrent pushes
+            for attempt in 1 2 3; do
+              if git push; then
+                echo "✅ Pushed model update (attempt $attempt)"
+                break
+              fi
+              echo "⚠️ Push failed (attempt $attempt), pulling --rebase and retrying..."
+              git pull --rebase --autostash || { echo "❌ Rebase failed"; exit 1; }
+              if [ "$attempt" = "3" ]; then
+                echo "❌ Push failed after 3 attempts"
+                exit 1
+              fi
+              sleep $((attempt * 2))
+            done
           fi
 
       - name: Notify on failure (Email + LINE)

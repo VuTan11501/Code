@@ -39,6 +39,10 @@ permissions:
 env:
   TZ: Asia/Tokyo
 
+concurrency:
+  group: payslip-fetch
+  cancel-in-progress: false
+
 jobs:
   fetch:
     runs-on: ubuntu-latest

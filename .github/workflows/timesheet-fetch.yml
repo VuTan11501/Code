@@ -30,6 +30,10 @@ permissions:
 env:
   TZ: Asia/Tokyo
 
+concurrency:
+  group: timesheet-fetch
+  cancel-in-progress: false
+
 jobs:
   fetch:
     runs-on: ubuntu-latest

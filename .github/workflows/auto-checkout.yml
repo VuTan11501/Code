@@ -16,6 +16,11 @@ on:
         description: Override longitude (decimal) — bypasses schedule.json lookup
         required: false
         type: string
+      force_update_co:
+        description: Overwrite an existing checkout (default skip if CO already recorded)
+        required: false
+        type: boolean
+        default: false
   # Triggered by Cloudflare Worker /checkout endpoint (Siri Shortcut).
   # client_payload: { location, source, triggered_at }
   repository_dispatch:
@@ -55,6 +60,7 @@ jobs:
           FORCE_LOCATION: ${{ inputs.location || github.event.client_payload.location || 'home' }}
           FORCE_LATITUDE: ${{ inputs.latitude }}
           FORCE_LONGITUDE: ${{ inputs.longitude }}
+          FORCE_UPDATE_CO: ${{ inputs.force_update_co && '1' || '' }}
           SMTP_USER: ${{ secrets.SMTP_USER }}
           SMTP_PASS: ${{ secrets.SMTP_PASS }}
           NOTIFY_EMAIL: ${{ secrets.NOTIFY_EMAIL }}

@@ -26,6 +26,10 @@ permissions:
 env:
   TZ: Asia/Tokyo
 
+concurrency:
+  group: ot-history-fetch
+  cancel-in-progress: false
+
 jobs:
   fetch:
     runs-on: ubuntu-latest

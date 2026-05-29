@@ -750,6 +750,10 @@ def main():
         if force_action == "auto" or force_action == "":
             force_action = None
         force_location = os.environ.get("FORCE_LOCATION", "office")
+        # Require explicit opt-in to overwrite a previously-recorded checkout.
+        # Default: skip silently if CO already exists and entry's scheduled time
+        # is past, to prevent accidental late-edit during retroactive re-runs.
+        force_update_co = os.environ.get("FORCE_UPDATE_CO", "").lower() in ("1", "true", "yes")
 
         # ── Load schedule and find action ──
         schedule = load_schedule()
@@ -918,7 +922,16 @@ def main():
                         set_output("skipped", "true")
                         set_summary(f"⏭️ Already checked out at {co_ref}. Skipping.")
                         return
-                    log(f"🔁 Re-checkout {ref_day}: previous CO at {co_ref}, current time {now_jst.strftime('%H:%M:%S')} — updating.")
+                    # CO already recorded in the past — only update if explicitly forced.
+                    # Prevents accidental clobber when a stale schedule entry fires
+                    # retroactively (e.g. dispatcher rescue after a 30-min gap).
+                    if not force_update_co:
+                        log(f"⏭️ Already checked out {ref_day} at {co_ref}. "
+                            f"Skipping update (set FORCE_UPDATE_CO=1 to overwrite).")
+                        set_output("skipped", "true")
+                        set_summary(f"⏭️ CO exists at {co_ref}. Use FORCE_UPDATE_CO=1 to update.")
+                        return
+                    log(f"🔁 Re-checkout {ref_day} (forced): previous CO at {co_ref}, current time {now_jst.strftime('%H:%M:%S')} — updating.")
                 except (ValueError, TypeError):
                     log(f"  ⚠️ Could not parse previous CO time ({co_ref}); proceeding with checkout anyway.")
 
