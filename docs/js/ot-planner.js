@@ -937,26 +937,84 @@ async function submitOtForm() {
       if (idx < 0) throw new Error('Entry not found (already deleted?)');
       const prev = entries[idx];
       entries[idx] = { ...prev, date, start, end, hours, reason, updated_at: new Date().toISOString() };
-    } else {
-      // Duplicate check
-      const dup = entries.find(o => o.date === date && o.start === start && o.end === end);
-      if (dup) {
-        const ok = await uiConfirm({
-          title: 'Duplicate OT?',
-          message: `An OT for ${date} ${start}-${end} already exists.\n\nSave another anyway?`,
-          okText: 'Save duplicate',
-        });
-        if (!ok) return;
+      await _saveOtRequests(entries);
+      closeOtForm();
+      toast('✓ OT saved', 'success');
+      await loadOtData();
+      return;
+    }
+    // ── New OT entry ──
+    const dup = entries.find(o => o.date === date && o.start === start && o.end === end);
+    if (dup) {
+      const ok = await uiConfirm({
+        title: 'Duplicate OT?',
+        message: `An OT for ${date} ${start}-${end} already exists.\n\nSave another anyway?`,
+        okText: 'Save duplicate',
+      });
+      if (!ok) return;
+    }
+    const newOt = {
+      id: _otId(),
+      date, start, end, hours, reason,
+      created_at: new Date().toISOString(),
+    };
+    // ── Auto-schedule a once-CO at the OT end time ──
+    // Rationale: filing an OT request without also scheduling the CO leaves
+    // the user relying on either a recurring CO (which may fire BEFORE OT
+    // ends, cutting presence short → Lost OT) or a manual checkout. Better
+    // to always pin a once-CO at the planned end and skip any conflicting
+    // recurring CO on the same date.
+    const crossMid = end < start;
+    const coDate = crossMid ? _nextDateStr(date) : date;
+    const onceRunAt = `${coDate}T${end}:00+09:00`;
+    const onceId = `ot-fix-${newOt.id}`;
+    const sched = [..._otState.scheduleEntries];
+    let skipDate = null;
+    // Find recurring CO on ot.date in the "afternoon-or-later" range that
+    // would close the session before OT ends.
+    //  • Same-day OT: any recurring CO with time > start AND time <= end
+    //    OR (time >= 12:00 AND time <= start)  [closes before OT starts]
+    //  • Cross-mid OT: any recurring CO with time >= 12:00 AND time < start
+    //    [the night CO obviously can't be on next day yet, since cross-mid
+    //     ends on next day; only ot.date recurring matters]
+    for (const e of sched) {
+      if (e.type !== 'recurring' || e.workflow !== OT_CHECKOUT_WF || e.enabled === false) continue;
+      const r = e.recurrence || {};
+      if (!_matchesPattern(r, date)) continue;
+      if (r.skip_dates && r.skip_dates.includes(date)) continue;
+      const t = r.time || '';
+      let conflicts = false;
+      if (crossMid) {
+        conflicts = t >= '12:00' && t < start;
+      } else {
+        conflicts = (t > start && t <= end) || (t >= '12:00' && t <= start);
       }
-      entries.push({
-        id: _otId(),
-        date, start, end, hours, reason,
-        created_at: new Date().toISOString(),
+      if (conflicts) {
+        r.skip_dates = r.skip_dates || [];
+        if (!r.skip_dates.includes(date)) r.skip_dates.push(date);
+        e.recurrence = r;
+        skipDate = date;
+      }
+    }
+    // Add the once-CO (idempotent — won't double-add if user re-submits)
+    if (!sched.find(e => e.type === 'once' && e.id === onceId)) {
+      sched.push({
+        id: onceId,
+        type: 'once',
+        workflow: OT_CHECKOUT_WF,
+        run_at: onceRunAt,
+        note: `Auto CO for OT ${date} ${start}-${end}`,
+        created: new Date().toISOString(),
+        enabled: true,
       });
     }
-    await _saveOtRequests(entries);
+    newOt.auto_co_id = onceId;
+    newOt.auto_co_at = onceRunAt;
+    if (skipDate) newOt.auto_skip_date = skipDate;
+    entries.push(newOt);
+    await _saveBoth(sched, entries);
     closeOtForm();
-    toast('✓ OT saved', 'success');
+    toast(`✓ OT saved · auto-CO scheduled at ${coDate} ${end}${skipDate ? ' · recurring CO skipped today' : ''}`, 'success');
     await loadOtData();
   } catch (e) {
     toast(`⚠️ ${e.message}`, 'error');
