@@ -179,10 +179,31 @@ jobs:
           age_min = (now - latest_updated).total_seconds() / 60
           print(f"  Latest run: #{latest['id']} status={latest_status} age={age_min:.1f}min")
 
-          # If something is in_progress, dispatcher is alive
+          # If something is in_progress, dispatcher LOOKS alive — but also
+          # cross-check the lease. A hung Python loop can keep the run in
+          # in_progress for ~350min while its heartbeat stopped firing.
+          # Lease-stale + in_progress = zombie → cancel + resurrect.
           if latest_status == 'in_progress':
-              print("✅ Dispatcher is alive (in_progress)")
-              sys.exit(0)
+              hung = False
+              if LEASE_OK:
+                  try:
+                      live = is_live(TOKEN)
+                      if live and not live.get('live'):
+                          silent = live.get('silent_for_min', 0)
+                          if silent and silent >= MAX_SILENCE_MIN:
+                              print(f"🧟 in_progress but lease stale {silent:.1f}m — cancelling zombie run #{latest['id']}")
+                              s, _ = gh_api(f"/repos/{REPO}/actions/runs/{latest['id']}/cancel", method='POST')
+                              if s in (202, 200):
+                                  hung = True
+                              else:
+                                  print(f"  (cancel returned HTTP {s}; resurrecting anyway)")
+                                  hung = True
+                  except Exception as e:
+                      print(f"  (lease check on in_progress failed: {e})")
+              if not hung:
+                  print("✅ Dispatcher is alive (in_progress)")
+                  sys.exit(0)
+              age_min = max(age_min, MAX_SILENCE_MIN + 1)
 
           # If recent completed run within window, dispatcher is healthy (just between loops)
           if age_min < MAX_SILENCE_MIN:

@@ -193,8 +193,33 @@ jobs:
           print(f"  Latest: #{latest['id']} status={status_l} age={age_min:.1f}min")
 
           if status_l == 'in_progress':
-              print("✅ Dispatcher alive (in_progress)")
-              sys.exit(0)
+              # Cross-check with lease — a hung Python loop may still show
+              # the workflow run as in_progress for up to 350min while its
+              # heartbeat lease has gone stale. Treat lease-stale + in_progress
+              # as a zombie: cancel the run, then resurrect, so we don't wait
+              # the full job timeout for GitHub to mark it failed.
+              hung = False
+              if LEASE_OK:
+                  try:
+                      live = is_live(TOKEN)
+                      if live and not live.get('live'):
+                          silent = live.get('silent_for_min', 0)
+                          if silent and silent >= MAX_SILENCE_MIN:
+                              print(f"🧟 in_progress but lease stale {silent:.1f}m — cancelling zombie run #{latest['id']}")
+                              s, _ = gh_api(f"/repos/{REPO}/actions/runs/{latest['id']}/cancel", method='POST')
+                              if s in (202, 200):
+                                  hung = True
+                              else:
+                                  print(f"  (cancel returned HTTP {s}; resurrecting anyway)")
+                                  hung = True
+                  except Exception as e:
+                      print(f"  (lease check on in_progress failed: {e})")
+              if not hung:
+                  print("✅ Dispatcher alive (in_progress)")
+                  sys.exit(0)
+              # Fall through to resurrect path with synthesized age_min so
+              # alert thresholds fire normally.
+              age_min = max(age_min, MAX_SILENCE_MIN + 1)
           if age_min < MAX_SILENCE_MIN:
               print(f"✅ Recently active ({age_min:.1f}min ago)")
               sys.exit(0)
