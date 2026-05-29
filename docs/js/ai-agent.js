@@ -488,8 +488,8 @@ Hôm nay (JST): ${today}.`;
     try { sessionStorage.setItem(SS_MODEL_KEY, m); } catch {}
   }
 
-  // ─── Rate limit (token bucket in localStorage) ──────
-  function rateConsume() {
+  // ─── Rate limit (token bucket in localStorage, cross-tab atomic) ──────
+  function _rateConsumeCore() {
     let bucket;
     try { bucket = JSON.parse(localStorage.getItem(LS_RATE_KEY) || 'null'); } catch {}
     const now = Date.now();
@@ -503,6 +503,29 @@ Hôm nay (JST): ${today}.`;
     bucket.count++;
     try { localStorage.setItem(LS_RATE_KEY, JSON.stringify(bucket)); } catch {}
     return { ok: true };
+  }
+
+  function _rateConsumeFallback() {
+    // Read-write-reread-verify pattern for browsers without Web Locks
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const result = _rateConsumeCore();
+      if (!result.ok) return result;
+      // Verify: re-read and confirm our write stuck
+      try {
+        const check = JSON.parse(localStorage.getItem(LS_RATE_KEY) || 'null');
+        if (check && check.count >= result._count) return { ok: true };
+      } catch {}
+    }
+    return _rateConsumeCore();
+  }
+
+  async function rateConsume() {
+    if (navigator.locks && navigator.locks.request) {
+      return navigator.locks.request('ai_rate_v1', () => {
+        return _rateConsumeCore();
+      });
+    }
+    return _rateConsumeFallback();
   }
 
   // ─── Markdown render (minimal whitelist, XSS-safe) ──
@@ -542,8 +565,22 @@ Hôm nay (JST): ${today}.`;
       const items = block.trim().split('\n').map(l => l.replace(/^\d+\. /, '').trim());
       return '\n<ol class="ai-list">' + items.map(i => `<li>${i}</li>`).join('') + '</ol>';
     });
-    // Links [text](url) — only http(s)
-    html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+    // Links [text](url) — only http(s), strict URL whitelist.
+    // Defense-in-depth: esc() ran first, so any HTML-sensitive chars in the
+    // URL ($2) appear as entities (`&quot;` `&lt;` `&gt;` `&#…;`). While
+    // HTML5 attribute tokenization treats entities as opaque text (so
+    // `&quot;` won't terminate href="..."), we still reject any URL whose
+    // bytes don't fit RFC 3986's unreserved + reserved sub-delim set. Real
+    // `&` becomes `&amp;` after esc(), so we split-on-`&amp;` and check each
+    // segment. Anything else (entities like &quot;/&lt;/&gt;/&#…, stray
+    // quotes, angle brackets, backticks, control chars) → render as text.
+    const URL_SAFE = /^[A-Za-z0-9\-._~:/?#\[\]@!$()*+,;=%]*$/;
+    html = html.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (match, text, url) => {
+      if (!/^https?:\/\//.test(url)) return match;
+      const segs = url.split('&amp;');
+      for (const s of segs) if (!URL_SAFE.test(s)) return match;
+      return `<a href="${url}" target="_blank" rel="noopener noreferrer">${text}</a>`;
+    });
     // Paragraph breaks
     html = html.replace(/\n{2,}/g, '</p><p>');
     html = '<p>' + html + '</p>';
@@ -1246,7 +1283,7 @@ Hôm nay (JST): ${today}.`;
   // ─── Send message + tool-loop ───────────────────────
   async function sendMessage(text) {
     if (isStreaming) return;
-    const rate = rateConsume();
+    const rate = await rateConsume();
     if (!rate.ok) {
       setComposerMeta(`⏳ Hết quota cục bộ — thử lại sau ${Math.ceil(rate.waitMs / 1000)}s`, 'warn');
       return;
@@ -1281,7 +1318,7 @@ Hôm nay (JST): ${today}.`;
       if (messages[i].role === 'user') { lastUserIdx = i; break; }
     }
     if (lastUserIdx === -1) return;
-    const rate = rateConsume();
+    const rate = await rateConsume();
     if (!rate.ok) {
       setComposerMeta(`⏳ Hết quota cục bộ — thử lại sau ${Math.ceil(rate.waitMs / 1000)}s`, 'warn');
       return;
@@ -2206,6 +2243,69 @@ Hôm nay (JST): ${today}.`;
 
   // Clear conv on logout — hook into app.js if a logout event exists.
   window.addEventListener('beforeunload', () => { /* sessionStorage clears with tab close anyway */ });
+
+  // ─── Dev self-test for renderMarkdown XSS hardening ──
+  // Activate with `#test=ai-md` (or `?test=ai-md`) in URL. Runs once at load
+  // and logs pass/fail to console. No-op in production navigation.
+  try {
+    const probe = (typeof location !== 'undefined')
+      ? ((location.hash || '') + '|' + (location.search || ''))
+      : '';
+    if (/[#&?|]test=ai-md\b/.test(probe)) {
+      const cases = [
+        { name: 'raw img tag escaped',
+          src: '<img src=x onerror=alert(1)>',
+          // Active tag form forbidden; escaped text form is fine.
+          forbid: ['<img ', '<img>'] },
+        { name: 'link attr injection (with space)',
+          src: '[xss](https://example.com" onclick="alert(1))',
+          forbidRe: /<a\b[^>]*\bonclick\b/i },
+        { name: 'link attr injection (no space)',
+          src: '[a](https://x.com"onclick=alert(1))',
+          // Must NOT emit an <a> tag — URL contains &quot; after esc → rejected.
+          forbid: ['<a href='],
+          // Entities should survive as plain text.
+          require: ['&quot;'] },
+        { name: 'link with angle-bracket smuggle',
+          src: '[a](https://x.com#"><svg/onload=alert(1))',
+          forbid: ['<a href=', '<svg'] },
+        { name: 'valid github link',
+          src: '[ok](https://github.com/foo)',
+          require: ['<a href="https://github.com/foo"', 'target="_blank"'] },
+        { name: 'valid url with query &',
+          src: '[q](https://x.com/?a=1&b=2)',
+          require: ['href="https://x.com/?a=1&amp;b=2"'] },
+        { name: 'script in code block',
+          src: '```\n<script>alert(1)</script>\n```',
+          forbid: ['<script>'] },
+        { name: 'script in inline code',
+          src: 'try `<script>alert(1)</script>` now',
+          forbid: ['<script>'] },
+        { name: 'script in table cell',
+          src: '| <script>alert(1)</script> | x |\n| --- | --- |\n| a | b |\n',
+          forbid: ['<script>'] },
+        { name: 'javascript: url rejected',
+          src: '[x](javascript:alert(1))',
+          forbid: ['<a href='] },
+        { name: 'data: url rejected',
+          src: '[x](data:text/html,<script>alert(1)</script>)',
+          forbid: ['<a href='] },
+      ];
+      const results = cases.map(c => {
+        let out = '';
+        let err = null;
+        try { out = renderMarkdown(c.src); } catch (e) { err = String(e); }
+        const badStr = (c.forbid || []).find(f => out.includes(f));
+        const badRe  = c.forbidRe && c.forbidRe.test(out) ? c.forbidRe.source : null;
+        const miss   = (c.require || []).find(r => !out.includes(r));
+        const ok = !err && !badStr && !badRe && !miss;
+        return { name: c.name, ok, err, badStr, badRe, miss, out };
+      });
+      const failed = results.filter(r => !r.ok);
+      if (failed.length) console.error('[AIAgent.renderMarkdown] %d FAIL', failed.length, failed);
+      else console.log('[AIAgent.renderMarkdown] %d/%d tests passed', results.length, results.length);
+    }
+  } catch (_) { /* test harness must never break app */ }
 
   return { mount, sendMessage, clearConv, clearAllConvs, switchConv, createConv, deleteConv: deleteConvById, renameConv, get messages() { return messages.slice(); }, get currentConvId() { return currentConvId; } };
 })();

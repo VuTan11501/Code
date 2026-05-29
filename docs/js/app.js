@@ -1661,3 +1661,71 @@ if (document.readyState === 'loading') {
     }
   });
 })();
+
+// ═══════════════════════════════════════════════════
+//  MODAL FOCUS TRAP UTILITY
+// ═══════════════════════════════════════════════════
+window.Modal = window.Modal || {};
+window.Modal.openTrapped = function(modalEl, opener) {
+  if (!modalEl) return { close: function() {} };
+  if (modalEl._focusTrapActive) return modalEl._focusTrapHandle;
+
+  var FOCUSABLE = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+  var prevFocus = opener || document.activeElement;
+
+  if (!modalEl.hasAttribute('role')) modalEl.setAttribute('role', 'dialog');
+  if (!modalEl.hasAttribute('aria-modal')) modalEl.setAttribute('aria-modal', 'true');
+
+  function getFocusable() {
+    return Array.from(modalEl.querySelectorAll(FOCUSABLE)).filter(function(el) {
+      return !el.disabled && el.offsetParent !== null;
+    });
+  }
+
+  function trapHandler(e) {
+    if (e.key !== 'Tab') return;
+    var focusable = getFocusable();
+    if (focusable.length === 0) { e.preventDefault(); return; }
+    var first = focusable[0], last = focusable[focusable.length - 1];
+    if (e.shiftKey) {
+      if (document.activeElement === first || !modalEl.contains(document.activeElement)) {
+        e.preventDefault(); last.focus();
+      }
+    } else {
+      if (document.activeElement === last || !modalEl.contains(document.activeElement)) {
+        e.preventDefault(); first.focus();
+      }
+    }
+  }
+
+  var closed = false;
+  function close() {
+    if (closed) return;
+    closed = true;
+    modalEl._focusTrapActive = false;
+    modalEl._focusTrapHandle = null;
+    document.removeEventListener('keydown', trapHandler, true);
+    document.removeEventListener('keydown', escHandler, true);
+    if (prevFocus && prevFocus.focus) {
+      try { prevFocus.focus(); } catch(e) {}
+    }
+  }
+
+  function escHandler(e) {
+    if (e.key === 'Escape') { close(); }
+  }
+
+  document.addEventListener('keydown', trapHandler, true);
+  document.addEventListener('keydown', escHandler, true);
+
+  // Move focus to first focusable
+  setTimeout(function() {
+    var focusable = getFocusable();
+    if (focusable.length > 0) focusable[0].focus();
+  }, 0);
+
+  var handle = { close: close };
+  modalEl._focusTrapActive = true;
+  modalEl._focusTrapHandle = handle;
+  return handle;
+};

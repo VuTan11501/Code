@@ -101,7 +101,7 @@ try {
         exit 5
       }
       # Confirm a `?v=` line is part of the staged diff
-      $diff = & git diff --cached -- docs/index.html docs/suica.html 2>$null
+      $diff = (& git diff --cached -- docs/index.html docs/suica.html 2>$null) -join "`n"
       if ($diff -notmatch '\?v=\d+') {
         Write-Host "✗ docs/*.html is staged but the diff doesn't contain a ?v= bump." -ForegroundColor Red
         Write-Host "  Ensure the cache-buster query string was actually incremented."

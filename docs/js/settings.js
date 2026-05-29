@@ -228,12 +228,17 @@ function renderAiAuditModalBody() {
   if (typeof renderIcons === 'function') renderIcons(body);
 }
 
+var _auditTrapHandle = null;
+
 function openAiAuditModal() {
   const m = document.getElementById('aiAuditModal');
   if (!m) return;
   renderAiAuditModalBody();
   m.classList.add('open');
   document.body.style.overflow = 'hidden';
+  if (window.Modal && window.Modal.openTrapped) {
+    _auditTrapHandle = window.Modal.openTrapped(m);
+  }
 }
 
 function closeAiAuditModal() {
@@ -241,6 +246,7 @@ function closeAiAuditModal() {
   if (!m) return;
   m.classList.remove('open');
   document.body.style.overflow = '';
+  if (_auditTrapHandle) { _auditTrapHandle.close(); _auditTrapHandle = null; }
 }
 
 // Wire close + undo + ESC
