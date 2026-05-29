@@ -322,6 +322,8 @@ async function renderBiometricStatus() {
   if (card) card.style.display = '';
   const enrollBtn = document.getElementById('biometricEnrollBtn');
   const disableBtn = document.getElementById('biometricDisableBtn');
+  const reenrollBtn = document.getElementById('biometricReenrollBtn');
+  const recoveryNote = document.getElementById('biometricRecoveryNote');
   const wa = window.Biometric.isWebAuthnSupported();
   const platAvail = wa ? await window.Biometric.isPlatformAuthenticatorAvailable() : false;
   const enabled = window.Biometric.isEnabled();
@@ -330,18 +332,26 @@ async function renderBiometricStatus() {
   if (!wa) {
     html = '<div class="text-warning">❌ WebAuthn not supported in this browser</div>';
     if (enrollBtn) enrollBtn.style.display = 'none';
+    if (reenrollBtn) reenrollBtn.style.display = 'none';
+    if (recoveryNote) recoveryNote.style.display = 'none';
   } else if (!platAvail) {
     html = '<div class="text-warning">⚠️ Platform authenticator (Face ID / Touch ID / Windows Hello) not available</div>';
     if (enrollBtn) enrollBtn.style.display = 'none';
+    if (reenrollBtn) reenrollBtn.style.display = 'none';
+    if (recoveryNote) recoveryNote.style.display = 'none';
   } else if (enabled) {
     const tierLabel = tier === 'prf' ? '🔐 Tier 1 — PRF (crypto-bound to biometric)' : '🔓 Tier 2 — Gate (biometric required, key local)';
     html = `<div class="text-success">✅ Enabled on this device</div><div>${tierLabel}</div>`;
     if (enrollBtn) enrollBtn.style.display = 'none';
     if (disableBtn) disableBtn.style.display = 'inline-flex';
+    if (reenrollBtn) reenrollBtn.style.display = 'inline-flex';
+    if (recoveryNote) recoveryNote.style.display = '';
   } else {
     html = '<div>Not enrolled on this device. Click Enable to register.</div>';
     if (enrollBtn) enrollBtn.style.display = 'inline-flex';
     if (disableBtn) disableBtn.style.display = 'none';
+    if (reenrollBtn) reenrollBtn.style.display = 'none';
+    if (recoveryNote) recoveryNote.style.display = 'none';
   }
   host.innerHTML = html;
 }

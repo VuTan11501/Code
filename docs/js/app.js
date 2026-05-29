@@ -450,6 +450,7 @@ function navigate(hash) {
     nav.classList.add('active');
     nav.setAttribute('aria-selected', 'true');
   }
+  updateRovingTabindex(page);
 
   // Toggle body class so CSS can lock body scroll + size #page-ai to the
   // viewport when the AI tab is active. Must happen BEFORE init so the
@@ -501,6 +502,41 @@ function navigate(hash) {
 window.addEventListener('hashchange', () => {
   if (sessionToken) navigate(location.hash);
 });
+
+// ═══════════════════════════════════════════════════
+//  TAB KEYBOARD NAVIGATION (roving tabindex)
+// ═══════════════════════════════════════════════════
+function setupTabKeyboardNav() {
+  const tablist = document.querySelector('[role="tablist"][aria-label="Main navigation"]');
+  if (!tablist) return;
+  tablist.addEventListener('keydown', (e) => {
+    const tabs = Array.from(tablist.querySelectorAll('[role="tab"]'));
+    const current = tabs.indexOf(document.activeElement);
+    if (current < 0) return;
+    let next = -1;
+    switch (e.key) {
+      case 'ArrowRight': next = (current + 1) % tabs.length; break;
+      case 'ArrowLeft': next = (current - 1 + tabs.length) % tabs.length; break;
+      case 'Home': next = 0; break;
+      case 'End': next = tabs.length - 1; break;
+      default: return;
+    }
+    e.preventDefault();
+    tabs[current].setAttribute('tabindex', '-1');
+    tabs[next].setAttribute('tabindex', '0');
+    tabs[next].focus();
+    navigate(tabs[next].getAttribute('href') || '#dashboard');
+  });
+}
+
+function updateRovingTabindex(activePage) {
+  const tablist = document.querySelector('[role="tablist"][aria-label="Main navigation"]');
+  if (!tablist) return;
+  tablist.querySelectorAll('[role="tab"]').forEach(tab => {
+    const isActive = tab.getAttribute('data-page') === activePage;
+    tab.setAttribute('tabindex', isActive ? '0' : '-1');
+  });
+}
 
 // ═══════════════════════════════════════════════════
 //  TOAST
@@ -1372,6 +1408,7 @@ function bootstrap() {
     try { window.Theme.init(); } catch {}
   }
   updateNotifBtn();
+  setupTabKeyboardNav();
   if (restoreSession()) {
     // Session survived reload — go straight to dashboard
     showDashboard();
@@ -1460,6 +1497,26 @@ async function disableBiometric() {
   if (!ok) return;
   window.Biometric.disable();
   toast('Biometric disabled on this device');
+  if (typeof renderBiometricStatus === 'function') renderBiometricStatus();
+  updateBiometricButton();
+}
+
+async function reenrollBiometric() {
+  if (!window.Biometric) return;
+  if (!window.Biometric.isPwa()) {
+    toast('⚠️ Install as PWA first', 'warning');
+    return;
+  }
+  if (!sessionToken) { toast('Unlock with passphrase first', 'warning'); return; }
+  try {
+    window.Biometric.disable();
+    const r = await window.Biometric.enroll(sessionToken);
+    if (r.ok) {
+      toast(`✅ Re-enrolled biometric (${r.tier === 'prf' ? 'crypto-bound' : 'gated'})`);
+    }
+  } catch (e) {
+    toast('❌ Re-enrollment failed: ' + (e.message || e), 'error');
+  }
   if (typeof renderBiometricStatus === 'function') renderBiometricStatus();
   updateBiometricButton();
 }
