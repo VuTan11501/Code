@@ -38,25 +38,46 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
+      - name: Checkout (sparse — only helper scripts)
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            .github/scripts
+          sparse-checkout-cone-mode: false
+
       - name: Verify dispatcher is alive
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
+          GH_PAT: ${{ secrets.GH_PAT }}
           REPO: ${{ github.repository }}
           SMTP_USER: ${{ secrets.SMTP_USER }}
           SMTP_PASS: ${{ secrets.SMTP_PASS }}
           NOTIFY_EMAIL: ${{ secrets.NOTIFY_EMAIL }}
         run: |
           python3 << 'EOF'
-          import json, os, sys, smtplib
+          import json, os, sys, smtplib, time
           from email.mime.text import MIMEText
           from datetime import datetime, timezone, timedelta
           import urllib.request, urllib.error
+
+          # Phase 4: lease-aware resurrect (debounced, idempotent across multi-pinger fan-in)
+          sys.path.insert(0, os.path.join(os.environ.get('GITHUB_WORKSPACE', '.'), '.github/scripts'))
+          try:
+              from dispatcher_lease import is_live, record_rescue
+              LEASE_OK = True
+          except Exception as _e:
+              print(f"  ⚠️ Lease helper import failed ({_e}); falling back to legacy resurrect.")
+              LEASE_OK = False
 
           TOKEN = os.environ['GH_TOKEN']
           REPO = os.environ['REPO']
           # External pinger fires every 5min, so be aggressive: resurrect at >7min silence
           MAX_SILENCE_MIN = 7
           ALERT_GAP_MIN = 20  # email when silence exceeded this much
+          # Debounce: skip resurrect if another pinger already kicked within this window.
+          # Cron-job.org (*/5) + Cloudflare worker (*/2) can fan-in → same last_rescue_at
+          # → all later attempts see <5min and bail out cleanly.
+          RESCUE_DEBOUNCE_MIN = 5
 
           def gh_api(path, method='GET', data=None):
               url = f"https://api.github.com{path}"
@@ -91,6 +112,58 @@ jobs:
               except Exception as e:
                   print(f"  ⚠️ Alert email failed: {e}")
 
+          def list_runs_with_retry():
+              """List dispatcher runs. Retry up to 3x with 5s sleep on empty result
+              (defends against transient API blips that would otherwise trigger a needless resurrect)."""
+              for attempt in (1, 2, 3):
+                  status, runs_data = gh_api(f"/repos/{REPO}/actions/workflows/scheduled-dispatch.yml/runs?per_page=5")
+                  if status != 200:
+                      return status, []
+                  runs = runs_data.get('workflow_runs', [])
+                  if runs:
+                      return status, runs
+                  if attempt < 3:
+                      print(f"  (list returned 0 runs; retry {attempt}/3 after 5s)")
+                      time.sleep(5)
+              return 200, []
+
+          def try_resurrect(reason):
+              """Resurrect dispatcher with debounce via lease.record_rescue.
+              Returns (dispatched: bool, debounced: bool)."""
+              if LEASE_OK:
+                  try:
+                      live = is_live(TOKEN)
+                  except Exception as e:
+                      print(f"  (is_live check failed: {e}; proceeding with resurrect)")
+                      live = None
+                  if live and live.get('live'):
+                      print(f"  ✅ Dispatcher healthy via lease (silent {live.get('silent_for_min')}m, owner={live.get('owner')})")
+                      return False, True
+                  if live and live.get('last_rescue_silent_min') is not None and live['last_rescue_silent_min'] < RESCUE_DEBOUNCE_MIN:
+                      print(f"  ⏭️ Skipping resurrect — last rescue was {live['last_rescue_silent_min']:.1f}m ago (debounce <{RESCUE_DEBOUNCE_MIN}m)")
+                      return False, True
+                  try:
+                      record_rescue(TOKEN)
+                  except Exception as e:
+                      print(f"  (record_rescue failed, proceeding anyway: {e})")
+              s, _ = gh_api(f"/repos/{REPO}/actions/workflows/scheduled-dispatch.yml/dispatches",
+                            method='POST', data={'ref': 'main'})
+              if s == 204:
+                  print(f"✅ Resurrected ({reason})")
+                  return True, False
+              print(f"❌ Resurrection failed: HTTP {s}")
+              return False, False
+
+          # Pre-check lease: if dispatcher recently heartbeated, skip everything.
+          if LEASE_OK:
+              try:
+                  live = is_live(TOKEN)
+                  if live and live.get('live'):
+                      print(f"✅ Dispatcher healthy (lease silent {live.get('silent_for_min')}m, owner={live.get('owner')})")
+                      sys.exit(0)
+              except Exception as e:
+                  print(f"  (pre-check is_live failed: {e}; falling through to run-list check)")
+
           # Check workflow is enabled
           status, wf = gh_api(f"/repos/{REPO}/actions/workflows/scheduled-dispatch.yml")
           if status != 200:
@@ -100,17 +173,16 @@ jobs:
               print(f"⚠️ Dispatcher state={wf.get('state')}, re-enabling")
               gh_api(f"/repos/{REPO}/actions/workflows/scheduled-dispatch.yml/enable", method='PUT')
 
-          # Inspect latest run
-          status, runs_data = gh_api(f"/repos/{REPO}/actions/workflows/scheduled-dispatch.yml/runs?per_page=5")
+          # Inspect latest run (with empty-result retry)
+          status, runs = list_runs_with_retry()
           if status != 200:
               print(f"❌ Cannot list runs: HTTP {status}")
               sys.exit(1)
-          runs = runs_data.get('workflow_runs', [])
           if not runs:
-              print("⚠️ No runs found — kicking dispatcher")
-              gh_api(f"/repos/{REPO}/actions/workflows/scheduled-dispatch.yml/dispatches",
-                     method='POST', data={'ref': 'main'})
-              send_alert("🚨 Dispatcher had zero runs — kicked", "Heartbeat found no dispatcher runs at all.")
+              print("⚠️ No runs found after 3 attempts — kicking dispatcher")
+              dispatched, debounced = try_resurrect("zero-runs")
+              if dispatched:
+                  send_alert("🚨 Dispatcher had zero runs — kicked", "Heartbeat found no dispatcher runs after 3 retries.")
               sys.exit(0)
 
           now = datetime.now(timezone.utc)
@@ -127,23 +199,22 @@ jobs:
               print(f"✅ Recently active ({age_min:.1f}min ago)")
               sys.exit(0)
 
-          print(f"🚨 Silent for {age_min:.1f}min, resurrecting...")
-          s, _ = gh_api(f"/repos/{REPO}/actions/workflows/scheduled-dispatch.yml/dispatches",
-                        method='POST', data={'ref': 'main'})
-          if s == 204:
-              print("✅ Resurrected")
-              if age_min >= ALERT_GAP_MIN:
-                  send_alert(
-                      f"🚨 Dispatcher gap {age_min:.0f}min — resurrected by heartbeat",
-                      f"Scheduled Run Dispatcher was silent for {age_min:.1f} minutes.\n"
-                      f"Latest run before resurrection: #{latest['id']} (status={status_l})\n"
-                      f"Updated at: {latest['updated_at']}\n\n"
-                      f"This usually indicates GitHub Actions cron skipped both the dispatcher "
-                      f"self-chain and the dispatcher-watchdog cron, and only the external "
-                      f"heartbeat caught it. If this happens often, investigate GitHub status "
-                      f"page or PAT scope."
-                  )
-          else:
-              print(f"❌ Resurrection failed: HTTP {s}")
+          print(f"🚨 Silent for {age_min:.1f}min, attempting resurrect...")
+          dispatched, debounced = try_resurrect(f"silent {age_min:.1f}m")
+          if debounced:
+              # Another pinger already kicked recently; no alert needed.
+              sys.exit(0)
+          if dispatched and age_min >= ALERT_GAP_MIN:
+              send_alert(
+                  f"🚨 Dispatcher gap {age_min:.0f}min — resurrected by heartbeat",
+                  f"Scheduled Run Dispatcher was silent for {age_min:.1f} minutes.\n"
+                  f"Latest run before resurrection: #{latest['id']} (status={status_l})\n"
+                  f"Updated at: {latest['updated_at']}\n\n"
+                  f"This usually indicates GitHub Actions cron skipped both the dispatcher "
+                  f"self-chain and the dispatcher-watchdog cron, and only the external "
+                  f"heartbeat caught it. If this happens often, investigate GitHub status "
+                  f"page or PAT scope."
+              )
+          if not dispatched and not debounced:
               sys.exit(1)
           EOF

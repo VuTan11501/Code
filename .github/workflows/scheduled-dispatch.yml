@@ -26,18 +26,40 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 350
     steps:
+      - name: Checkout (sparse — only helper scripts)
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            .github/scripts
+          sparse-checkout-cone-mode: false
+
       - name: Self-looping dispatcher (checks every 30s)
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
+          GH_PAT: ${{ secrets.GH_PAT }}
           GIST_ID: ${{ vars.GIST_ID || 'abc2a47c0a396025a72a6580227ff493' }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           LOOP_MINUTES: ${{ inputs.loop_minutes || '120' }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          NOTIFY_EMAIL: ${{ secrets.NOTIFY_EMAIL }}
         run: |
           python3 << 'EOF'
-          import json, os, sys, time
+          import json, os, sys, time, smtplib
+          from email.mime.text import MIMEText
           from datetime import datetime, timezone, timedelta
           import urllib.request
           import urllib.error
+
+          # --- Import lease + CAS helpers (Phase 4 concurrency safety) ---
+          sys.path.insert(0, os.path.join(os.environ.get('GITHUB_WORKSPACE', '.'), '.github/scripts'))
+          try:
+              from dispatcher_lease import acquire as lease_acquire, heartbeat as lease_heartbeat, release as lease_release
+              from gist_cas import cas_update
+              HELPERS_OK = True
+          except Exception as _imp_err:
+              print(f"  ⚠️ Helper import failed ({_imp_err}); running in legacy mode without lease.")
+              HELPERS_OK = False
 
           GIST_ID = os.environ['GIST_ID']
           REPO = os.environ['GITHUB_REPOSITORY']
@@ -45,6 +67,24 @@ jobs:
           LOOP_MINUTES = int(os.environ.get('LOOP_MINUTES', '120'))
           CHECK_INTERVAL_SEC = 30
           JST = timezone(timedelta(hours=9))
+          RUN_ID = os.environ.get('GITHUB_RUN_ID', 'local')
+          RUN_URL = f"https://github.com/{REPO}/actions/runs/{RUN_ID}"
+          # Lease TTL = loop length + 15min buffer (covers chain transition + new run startup)
+          LEASE_TTL_MIN = LOOP_MINUTES + 15
+
+          def send_alert(subject, body):
+              """Minimal SMTP alert — inlined (mirrors heartbeat.yml pattern)."""
+              user = os.environ.get('SMTP_USER'); pwd = os.environ.get('SMTP_PASS'); to = os.environ.get('NOTIFY_EMAIL')
+              if not all([user, pwd, to]):
+                  print("  (SMTP not configured, skip alert email)"); return
+              try:
+                  msg = MIMEText(body, 'plain', 'utf-8')
+                  msg['Subject'] = subject; msg['From'] = user; msg['To'] = to
+                  with smtplib.SMTP('smtp.gmail.com', 587, timeout=15) as s:
+                      s.starttls(); s.login(user, pwd); s.send_message(msg)
+                  print(f"  📧 Alert sent: {subject}")
+              except Exception as e:
+                  print(f"  ⚠️ Alert email failed: {e}")
 
           loop_start = time.time()
           loop_end = loop_start + (LOOP_MINUTES * 60)
@@ -76,6 +116,7 @@ jobs:
                   return None
 
           def gist_write(entries):
+              """Legacy bare-PATCH writer. Kept as fallback; main path uses gist_write_cas()."""
               global cached_runs, gist_etag
               url = f"https://api.github.com/gists/{GIST_ID}"
               payload = json.dumps({
@@ -94,6 +135,77 @@ jobs:
               except urllib.error.HTTPError as e:
                   print(f"  ❌ Gist write HTTP {e.code}")
                   return False
+
+          # Track entries we *intended* to mark dispatched, even if Gist write failed.
+          # Prevents re-dispatch within this run when persistent write errors occur
+          # (degrade-mode: better to miss the historical mark than to double-checkin).
+          locally_dispatched_ids = set()
+
+          def gist_write_cas(updated_entries, dispatched_ids_this_iter):
+              """Atomic CAS-backed write. On persistent failure: alert + locally mark to prevent dup-dispatch.
+
+              Returns True on success (including no_change), False on persistent failure.
+              """
+              global cached_runs, gist_etag
+              if not HELPERS_OK:
+                  # Helper import failed at startup → fall back to legacy writer.
+                  ok = gist_write(updated_entries)
+                  if not ok:
+                      locally_dispatched_ids.update(dispatched_ids_this_iter)
+                  return ok
+
+              # Mutator merges OUR dispatch marks into whatever Gist currently holds.
+              # This is robust to concurrent edits (e.g. dashboard adding a new entry):
+              # we only flip `dispatched`/`last_run` on the ids we actually triggered,
+              # never overwriting fields owned by other writers.
+              marks = {e.get('id'): {'dispatched': e.get('dispatched'),
+                                     'last_run': e.get('last_run')}
+                       for e in updated_entries
+                       if e.get('id') and (e.get('dispatched') or e.get('last_run'))}
+
+              def _mutator(current):
+                  if not isinstance(current, list):
+                      # Gist file empty/corrupt → write our snapshot wholesale.
+                      return updated_entries
+                  out = []
+                  for ent in current:
+                      eid = ent.get('id')
+                      if eid in marks:
+                          m = marks[eid]
+                          if m.get('dispatched') is not None:
+                              ent['dispatched'] = m['dispatched']
+                          if m.get('last_run'):
+                              ent['last_run'] = m['last_run']
+                      out.append(ent)
+                  return out
+
+              try:
+                  result = cas_update(GIST_ID, 'scheduled-runs.json', _mutator, TOKEN, max_retries=3)
+              except Exception as e:
+                  result = {'ok': False, 'error': f'cas_update raised: {e}'}
+
+              if result.get('ok'):
+                  cached_runs = result.get('final_content') or updated_entries
+                  gist_etag = None  # force fresh read next iter (CAS bypassed our cache)
+                  return True
+
+              ids_csv = ','.join(sorted(dispatched_ids_this_iter)) or '<none>'
+              err = result.get('error', 'unknown')
+              print(f"  🚨 CRITICAL: gist write failed after retries — entries: {ids_csv} — {err}")
+              # Degrade mode: remember locally so we don't re-dispatch in this run.
+              locally_dispatched_ids.update(dispatched_ids_this_iter)
+              try:
+                  send_alert(
+                      f"🚨 Dispatcher gist write failed (run {RUN_ID})",
+                      (f"cas_update to scheduled-runs.json failed after retries.\n"
+                       f"Entries we dispatched but could not persist: {ids_csv}\n"
+                       f"Error: {err}\n\n"
+                       f"In-run dedup is active for these ids. Next dispatcher run MAY re-dispatch\n"
+                       f"if its first read still shows dispatched=false.\n\n"
+                       f"Run: {RUN_URL}"))
+              except Exception as e:
+                  print(f"  (alert send failed: {e})", file=sys.stderr)
+              return False
 
           def dispatch_workflow(workflow, reason="", inputs=None):
               if not TOKEN:
@@ -151,6 +263,7 @@ jobs:
               updated = []
               triggered = 0
               changed = False
+              dispatched_ids_this_iter = set()
               for entry in runs:
                   entry_type = entry.get('type', 'once')
                   entry_inputs = {}
@@ -169,6 +282,8 @@ jobs:
                               entry['last_run'] = now.isoformat()
                               triggered += 1
                               changed = True
+                              if entry.get('id'):
+                                  dispatched_ids_this_iter.add(entry['id'])
                       updated.append(entry)
                   else:
                       run_at_str = entry.get('run_at', '')
@@ -176,6 +291,11 @@ jobs:
                           updated.append(entry); continue
                       if entry.get('dispatched'):
                           # Already dispatched — keep for history
+                          updated.append(entry); continue
+                      # Degrade-mode: if a previous iter dispatched this but Gist write failed,
+                      # treat it as already-dispatched locally to avoid duplicate checkin.
+                      if entry.get('id') in locally_dispatched_ids:
+                          entry['dispatched'] = True
                           updated.append(entry); continue
                       if entry.get('enabled') is False:
                           # Paused one-time entry — keep but skip dispatch
@@ -190,54 +310,105 @@ jobs:
                               entry['last_run'] = now.isoformat()
                               triggered += 1
                               changed = True
+                              if entry.get('id'):
+                                  dispatched_ids_this_iter.add(entry['id'])
                           updated.append(entry)
                       else:
                           updated.append(entry)
               if changed:
-                  gist_write(updated)
+                  gist_write_cas(updated, dispatched_ids_this_iter)
               return triggered
 
-          print(f"🔄 Loop start: {LOOP_MINUTES} min, check every {CHECK_INTERVAL_SEC}s")
-          # Cold-start sweep: explicitly scan & dispatch overdue entries on first iter.
-          # The main loop already handles this via process_runs(), but log it explicitly
-          # so post-incident debugging can confirm catch-up happened immediately.
-          try:
-              cold_start_runs = gist_read()
-              if cold_start_runs:
-                  now_cs = datetime.now(timezone.utc)
-                  overdue_count = 0
-                  for entry in cold_start_runs:
-                      if entry.get('type') != 'once': continue
-                      if entry.get('dispatched') or entry.get('enabled') is False: continue
-                      run_at_str = entry.get('run_at', '')
-                      if not run_at_str: continue
-                      try:
-                          run_at = datetime.fromisoformat(run_at_str.replace('Z', '+00:00'))
-                          if run_at <= now_cs:
-                              overdue_count += 1
-                      except Exception:
-                          pass
-                  if overdue_count > 0:
-                      print(f"📋 Cold-start: {overdue_count} overdue one-time entries detected, will dispatch in iter 1")
-          except Exception as e:
-              print(f"  (cold-start sweep skipped: {e})")
-          iteration = 0
-          total_dispatched = 0
-          while time.time() < loop_end:
-              iteration += 1
-              try:
-                  n = process_runs()
-                  if n > 0:
-                      total_dispatched += n
-                      print(f"  [iter {iteration}] dispatched {n} (total: {total_dispatched})")
-              except Exception as e:
-                  print(f"  [iter {iteration}] error: {e}")
-              remaining = loop_end - time.time()
-              if remaining <= 0: break
-              time.sleep(min(CHECK_INTERVAL_SEC, remaining))
+          # --- Lease acquisition (Phase 4: prevent concurrent dispatchers) ---
+          # Why: concurrency.cancel-in-progress=false + cron */15 + heartbeat resurrects
+          # can spawn 2+ dispatchers fighting over the same Gist. Lease serializes them.
+          # Degrade-mode: if lease helper fails (network/PAT), we proceed without it —
+          # duplicate dispatch is bad, but no dispatch at all is worse.
+          lease_held = False
+          if HELPERS_OK and TOKEN:
+              for attempt in (1, 2):
+                  try:
+                      lease_result = lease_acquire(RUN_ID, RUN_URL, ttl_minutes=LEASE_TTL_MIN, token=TOKEN)
+                  except Exception as e:
+                      lease_result = {'acquired': False, 'reason': f'exception: {e}'}
+                  if lease_result.get('acquired'):
+                      lease_held = True
+                      print(f"🔒 Lease acquired (TTL={LEASE_TTL_MIN} min, attempt {attempt})")
+                      break
+                  if attempt == 1 and 'CAS error' in (lease_result.get('reason') or ''):
+                      # Network blip — retry once
+                      print(f"  (lease attempt 1 failed: {lease_result.get('reason')}; retrying once)")
+                      time.sleep(2)
+                      continue
+                  print(f"⏭️  Another dispatcher live (owner={lease_result.get('current_owner')}, reason={lease_result.get('reason')}). Exiting clean.")
+                  sys.exit(0)
+              if not lease_held:
+                  print("  ⚠️ Lease acquire failed twice; proceeding in degrade-mode (no lease).")
+          else:
+              print("  ⚠️ Lease disabled (helpers missing or no token); running without concurrency guard.")
 
-          elapsed_min = (time.time() - loop_start) / 60
-          print(f"\n✅ Loop ended: {elapsed_min:.1f} min, {iteration} iter, {total_dispatched} dispatched")
+          try:
+              print(f"🔄 Loop start: {LOOP_MINUTES} min, check every {CHECK_INTERVAL_SEC}s")
+              # Cold-start sweep: explicitly scan & dispatch overdue entries on first iter.
+              # The main loop already handles this via process_runs(), but log it explicitly
+              # so post-incident debugging can confirm catch-up happened immediately.
+              try:
+                  cold_start_runs = gist_read()
+                  if cold_start_runs:
+                      now_cs = datetime.now(timezone.utc)
+                      overdue_count = 0
+                      for entry in cold_start_runs:
+                          if entry.get('type') != 'once': continue
+                          if entry.get('dispatched') or entry.get('enabled') is False: continue
+                          run_at_str = entry.get('run_at', '')
+                          if not run_at_str: continue
+                          try:
+                              run_at = datetime.fromisoformat(run_at_str.replace('Z', '+00:00'))
+                              if run_at <= now_cs:
+                                  overdue_count += 1
+                          except Exception:
+                              pass
+                      if overdue_count > 0:
+                          print(f"📋 Cold-start: {overdue_count} overdue one-time entries detected, will dispatch in iter 1")
+              except Exception as e:
+                  print(f"  (cold-start sweep skipped: {e})")
+              iteration = 0
+              total_dispatched = 0
+              while time.time() < loop_end:
+                  iteration += 1
+                  # Heartbeat first — if False, another dispatcher stole the lease
+                  # (e.g. we crashed past lease_until and someone else took over).
+                  if lease_held:
+                      try:
+                          still_owner = lease_heartbeat(RUN_ID, TOKEN, ttl_minutes=LEASE_TTL_MIN)
+                      except Exception as e:
+                          # Transient — log + continue. Do NOT exit on heartbeat exception.
+                          still_owner = True
+                          print(f"  [iter {iteration}] heartbeat exception (continuing): {e}")
+                      if still_owner is False:
+                          print(f"🚨 Lease stolen at iter {iteration}, exiting clean to let new owner run.")
+                          sys.exit(0)
+                  try:
+                      n = process_runs()
+                      if n > 0:
+                          total_dispatched += n
+                          print(f"  [iter {iteration}] dispatched {n} (total: {total_dispatched})")
+                  except Exception as e:
+                      print(f"  [iter {iteration}] error: {e}")
+                  remaining = loop_end - time.time()
+                  if remaining <= 0: break
+                  time.sleep(min(CHECK_INTERVAL_SEC, remaining))
+
+              elapsed_min = (time.time() - loop_start) / 60
+              print(f"\n✅ Loop ended: {elapsed_min:.1f} min, {iteration} iter, {total_dispatched} dispatched")
+          finally:
+              # Always release on exit so next run can acquire immediately.
+              if lease_held:
+                  try:
+                      lease_release(RUN_ID, TOKEN)
+                      print("🔓 Lease released")
+                  except Exception as e:
+                      print(f"  ⚠️ Lease release failed (will expire via TTL): {e}")
           EOF
 
       - name: Re-trigger self (chain next run)

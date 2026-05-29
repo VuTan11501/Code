@@ -27,19 +27,36 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      - name: Checkout (sparse — only helper scripts)
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            .github/scripts
+          sparse-checkout-cone-mode: false
+
       - name: Check dispatcher health and resurrect if dead
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
+          GH_PAT: ${{ secrets.GH_PAT }}
           REPO: ${{ github.repository }}
           SMTP_USER: ${{ secrets.SMTP_USER }}
           SMTP_PASS: ${{ secrets.SMTP_PASS }}
           NOTIFY_EMAIL: ${{ secrets.NOTIFY_EMAIL }}
         run: |
           python3 << 'EOF'
-          import json, os, sys, smtplib
+          import json, os, sys, smtplib, time
           from email.mime.text import MIMEText
           from datetime import datetime, timezone, timedelta
           import urllib.request, urllib.error
+
+          # Phase 4: lease-aware resurrect (debounced across multi-offset cron fan-in)
+          sys.path.insert(0, os.path.join(os.environ.get('GITHUB_WORKSPACE', '.'), '.github/scripts'))
+          try:
+              from dispatcher_lease import is_live, record_rescue
+              LEASE_OK = True
+          except Exception as _e:
+              print(f"  ⚠️ Lease helper import failed ({_e}); falling back to legacy resurrect.")
+              LEASE_OK = False
 
           TOKEN = os.environ['GH_TOKEN']
           REPO = os.environ['REPO']
@@ -47,6 +64,9 @@ jobs:
           MAX_SILENCE_MIN = 10
           # Send email alert when gap exceeds this (catches "cron skipped multiple windows")
           ALERT_GAP_MIN = 25
+          # Debounce: 3 cron offsets (*/20, 7-27-47, 13-33-53) can converge within 1-2min.
+          # Lease.last_rescue_at is the dedup key — first kicker sets it, others see <5m and skip.
+          RESCUE_DEBOUNCE_MIN = 5
 
           def send_alert(subject, body):
               user = os.environ.get('SMTP_USER')
@@ -80,6 +100,56 @@ jobs:
               except urllib.error.HTTPError as e:
                   return e.code, {}
 
+          def list_runs_with_retry():
+              """Retry up to 3x with 5s sleep on empty result (defends against transient blips)."""
+              for attempt in (1, 2, 3):
+                  status, runs_data = gh_api(f"/repos/{REPO}/actions/workflows/scheduled-dispatch.yml/runs?per_page=5")
+                  if status != 200:
+                      return status, []
+                  runs = runs_data.get('workflow_runs', [])
+                  if runs:
+                      return status, runs
+                  if attempt < 3:
+                      print(f"  (list returned 0 runs; retry {attempt}/3 after 5s)")
+                      time.sleep(5)
+              return 200, []
+
+          def try_resurrect(reason):
+              """Lease-debounced resurrect. Returns (dispatched, debounced)."""
+              if LEASE_OK:
+                  try:
+                      live = is_live(TOKEN)
+                  except Exception as e:
+                      print(f"  (is_live check failed: {e}; proceeding with resurrect)")
+                      live = None
+                  if live and live.get('live'):
+                      print(f"  ✅ Dispatcher healthy via lease (silent {live.get('silent_for_min')}m, owner={live.get('owner')})")
+                      return False, True
+                  if live and live.get('last_rescue_silent_min') is not None and live['last_rescue_silent_min'] < RESCUE_DEBOUNCE_MIN:
+                      print(f"  ⏭️ Skipping resurrect — last rescue was {live['last_rescue_silent_min']:.1f}m ago (debounce <{RESCUE_DEBOUNCE_MIN}m)")
+                      return False, True
+                  try:
+                      record_rescue(TOKEN)
+                  except Exception as e:
+                      print(f"  (record_rescue failed, proceeding anyway: {e})")
+              s, _ = gh_api(f"/repos/{REPO}/actions/workflows/scheduled-dispatch.yml/dispatches",
+                            method='POST', data={'ref': 'main'})
+              if s == 204:
+                  print(f"✅ Resurrected ({reason})")
+                  return True, False
+              print(f"❌ Resurrection failed: HTTP {s}")
+              return False, False
+
+          # Pre-check lease: if dispatcher heartbeated recently, do nothing.
+          if LEASE_OK:
+              try:
+                  live = is_live(TOKEN)
+                  if live and live.get('live'):
+                      print(f"✅ Dispatcher healthy (lease silent {live.get('silent_for_min')}m, owner={live.get('owner')})")
+                      sys.exit(0)
+              except Exception as e:
+                  print(f"  (pre-check is_live failed: {e}; falling through to run-list check)")
+
           # 1) Check workflow is ENABLED
           status, wf = gh_api(f"/repos/{REPO}/actions/workflows/scheduled-dispatch.yml")
           if status != 200:
@@ -93,15 +163,13 @@ jobs:
               print(f"  Enable result: HTTP {s}")
 
           # 2) Check recent runs: must have one in_progress OR completed in last MAX_SILENCE_MIN
-          status, runs_data = gh_api(f"/repos/{REPO}/actions/workflows/scheduled-dispatch.yml/runs?per_page=5")
+          status, runs = list_runs_with_retry()
           if status != 200:
               print(f"❌ Cannot list dispatcher runs: HTTP {status}")
               sys.exit(1)
-          runs = runs_data.get('workflow_runs', [])
           if not runs:
-              print("⚠️ No runs found at all — kicking dispatcher")
-              gh_api(f"/repos/{REPO}/actions/workflows/scheduled-dispatch.yml/dispatches",
-                     method='POST', data={'ref': 'main'})
+              print("⚠️ No runs found after 3 attempts — kicking dispatcher")
+              try_resurrect("zero-runs")
               sys.exit(0)
 
           now = datetime.now(timezone.utc)
@@ -121,24 +189,23 @@ jobs:
               print(f"✅ Dispatcher recently active ({age_min:.1f}min ago)")
               sys.exit(0)
 
-          # SILENT TOO LONG — resurrect
-          print(f"🚨 Dispatcher silent for {age_min:.1f}min (>{MAX_SILENCE_MIN}min)! Resurrecting...")
-          s, _ = gh_api(f"/repos/{REPO}/actions/workflows/scheduled-dispatch.yml/dispatches",
-                        method='POST', data={'ref': 'main'})
-          if s == 204:
-              print("✅ Dispatcher resurrected successfully")
-              if age_min >= ALERT_GAP_MIN:
-                  send_alert(
-                      f"🚨 Dispatcher gap {age_min:.0f}min — resurrected by watchdog",
-                      f"Scheduled Run Dispatcher was silent for {age_min:.1f} minutes.\n"
-                      f"Latest run before resurrection: #{latest['id']} (status={latest_status})\n"
-                      f"Updated at: {latest['updated_at']}\n\n"
-                      f"Watchdog cron `*/20` should normally catch a dead dispatcher within "
-                      f"~30min. Gaps > 30min indicate that GitHub Actions cron skipped multiple "
-                      f"watchdog windows too. Consider configuring an external heartbeat pinger "
-                      f"(see .github/workflows/heartbeat.yml)."
-                  )
-          else:
-              print(f"❌ Failed to resurrect: HTTP {s}")
+          # SILENT TOO LONG — attempt lease-debounced resurrect
+          print(f"🚨 Dispatcher silent for {age_min:.1f}min (>{MAX_SILENCE_MIN}min)! Attempting resurrect...")
+          dispatched, debounced = try_resurrect(f"silent {age_min:.1f}m")
+          if debounced:
+              # Another pinger already kicked recently; nothing more to do.
+              sys.exit(0)
+          if dispatched and age_min >= ALERT_GAP_MIN:
+              send_alert(
+                  f"🚨 Dispatcher gap {age_min:.0f}min — resurrected by watchdog",
+                  f"Scheduled Run Dispatcher was silent for {age_min:.1f} minutes.\n"
+                  f"Latest run before resurrection: #{latest['id']} (status={latest_status})\n"
+                  f"Updated at: {latest['updated_at']}\n\n"
+                  f"Watchdog cron `*/20` should normally catch a dead dispatcher within "
+                  f"~30min. Gaps > 30min indicate that GitHub Actions cron skipped multiple "
+                  f"watchdog windows too. Consider configuring an external heartbeat pinger "
+                  f"(see .github/workflows/heartbeat.yml)."
+              )
+          if not dispatched and not debounced:
               sys.exit(1)
           EOF
