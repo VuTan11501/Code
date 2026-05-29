@@ -258,6 +258,30 @@ _(source: checkpoint 015)_
 - **Fix**: Schema v2 with `per_key.<shortKey>.updated_at` so each key has its own LWW timestamp. Push only stamps keys whose VALUE actually changed since last pull (`_lastPulledValues` Map). Pull applies per-key if `remote.per_key[k].updated_at > localPerKeyTimestamp[k]`. v1 docs migrated by stamping all per_key timestamps to the v1 value on first pull.
 - **Prevention**: For any multi-device LWW sync, design per-field/per-key timestamps from day one. A single top-level timestamp is convenient but quickly bites in real multi-device usage.
 
+### 3.26 Default-skip safety flag creates false confidence — surfaces as silent no-op for legitimate manual actions
+- **Symptom**: After adding `FORCE_UPDATE_CO` opt-in flag to `gh_checkin.py` (Phase 7, commit 09bfb9a), Siri / dashboard / manual workflow_dispatch checkout silently no-op'd whenever the recurring 18:00 CO had already fired that day. Timesheet stayed with the recurring 18:00 stamp even though the user really worked till 21:00.
+- **Root cause**: I added `FORCE_UPDATE_CO` to prevent stale-replay clobber from recurring dispatches but the default-off applied uniformly to ALL trigger sources. The recurring dispatcher and the user's real manual checkout look identical to the script — both arrive as `workflow_dispatch` events.
+- **Fix**: Introduce `TRIGGER_SOURCE` env (manual / scheduled / recurring) set by each workflow based on event context. `repository_dispatch` (Siri) → manual; `workflow_dispatch` defaults to manual (user-initiated by definition); `scheduled-dispatch.yml` explicitly tags recurring entries `trigger_source=recurring` and one-time entries `scheduled`. Worker auto-enables FORCE_UPDATE_CO when source=manual.
+- **Prevention**: Whenever a "safety flag" is added to prevent a class of unwanted behavior, ALWAYS classify the dispatch origin so legitimate user-driven actions never share the safe-by-default path with automated re-dispatches. Don't trust the workflow name or event type alone — they conflate user intent and machine retry.
+
+### 3.27 Refresh-token monitor can brick itself + strand worker-queued tokens
+- **Symptom**: After an Azure refresh-token rotation, `token-monitor.yml` failed with `AADSTS700082` even though a worker had successfully rotated and queued a fresh token 2 minutes earlier — the monitor exited before draining the queue.
+- **Root cause**: Monitor's main flow: (1) refresh env's `AZURE_REFRESH_TOKEN`, (2) on failure exit 1 — drain queue step never reached. If the env secret is already-rotated stale (worker queued newer but secret-set hasn't propagated, or `gh secret set` was throttled), monitor brick. Queue keeps growing, never drained, until human intervenes.
+- **Fix**: Peek queue BEFORE refresh. Build candidate list `[env, ...queue desc by written_at]`. Try each candidate until one refreshes successfully. On success, drain only entries `written_at <= chosen.written_at` — anything newer stays queued in case a fresher rotation supersedes us on the next tick. Added `peek_pending()` (read-only) and `consume_pending_upto(cutoff)` to `pending_rotation.py`.
+- **Prevention**: When env state and queue state are both inputs to a recovery loop, NEVER trust env alone. Always have a path that probes the queue when env fails — and treat the queue as ordered evidence, not a "last resort fallback".
+
+### 3.28 In-progress workflow run is NOT a liveness signal when loop can hang
+- **Symptom**: Dispatcher stuck silent for 4+ hours; heartbeat.yml + watchdog both reported "✅ Dispatcher alive (in_progress)" the whole time and refused to resurrect.
+- **Root cause**: Watchdogs treated `latest_run.status == 'in_progress'` as definitive proof of liveness. But the dispatcher Python loop can hang (urllib socket stall, Gist 5xx loop) while the GitHub Actions runner keeps the job slot open until the 350-minute timeout. The lease (heartbeated every iteration) would show stale, but the watchdogs only checked lease BEFORE looking at runs.
+- **Fix**: When run is in_progress, ALSO check lease. If `lease.silent_for_min >= MAX_SILENCE_MIN` → cancel the zombie run via `POST /actions/runs/{id}/cancel` (releases the slot immediately), then fall through to resurrect. Recovery time drops from "wait 350min" to "within next watchdog tick".
+- **Prevention**: For any long-running periodic job, build at least 2 independent liveness signals (e.g. process status + application-level heartbeat). If they disagree, prefer the application heartbeat — the process can be a zombie. Document the cancel-on-disagree action explicitly.
+
+### 3.29 Worker queue-write failure is a silent token loss
+- **Symptom**: After 6 workers ran cleanly for a week, automation suddenly broke with `AADSTS700082` on every workflow. Investigation showed the LAST worker that rotated had queue-write fail with a transient Gist 5xx — exception was caught and only logged. New token was thrown away.
+- **Root cause**: Each worker wrapped `write_pending(new_refresh, ...)` in try/except to avoid failing the worker on a queue write failure (good intent: checkin shouldn't fail because rotation can't be queued). But the catch was silent — no alert, no escalation. Token lost; next refresh tried the stale env secret; cascade dies.
+- **Fix**: Added `write_pending_or_alert()` wrapper in `pending_rotation.py` that sends SMTP email on persistent failure (masked token + run URL + recovery instructions). All 6 callers updated via `from pending_rotation import write_pending_or_alert as write_pending` — no other code change. Worker still succeeds (alert is best-effort), but human is now loudly notified.
+- **Prevention**: Any catch-and-log of an exception around a write that's the ONLY persistence of important state MUST escalate. Silent best-effort logging is only safe when the state is already redundantly stored elsewhere.
+
 ---
 
 ## 4. Build & test commands
@@ -346,4 +370,4 @@ If any step fails, capture the workflow log via `pwsh scripts/fetch-run-logs.ps1
 
 ---
 
-_Last reviewed: 2026-05-30_
+_Last reviewed: 2026-05-31_
