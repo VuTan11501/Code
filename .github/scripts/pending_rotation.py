@@ -233,6 +233,79 @@ def consume_pending_upto(gh_pat: str, written_at_cutoff: str) -> list:
     return drained["entries"]
 
 
+# ── Alerting wrapper for workers ─────────────────────────────────────────
+
+def _send_rotation_alert(token: str, source: str, error: str) -> bool:
+    """Send an SMTP alert when queue-write fails after retries.
+
+    Uses ``SMTP_USER`` / ``SMTP_PASS`` / ``NOTIFY_EMAIL`` env vars (same
+    secrets the workers already inject). Token is masked. Best-effort: any
+    SMTP failure is swallowed so we don't double-fault the worker.
+
+    Returns True on send success, False otherwise.
+    """
+    import smtplib
+    from email.mime.text import MIMEText
+
+    smtp_user = os.environ.get("SMTP_USER")
+    smtp_pass = os.environ.get("SMTP_PASS")
+    to_addr = os.environ.get("NOTIFY_EMAIL")
+    if not (smtp_user and smtp_pass and to_addr):
+        return False
+
+    run_id = os.environ.get("GITHUB_RUN_ID", "?")
+    repo = os.environ.get("GITHUB_REPOSITORY", "?")
+    server = os.environ.get("GITHUB_SERVER_URL", "https://github.com")
+    run_url = f"{server}/{repo}/actions/runs/{run_id}" if run_id != "?" else "(unknown run)"
+
+    body = (
+        f"⚠️ A worker rotated an Azure refresh token but the queue write to\n"
+        f"pending_token_rotation.json FAILED after retries. The new token is\n"
+        f"still valid in memory for the current run, but it will be LOST when\n"
+        f"this worker exits — meaning the next Azure refresh attempt with the\n"
+        f"old token (still in AZURE_REFRESH_TOKEN secret) will return\n"
+        f"AADSTS700082 and break automation.\n\n"
+        f"Source worker : {source}\n"
+        f"Token (masked): {_mask(token)}\n"
+        f"Error         : {error}\n"
+        f"Run URL       : {run_url}\n\n"
+        f"Manual recovery: run token-monitor workflow ASAP, OR if it also fails,\n"
+        f"re-run the dokokin-azure-login skill (--setup) to mint a new refresh\n"
+        f"token and `gh secret set AZURE_REFRESH_TOKEN`."
+    )
+
+    msg = MIMEText(body, "plain", "utf-8")
+    msg["Subject"] = f"🚨 Pending rotation queue write FAILED — {source}"
+    msg["From"] = smtp_user
+    msg["To"] = to_addr
+    try:
+        with smtplib.SMTP("smtp.gmail.com", 587, timeout=30) as smtp:
+            smtp.starttls()
+            smtp.login(smtp_user, smtp_pass)
+            smtp.sendmail(smtp_user, [to_addr], msg.as_string())
+        return True
+    except Exception:
+        return False
+
+
+def write_pending_or_alert(token: str, source: str, gh_pat: str,
+                           run_id: str | None = None) -> bool:
+    """Queue a rotation; on persistent CAS failure send SMTP alert + return False.
+
+    Drop-in safer replacement for ``write_pending`` in worker scripts: never
+    raises (so the worker's primary task still succeeds), but ensures a
+    failed-to-queue rotation is loudly surfaced so the user can intervene
+    before the next ``AZURE_REFRESH_TOKEN`` mismatch kills automation.
+    """
+    try:
+        return write_pending(token, source, gh_pat, run_id=run_id)
+    except Exception as e:
+        sent = _send_rotation_alert(token, source, str(e))
+        marker = "📧 alert sent" if sent else "📧 alert FAILED (no SMTP creds?)"
+        print(f"⚠️ Failed to queue pending rotation: {e} — {marker}", file=sys.stderr)
+        return False
+
+
 # ── Self-test (no network) ──
 
 def _self_test():

@@ -884,7 +884,7 @@ def main():
                 print(f"::add-mask::{new_refresh}")
                 try:
                     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-                    from pending_rotation import write_pending  # noqa: E402
+                    from pending_rotation import write_pending_or_alert as write_pending  # noqa: E402
                     gh_pat = os.environ.get("GH_PAT") or os.environ.get("GH_TOKEN")
                     if gh_pat:
                         write_pending(new_refresh, source="ai_monthly_insight", gh_pat=gh_pat)

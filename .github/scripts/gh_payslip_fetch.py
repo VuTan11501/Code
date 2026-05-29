@@ -325,7 +325,7 @@ def _emit_token_rotation(new_refresh: str):
     # Phase 3 hardening: queue rotation; token-monitor drains centrally.
     print(f"::add-mask::{new_refresh}")
     try:
-        from pending_rotation import write_pending  # noqa: E402
+        from pending_rotation import write_pending_or_alert as write_pending  # noqa: E402
         gh_pat = os.environ.get("GH_PAT") or os.environ.get("GH_TOKEN")
         if gh_pat:
             write_pending(new_refresh, source="gh_payslip_fetch", gh_pat=gh_pat)
