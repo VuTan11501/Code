@@ -6,8 +6,9 @@ const POLL_NORMAL = 15000;
 const POLL_SLOW = 60000;
 let pollInterval = POLL_NORMAL;
 let pollTimer = null;
-let isPolling = false;
+let _refreshInflight = null;
 let lastRunStates = {};
+const _statusFlashTimers = new Set();
 let hasRunningWorkflows = false;
 let consecutiveErrors = 0;
 
@@ -217,15 +218,18 @@ function renderCardPicker() {
 }
 
 // Backdrop click + Esc close — wired once on first script execution.
-document.addEventListener('click', (e) => {
-  const m = document.getElementById('dashCustomizeModal');
-  if (m && m.classList.contains('open') && e.target === m) closeCardPicker();
-});
-document.addEventListener('keydown', (e) => {
-  if (e.key !== 'Escape') return;
-  const m = document.getElementById('dashCustomizeModal');
-  if (m && m.classList.contains('open')) closeCardPicker();
-});
+if (!window.__dashboardListenersInit) {
+  window.__dashboardListenersInit = true;
+  document.addEventListener('click', (e) => {
+    const m = document.getElementById('dashCustomizeModal');
+    if (m && m.classList.contains('open') && e.target === m) closeCardPicker();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    const m = document.getElementById('dashCustomizeModal');
+    if (m && m.classList.contains('open')) closeCardPicker();
+  });
+}
 
 function renderInfraToggle() {
   const bar = document.getElementById('dashInfraToggleBar');
@@ -351,7 +355,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 window.addEventListener('focus', () => {
-  if (sessionToken && !isPolling) refresh();
+  if (sessionToken) refresh();
   if (sessionToken && window.CloudSync) {
     window.CloudSync.pull().then(r => { if (r && r.applied) window.CloudSync.applyToUI(); });
   }
@@ -376,8 +380,14 @@ function detectStatusChanges(allRuns) {
       toast(`🔄 ${wf.icon || ''} ${wf.name || 'Workflow'} #${ch.run.run_number} started`);
   }
   if (changes.length > 0) {
+    _statusFlashTimers.forEach(clearTimeout);
+    _statusFlashTimers.clear();
     document.querySelectorAll('.card').forEach(card => card.classList.add('status-change-flash'));
-    setTimeout(() => document.querySelectorAll('.card').forEach(card => card.classList.remove('status-change-flash')), 1000);
+    const tid = setTimeout(() => {
+      document.querySelectorAll('.card').forEach(card => card.classList.remove('status-change-flash'));
+      _statusFlashTimers.delete(tid);
+    }, 1000);
+    _statusFlashTimers.add(tid);
   }
 }
 
@@ -498,7 +508,7 @@ function renderWorkflowCard(wf, runs) {
         </ul>
         <div class="trigger-actions">
           <button class="btn primary sm" onclick="triggerWorkflow('${wf.file}', event)">▶ Trigger</button>
-          <a class="btn sm" href="https://github.com/${OWNER}/${REPO}/actions/workflows/${wf.file}" target="_blank">View →</a>
+          <a class="btn sm" href="https://github.com/${OWNER}/${REPO}/actions/workflows/${wf.file}" target="_blank" rel="noopener noreferrer">View →</a>
         </div>
       </div>
     </div>
@@ -587,7 +597,7 @@ async function triggerWorkflow(file, ev) {
     }
     const res = await fetch(`${API}/repos/${OWNER}/${REPO}/actions/workflows/${file}/dispatches`, {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${sessionToken}`, 'Accept': 'application/vnd.github+json' },
+      headers: { 'Authorization': `Bearer ${sessionToken}`, 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json' },
       body: JSON.stringify({ ref: 'main' }),
     });
     if (res.status === 204) {
@@ -966,8 +976,8 @@ document.getElementById('logModal').addEventListener('click', e => {
 //  MAIN REFRESH
 // ═══════════════════════════════════════════════════
 async function refresh() {
-  if (isPolling) return;
-  isPolling = true;
+  if (_refreshInflight) return _refreshInflight;
+  _refreshInflight = (async () => {
   const grid = document.getElementById('workflowGrid');
   const recentEl = document.getElementById('recentRuns');
 
@@ -1034,8 +1044,10 @@ async function refresh() {
     }
     if (consecutiveErrors === 1) toast(`❌ ${e.message}`, 'error');
   } finally {
-    isPolling = false;
+    _refreshInflight = null;
   }
+  })();
+  return _refreshInflight;
 }
 
 // ═══════════════════════════════════════════════════

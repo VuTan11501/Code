@@ -6,6 +6,10 @@
 window.Theme = (function () {
   const KEY = 'wf_dash_theme';
   const VALID = ['auto', 'dark', 'light'];
+  // Track whether CloudSync has settled the first pull. Until then the local
+  // theme is "tentative" and we apply transitions if remote differs.
+  let _settled = false;
+  let _settleTimer = null;
 
   function getMode() {
     const v = localStorage.getItem(KEY);
@@ -31,6 +35,21 @@ window.Theme = (function () {
     document.dispatchEvent(new CustomEvent('themechange', { detail: { mode, resolved } }));
   }
 
+  // Apply with a 300ms CSS transition (used when CloudSync pulls a different theme
+  // while first paint was tentative). Avoids hard flicker.
+  function applyWithTransition(mode) {
+    const prevResolved = document.documentElement.getAttribute('data-theme');
+    const nextResolved = resolve(VALID.includes(mode) ? mode : 'auto');
+    if (prevResolved === nextResolved) { apply(mode); return; }
+    document.documentElement.classList.add('theme-transitioning');
+    apply(mode);
+    setTimeout(() => document.documentElement.classList.remove('theme-transitioning'), 350);
+  }
+
+  // Mark theme as settled (CloudSync has pulled or timeout elapsed).
+  function markSettled() { _settled = true; if (_settleTimer) { clearTimeout(_settleTimer); _settleTimer = null; } }
+  function isSettled() { return _settled; }
+
   function set(mode) {
     if (!VALID.includes(mode)) mode = 'auto';
     localStorage.setItem(KEY, mode);
@@ -42,6 +61,14 @@ window.Theme = (function () {
 
   function init() {
     apply(getMode());
+    // Auto-settle after 2s if CloudSync hasn't pulled yet (avoid indefinite tentative state)
+    _settleTimer = setTimeout(markSettled, 2000);
+    // Inject CSS rule for smooth theme transitions (avoids hard flicker on CloudSync pull)
+    try {
+      const style = document.createElement('style');
+      style.textContent = '.theme-transitioning, .theme-transitioning * { transition: background-color 300ms ease, color 300ms ease, border-color 300ms ease !important; }';
+      document.head.appendChild(style);
+    } catch {}
     // React to OS theme switches when in auto mode
     try {
       const mq = window.matchMedia('(prefers-color-scheme: light)');
@@ -55,5 +82,5 @@ window.Theme = (function () {
     });
   }
 
-  return { getMode, resolve, apply, set, init, systemPref };
+  return { getMode, resolve, apply, applyWithTransition, set, init, systemPref, markSettled, isSettled };
 })();

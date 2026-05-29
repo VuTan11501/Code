@@ -403,6 +403,8 @@ window.CloudSync = (function () {
         const clean = (url || '').trim().replace(/\/+$/, '');
         if (clean) localStorage.setItem(PROXY_KEY, clean);
         else localStorage.removeItem(PROXY_KEY);
+        // Invalidate ETag cache — proxy scope changed, cached 304s no longer valid.
+        if (typeof window.__clearEtagCache === 'function') window.__clearEtagCache();
       } catch {}
     },
     rewriteUrl: _rewriteUrl,
@@ -413,8 +415,19 @@ window.CloudSync = (function () {
     // Convenience: re-render UI bits that depend on synced settings.
     // Call after a successful pull on the active page.
     applyToUI: function () {
-      // Theme is special — apply BEFORE re-rendering so colors are right
-      if (window.Theme) { try { window.Theme.apply(window.Theme.getMode()); } catch {} }
+      // Theme: use smooth transition if this is the first CloudSync pull (tentative state).
+      // After first pull settles, subsequent changes apply instantly.
+      if (window.Theme) {
+        try {
+          const mode = window.Theme.getMode();
+          if (!window.Theme.isSettled()) {
+            window.Theme.applyWithTransition(mode);
+            window.Theme.markSettled();
+          } else {
+            window.Theme.apply(mode);
+          }
+        } catch {}
+      }
       const calls = [
         'renderLocationList',        // locations.js
         'renderNotifSettings',       // app.js

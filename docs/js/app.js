@@ -76,6 +76,8 @@ function clearSession() {
   sessionToken = null;
   sessionStorage.removeItem(SESSION_KEY);
   if (typeof cachedGithubUser !== 'undefined') cachedGithubUser = null;
+  // Invalidate ETag cache — token changed, cached responses may differ for new user.
+  if (typeof window.__clearEtagCache === 'function') window.__clearEtagCache();
   // Clear AI conversation on logout/auto-lock — never persist chat across auth boundary
   if (window.AIAgent && typeof window.AIAgent.clearAllConvs === 'function') {
     try { window.AIAgent.clearAllConvs(); } catch {}
@@ -398,9 +400,15 @@ if (document.readyState === 'loading') {
   });
   // Defensive: poll once a second while AI page is active to catch any
   // edge case the events miss (keyboard dismissed without blur, etc).
-  setInterval(() => {
-    if (document.body.classList.contains('ai-page-active')) update();
-  }, 1000);
+  // Start/stop via navigation hooks to avoid waking CPU when not needed.
+  let _kbdPollTimer = null;
+  window._startKbdPoll = function () {
+    if (_kbdPollTimer) return;
+    _kbdPollTimer = setInterval(update, 1000);
+  };
+  window._stopKbdPoll = function () {
+    if (_kbdPollTimer) { clearInterval(_kbdPollTimer); _kbdPollTimer = null; }
+  };
   update();
 })();
 
@@ -447,7 +455,12 @@ function navigate(hash) {
   // viewport when the AI tab is active. Must happen BEFORE init so the
   // chat scroll container has its final size when renderAll() runs.
   document.body.classList.toggle('ai-page-active', page === 'ai');
-  if (page === 'ai') updateAiTopOffset();
+  if (page === 'ai') {
+    updateAiTopOffset();
+    if (typeof window._startKbdPoll === 'function') window._startKbdPoll();
+  } else {
+    if (typeof window._stopKbdPoll === 'function') window._stopKbdPoll();
+  }
 
   // Initialize page-specific content. Page-specific scripts are lazy-
   // loaded, so wait for them to be ready before calling init functions
@@ -668,7 +681,20 @@ async function deleteVault() {
 //  API & UTILITIES
 // ═══════════════════════════════════════════════════
 // ETag cache for conditional requests (304 = no change, very fast)
-const etagCache = new Map(); // path → { etag, data }
+// Key: `${proxyScope}:${tokenHash}:${path}` to avoid cross-user/proxy collisions.
+const etagCache = new Map();
+
+function _etagCacheKey(path) {
+  const proxyUrl = (window.CloudSync && window.CloudSync.getProxyUrl)
+    ? window.CloudSync.getProxyUrl() : '';
+  const proxy = proxyUrl || 'direct';
+  // Quick non-crypto hash of first 8 chars of token — just enough to distinguish users.
+  const t = sessionToken ? sessionToken.slice(0, 8) : '_';
+  return `${proxy}:${t}:${path}`;
+}
+
+// Exposed for cache invalidation on logout / proxy change.
+window.__clearEtagCache = function () { etagCache.clear(); };
 
 // Sleep helper used by the retry/backoff path.
 function _apiSleep(ms) { return new Promise(r => setTimeout(r, ms)); }
@@ -725,7 +751,18 @@ async function readGistFile(file) {
 window.readGistFile = readGistFile;
 
 async function apiFetch(path, opts = {}) {
+  const method = (opts.method || 'GET').toUpperCase();
   const headers = { 'Accept': 'application/vnd.github+json' };
+
+  // Merge caller-supplied headers (except Authorization — we control that).
+  if (opts.headers) {
+    const h = (opts.headers instanceof Headers)
+      ? Object.fromEntries(opts.headers.entries())
+      : Array.isArray(opts.headers) ? Object.fromEntries(opts.headers) : opts.headers;
+    for (const [k, v] of Object.entries(h)) {
+      if (k.toLowerCase() !== 'authorization') headers[k] = v;
+    }
+  }
 
   // Route through Cloudflare Worker proxy if configured (PAT stays server-side).
   // Falls back to direct api.github.com call with Bearer token when not set.
@@ -734,10 +771,17 @@ async function apiFetch(path, opts = {}) {
   const fullUrl = proxyUrl ? `${proxyUrl}${path}` : `${API}${path}`;
   if (!proxyUrl && sessionToken) headers['Authorization'] = `Bearer ${sessionToken}`;
 
-  // Use ETag for conditional request if available
-  const cached = etagCache.get(path);
+  // Use ETag for conditional request if available (GET only)
+  const isGet = method === 'GET';
+  const cacheKey = isGet ? _etagCacheKey(path) : null;
+  const cached = isGet ? etagCache.get(cacheKey) : null;
   if (cached?.etag && !opts.noCache) {
     headers['If-None-Match'] = cached.etag;
+  }
+
+  const fetchInit = { method, headers };
+  if (opts.body !== undefined && method !== 'GET' && method !== 'HEAD') {
+    fetchInit.body = opts.body;
   }
 
   const maxAttempts = opts.maxAttempts ?? 3;
@@ -746,7 +790,7 @@ async function apiFetch(path, opts = {}) {
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
-      res = await fetch(fullUrl, { headers });
+      res = await fetch(fullUrl, fetchInit);
     } catch (e) {
       // Network error — retry (offline blip, DNS hiccup)
       lastErr = e;
@@ -787,10 +831,12 @@ async function apiFetch(path, opts = {}) {
 
   const data = await res.json();
 
-  // Cache ETag for next request
-  const etag = res.headers.get('ETag');
-  if (etag) {
-    etagCache.set(path, { etag, data });
+  // Cache ETag for next request (GET only)
+  if (isGet) {
+    const etag = res.headers.get('ETag');
+    if (etag && cacheKey) {
+      etagCache.set(cacheKey, { etag, data });
+    }
   }
 
   return data;

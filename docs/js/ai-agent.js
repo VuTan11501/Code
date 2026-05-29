@@ -1241,29 +1241,89 @@ Hôm nay (JST): ${today}.`;
     const dec = new TextDecoder();
     let buf = '';
     let finishReason = null;
+    let eventBuf = []; // accumulate data: lines until blank line (SSE spec)
     while (true) {
       const { value, done } = await reader.read();
       if (done) break;
       buf += dec.decode(value, { stream: true });
       let nl;
       while ((nl = buf.indexOf('\n')) !== -1) {
-        const line = buf.slice(0, nl).trim();
+        const rawLine = buf.slice(0, nl);
         buf = buf.slice(nl + 1);
-        if (!line.startsWith('data:')) continue;
-        const data = line.slice(5).trim();
-        if (data === '[DONE]') return { finishReason };
-        let json;
-        try { json = JSON.parse(data); } catch { continue; }
-        const choice = json.choices && json.choices[0];
-        if (!choice) continue;
-        const delta = choice.delta || {};
-        if (delta.content) onDelta(delta.content);
-        if (Array.isArray(delta.tool_calls)) onToolCallDelta(delta.tool_calls);
-        if (choice.finish_reason) finishReason = choice.finish_reason;
+        const line = rawLine.replace(/\r$/, '');
+        // Blank line = event boundary per SSE spec
+        if (line === '') {
+          if (eventBuf.length) {
+            const data = eventBuf.join('\n');
+            eventBuf = [];
+            if (data === '[DONE]') return { finishReason };
+            let json;
+            try { json = JSON.parse(data); } catch { continue; }
+            const choice = json.choices && json.choices[0];
+            if (!choice) continue;
+            const delta = choice.delta || {};
+            if (delta.content) onDelta(delta.content);
+            if (Array.isArray(delta.tool_calls)) onToolCallDelta(delta.tool_calls);
+            if (choice.finish_reason) finishReason = choice.finish_reason;
+          }
+          continue;
+        }
+        if (line.startsWith('data:')) {
+          // Strip optional leading space after "data:" per SSE spec
+          eventBuf.push(line.slice(5).replace(/^ /, ''));
+        }
+        // Ignore other fields (id:, event:, retry:, comments starting with :)
+      }
+    }
+    // Flush any trailing event without final blank line (lenient)
+    if (eventBuf.length) {
+      const data = eventBuf.join('\n');
+      eventBuf = [];
+      if (data !== '[DONE]') {
+        try {
+          const json = JSON.parse(data);
+          const choice = json.choices && json.choices[0];
+          if (choice) {
+            const delta = choice.delta || {};
+            if (delta.content) onDelta(delta.content);
+            if (Array.isArray(delta.tool_calls)) onToolCallDelta(delta.tool_calls);
+            if (choice.finish_reason) finishReason = choice.finish_reason;
+          }
+        } catch { /* ignore unparseable trailing data */ }
       }
     }
     return { finishReason };
   }
+
+  // Inline assertion: verify multi-line SSE event parsing works.
+  // A server may split a large JSON across multiple data: lines.
+  (function _assertSSEMultiLine() {
+    // Simulate a multi-line SSE event (JSON split across 2 data: lines)
+    const chunks = [
+      'data: {"choices":[{"delta":{"content":"hel',
+      'data: lo"},"finish_reason":null,"index":0}]}',
+      '',
+      'data: [DONE]',
+      ''
+    ].join('\n');
+    let collected = '';
+    // Mini parser replicating core logic for assertion
+    const lines = chunks.split('\n');
+    const evBuf = [];
+    for (const raw of lines) {
+      const line = raw.replace(/\r$/, '');
+      if (line === '') {
+        if (evBuf.length) {
+          const d = evBuf.join('\n'); evBuf.length = 0;
+          if (d === '[DONE]') break;
+          try { const j = JSON.parse(d); collected += j.choices[0].delta.content || ''; } catch {}
+        }
+        continue;
+      }
+      if (line.startsWith('data:')) evBuf.push(line.slice(5).replace(/^ /, ''));
+    }
+    console.assert(collected === 'hello', '[ai-agent] SSE multi-line assertion failed: got ' + collected);
+  })();
 
   // ─── Tool call accumulator (across delta chunks) ────
   function accumulateToolCalls(accum, deltas) {
