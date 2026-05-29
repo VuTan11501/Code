@@ -602,8 +602,16 @@ function _renderOtRow(ot, idx, isPast) {
     ? `<button class="btn sm" style="color:var(--orange);border-color:rgba(249,115,22,0.32)" onclick="autoFixOtConflict('${ot.id}')" data-tooltip="Auto-fix conflict">${ICON('sparkles', 14)}</button>`
     : '';
 
+  const delTip = isPast
+    ? (created
+        ? 'Delete (local entry only — already pushed to DokoKin; manually remove there if needed)'
+        : 'Delete past entry')
+    : 'Delete';
   const actionsCell = isPast
-    ? `<div class="actions-cell"><span class="badge-readonly" data-tooltip="Past month — view only">${ICON('eye', 14)}</span></div>`
+    ? `<div class="actions-cell">
+        <span class="badge-readonly" data-tooltip="Past month — view only">${ICON('eye', 14)}</span>
+        <button class="btn danger sm" onclick="deleteOtRequest('${ot.id}')" data-tooltip="${_esc(delTip)}">${ICON('trash', 14)}</button>
+      </div>`
     : `<div class="actions-cell">
         ${fixBtn}
         <button class="btn sm" onclick="openOtForm(null, '${ot.id}')" data-tooltip="Edit">${ICON('edit', 14)}</button>
