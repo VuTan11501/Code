@@ -19,6 +19,7 @@ from ot_gist import load_ot_from_gist  # noqa: E402
 from gist_safety import (  # noqa: E402
     read_gist_file, safe_patch_gist_file, validate_scheduled_runs_shape,
 )
+from gist_cas import cas_update  # noqa: E402
 
 JST = timezone(timedelta(hours=9))
 
@@ -602,6 +603,63 @@ def _find_existing_co_entry(entries, ot_co_dt, tolerance_min=30):
     return False
 
 
+def _add_skip_date_to_recurring_co(date_str, entry_dt=None):
+    """Add date_str to skip_dates of the recurring CO entry in Gist (CAS).
+
+    Best-effort: failure only logs a warning, never raises.
+    Matches by workflow='auto-checkout.yml' + time match (if entry_dt provided).
+    """
+    pat = os.environ.get("GH_PAT")
+    if not pat:
+        log("  ⚠️ GH_PAT not set — cannot add skip_date to recurring CO")
+        return
+
+    # Determine target time (HH:MM) for matching
+    target_time = None
+    if entry_dt is not None:
+        target_time = entry_dt.strftime("%H:%M")
+
+    def mutator(parsed):
+        entries = parsed if isinstance(parsed, list) else []
+        found = False
+        for entry in entries:
+            if entry.get("type") != "recurring":
+                continue
+            if entry.get("workflow") != "auto-checkout.yml":
+                continue
+            rec = entry.get("recurrence", {})
+            entry_time = rec.get("time") or entry.get("time", "")
+            # Match by time if available
+            if target_time and entry_time != target_time:
+                continue
+            # Found the recurring CO entry
+            skip_dates = rec.get("skip_dates", [])
+            if date_str in skip_dates:
+                # Already present — no-op (cas_update detects no change)
+                return entries
+            skip_dates.append(date_str)
+            rec["skip_dates"] = sorted(set(skip_dates))
+            entry["recurrence"] = rec
+            found = True
+            break  # Only update first matching entry
+
+        if not found:
+            # No matching recurring CO entry — return unchanged (no-op)
+            pass
+        return entries
+
+    try:
+        result = cas_update(GIST_ID, SCHEDULED_RUNS_FILE, mutator, pat, max_retries=3)
+        if result.get("no_change"):
+            log(f"  ℹ️ skip_dates: {date_str} already present (no-op)")
+        elif result.get("ok"):
+            log(f"  ✅ Added {date_str} to recurring CO skip_dates (attempts: {result['attempts']})")
+        else:
+            log(f"  ⚠️ Failed to add skip_date: {result.get('error', 'unknown')} — checkin continues")
+    except Exception as e:
+        log(f"  ⚠️ skip_date CAS error: {e} — checkin continues")
+
+
 def ensure_ot_checkout_scheduled(ot_entries_today, now_jst, location_key="home"):
     """Ensure a checkout entry exists in Gist scheduled-runs.json covering OT end.
 
@@ -895,6 +953,10 @@ def main():
                         f"{ot_entry.get('start','?')}→{ot_entry.get('end','?')}. "
                         f"OT CO at end-time will close the shift."
                     )
+                    # ── Add today to skip_dates of the recurring CO entry (CAS) ──
+                    # Prevents dispatcher from re-firing this CO on the same date.
+                    _add_skip_date_to_recurring_co(today_str, entry_dt_for_check)
+
                     # Ensure the later OT checkout is actually scheduled in Gist
                     ot_today_list = [ot for ot in pending_ot if ot["date"] == today_str]
                     created = ensure_ot_checkout_scheduled(ot_today_list, now_jst, location_key)
