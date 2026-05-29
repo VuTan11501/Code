@@ -228,6 +228,36 @@ _(source: checkpoint 015)_
   - `generatePDF()` early-returns on any blocker, renders them in `#planner-warnings` with Auto-suggest fix button + "Force generate anyway" escape hatch (confirm + `data-forceGenerate` flag)
 - **Prevention**: Any new server-side validation rule SHOULD have a client-side mirror in `computeBlockers()`. The cost of one CI roundtrip (~30-60s + Actions minutes) is much higher than computing the same check in <1ms locally. When you add a check to `validator.py`, add the JS equivalent in the same PR.
 
+### 3.21 Regex link parser captures HTML entities into href attributes (XSS pattern)
+- **Symptom**: AI Coach markdown renderer in `docs/js/ai-agent.js` allowed model output like `[click](javascript:alert(1))` AND, more subtly, `[x](http://e.com/?a=&quot;onmouseover=alert(1)&quot;)` — the entity-encoded quotes survived the link regex into the `href="$2"` interpolation.
+- **Root cause**: The link transform regex `\[(...)\]\((http[s]?://[^\s)]+)\)` captured anything that wasn't whitespace/`)`, including `&quot;`, `&amp;`, etc. The capture went into an HTML attribute context where HTML5 parsers technically treat entities as opaque — but this is fragile and breaks under proxies / older browsers.
+- **Fix**: Strict RFC 3986 allowlist regex: `^[A-Za-z0-9\-._~:/?#\[\]@!$()*+,;=%]*$`. Split on `&amp;` for query-string ampersands. Fall through to plain-text rendering if URL fails validation.
+- **Prevention**: When regex output feeds an HTML attribute, treat it as untrusted. Don't trust HTML5 attribute parsers to entity-decode "safely". For any new model-output renderer, write 5+ adversarial fixtures (gated by `#test=ai-md` URL hash) covering entity-encoded scripts, control chars, IDN, data:URIs.
+
+### 3.22 Concurrent workers race-clobber rotated Azure refresh tokens
+- **Symptom**: Random "Azure token invalid" failures across DokoKin workers (checkin, ot-creator, timesheet/payslip/ot-history fetch) when 2+ workers run in the same minute. Last-write-wins on `gh secret set AZURE_REFRESH_TOKEN`.
+- **Root cause**: Each worker independently rotated the secret via `gh secret set`. If Worker A rotated to token X at T+0 and Worker B rotated to token Y at T+1, the secret ends up as Y, but A's run logged `token_rotated=true` and X is permanently lost.
+- **Fix**: Centralized rotation queue via new `.github/scripts/pending_rotation.py` (built on `gist_cas.cas_update`). Workers PATCH the queue (CAS-safe, idempotent on token equality, capped 20). Only `token-monitor` and `azure_reauth` workflows call `gh secret set`. token-monitor cron tightened to `*/30 * * * *` so propagation lag ≤30 min.
+- **Prevention**: Any new worker that exchanges Azure tokens MUST call `pending_rotation.write_pending(...)` instead of `gh secret set`. Never write the same GitHub secret from >1 workflow. See §18 in custom instructions for full token rotation flow.
+
+### 3.23 Dispatcher self-loop has no overlap guard → double-dispatch on chain race
+- **Symptom**: After multi-cron offsets were added to `scheduled-dispatch.yml`, occasional duplicate workflow runs of the same schedule entry within 30s — typically when the self-chain re-trigger fired concurrently with a backup cron.
+- **Root cause**: Only `concurrency: cancel-in-progress: false` group prevents queueing two new runs while one is active, BUT did NOT prevent the chain handoff window (Run N exiting + Run N+1 cron firing) from briefly overlapping. Inside each run, the in-process `gh_pat` PATCH to Gist had no ETag → if both saw a not-yet-marked entry as overdue, both dispatched it.
+- **Fix**: Distributed lease via new `.github/scripts/dispatcher_lease.py` (Gist `dispatcher-lease.json`). Each run acquires (TTL=LOOP_MINUTES+15), heartbeats per iter, exits clean if stolen, releases in finally. Gist writes wrapped in `gist_cas.cas_update` with degrade-mode local dedup if CAS fails. Heartbeat + watchdog `record_rescue` debounce prevents multi-offset email/dispatch storms.
+- **Prevention**: Any cron job that can overlap with itself (multi-offset, manual trigger, retry) MUST acquire a lease or use Gist CAS. `concurrency.cancel-in-progress: false` alone is insufficient if the loop persists across runs. Pattern: `dispatcher_lease.acquire/heartbeat/release` + `gist_cas.cas_update` for any state writes.
+
+### 3.24 In-process boolean polling guard is racy across re-entry
+- **Symptom**: Dashboard's `refresh()` showed stale data under tab focus + visibility change events firing close together (Chrome dev tools showed 2 in-flight fetches updating the same DOM).
+- **Root cause**: `isPolling = true` set at top of `refresh()`, reset in `finally`. But focus handler called `refresh()` directly while a polling-tick was also in flight. Between read-of-`isPolling` and write, both passed the guard.
+- **Fix**: Replace boolean guard with promise mutex `_refreshInflight`. Concurrent callers `await` the same inflight promise; reset to null in `finally`. Same pattern used in `app.js apiFetch` for the proxy URL change → ETag cache clear.
+- **Prevention**: Never gate async functions with `bool inFlight`. Use promise mutex or `navigator.locks.request` (also good for cross-tab — see Phase 1 rate-limit fix in `ai-agent.js`).
+
+### 3.25 Schema-wide LWW timestamp loses cross-key edits in multi-device sync
+- **Symptom**: User edits theme on phone, then locations on laptop 30s later — laptop's push overwrites the phone's theme change because both write a single top-level `_updated_at`.
+- **Root cause**: CloudSync schema v1 had ONE `_updated_at` for ALL 5 synced keys. Last writer = full document winner, regardless of WHICH key they actually changed.
+- **Fix**: Schema v2 with `per_key.<shortKey>.updated_at` so each key has its own LWW timestamp. Push only stamps keys whose VALUE actually changed since last pull (`_lastPulledValues` Map). Pull applies per-key if `remote.per_key[k].updated_at > localPerKeyTimestamp[k]`. v1 docs migrated by stamping all per_key timestamps to the v1 value on first pull.
+- **Prevention**: For any multi-device LWW sync, design per-field/per-key timestamps from day one. A single top-level timestamp is convenient but quickly bites in real multi-device usage.
+
 ---
 
 ## 4. Build & test commands
@@ -279,6 +309,30 @@ python .github/skills/dokokin-auto-checkin/auto_checkin.py --status
 | DokoKin auth | `.github/skills/dokokin-azure-login/SKILL.md` |
 | Cache not refreshing | §3.3 |
 | Animation stops on some machines | §3.2 |
+| XSS / HTML escaping in any new renderer | §3.21 |
+| Token race across DokoKin workers | §3.22 + `.github/scripts/pending_rotation.py` |
+| Dispatcher double-fire / overlap | §3.23 + `.github/scripts/dispatcher_lease.py` |
+| Polling / re-entrancy races | §3.24 |
+| Cross-device sync data loss | §3.25 |
+
+---
+
+## 6.1 Post-hardening smoke runbook
+
+After a multi-phase refactor that touches workers / dispatcher / Gist writes, run this manual smoke before declaring it green:
+
+1. **Dispatcher health**: open Actions tab → confirm `Scheduled Run Dispatcher` runs every ~2h chained + heartbeat workflow runs every ~2 min (CF + cron-job.org). No `dispatcher-watchdog` resurrect emails in the last 24h.
+2. **Lease**: `gh api /gists/{GIST_ID} --jq '.files["dispatcher-lease.json"].content'` → expect a single owner + recent `heartbeat_at`.
+3. **Pending token rotation queue**: `gh api /gists/{GIST_ID} --jq '.files["pending_token_rotation.json"].content'` → should be `{queue: []}` most of the time; if non-empty, next `token-monitor` (`*/30`) drains it.
+4. **Manual checkin** via PWA → expect 1 dispatch → 1 worker run → email summary. No "Working Place blank" on the next-day timesheet.
+5. **Checkout idempotency**: trigger `auto-checkout` workflow twice in 1 min → second run should log `Already checked out... Skipping update (set FORCE_UPDATE_CO=1 to overwrite)`.
+6. **OT cross-midnight**: create OT 22:00→03:30 via AI Coach or planner → confirm `add_skip_date` sub-action ran (skip_dates includes the workday). Recurring 18:00 CO should NOT fire that day.
+7. **AI Coach XSS regression**: open dashboard with `#test=ai-md` → all fixtures pass.
+8. **CloudSync**: change theme on Device A, change location on Device B within 30s → both changes propagate (per-key LWW).
+9. **PWA install + biometric**: install as PWA, enroll Face ID, lock + auto-unlock. Test "Re-enroll" button.
+10. **Tab keyboard nav**: focus bottom nav, ArrowLeft/Right cycle, Home/End jump, Enter activates. Pinch-zoom now works.
+
+If any step fails, capture the workflow log via `pwsh scripts/fetch-run-logs.ps1 -RunId <id>` and cross-reference §3 entries.
 
 ---
 
@@ -292,4 +346,4 @@ python .github/skills/dokokin-auto-checkin/auto_checkin.py --status
 
 ---
 
-_Last reviewed: 2026-05-23_
+_Last reviewed: 2026-05-30_
