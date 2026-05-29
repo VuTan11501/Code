@@ -512,7 +512,15 @@ def generate_ai_prose(stats, trend):
                 {"role": "user", "content": user_content},
             ]
             result = chat_completion(messages, model="gpt-4o-mini", max_tokens=600)
-            prose = result.get("content") or result.get("text", "")
+            # Handle structured result from ai_client
+            if isinstance(result, dict) and "ok" in result:
+                if not result["ok"]:
+                    log(f"⚠️ AI generation failed: {result['error']} (status={result['status']}), using template fallback")
+                    return _template_fallback(stats, trend)
+                prose = result.get("content", "")
+            else:
+                # Inline fallback client returns plain dict with "content" key
+                prose = result.get("content") or result.get("text", "")
             if prose and len(prose) > 20:
                 log("✅ AI prose generated successfully")
                 return prose

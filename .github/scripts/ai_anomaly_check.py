@@ -265,10 +265,10 @@ def ai_summarize(anomalies):
         max_tokens=800,
     )
 
-    if resp is None:
-        log("AI summarizer returned None — using template fallback")
+    if not resp["ok"]:
+        log(f"AI summarizer failed: {resp['error']} (status={resp['status']}) — using template fallback")
         return None
-    return resp.content
+    return resp["content"]
 
 
 def template_summary(anomalies):
