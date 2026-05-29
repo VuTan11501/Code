@@ -215,30 +215,45 @@
 
     let applied = 0;
     let errors = [];
+    let conflicts = [];
 
     for (const [file, fileProposals] of Object.entries(groups)) {
       try {
         const result = await _applyToFile(file, fileProposals);
         applied += result.applied;
         if (result.errors.length) errors.push(...result.errors);
+        if (result.conflicts && result.conflicts.length) conflicts.push(...result.conflicts);
       } catch (e) {
         errors.push(`${file}: ${e.message || e}`);
       }
     }
 
-    // Clean up applied proposals
-    for (const id of selectedIds) _pending.delete(id);
+    // Only forget proposals that were actually applied or definitively errored;
+    // keep conflicted ones in _pending so the user can review and re-submit.
+    const conflictedIds = new Set(conflicts.map(c => c.proposal_id));
+    for (const id of selectedIds) {
+      if (!conflictedIds.has(id)) _pending.delete(id);
+    }
 
     if (applied > 0) {
       _toast(`✅ Applied ${applied} change${applied > 1 ? 's' : ''}`, '');
       _refreshAffectedUI();
     }
+    if (conflicts.length) {
+      console.warn('[proposals] Skipped due to concurrent edits:', conflicts);
+      _toast(
+        `⚠️ ${conflicts.length} change(s) skipped — target was modified elsewhere. Review & re-submit.`,
+        'warning'
+      );
+    }
     if (errors.length) {
       _toast(`⚠️ ${errors.length} error(s): ${errors[0]}`, 'error');
     }
+
+    return { applied, errors, conflicts };
   }
 
-  async function _applyToFile(file, proposals, retryCount = 0) {
+  async function _applyToFile(file, proposals, retryCount = 0, baseSnapshot = null) {
     if (typeof apiFetch !== 'function') throw new Error('apiFetch not available');
 
     // Fetch current Gist
@@ -253,11 +268,29 @@
       } catch { currentData = []; }
     }
 
+    // Snapshot the "base" target state on the FIRST attempt. On retry we keep
+    // the original base so 3-way merge can compare base vs new-remote per entry.
+    if (baseSnapshot === null) {
+      baseSnapshot = JSON.parse(JSON.stringify(currentData));
+    }
+
     const applied = [];
     const applyErrors = [];
+    const conflicts = [];
+    // Defer audit logging until after a successful PATCH — otherwise we'd
+    // record applies that never actually hit the gist.
+    const pendingAudit = [];
 
     for (const p of proposals) {
       try {
+        // 3-way merge: skip this proposal if base vs current shows a real
+        // conflict on the same target. (No-op on first attempt because
+        // baseSnapshot === currentData.)
+        const conflict = _detectConflict(p, baseSnapshot, currentData);
+        if (conflict) {
+          conflicts.push({ proposal_id: p.proposal_id, kind: p.kind, ...conflict });
+          continue;
+        }
         const before = JSON.parse(JSON.stringify(currentData));
         currentData = _applyDiff(currentData, p);
 
@@ -267,25 +300,14 @@
             currentData = _applyDiff(currentData, sa);
           }
         }
-
-        // Audit log
-        if (window.AIAudit) {
-          window.AIAudit.log({
-            proposal_id: p.proposal_id,
-            kind: p.kind,
-            target_file: file,
-            before_snapshot: before,
-            after_snapshot: JSON.parse(JSON.stringify(currentData)),
-            applied_at: new Date().toISOString(),
-          });
-        }
+        pendingAudit.push({ p, before });
         applied.push(p.proposal_id);
       } catch (e) {
         applyErrors.push(`${p.kind}: ${e.message}`);
       }
     }
 
-    if (!applied.length) return { applied: 0, errors: applyErrors };
+    if (!applied.length) return { applied: 0, errors: applyErrors, conflicts };
 
     // Determine content format — preserve wrapper if OT file
     let content;
@@ -301,8 +323,9 @@
     if (!token) throw new Error('No session token');
 
     const patchBody = { files: { [file]: { content } } };
+    let patchResp;
     try {
-      const resp = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
+      patchResp = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
         method: 'PATCH',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -311,26 +334,121 @@
         },
         body: JSON.stringify(patchBody),
       });
-      if (resp.status === 409 || resp.status === 412) {
-        // Conflict — retry once
+      if (patchResp.status === 409 || patchResp.status === 412) {
+        // Conflict — retry once, carrying the ORIGINAL baseSnapshot so the
+        // 3-way merge can detect concurrent edits this time round.
         if (retryCount < 1) {
-          console.log('[proposals] ETag conflict, retrying...');
-          return _applyToFile(file, proposals, retryCount + 1);
+          console.log('[proposals] ETag conflict, retrying with 3-way merge...');
+          return _applyToFile(file, proposals, retryCount + 1, baseSnapshot);
         }
         throw new Error('Gist conflict after retry');
       }
-      if (!resp.ok) {
-        const text = await resp.text().catch(() => '');
-        throw new Error(`PATCH failed: ${resp.status} ${text.slice(0, 100)}`);
+      if (!patchResp.ok) {
+        const text = await patchResp.text().catch(() => '');
+        throw new Error(`PATCH failed: ${patchResp.status} ${text.slice(0, 100)}`);
       }
     } catch (e) {
       if (retryCount < 1 && e.message && e.message.includes('conflict')) {
-        return _applyToFile(file, proposals, retryCount + 1);
+        return _applyToFile(file, proposals, retryCount + 1, baseSnapshot);
       }
       throw e;
     }
 
-    return { applied: applied.length, errors: applyErrors };
+    // Audit log — emit only after the PATCH actually succeeded, and stamp the
+    // FINAL etag from the successful response so rollback can guard against
+    // post-apply concurrent edits.
+    const finalEtag = patchResp.headers.get('ETag') || patchResp.headers.get('etag') || null;
+    const finalSnapshot = JSON.parse(JSON.stringify(currentData));
+    for (const r of pendingAudit) {
+      if (window.AIAudit) {
+        window.AIAudit.log({
+          proposal_id: r.p.proposal_id,
+          kind: r.p.kind,
+          target_file: file,
+          before_snapshot: r.before,
+          after_snapshot: finalSnapshot,
+          applied_at: new Date().toISOString(),
+          gist_etag: finalEtag,
+        });
+      }
+    }
+
+    return { applied: applied.length, errors: applyErrors, conflicts };
+  }
+
+  // ─── 3-way merge conflict detection ─────────────────
+  // Decides whether a proposal can still be safely applied when the remote
+  // state has changed since the proposal was created (base snapshot).
+  //   • create_* → conflict only on duplicate id (someone else inserted it)
+  //   • delete_schedule → conflict if the target was edited remotely (don't
+  //     silently delete someone else's update); no-op if already gone
+  //   • update_schedule → per-field merge: conflict only if a field WE touch
+  //     was also changed remotely. Otherwise apply onto current state.
+  //   • add_skip_date → never field-conflicts (skip_dates is union-mergeable in
+  //     _applyDiff). Conflict only if target entry was deleted remotely.
+  function _detectConflict(proposal, baseEntries, currentEntries) {
+    const kind = proposal.kind;
+    const diff = proposal.diff;
+    if (!diff) return null;
+    const baseArr = Array.isArray(baseEntries) ? baseEntries : [];
+    const curArr = Array.isArray(currentEntries) ? currentEntries : [];
+
+    if (kind === 'create_once' || kind === 'create_recurring' || kind === 'create_ot') {
+      if (diff.after && diff.after.id && curArr.some(e => e && e.id === diff.after.id)) {
+        return { reason: 'duplicate_id', target_id: diff.after.id };
+      }
+      return null;
+    }
+
+    const targetId = (diff.before && diff.before.id) || (diff.after && diff.after.id);
+    if (!targetId) return null;
+    const baseEntry = baseArr.find(e => e && e.id === targetId) || null;
+    const curEntry = curArr.find(e => e && e.id === targetId) || null;
+
+    if (kind === 'delete_schedule') {
+      if (!curEntry) return null; // already gone — treat as success
+      if (baseEntry && JSON.stringify(baseEntry) !== JSON.stringify(curEntry)) {
+        return {
+          reason: 'modified_before_delete',
+          target_id: targetId,
+          base_field: '*',
+          current_value: curEntry,
+          proposed_value: null,
+        };
+      }
+      return null;
+    }
+
+    if (kind === 'update_schedule') {
+      if (!curEntry) {
+        return { reason: 'target_deleted', target_id: targetId };
+      }
+      if (!baseEntry) return null;
+      const ourChanges = diff.after || {};
+      for (const k of Object.keys(ourChanges)) {
+        if (k === 'id') continue;
+        const baseVal = JSON.stringify(baseEntry[k]);
+        const curVal = JSON.stringify(curEntry[k]);
+        if (baseVal !== curVal) {
+          return {
+            reason: 'field_conflict',
+            target_id: targetId,
+            base_field: k,
+            current_value: curEntry[k],
+            proposed_value: ourChanges[k],
+          };
+        }
+      }
+      return null;
+    }
+
+    if (kind === 'add_skip_date') {
+      if (!curEntry) return { reason: 'target_deleted', target_id: targetId };
+      // skip_dates is union-merged in _applyDiff — concurrent additions are safe.
+      return null;
+    }
+
+    return null;
   }
 
   function _applyDiff(data, proposal) {
@@ -363,7 +481,12 @@
           const idx = data.findIndex(e => e.id === diff.after.id);
           if (idx >= 0) {
             const rec = data[idx].recurrence || {};
-            rec.skip_dates = diff.after.skip_dates || rec.skip_dates || [];
+            // Union-merge so we don't clobber skip_dates that were added
+            // concurrently (e.g. another device's add_skip_date for a
+            // different date on the same recurring entry).
+            const curSkip = Array.isArray(rec.skip_dates) ? rec.skip_dates : [];
+            const newSkip = Array.isArray(diff.after.skip_dates) ? diff.after.skip_dates : [];
+            rec.skip_dates = Array.from(new Set([...curSkip, ...newSkip])).sort();
             data[idx].recurrence = rec;
           }
         }
@@ -392,17 +515,73 @@
     const token = typeof sessionToken !== 'undefined' ? sessionToken : null;
     if (!token) { _toast('No session token', 'error'); return; }
 
+    // ─── Safety pre-check: refuse rollback if remote diverged from what we
+    // stored at apply time. This guards against silently overwriting edits a
+    // user (or autopilot) made on another device after the apply landed.
+    // GitHub Gist PATCH ignores `If-Match` in practice, so a content-equality
+    // check is the reliable signal; we still send If-Match as belt-and-braces
+    // in case the API starts honouring it.
+    if (entry.after_snapshot !== undefined && entry.after_snapshot !== null) {
+      try {
+        if (typeof apiFetch !== 'function') throw new Error('apiFetch not available');
+        const gist = await apiFetch(`/gists/${GIST_ID}`);
+        const gf = gist.files && gist.files[file];
+        const remoteRaw = window.readGistFile ? await window.readGistFile(gf) : (gf && gf.content) || '';
+        let remoteData = [];
+        if (remoteRaw) {
+          try {
+            const parsed = JSON.parse(remoteRaw);
+            remoteData = Array.isArray(parsed)
+              ? parsed
+              : (Array.isArray(parsed.entries) ? parsed.entries
+                : (Array.isArray(parsed.requests) ? parsed.requests : []));
+          } catch { remoteData = []; }
+        }
+        if (JSON.stringify(remoteData) !== JSON.stringify(entry.after_snapshot)) {
+          _toast(
+            '❌ Cannot rollback — file has been modified since the apply was logged. Use manual edit.',
+            'error'
+          );
+          console.warn('[proposals] Rollback blocked: remote state diverged from logged after_snapshot', {
+            proposal_id: entry.proposal_id, target_file: file,
+          });
+          return;
+        }
+      } catch (e) {
+        _toast(`❌ Rollback pre-check failed: ${e.message || e}`, 'error');
+        return;
+      }
+    }
+
+    const headers = {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      'Accept': 'application/vnd.github+json',
+    };
+    if (entry.gist_etag) headers['If-Match'] = entry.gist_etag;
+
     try {
       const resp = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
         method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-          'Accept': 'application/vnd.github+json',
-        },
+        headers,
         body: JSON.stringify({ files: { [file]: { content } } }),
       });
+      if (resp.status === 412) {
+        _toast(
+          '❌ Cannot rollback — file has been modified since the apply was logged. Use manual edit.',
+          'error'
+        );
+        return;
+      }
       if (!resp.ok) throw new Error(`PATCH failed: ${resp.status}`);
+      // Persist the new etag so a subsequent chained rollback still has a
+      // fresh anchor (mainly for the If-Match path; the content-equality
+      // check uses after_snapshot which we don't mutate here — chained
+      // rollback will simply re-fetch and re-validate).
+      const newEtag = resp.headers.get('ETag') || resp.headers.get('etag') || null;
+      if (newEtag && window.AIAudit && typeof window.AIAudit.updateEtag === 'function') {
+        try { window.AIAudit.updateEtag(entry.proposal_id, newEtag); } catch {}
+      }
       _toast('✅ Rolled back successfully', '');
       _refreshAffectedUI();
     } catch (e) {

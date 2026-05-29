@@ -1,9 +1,32 @@
 // cloud-sync.js — cross-device sync of user settings via Gist.
 //
-// Stores 4 localStorage keys (locations, ot_profile, notif_prefs, schedule_filter)
-// in `user-settings.json` of the same Gist used for schedule + OT. Conflict
-// resolution = last-write-wins on `_updated_at` timestamp. PAT vault is NEVER
-// synced — passphrase is device-specific and that's the security boundary.
+// Schema v2 (per-key LWW):
+// ─────────────────────────
+// {
+//   _version: 2,
+//   _updated_at: <ISO>,          // max of all per_key timestamps (v1 compat)
+//   _updated_by: <device>,       // device that last pushed any key
+//   settings: {
+//     locations:       { ... },
+//     ot_profile:      { ... },
+//     notif_prefs:     { ... },
+//     schedule_filter: { ... },
+//     theme:           "auto"
+//   },
+//   per_key: {
+//     locations:       { updated_at: <ISO>, updated_by: <device> },
+//     ot_profile:      { updated_at: <ISO>, updated_by: <device> },
+//     notif_prefs:     { updated_at: <ISO>, updated_by: <device> },
+//     schedule_filter: { updated_at: <ISO>, updated_by: <device> },
+//     theme:           { updated_at: <ISO>, updated_by: <device> }
+//   }
+// }
+//
+// Pull: per-key merge — only apply remote keys whose per_key[k].updated_at
+//       is newer than our local per-key timestamp.
+// Push: only bump per_key[k].updated_at for keys whose value changed since
+//       last pull (tracked via in-memory _lastPulledValues).
+// Migration: v1 docs get all per_key timestamps set to the v1 _updated_at.
 //
 // Public API:
 //   CloudSync.init({ getToken, toast })   — boot
@@ -88,7 +111,8 @@ window.CloudSync = (function () {
   const GIST_ID = 'abc2a47c0a396025a72a6580227ff493';
   const FILE = 'user-settings.json';
   const BAK_FILE = 'user-settings.json.bak';
-  const TS_KEY = 'wf_dash_settings_updated_at';
+  const TS_KEY = 'wf_dash_settings_updated_at';           // v1 compat (global)
+  const PERKEY_PREFIX = 'wf_dash_settings_perkey_';       // v2 per-key timestamps
   const DEV_KEY = 'wf_dash_device_id';
   const PREFIX = 'wf_dash_';                 // stripped when serializing keys
   const DEBOUNCE_MS = 3000;
@@ -103,6 +127,8 @@ window.CloudSync = (function () {
   let _pushTimer = null;
   let _pushing = false;
   let _pullPromise = null;
+  // v2: track values from last pull to detect which keys changed locally
+  const _lastPulledValues = new Map();       // shortKey → JSON string of value
   // Shared gist cache — any caller (CloudSync.pull, insights.js,
   // checkTokenScopes, etc.) can reuse the same fetched body instead of
   // hitting GitHub API in parallel for the same gist on page load.
@@ -209,6 +235,10 @@ window.CloudSync = (function () {
   function _localTs() { return localStorage.getItem(TS_KEY) || ''; }
   function _setLocalTs(ts) { localStorage.setItem(TS_KEY, ts); }
 
+  // v2 per-key timestamp helpers
+  function _localPerKeyTs(shortKey) { return localStorage.getItem(PERKEY_PREFIX + shortKey) || ''; }
+  function _setLocalPerKeyTs(shortKey, ts) { localStorage.setItem(PERKEY_PREFIX + shortKey, ts); }
+
   function _collectLocal() {
     const settings = {};
     REGISTERED.forEach(r => {
@@ -295,22 +325,74 @@ window.CloudSync = (function () {
         try { remote = JSON.parse(fileContent); }
         catch (e) { return { error: 'parse_error' }; }
         _cachedRemote = remote;
+
+        const remoteVersion = remote._version || 1;
         const remoteAt = remote._updated_at || '';
-        const localAt = _localTs();
-        // First-time on this device with no local timestamp → adopt remote regardless.
-        // Otherwise only adopt if remote is strictly newer.
-        const firstTime = !localAt;
-        if (!opts.force && !firstTime && remoteAt && remoteAt <= localAt) {
-          return { changed: false, reason: 'local_newer_or_equal', remoteAt, localAt };
+        const fromDevice = remote._updated_by || 'another device';
+
+        // Build per_key metadata (migrate v1 → v2 if needed)
+        let perKey = remote.per_key || {};
+        if (remoteVersion < 2 || !remote.per_key) {
+          // v1 doc: stamp all keys with the single _updated_at
+          const fallbackTs = remoteAt || new Date().toISOString();
+          REGISTERED.forEach(r => {
+            if (!perKey[r.shortKey]) {
+              perKey[r.shortKey] = { updated_at: fallbackTs, updated_by: fromDevice };
+            }
+          });
+          console.info('CloudSync: migrated v1 doc → v2 per_key timestamps');
         }
-        const applied = _applyRemote(remote.settings || {});
+
+        // Per-key merge
+        let applied = 0;
+        const settings = remote.settings || {};
+        REGISTERED.forEach(r => {
+          if (!Object.prototype.hasOwnProperty.call(settings, r.shortKey)) return;
+          const remoteKeyMeta = perKey[r.shortKey] || {};
+          const remoteKeyTs = remoteKeyMeta.updated_at || remoteAt || '';
+          const localKeyTs = _localPerKeyTs(r.shortKey);
+
+          // First-time on this device (no local per-key ts) → adopt remote
+          const firstTime = !localKeyTs;
+          if (!opts.force && !firstTime && remoteKeyTs && remoteKeyTs <= localKeyTs) {
+            // Local is newer or equal — keep local
+            if (remoteKeyTs < localKeyTs) {
+              console.info(`CloudSync: kept local ${r.shortKey} (local newer)`);
+            }
+            return;
+          }
+
+          // Apply remote value
+          const v = settings[r.shortKey];
+          if (v === null || v === undefined) {
+            localStorage.removeItem(r.key);
+          } else {
+            const out = (typeof v === 'string') ? v : JSON.stringify(v);
+            localStorage.setItem(r.key, out);
+          }
+          // Update per-key timestamp + snapshot for push diff
+          if (remoteKeyTs) _setLocalPerKeyTs(r.shortKey, remoteKeyTs);
+          const valStr = (v === null || v === undefined) ? '' : (typeof v === 'string' ? v : JSON.stringify(v));
+          _lastPulledValues.set(r.shortKey, valStr);
+          applied++;
+        });
+
+        // Also populate _lastPulledValues for keys we didn't apply (local newer)
+        // so push() can diff against them
+        REGISTERED.forEach(r => {
+          if (!_lastPulledValues.has(r.shortKey)) {
+            const raw = localStorage.getItem(r.key);
+            _lastPulledValues.set(r.shortKey, raw || '');
+          }
+        });
+
+        // Update global timestamp (v1 compat) to max of per_key
         if (remoteAt) _setLocalTs(remoteAt);
         _lastPulled = new Date();
-        const fromDevice = remote._updated_by || 'another device';
+
         const sameDevice = fromDevice === _deviceId();
         if (applied > 0 && !opts.silent && !sameDevice) {
           _toast(`⬇ Synced ${applied} setting${applied === 1 ? '' : 's'} from ${fromDevice}`);
-          // Notify listeners so UIs can re-render
           window.dispatchEvent(new CustomEvent('cloudsync:applied', { detail: { applied, from: fromDevice } }));
         }
         return { changed: applied > 0, applied, from: fromDevice, at: remoteAt };
@@ -334,32 +416,67 @@ window.CloudSync = (function () {
     if (!_getToken || !_getToken()) return { skipped: 'no_token' };
     _pushing = true;
     try {
-      // Re-read existing to build rolling backup atomically
+      // Re-read existing to build rolling backup + preserve per_key from remote
       let backupContent = null;
+      let existingPerKey = {};
       try {
         const cur = await _ghFetch(`https://api.github.com/gists/${GIST_ID}`);
         if (cur.ok) {
           const data = await cur.json();
           const f = data.files && data.files[FILE];
           const bc = window.readGistFile ? await window.readGistFile(f) : (f && f.content) || '';
-          if (bc) backupContent = bc;
+          if (bc) {
+            backupContent = bc;
+            try {
+              const parsed = JSON.parse(bc);
+              existingPerKey = parsed.per_key || {};
+            } catch {}
+          }
         }
       } catch {}
       const settings = _collectLocal();
-      // If nothing to write (no registered keys ever populated), skip
       if (!Object.keys(settings).length) return { skipped: 'empty' };
+
       const now = new Date().toISOString();
+      const device = _deviceId();
+
+      // Build per_key: only bump timestamp for keys that changed since last pull
+      const perKey = {};
+      REGISTERED.forEach(r => {
+        const currentVal = localStorage.getItem(r.key) || '';
+        const lastPulledVal = _lastPulledValues.get(r.shortKey);
+        const hasChanged = lastPulledVal === undefined || currentVal !== lastPulledVal;
+
+        if (hasChanged) {
+          perKey[r.shortKey] = { updated_at: now, updated_by: device };
+          // Update snapshot so next push won't re-stamp
+          _lastPulledValues.set(r.shortKey, currentVal);
+          // Update local per-key timestamp
+          _setLocalPerKeyTs(r.shortKey, now);
+        } else {
+          // Keep existing remote metadata for this key
+          perKey[r.shortKey] = existingPerKey[r.shortKey] || { updated_at: now, updated_by: device };
+        }
+      });
+
+      // _updated_at = max of all per_key timestamps (v1 backward compat)
+      let maxTs = now;
+      Object.values(perKey).forEach(meta => {
+        if (meta.updated_at && meta.updated_at > maxTs) maxTs = meta.updated_at;
+      });
+
       const body = {
-        _version: 1,
-        _updated_at: now,
-        _updated_by: _deviceId(),
+        _version: 2,
+        _updated_at: maxTs,
+        _updated_by: device,
         settings,
+        per_key: perKey,
       };
       const files = {
         [FILE]: { content: JSON.stringify(body, null, 2) },
       };
       if (backupContent) {
-        const bak = { _backup_at: now, _backup_by: _deviceId(), content: JSON.parse(backupContent) };
+        const bak = { _backup_at: now, _backup_by: device, content: JSON.parse(backupContent) };
         files[BAK_FILE] = { content: JSON.stringify(bak, null, 2) };
       }
       const resp = await _ghFetch(`https://api.github.com/gists/${GIST_ID}`, {
@@ -368,11 +485,11 @@ window.CloudSync = (function () {
         body: JSON.stringify({ files }),
       });
       if (!resp.ok) throw new Error('PATCH HTTP ' + resp.status);
-      _setLocalTs(now);
+      _setLocalTs(maxTs);
       _lastPushedAt = new Date();
       _etag = null; // force re-fetch next pull
-      window.dispatchEvent(new CustomEvent('cloudsync:pushed', { detail: { at: now } }));
-      return { ok: true, at: now };
+      window.dispatchEvent(new CustomEvent('cloudsync:pushed', { detail: { at: maxTs } }));
+      return { ok: true, at: maxTs };
     } catch (e) {
       console.warn('[CloudSync] push failed:', e);
       return { error: String(e.message || e) };

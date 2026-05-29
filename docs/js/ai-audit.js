@@ -33,6 +33,7 @@
       after_snapshot: entry.after_snapshot || null,
       applied_at: entry.applied_at || new Date().toISOString(),
       conv_id: entry.conv_id || null,
+      gist_etag: entry.gist_etag || null,
     };
     const entries = _load();
     entries.push(record);
@@ -61,6 +62,18 @@
   function clearAll() {
     try { localStorage.removeItem(LS_KEY); } catch {}
     console.log('[audit] Cleared all entries');
+  }
+
+  // Used by rollback path to refresh the etag anchor after a successful PATCH
+  // so chained rollbacks still have a fresh If-Match value.
+  function updateEtag(proposalId, etag) {
+    if (!proposalId || !etag) return;
+    const entries = _load();
+    const idx = entries.findIndex(e => e && e.proposal_id === proposalId);
+    if (idx >= 0) {
+      entries[idx].gist_etag = etag;
+      _save(entries);
+    }
   }
 
   function enableSync(enabled) {
@@ -156,5 +169,5 @@
     });
   }
 
-  window.AIAudit = { log, getAll, getRecent, getLast, getByProposalId, clearAll, enableSync, isSyncEnabled, isOwnerSync, _isCurrentUserGistOwner };
+  window.AIAudit = { log, getAll, getRecent, getLast, getByProposalId, clearAll, updateEtag, enableSync, isSyncEnabled, isOwnerSync, _isCurrentUserGistOwner };
 })();
