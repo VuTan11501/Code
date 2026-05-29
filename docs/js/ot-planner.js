@@ -582,11 +582,23 @@ function _renderOtRow(ot, idx, isPast) {
   } else if (fixed) {
     statusBadge = `<span class="badge-recurring" data-tooltip="Cross-midnight CO auto-scheduled">${ICON('sparkles', 11)} Auto-fixed</span>`;
   } else if (inWindow) {
-    // In creation window — will be auto-created at next 10:00 JST run
+    // In creation window — normally will be auto-created at next 10:00 JST run.
+    // BUT if the OT start time has already passed (or is imminent within 60min),
+    // waiting until tomorrow 10:00 is wasteful — prompt the user to sync now.
     const next = _nextAutoCreateTime();
     const until = _humanizeUntil(next);
     const tipTs = `${next.getFullYear()}-${String(next.getMonth()+1).padStart(2,'0')}-${String(next.getDate()).padStart(2,'0')} 10:00 JST`;
-    statusBadge = `<span class="badge-once" data-tooltip="Will auto-create on ${_esc(tipTs)} via Auto OT Creator">${ICON('hourglass', 11)} Pending · auto in ${until}</span>`;
+    const startDt = new Date(`${ot.date}T${ot.start}:00+09:00`);
+    const now = jstNow();
+    const minsUntilStart = (startDt - now) / 60000;
+    if (minsUntilStart <= 60) {
+      statusBadge = `<span class="badge-warning" role="button" tabindex="0"
+        onclick="syncOtWithDokoKin()" style="cursor:pointer"
+        data-tooltip="OT start time is past or imminent — click to push to DokoKin now (next auto-run is at ${_esc(tipTs)})"
+        >${ICON('alertTriangle', 11)} Sync now</span>`;
+    } else {
+      statusBadge = `<span class="badge-once" data-tooltip="Will auto-create on ${_esc(tipTs)} via Auto OT Creator">${ICON('hourglass', 11)} Pending · auto in ${until}</span>`;
+    }
   } else {
     // Outside 7-day window — queued, becomes eligible (date - 7 days)
     const eligible = _addDays(ot.date, -OT_CREATION_WINDOW_DAYS);
