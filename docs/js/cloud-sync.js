@@ -416,12 +416,19 @@ window.CloudSync = (function () {
     if (!_getToken || !_getToken()) return { skipped: 'no_token' };
     _pushing = true;
     try {
-      // Re-read existing to build rolling backup + preserve per_key from remote
+      // Re-read existing to build rolling backup + preserve per_key + per-key
+       // remote SETTINGS from remote. For keys we haven't locally modified
+       // since the last pull, we must echo the REMOTE value back (not our
+       // stale local) so we don't clobber another device's concurrent write
+       // that landed between our last pull and this push.
       let backupContent = null;
       let existingPerKey = {};
+      let existingSettings = {};
+      let existingEtag = null;
       try {
         const cur = await _ghFetch(`https://api.github.com/gists/${GIST_ID}`);
         if (cur.ok) {
+          existingEtag = cur.headers.get('ETag');
           const data = await cur.json();
           const f = data.files && data.files[FILE];
           const bc = window.readGistFile ? await window.readGistFile(f) : (f && f.content) || '';
@@ -430,6 +437,7 @@ window.CloudSync = (function () {
             try {
               const parsed = JSON.parse(bc);
               existingPerKey = parsed.per_key || {};
+              existingSettings = parsed.settings || {};
             } catch {}
           }
         }
@@ -440,7 +448,9 @@ window.CloudSync = (function () {
       const now = new Date().toISOString();
       const device = _deviceId();
 
-      // Build per_key: only bump timestamp for keys that changed since last pull
+      // Build per_key + merge settings: only bump timestamp + ship local value
+      // for keys that changed since last pull. For unchanged keys, preserve
+      // remote value AND remote timestamp.
       const perKey = {};
       REGISTERED.forEach(r => {
         const currentVal = localStorage.getItem(r.key) || '';
@@ -454,7 +464,11 @@ window.CloudSync = (function () {
           // Update local per-key timestamp
           _setLocalPerKeyTs(r.shortKey, now);
         } else {
-          // Keep existing remote metadata for this key
+          // Unchanged locally → echo remote value + remote metadata back so
+          // a concurrent push from another device wins on its keys.
+          if (Object.prototype.hasOwnProperty.call(existingSettings, r.shortKey)) {
+            settings[r.shortKey] = existingSettings[r.shortKey];
+          }
           perKey[r.shortKey] = existingPerKey[r.shortKey] || { updated_at: now, updated_by: device };
         }
       });
@@ -479,11 +493,18 @@ window.CloudSync = (function () {
         const bak = { _backup_at: now, _backup_by: device, content: JSON.parse(backupContent) };
         files[BAK_FILE] = { content: JSON.stringify(bak, null, 2) };
       }
+      const patchHeaders = { 'Content-Type': 'application/json' };
+      if (existingEtag) patchHeaders['If-Match'] = existingEtag;
       const resp = await _ghFetch(`https://api.github.com/gists/${GIST_ID}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: patchHeaders,
         body: JSON.stringify({ files }),
       });
+      if (resp.status === 412) {
+        // Concurrent write landed between our GET and PATCH. Bail; the next
+        // debounced push (or focus pull) will re-converge.
+        throw new Error('PATCH 412 (concurrent write — will retry on next sync)');
+      }
       if (!resp.ok) throw new Error('PATCH HTTP ' + resp.status);
       _setLocalTs(maxTs);
       _lastPushedAt = new Date();

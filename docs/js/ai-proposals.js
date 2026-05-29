@@ -255,9 +255,23 @@
 
   async function _applyToFile(file, proposals, retryCount = 0, baseSnapshot = null) {
     if (typeof apiFetch !== 'function') throw new Error('apiFetch not available');
+    const token = typeof sessionToken !== 'undefined' ? sessionToken : null;
+    if (!token) throw new Error('No session token');
 
-    // Fetch current Gist
-    const gist = await apiFetch(`/gists/${GIST_ID}`);
+    // Raw GET so we can capture the ETag for the PATCH If-Match header.
+    // apiFetch caches via in-memory ETag map but doesn't expose the header
+    // value, which we need to detect concurrent writes between our GET
+    // and PATCH (412 → retry with fresh state + ORIGINAL baseSnapshot).
+    const proxyBase = (typeof localStorage !== 'undefined' && localStorage.getItem('wf_dash_gh_proxy_url')) || 'https://api.github.com';
+    const getResp = await fetch(`${proxyBase}/gists/${GIST_ID}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/vnd.github+json',
+      },
+    });
+    if (!getResp.ok) throw new Error(`Gist GET failed: ${getResp.status}`);
+    const currentEtag = getResp.headers.get('ETag') || getResp.headers.get('etag') || null;
+    const gist = await getResp.json();
     const gistFile = gist.files && gist.files[file];
     let currentData = [];
     const gfContent = window.readGistFile ? await window.readGistFile(gistFile) : (gistFile && gistFile.content) || '';
@@ -318,27 +332,27 @@
       content = JSON.stringify(currentData, null, 2);
     }
 
-    // PATCH Gist
-    const token = typeof sessionToken !== 'undefined' ? sessionToken : null;
-    if (!token) throw new Error('No session token');
-
+    // PATCH Gist — send If-Match with the ETag captured during our GET so
+    // concurrent writes between GET and PATCH return 412 and trigger retry.
     const patchBody = { files: { [file]: { content } } };
+    const patchHeaders = {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      'Accept': 'application/vnd.github+json',
+    };
+    if (currentEtag) patchHeaders['If-Match'] = currentEtag;
     let patchResp;
     try {
-      patchResp = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
+      patchResp = await fetch(`${proxyBase}/gists/${GIST_ID}`, {
         method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-          'Accept': 'application/vnd.github+json',
-        },
+        headers: patchHeaders,
         body: JSON.stringify(patchBody),
       });
       if (patchResp.status === 409 || patchResp.status === 412) {
         // Conflict — retry once, carrying the ORIGINAL baseSnapshot so the
         // 3-way merge can detect concurrent edits this time round.
         if (retryCount < 1) {
-          console.log('[proposals] ETag conflict, retrying with 3-way merge...');
+          console.log('[proposals] ETag conflict (412/409), retrying with 3-way merge...');
           return _applyToFile(file, proposals, retryCount + 1, baseSnapshot);
         }
         throw new Error('Gist conflict after retry');
@@ -379,11 +393,16 @@
   // ─── 3-way merge conflict detection ─────────────────
   // Decides whether a proposal can still be safely applied when the remote
   // state has changed since the proposal was created (base snapshot).
+  // The "base" for each proposal is taken from ``proposal.diff.before`` when
+  // available — this is the snapshot AT PROPOSAL CREATION TIME, which is what
+  // the user actually reviewed in the modal. Falling back to apply-time
+  // ``baseEntries`` would miss any drift between proposal create and apply.
   //   • create_* → conflict only on duplicate id (someone else inserted it)
-  //   • delete_schedule → conflict if the target was edited remotely (don't
-  //     silently delete someone else's update); no-op if already gone
+  //   • delete_schedule → conflict if the target was edited remotely since
+  //     proposal creation (don't silently delete someone else's update);
+  //     no-op if already gone
   //   • update_schedule → per-field merge: conflict only if a field WE touch
-  //     was also changed remotely. Otherwise apply onto current state.
+  //     was also changed remotely since proposal creation
   //   • add_skip_date → never field-conflicts (skip_dates is union-mergeable in
   //     _applyDiff). Conflict only if target entry was deleted remotely.
   function _detectConflict(proposal, baseEntries, currentEntries) {
@@ -402,7 +421,12 @@
 
     const targetId = (diff.before && diff.before.id) || (diff.after && diff.after.id);
     if (!targetId) return null;
-    const baseEntry = baseArr.find(e => e && e.id === targetId) || null;
+    // Prefer the proposal's own ``before`` snapshot (captured at proposal-
+    // creation time and shown to the user in the diff modal). Fall back to
+    // the apply-time base only if the proposal didn't capture one (legacy).
+    const baseEntry = (diff.before && diff.before.id === targetId)
+      ? diff.before
+      : (baseArr.find(e => e && e.id === targetId) || null);
     const curEntry = curArr.find(e => e && e.id === targetId) || null;
 
     if (kind === 'delete_schedule') {
