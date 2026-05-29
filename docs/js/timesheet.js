@@ -168,12 +168,17 @@ function _calcLostForDay(d) {
     if (d.date > todayKey) return { lostMin: 0, sundayLostMin: 0, nightLostMin: 0 };
   }
 
-  const actualWorkMin   = _hhmmToMin(d.actualWorking);
-  const expectedWorkMin = _hhmmToMin(d.workingHours);
-  // If DokoKin doesn't expose workingHours for this day yet (e.g. very
-  // fresh fetch), fall back to standard 8h + req as the expected total.
-  const expectedFallback = (8 * 60) + req;
-  const expected = expectedWorkMin > 0 ? expectedWorkMin : expectedFallback;
+  const actualWorkMin = _hhmmToMin(d.actualWorking);
+  // Expected total presence the user planned to put in:
+  //   standard hours (8h on weekdays, 0h on Sat/Sun/holidays) + OT request.
+  //
+  // We cannot use d.workingHours from DokoKin here — it reflects what was
+  // ACTUALLY counted (≈ actualWorking minus breaks), NOT what was planned.
+  // Comparing actualWorking to workingHours would always be ~zero and
+  // hide every Lost case (e.g. 05-17 Sun: workingHours=actualWorking=10:32
+  // even though the user requested 12h of OT and was 1:28 short).
+  const stdMin = (d.isSunday || d.isSaturday || d.isHoliday) ? 0 : (8 * 60);
+  const expected = stdMin + req;
 
   const gap = expected - actualWorkMin;
   if (gap <= LOST_OT_TOLERANCE_MIN) {
@@ -443,10 +448,13 @@ function renderTimesheet() {
         const isFuture = d.date && d.date > today;
         if (isLost) {
           const dayYen = _lostYenFromDay(parts);
+          const reqMin = _hhmmToMin(d.otRequest);
+          const stdMin = (d.isSunday || d.isSaturday || d.isHoliday) ? 0 : (8 * 60);
+          const expectedHhmm = _minToHhmm(stdMin + reqMin);
           const lines = [
             `Lost ${_minToHhmm(lost)} (≈ ¥${dayYen.toLocaleString('en-US')} gross)`,
             `Check-in/out didn't fully cover the OT request range.`,
-            `Requested: ${d.otRequest || '—'} · Worked: ${d.actualWorking || '—'} / Expected: ${d.workingHours || '—'}`,
+            `Requested: ${d.otRequest || '—'} · Worked: ${d.actualWorking || '—'} / Expected: ${expectedHhmm}`,
           ];
           if (parts.sundayLostMin > 0) lines.push(`+10% Sunday on ${_minToHhmm(parts.sundayLostMin)}`);
           if (parts.nightLostMin > 0)  lines.push(`+25% Night on ${_minToHhmm(parts.nightLostMin)}`);
