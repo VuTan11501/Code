@@ -118,10 +118,72 @@ def _slim_detail(d: dict) -> dict:
     }
 
 
-def normalize_month(raw: dict) -> dict:
-    """Build month snapshot {summary, details}."""
+def fetch_ot_request_statuses(token: str, year: int, month: int) -> dict[str, int]:
+    """Return {date_str: status_int} for all OT requests in the given month.
+
+    Status values observed in the DokoKin OT request entity:
+      • 1 = pending (just created / awaiting approval)
+      • 2 = approved
+      • 3 = rejected
+      • other → treated as pending by the frontend.
+
+    Falls back to an empty dict on any error so timesheet sync still works
+    even if this enrichment fails.
+    """
+    from calendar import monthrange
+    from gh_ot_creator import http_post  # type: ignore
+    last_day = monthrange(year, month)[1]
+    try:
+        status, data = http_post(
+            API_BASE + "otrequest/search",
+            json_data={
+                "Status": 0,            # 0 = all statuses
+                "FromDate": f"{year}-{month:02d}-01",
+                "ToDate":   f"{year}-{month:02d}-{last_day}",
+                "IsApproval": True,     # include both approved and not
+            },
+            headers=api_headers(token),
+        )
+    except Exception as e:
+        log(f"  ⚠ otrequest/search {year}-{month:02d} failed: {e}")
+        return {}
+    if status != 200 or not isinstance(data, list):
+        log(f"  ⚠ otrequest/search {year}-{month:02d}: HTTP {status}")
+        return {}
+    out: dict[str, int] = {}
+    for r in data:
+        if not isinstance(r, dict):
+            continue
+        # requestDate is like "2026-05-27T00:00:00"; take YYYY-MM-DD prefix.
+        dt = r.get("requestDate") or r.get("startTime") or ""
+        if not isinstance(dt, str) or len(dt) < 10:
+            continue
+        dk = dt[:10]
+        st = r.get("status")
+        if not isinstance(st, int):
+            continue
+        # If multiple requests exist for the same date, prefer the most
+        # final state: rejected (3) > approved (2) > pending (anything else).
+        prev = out.get(dk)
+        rank = lambda s: 3 if s == 3 else (2 if s == 2 else 1)
+        if prev is None or rank(st) > rank(prev):
+            out[dk] = st
+    return out
+
+
+def normalize_month(raw: dict, ot_status_by_date: dict[str, int] | None = None) -> dict:
+    """Build month snapshot {summary, details}.
+
+    `ot_status_by_date` maps YYYY-MM-DD → request-status integer. When
+    provided, each detail row is annotated with `otRequestStatus` so the
+    PWA can show approved / pending / rejected icons.
+    """
     details_raw = raw.get("details") or []
     details = [_slim_detail(x) for x in details_raw if isinstance(x, dict)]
+    if ot_status_by_date:
+        for d in details:
+            if d.get("date") and d["date"] in ot_status_by_date:
+                d["otRequestStatus"] = ot_status_by_date[d["date"]]
     summary = {
         "displayStandardWorkingHour":    raw.get("displayStandardWorkingHour") or "",
         "displayTotalWorkingHours":      raw.get("displayTotalWorkingHours") or "",
@@ -239,7 +301,8 @@ def main():
         if not raw:
             log(f"  · {y}-{m:02d}: skipped (no data / fetch error)")
             continue
-        snap = normalize_month(raw)
+        ot_status = fetch_ot_request_statuses(kt, y, m)
+        snap = normalize_month(raw, ot_status)
         # Skip empty calendar shells (months before user joined FJP).
         # Heuristic: no actual working time AND no OT request AND no checkins.
         s = snap["summary"]
