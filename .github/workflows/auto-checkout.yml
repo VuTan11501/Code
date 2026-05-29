@@ -66,17 +66,6 @@ jobs:
         env:
           LINE_NOTIFY_TOKEN: ${{ secrets.LINE_NOTIFY_TOKEN }}
         run: python .github/scripts/line_notify.py "❌ Auto Checkout FAILED - Run #${{ github.run_number }} ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+      # Phase 3: token rotation is queued by the worker into Gist
+      # pending_token_rotation.json and applied centrally by token-monitor.yml.
 
-      - name: Update secret if token rotated
-        if: always() && steps.checkout_step.outputs.token_rotated == 'true'
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ secrets.GH_PAT }}
-          NEW_REFRESH_TOKEN: ${{ steps.checkout_step.outputs.new_refresh_token }}
-        run: |
-          if [ -n "$NEW_REFRESH_TOKEN" ] && [ -n "$GH_TOKEN" ]; then
-            gh secret set AZURE_REFRESH_TOKEN --body "$NEW_REFRESH_TOKEN" --repo "$GITHUB_REPOSITORY"
-            echo "✅ Secret updated with rotated token"
-          else
-            echo "⚠️ Token rotated but GH_PAT not set or new token empty"
-          fi

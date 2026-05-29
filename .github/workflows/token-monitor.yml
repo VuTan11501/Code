@@ -1,12 +1,24 @@
 name: Token Health Monitor
 
 on:
+  # Every 30 min: workers queue rotated tokens into Gist
+  # pending_token_rotation.json (Phase 3 hardening — workers no longer call
+  # `gh secret set` directly to avoid race conditions). This monitor is now
+  # the SOLE rotator of the AZURE_REFRESH_TOKEN secret, so it must drain the
+  # queue frequently enough that worker-side rotations propagate quickly.
   schedule:
-    - cron: '0 */6 * * *'  # every 6 hours
+    - cron: '*/30 * * * *'
   workflow_dispatch:
 
 permissions:
   contents: read
+
+# Serialize with azure-reauth (the only other workflow that mutates the
+# AZURE_REFRESH_TOKEN secret). Workers do NOT join this group — they only
+# write to the Gist queue, which is itself ETag-CAS-safe.
+concurrency:
+  group: azure-token-rotation
+  cancel-in-progress: false
 
 env:
   TZ: Asia/Tokyo
@@ -32,6 +44,7 @@ jobs:
         env:
           AZURE_REFRESH_TOKEN: ${{ secrets.AZURE_REFRESH_TOKEN }}
           GH_TOKEN: ${{ secrets.GH_PAT }}
+          GH_PAT: ${{ secrets.GH_PAT }}
           GIST_ID: ${{ vars.GIST_ID || 'abc2a47c0a396025a72a6580227ff493' }}
         run: python .github/scripts/token_monitor.py --gist
 
@@ -41,9 +54,15 @@ jobs:
           GH_TOKEN: ${{ secrets.GH_PAT }}
           NEW_REFRESH_TOKEN: ${{ steps.token_check.outputs.new_refresh_token }}
         run: |
-          if [ -n "$NEW_REFRESH_TOKEN" ] && [ -n "$GH_TOKEN" ]; then
-            gh secret set AZURE_REFRESH_TOKEN --body "$NEW_REFRESH_TOKEN" --repo "$GITHUB_REPOSITORY"
-            echo "✅ Secret updated with rotated token"
+          if [ -z "$NEW_REFRESH_TOKEN" ] || [ -z "$GH_TOKEN" ]; then
+            echo "❌ NEW_REFRESH_TOKEN or GH_TOKEN is empty — cannot rotate"
+            exit 1
+          fi
+          if gh secret set AZURE_REFRESH_TOKEN --body "$NEW_REFRESH_TOKEN" --repo "$GITHUB_REPOSITORY"; then
+            echo "✅ rotated"
+          else
+            echo "❌ rotation failed"
+            exit 1
           fi
 
       - name: Alert on expiry

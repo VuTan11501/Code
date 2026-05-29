@@ -51,15 +51,6 @@ jobs:
           CLEAN_SEEDS: ${{ inputs.clean_seeds }}
           FETCH_TIMESHEET: ${{ inputs.fetch_timesheet }}
         run: python .github/scripts/ot_history_fetch.py
+      # Phase 3: token rotation is queued by the worker into Gist
+      # pending_token_rotation.json and applied centrally by token-monitor.yml.
 
-      - name: Update secret if token rotated
-        if: always() && steps.fetch.outputs.token_rotated == 'true'
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ secrets.GH_PAT }}
-          NEW_REFRESH_TOKEN: ${{ steps.fetch.outputs.new_refresh_token }}
-        run: |
-          if [ -n "$NEW_REFRESH_TOKEN" ] && [ -n "$GH_TOKEN" ]; then
-            gh secret set AZURE_REFRESH_TOKEN --body "$NEW_REFRESH_TOKEN" --repo "$GITHUB_REPOSITORY"
-            echo "✅ Secret updated with rotated token"
-          fi

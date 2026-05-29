@@ -36,17 +36,6 @@ jobs:
           NOTIFY_EMAIL: ${{ secrets.NOTIFY_EMAIL }}
           GH_PAT: ${{ secrets.GH_PAT }}
         run: python .github/scripts/gh_ot_creator.py
+      # Phase 3: token rotation is queued by the worker into Gist
+      # pending_token_rotation.json and applied centrally by token-monitor.yml.
 
-      - name: Update secret if token rotated
-        if: always() && steps.ot_creator.outputs.token_rotated == 'true'
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ secrets.GH_PAT }}
-          NEW_REFRESH_TOKEN: ${{ steps.ot_creator.outputs.new_refresh_token }}
-        run: |
-          if [ -n "$NEW_REFRESH_TOKEN" ] && [ -n "$GH_TOKEN" ]; then
-            gh secret set AZURE_REFRESH_TOKEN --body "$NEW_REFRESH_TOKEN" --repo "$GITHUB_REPOSITORY"
-            echo "✅ Secret updated with rotated token"
-          else
-            echo "⚠️ Token rotated but GH_PAT not set or new token empty"
-          fi

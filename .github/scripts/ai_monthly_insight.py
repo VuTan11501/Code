@@ -871,15 +871,24 @@ def main():
         try:
             log("Refreshing Azure AD token...")
             azure_token, new_refresh = refresh_azure_token(refresh_token)
-            # Handle token rotation
+            # Phase 3 hardening: queue rotation; token-monitor drains centrally.
             if new_refresh != refresh_token:
-                log("🔄 Refresh token rotated")
-                # Set GitHub Actions output for rotation handling
+                print(f"::add-mask::{new_refresh}")
+                try:
+                    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+                    from pending_rotation import write_pending  # noqa: E402
+                    gh_pat = os.environ.get("GH_PAT") or os.environ.get("GH_TOKEN")
+                    if gh_pat:
+                        write_pending(new_refresh, source="ai_monthly_insight", gh_pat=gh_pat)
+                        log("🔄 Refresh token rotated; queued for centralized rotation.")
+                    else:
+                        log("⚠️ Refresh token rotated but GH_PAT missing — cannot queue.")
+                except Exception as _e:
+                    log(f"⚠️ Failed to queue pending rotation (non-fatal): {_e}")
                 gh_output = os.environ.get("GITHUB_OUTPUT")
                 if gh_output:
                     with open(gh_output, "a") as f:
-                        f.write(f"token_rotated=true\n")
-                        f.write(f"new_refresh_token={new_refresh}\n")
+                        f.write("token_rotated=true\n")
 
             log("Exchanging for DokoKin token...")
             dokokin_token = get_dokokin_token(azure_token)

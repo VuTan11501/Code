@@ -182,15 +182,19 @@ def main():
         sys.exit(1)
     print("  ✅ Secret updated")
 
-    # Step 4: trigger token-monitor to refresh status
+    # Step 4: trigger token-monitor to refresh status (best-effort)
     print()
     print("Triggering token-monitor workflow...")
-    subprocess.run(
+    proc2 = subprocess.run(
         ["gh", "workflow", "run", "token-monitor.yml", "--repo", REPO, "--ref", "main"],
         env={**os.environ, "GH_TOKEN": GH_TOKEN},
         capture_output=True,
         text=True,
     )
+    if proc2.returncode != 0:
+        # Non-fatal — secret was successfully rotated; this is just a hint.
+        print(f"  ⚠️ Could not auto-trigger token-monitor (non-fatal): "
+              f"{proc2.stderr.strip()[:200]}")
 
     gist_write({
         "state": "success",

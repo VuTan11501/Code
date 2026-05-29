@@ -322,13 +322,22 @@ def upsert_payslips(new_records: list[dict], force: bool) -> int:
 # ═══════════════════════════════════════════════════════════
 
 def _emit_token_rotation(new_refresh: str):
+    # Phase 3 hardening: queue rotation; token-monitor drains centrally.
     print(f"::add-mask::{new_refresh}")
+    try:
+        from pending_rotation import write_pending  # noqa: E402
+        gh_pat = os.environ.get("GH_PAT") or os.environ.get("GH_TOKEN")
+        if gh_pat:
+            write_pending(new_refresh, source="gh_payslip_fetch", gh_pat=gh_pat)
+            log("🔄 Refresh token rotated; queued for centralized rotation.")
+        else:
+            log("⚠️ Refresh token rotated but GH_PAT missing — cannot queue.")
+    except Exception as _e:
+        log(f"⚠️ Failed to queue pending rotation (non-fatal): {_e}")
     out = os.environ.get("GITHUB_OUTPUT")
     if out:
         with open(out, "a", encoding="utf-8") as f:
             f.write("token_rotated=true\n")
-            f.write(f"new_refresh_token={new_refresh}\n")
-    log("⚠️ Azure refresh token rotated — written to GITHUB_OUTPUT")
 
 
 def _parse_year_month(s: str | None, fallback: datetime):

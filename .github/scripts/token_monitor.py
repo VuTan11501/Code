@@ -232,18 +232,61 @@ def main():
     else:
         print(f"  ⚠️ API returned HTTP {st} (non-critical)")
 
-    # Step 4: Refresh-token rotation
+    # Step 4: Refresh-token rotation — own + drain pending queue from workers.
+    # Phase 3: token-monitor is the SOLE rotator of the GitHub secret. Worker
+    # scripts write rotated tokens into pending_token_rotation.json; we merge
+    # their entries with our own rotation candidate, pick the LATEST by
+    # written_at, and emit it to GITHUB_OUTPUT for the workflow step to apply.
+    candidates = []
     if new_refresh and new_refresh != refresh_token:
-        print()
-        print("⚠️ Refresh token was ROTATED by Azure AD")
-        status["refresh_token_rotated"] = True
-        status["last_rotation_at"] = now.isoformat()
-        out = os.environ.get("GITHUB_OUTPUT")
-        if out:
-            print(f"::add-mask::{new_refresh}")
-            with open(out, "a") as f:
-                f.write("token_rotated=true\n")
-                f.write(f"new_refresh_token={new_refresh}\n")
+        candidates.append({
+            "token": new_refresh,
+            "source": "token_monitor",
+            "written_at": now.isoformat(),
+        })
+
+    try:
+        from pending_rotation import consume_pending  # noqa: E402
+        gh_pat = os.environ.get("GH_PAT") or os.environ.get("GH_TOKEN")
+        if gh_pat:
+            queued = consume_pending(gh_pat)
+            if queued:
+                print()
+                print(f"📥 Drained {len(queued)} pending rotation(s) from queue")
+                for q in queued:
+                    src = q.get("source", "?")
+                    ts = q.get("written_at", "?")
+                    rid = q.get("run_id", "")
+                    print(f"   - source={src} written_at={ts} run_id={rid}")
+                candidates.extend(queued)
+    except Exception as e:
+        print(f"  ⚠️ Failed to drain pending rotation queue: {e}")
+
+    if candidates:
+        candidates.sort(key=lambda c: c.get("written_at", ""), reverse=True)
+        latest = candidates[0]
+        latest_token = latest.get("token")
+        latest_source = latest.get("source", "?")
+        distinct_sources = {c.get("source") for c in candidates}
+        distinct_tokens = {c.get("token") for c in candidates if c.get("token")}
+
+        if len(distinct_tokens) > 1:
+            print(f"  ⚠️ Multi-source rotation detected: "
+                  f"picked LATEST from {latest_source} "
+                  f"(sources seen: {sorted(distinct_sources)})")
+
+        if latest_token and latest_token != refresh_token:
+            print()
+            print(f"⚠️ Refresh token ROTATION will be applied "
+                  f"(source={latest_source})")
+            status["refresh_token_rotated"] = True
+            status["last_rotation_at"] = now.isoformat()
+            out = os.environ.get("GITHUB_OUTPUT")
+            if out:
+                print(f"::add-mask::{latest_token}")
+                with open(out, "a") as f:
+                    f.write("token_rotated=true\n")
+                    f.write(f"new_refresh_token={latest_token}\n")
 
     status["status"] = "healthy"
     print()

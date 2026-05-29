@@ -55,10 +55,6 @@ jobs:
             FLAGS="$FLAGS --dry-run"
           fi
           python .github/scripts/ai_monthly_insight.py $FLAGS
+      # Phase 3: token rotation is queued by the worker into Gist
+      # pending_token_rotation.json and applied centrally by token-monitor.yml.
 
-      - name: Update refresh token if rotated
-        if: steps.insight.outputs.token_rotated == 'true'
-        env:
-          GH_PAT: ${{ secrets.GH_PAT }}
-        run: |
-          echo "${{ steps.insight.outputs.new_refresh_token }}" | gh secret set AZURE_REFRESH_TOKEN

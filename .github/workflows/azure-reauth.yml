@@ -9,8 +9,9 @@ permissions:
 env:
   TZ: Asia/Tokyo
 
+# Share the same lock as token-monitor — both mutate AZURE_REFRESH_TOKEN.
 concurrency:
-  group: azure-reauth
+  group: azure-token-rotation
   cancel-in-progress: false
 
 jobs:

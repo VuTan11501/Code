@@ -980,12 +980,23 @@ def main():
             sys.exit(1)
 
         # ── Handle token rotation ──
+        # Phase 3 hardening: queue the rotated token in the Gist;
+        # token-monitor.yml drains the queue and updates the GitHub
+        # secret centrally (avoids overlapping `gh secret set` races
+        # that previously overwrote a newer token with an older one).
         if new_refresh != refresh_token:
-            log("⚠️ Refresh token rotated!")
-            # Mask token in GitHub Actions logs
             print(f"::add-mask::{new_refresh}")
+            try:
+                from pending_rotation import write_pending  # noqa: E402
+                gh_pat = os.environ.get("GH_PAT") or os.environ.get("GH_TOKEN")
+                if gh_pat:
+                    write_pending(new_refresh, source="gh_checkin", gh_pat=gh_pat)
+                    log("🔄 Refresh token rotated; queued for centralized rotation.")
+                else:
+                    log("⚠️ Refresh token rotated but GH_PAT missing — cannot queue.")
+            except Exception as _e:
+                log(f"⚠️ Failed to queue pending rotation (non-fatal): {_e}")
             set_output("token_rotated", "true")
-            set_output("new_refresh_token", new_refresh)
         else:
             set_output("token_rotated", "false")
 

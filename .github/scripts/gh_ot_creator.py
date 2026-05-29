@@ -516,15 +516,23 @@ def main():
                 errors.append(f"{entry['date']}: {e}")
                 log(f"    ❌ Exception: {e}")
 
-        # Handle token rotation
+        # Phase 3 hardening: queue rotation; token-monitor drains centrally.
         if new_refresh != refresh_token:
-            log("⚠️ Azure refresh token rotated!")
             print(f"::add-mask::{new_refresh}")
+            try:
+                from pending_rotation import write_pending  # noqa: E402
+                gh_pat = os.environ.get("GH_PAT") or os.environ.get("GH_TOKEN")
+                if gh_pat:
+                    write_pending(new_refresh, source="gh_ot_creator", gh_pat=gh_pat)
+                    log("🔄 Refresh token rotated; queued for centralized rotation.")
+                else:
+                    log("⚠️ Refresh token rotated but GH_PAT missing — cannot queue.")
+            except Exception as _e:
+                log(f"⚠️ Failed to queue pending rotation (non-fatal): {_e}")
             output_file = os.environ.get("GITHUB_OUTPUT")
             if output_file:
                 with open(output_file, "a") as f:
-                    f.write(f"token_rotated=true\n")
-                    f.write(f"new_refresh_token={new_refresh}\n")
+                    f.write("token_rotated=true\n")
 
         # Write back kintai_created_at to Gist (best-effort).
         # existing_dates contains ALL DokoKin OT requests for relevant months
