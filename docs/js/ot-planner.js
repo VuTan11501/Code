@@ -485,9 +485,14 @@ function renderOtCalendar() {
         ? `toast('📅 ${dateStr}: ${ots.length} OT entr${ots.length === 1 ? 'y' : 'ies'} (past month, view only)', 'info')`
         : `toast('📅 Past month — view only', 'info')`;
     } else {
-      click = inWindow
-        ? `openOtForm('${dateStr}')`
-        : (ots.length ? `openOtForm(null, '${ots[0].id}')` : `_showOutOfWindowToast('${dateStr}')`);
+      if (ots.length) {
+        // Day already has OT → edit the first one (use table or Add button for a 2nd entry)
+        click = `openOtForm(null, '${ots[0].id}')`;
+      } else {
+        click = inWindow
+          ? `openOtForm('${dateStr}')`
+          : `_showOutOfWindowToast('${dateStr}')`;
+      }
     }
     const label = `${dateStr}${ots.length ? `, ${ots.length} OT` : ''}${!inWindow && !ots.length ? ' (không thể tạo)' : ''}`;
     html += `<div class="${classes.join(' ')}" onclick="${click}" role="button" tabindex="0" aria-label="${label}" aria-disabled="${!inWindow && !ots.length}">`;
