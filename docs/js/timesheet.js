@@ -137,84 +137,58 @@ function _minToHhmm(min) {
   return `${sign}${String(h).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
 }
 
-// Lost-OT for one day: requested OT minutes that did NOT get recognized.
-// Returns: { lostMin, sundayLostMin, nightLostMin, pendingMin, pendingReason }
+// Lost-OT for one day: requested OT minutes that did NOT get worked
+// (the user wasn't physically present long enough to cover the OT span).
+// Returns: { lostMin, sundayLostMin, nightLostMin }
 //
-// • `otNormal + otSat + otSun` = total recognized OT credit (otMidnight is a
-//   subset per ot-salary.js — overlaps with the others; don't double-count).
-// • Sunday premium (+10%) applies to entire lost block if isSunday (matches
-//   the OT engine, which buckets by REQUEST START DATE day-of-week).
-// • Night premium (+25%) applies to the lost portion of midnight hours,
-//   computed as max(0, requested midnight − actual midnight recognized).
+// **Design (rewritten 2026-05-29 evening):** Lost detection is now purely
+// presence-based. It compares `actualWorking` (physical clock-in/out span
+// minus breaks) against `workingHours` (expected total = standard + OT
+// request, per DokoKin). If presence covers expected within tolerance →
+// not lost.
 //
-// **Pending vs Lost distinction (added 2026-05-29):** DokoKin only credits
-// `otNormal/otSat/otSun` AFTER the OT request is approved AND the nightly
-// batch recalc has run. Until then, a day with full presence (check-in/out
-// covering the OT span) will show `actualWorking ≈ workingHours` but
-// `credit = 0`. The old logic flagged this as "Lost" — false positive.
-// New logic: if presence already covers the scheduled total (or the request
-// is marked unapproved), treat as `pendingMin` (chờ credit) instead of lost.
+// We deliberately ignore credit fields (`otNormal/otSat/otSun`) and the
+// `hasUnapprovedOT` flag for the lost-vs-OK decision:
+//   • Credit only appears after manager approval + nightly batch. A day
+//     worked yesterday with credit=0 is NOT lost — it's awaiting approval,
+//     and approval is paperwork, not work that can be "missed".
+//   • The lost concept exists to catch the case where auto-checkout fires
+//     before the planned OT end-time, cutting presence short. That's
+//     entirely a presence (in/out) issue, independent of approval.
+//
+// Premium math (Sunday +10%, Night +25%) is applied when we DO call it
+// lost, using the requested midnight portion as an upper bound.
 function _calcLostForDay(d) {
   const req = _hhmmToMin(d.otRequest);
-  if (req <= 0) return { lostMin: 0, sundayLostMin: 0, nightLostMin: 0, pendingMin: 0 };
+  if (req <= 0) return { lostMin: 0, sundayLostMin: 0, nightLostMin: 0 };
   // Skip future dates: OT for days that haven't happened yet can't be "lost".
   if (d.date) {
     const today = new Date();
     const todayKey = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
-    if (d.date > todayKey) return { lostMin: 0, sundayLostMin: 0, nightLostMin: 0, pendingMin: 0 };
-  }
-  const actual = _hhmmToMin(d.otNormal) + _hhmmToMin(d.otSat) + _hhmmToMin(d.otSun);
-  const gap = req - actual;
-
-  // ── Awaiting-approval check (highest priority) ─────────────────────────
-  // If the OT request is unapproved, the day is Pending regardless of
-  // whether DokoKin has already provisionally credited otNormal/otSat/otSun.
-  // Rejection by the manager could revoke that credit, so a ✓ would be
-  // misleading. Show ⏳ until the approval lands.
-  if (d.hasUnapprovedOT) {
-    const provisional = gap <= LOST_OT_TOLERANCE_MIN;
-    return {
-      lostMin: 0,
-      sundayLostMin: 0,
-      nightLostMin: 0,
-      pendingMin: Math.max(gap, 0),
-      awaitingApproval: true,
-      pendingReason: provisional
-        ? 'OT request not yet approved — provisional credit may change on rejection'
-        : 'OT request not yet approved + credit not yet applied',
-    };
+    if (d.date > todayKey) return { lostMin: 0, sundayLostMin: 0, nightLostMin: 0 };
   }
 
-  if (gap <= LOST_OT_TOLERANCE_MIN) {
-    return { lostMin: 0, sundayLostMin: 0, nightLostMin: 0, pendingMin: 0 };
-  }
-
-  // ── Pending-credit detection ───────────────────────────────────────────
-  // workingHours = expected total (standard + OT request) per DokoKin API.
-  // If actualWorking covers that within tolerance, the user was physically
-  // present for the full OT span. The missing credit is because DokoKin's
-  // nightly batch hasn't re-credited the day yet (approval already in since
-  // hasUnapprovedOT is false here).
   const actualWorkMin   = _hhmmToMin(d.actualWorking);
   const expectedWorkMin = _hhmmToMin(d.workingHours);
-  const presenceCovers  = actualWorkMin > 0
-                        && expectedWorkMin > 0
-                        && actualWorkMin >= (expectedWorkMin - LOST_OT_TOLERANCE_MIN);
-  if (presenceCovers) {
-    return {
-      lostMin: 0, sundayLostMin: 0, nightLostMin: 0,
-      pendingMin: gap,
-      pendingReason: 'Check-in/out covers the OT span — credit will appear after next nightly batch',
-    };
-  }
+  // If DokoKin doesn't expose workingHours for this day yet (e.g. very
+  // fresh fetch), fall back to standard 8h + req as the expected total.
+  const expectedFallback = (8 * 60) + req;
+  const expected = expectedWorkMin > 0 ? expectedWorkMin : expectedFallback;
 
-  // Night portion lost: per-day requested midnight − actual recognized midnight
-  // (both are hours floats from the raw API → minutes).
+  const gap = expected - actualWorkMin;
+  if (gap <= LOST_OT_TOLERANCE_MIN) {
+    return { lostMin: 0, sundayLostMin: 0, nightLostMin: 0 };
+  }
+  // Cap lost minutes at the requested OT amount — presence shortfall
+  // beyond the OT portion is missing standard hours, not lost OT.
+  const lostMin = Math.min(gap, req);
+
   const reqMidMin    = Math.round((d.otRequestMidNum || 0) * 60);
   const actualMidMin = Math.round((d.actualMidNum    || 0) * 60);
-  const nightLostMin = Math.max(0, Math.min(gap, reqMidMin - actualMidMin));
-  const sundayLostMin = d.isSunday ? gap : 0;
-  return { lostMin: gap, sundayLostMin, nightLostMin, pendingMin: 0 };
+  const midGap       = Math.max(0, reqMidMin - actualMidMin);
+  const nightLostMin = Math.min(lostMin, midGap || reqMidMin);
+  const sundayLostMin = d.isSunday ? lostMin : 0;
+  return { lostMin, sundayLostMin, nightLostMin };
 }
 
 // Back-compat shim for any callers still using the old signature.
@@ -471,28 +445,18 @@ function renderTimesheet() {
           const dayYen = _lostYenFromDay(parts);
           const lines = [
             `Lost ${_minToHhmm(lost)} (≈ ¥${dayYen.toLocaleString('en-US')} gross)`,
-            `Checkin/out didn't fully cover the OT request range.`,
-            `Requested: ${d.otRequest || '—'} · Be counted: ${_minToHhmm(_hhmmToMin(d.otNormal) + _hhmmToMin(d.otSat) + _hhmmToMin(d.otSun))}`,
+            `Check-in/out didn't fully cover the OT request range.`,
+            `Requested: ${d.otRequest || '—'} · Worked: ${d.actualWorking || '—'} / Expected: ${d.workingHours || '—'}`,
           ];
           if (parts.sundayLostMin > 0) lines.push(`+10% Sunday on ${_minToHhmm(parts.sundayLostMin)}`);
           if (parts.nightLostMin > 0)  lines.push(`+25% Night on ${_minToHhmm(parts.nightLostMin)}`);
           const tip = lines.join('\n').replace(/"/g, '&quot;');
           deltaCell = `<td class="ts-cell ts-cell-delta text-destructive font-semibold tooltip-trigger" data-tooltip="${tip}">−${_minToHhmm(lost)}</td>`;
-        } else if (parts.pendingMin > 0 || parts.awaitingApproval) {
-          const label = parts.pendingMin > 0 ? `⏳ ${_minToHhmm(parts.pendingMin)}` : '⏳ Awaiting';
-          const tip = [
-            parts.pendingMin > 0
-              ? `Pending ${_minToHhmm(parts.pendingMin)} credit`
-              : 'Awaiting approval (credit provisional)',
-            parts.pendingReason || 'OT credit not yet finalized',
-            `Requested: ${d.otRequest || '—'} · Be counted: ${_minToHhmm(_hhmmToMin(d.otNormal) + _hhmmToMin(d.otSat) + _hhmmToMin(d.otSun))}`,
-          ].join('\n').replace(/"/g, '&quot;');
-          deltaCell = `<td class="ts-cell ts-cell-delta text-warning font-medium tooltip-trigger" data-tooltip="${tip}">${label}</td>`;
         } else if (isFuture && d.otRequest && _hhmmToMin(d.otRequest) > 0) {
           deltaCell = `<td class="ts-cell ts-cell-delta text-muted-foreground tooltip-trigger" data-tooltip="Future date — OT not yet worked, lost status unknown">?</td>`;
         } else {
           deltaCell = (d.otRequest && _hhmmToMin(d.otRequest) > 0)
-            ? `<td class="ts-cell ts-cell-delta text-success tooltip-trigger" data-tooltip="OT request fully covered by checkin/out ✓">✓</td>`
+            ? `<td class="ts-cell ts-cell-delta text-success tooltip-trigger" data-tooltip="Check-in/out covered the OT span ✓">✓</td>`
             : `<td class="ts-cell ts-cell-delta text-muted-foreground">—</td>`;
         }
         const dateLabel = d.date ? d.date.slice(5) : '—';   // MM-DD
