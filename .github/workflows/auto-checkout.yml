@@ -21,6 +21,11 @@ on:
         required: false
         type: boolean
         default: false
+      trigger_source:
+        description: 'Dispatch origin: manual (user) | scheduled (one-time) | recurring (replay-prone)'
+        required: false
+        type: string
+        default: manual
   # Triggered by Cloudflare Worker /checkout endpoint (Siri Shortcut).
   # client_payload: { location, source, triggered_at }
   repository_dispatch:
@@ -61,6 +66,13 @@ jobs:
           FORCE_LATITUDE: ${{ inputs.latitude }}
           FORCE_LONGITUDE: ${{ inputs.longitude }}
           FORCE_UPDATE_CO: ${{ inputs.force_update_co && '1' || '' }}
+          # TRIGGER_SOURCE classifies the dispatch origin:
+          #   - manual: user-initiated (Siri repository_dispatch, or workflow_dispatch
+          #     from dashboard/CLI). Implicitly opts into FORCE_UPDATE_CO so late
+          #     checkout overwrites existing CO.
+          #   - scheduled: dispatched by scheduled-dispatch.yml from a Gist entry.
+          #     Default-skip if CO exists (prevents stale-replay clobber).
+          TRIGGER_SOURCE: ${{ github.event_name == 'repository_dispatch' && 'manual' || inputs.trigger_source || 'manual' }}
           SMTP_USER: ${{ secrets.SMTP_USER }}
           SMTP_PASS: ${{ secrets.SMTP_PASS }}
           NOTIFY_EMAIL: ${{ secrets.NOTIFY_EMAIL }}

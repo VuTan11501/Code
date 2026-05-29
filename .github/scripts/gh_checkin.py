@@ -750,10 +750,16 @@ def main():
         if force_action == "auto" or force_action == "":
             force_action = None
         force_location = os.environ.get("FORCE_LOCATION", "office")
-        # Require explicit opt-in to overwrite a previously-recorded checkout.
-        # Default: skip silently if CO already exists and entry's scheduled time
-        # is past, to prevent accidental late-edit during retroactive re-runs.
-        force_update_co = os.environ.get("FORCE_UPDATE_CO", "").lower() in ("1", "true", "yes")
+        # TRIGGER_SOURCE: 'manual' (Siri/dashboard/dispatch by user), 'recurring'
+        # (recurring schedule entry replay), 'scheduled' (one-time schedule).
+        # Manual sources implicitly opt-in to FORCE_UPDATE_CO so user-initiated
+        # late checkout always overwrites existing CO. Recurring sources stay
+        # default-skip to prevent stale dispatcher replay from clobbering.
+        trigger_source = (os.environ.get("TRIGGER_SOURCE") or "").lower()
+        force_update_co_env = os.environ.get("FORCE_UPDATE_CO", "").lower() in ("1", "true", "yes")
+        force_update_co = force_update_co_env or trigger_source == "manual"
+        if trigger_source:
+            log(f"📌 Trigger source: {trigger_source} (force_update_co={force_update_co})")
 
         # ── Load schedule and find action ──
         schedule = load_schedule()

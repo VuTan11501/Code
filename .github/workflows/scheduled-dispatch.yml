@@ -278,7 +278,11 @@ jobs:
                           wf = entry['workflow']
                           rec = entry.get('recurrence', {})
                           print(f"🔁 Recurring: {wf} ({rec.get('pattern','')}, {rec.get('time','')})")
-                          if dispatch_workflow(wf, "[recurring]", entry_inputs or None):
+                          # Tag trigger_source=recurring so workers default-skip
+                          # late-edit overwrites (e.g. CO already recorded).
+                          rec_inputs = dict(entry_inputs)
+                          rec_inputs['trigger_source'] = 'recurring'
+                          if dispatch_workflow(wf, "[recurring]", rec_inputs or None):
                               entry['last_run'] = now.isoformat()
                               triggered += 1
                               changed = True
@@ -304,7 +308,11 @@ jobs:
                       if run_at <= now:
                           wf = entry['workflow']
                           print(f"🔹 One-time: {wf} (scheduled {run_at_str})")
-                          if dispatch_workflow(wf, "[one-time]", entry_inputs or None):
+                          # One-time entries are user-created intent (default to
+                          # 'scheduled'; can be 'manual' if entry has flag).
+                          one_inputs = dict(entry_inputs)
+                          one_inputs['trigger_source'] = entry.get('trigger_source', 'scheduled')
+                          if dispatch_workflow(wf, "[one-time]", one_inputs or None):
                               # Mark dispatched, keep in list for history
                               entry['dispatched'] = True
                               entry['last_run'] = now.isoformat()
