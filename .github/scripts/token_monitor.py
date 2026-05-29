@@ -146,36 +146,95 @@ def main():
         status["error"] = "AZURE_REFRESH_TOKEN secret not set"
         finish(1)
 
-    # Step 1: Refresh Azure AD token
+    # Step 1: Refresh Azure AD token.
+    # Resilience: if the env token is stale (already-rotated by a worker),
+    # peek the pending rotation queue and try each queued candidate in
+    # newest-first order until one succeeds. This prevents the monitor from
+    # bricking itself + stranding worker-queued rotations when env and queue
+    # disagree (e.g. user manually re-runs monitor before secret propagates).
     print("Step 1: Refreshing Azure AD token...")
-    st, data = http_post(
-        f"https://login.microsoftonline.com/{AZURE_TENANT}/oauth2/v2.0/token",
-        data={
-            "client_id": AZURE_APP_ID,
-            "grant_type": "refresh_token",
-            "refresh_token": refresh_token,
-            "scope": AZURE_SCOPE,
-        },
-    )
 
-    if st != 200:
-        error_desc = data.get("error_description", data.get("error", "unknown"))
-        print(f"CRITICAL: Azure AD token refresh failed (HTTP {st})")
-        print(f"  Error: {error_desc}")
-        if "AADSTS700082" in str(error_desc):
+    def _try_refresh(rt):
+        return http_post(
+            f"https://login.microsoftonline.com/{AZURE_TENANT}/oauth2/v2.0/token",
+            data={
+                "client_id": AZURE_APP_ID,
+                "grant_type": "refresh_token",
+                "refresh_token": rt,
+                "scope": AZURE_SCOPE,
+            },
+        )
+
+    # Build ordered candidate list: env first, then queue desc by written_at.
+    # Source "env" sentinel uses now.isoformat() so consume_pending_upto can
+    # treat env-as-cutoff = "do not consume queue" (since env isn't queued).
+    gh_pat_early = os.environ.get("GH_PAT") or os.environ.get("GH_TOKEN")
+    queue_entries: list = []
+    try:
+        from pending_rotation import peek_pending  # noqa: E402
+        if gh_pat_early:
+            queue_entries = peek_pending(gh_pat_early)
+    except Exception as e:
+        print(f"  ⚠️ peek pending queue failed (continuing with env only): {e}")
+
+    candidates_to_try = [{"token": refresh_token, "source": "env", "written_at": ""}]
+    # Newest queued first so we prefer the freshest valid token.
+    for q in sorted(queue_entries, key=lambda e: e.get("written_at", ""), reverse=True):
+        if q.get("token") and q.get("token") != refresh_token:
+            candidates_to_try.append(q)
+
+    st = None
+    data = None
+    chosen_candidate = None
+    last_error = None
+    for idx, cand in enumerate(candidates_to_try):
+        if idx > 0:
+            src = cand.get("source", "?")
+            wat = cand.get("written_at", "?")
+            print(f"  ↻ env token rejected; trying queued candidate "
+                  f"#{idx} (source={src}, written_at={wat})")
+        st, data = _try_refresh(cand["token"])
+        if st == 200:
+            chosen_candidate = cand
+            break
+        err = data.get("error_description", data.get("error", "unknown"))
+        last_error = err
+        # If error is fatal class (expired/revoked) for THIS candidate, keep
+        # trying queued ones — they may be a fresh rotation that supersedes.
+        if any(code in str(err) for code in ("AADSTS700082", "AADSTS50173", "AADSTS54005")):
+            print(f"  ✗ candidate #{idx} ({cand.get('source','?')}) "
+                  f"is expired/revoked, trying next")
+            continue
+        # Non-auth error (network, 5xx): don't keep iterating to avoid
+        # wasting time on transient failures across all candidates.
+        print(f"  ✗ candidate #{idx} non-auth error: {err}")
+        break
+
+    if st != 200 or chosen_candidate is None:
+        print(f"CRITICAL: Azure AD token refresh failed across "
+              f"{len(candidates_to_try)} candidate(s) (HTTP {st})")
+        print(f"  Last error: {last_error}")
+        if "AADSTS700082" in str(last_error):
             print("  → Refresh token has EXPIRED (>90 days)")
             status["status"] = "expired"
-        elif "AADSTS50173" in str(error_desc):
+        elif "AADSTS50173" in str(last_error):
             print("  → Refresh token has been REVOKED")
             status["status"] = "revoked"
         else:
             status["status"] = "error"
-        status["error"] = str(error_desc)[:500]
+        status["error"] = str(last_error)[:500]
         finish(1)
 
     azure_token = data.get("access_token", "")
     new_refresh = data.get("refresh_token", "")
-    print("  ✅ Azure AD token refresh successful")
+    if chosen_candidate.get("source") != "env":
+        print(f"  ✅ Azure AD token refresh successful "
+              f"(using queued candidate from {chosen_candidate.get('source','?')})")
+        # Remember that env was stale so we drain entries up to (and incl.)
+        # the chosen candidate later. Newer entries stay queued.
+        status["env_token_stale"] = True
+    else:
+        print("  ✅ Azure AD token refresh successful")
 
     # Decode JWT for expiry + user info
     payload = decode_jwt_payload(azure_token)
@@ -246,19 +305,29 @@ def main():
         })
 
     try:
-        from pending_rotation import consume_pending  # noqa: E402
+        from pending_rotation import consume_pending_upto, consume_pending  # noqa: E402
         gh_pat = os.environ.get("GH_PAT") or os.environ.get("GH_TOKEN")
         if gh_pat:
-            queued = consume_pending(gh_pat)
-            if queued:
+            # If env was stale, only drain entries up to the chosen candidate's
+            # written_at — anything newer must stay queued for next tick
+            # (it may carry a fresher rotation that supersedes us).
+            if status.get("env_token_stale") and chosen_candidate.get("written_at"):
+                cutoff = chosen_candidate.get("written_at", "")
+                queued = consume_pending_upto(gh_pat, cutoff)
                 print()
-                print(f"📥 Drained {len(queued)} pending rotation(s) from queue")
-                for q in queued:
-                    src = q.get("source", "?")
-                    ts = q.get("written_at", "?")
-                    rid = q.get("run_id", "")
-                    print(f"   - source={src} written_at={ts} run_id={rid}")
-                candidates.extend(queued)
+                print(f"📥 Drained {len(queued)} pending rotation(s) "
+                      f"up to cutoff={cutoff} (newer entries preserved)")
+            else:
+                queued = consume_pending(gh_pat)
+                if queued:
+                    print()
+                    print(f"📥 Drained {len(queued)} pending rotation(s) from queue")
+            for q in queued:
+                src = q.get("source", "?")
+                ts = q.get("written_at", "?")
+                rid = q.get("run_id", "")
+                print(f"   - source={src} written_at={ts} run_id={rid}")
+            candidates.extend(queued)
     except Exception as e:
         print(f"  ⚠️ Failed to drain pending rotation queue: {e}")
 

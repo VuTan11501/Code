@@ -177,6 +177,62 @@ def latest_pending(gh_pat: str):
     return sorted(entries, key=lambda e: e.get("written_at", ""))[-1]
 
 
+def peek_pending(gh_pat: str) -> list:
+    """Read all queued entries without consuming. Returns [] on error/empty.
+
+    Used by token-monitor when its own AZURE_REFRESH_TOKEN is stale: peek
+    all queued candidates, try each one until refresh succeeds, then only
+    consume entries up to and including the chosen one (newer entries stay
+    queued for the next tick in case they supersede).
+    """
+    if not gh_pat:
+        return []
+    url = f"https://api.github.com/gists/{_gist_id()}"
+    req = Request(url, headers={
+        "Authorization": f"Bearer {gh_pat}",
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "dokokin-pending-rotation/1.0",
+    })
+    try:
+        with urlopen(req, timeout=15) as resp:
+            data = json.loads(resp.read().decode())
+    except (HTTPError, OSError):
+        return []
+    content = (data.get("files", {}).get(PENDING_FILE, {}) or {}).get("content")
+    if not content:
+        return []
+    try:
+        parsed = json.loads(content)
+    except (json.JSONDecodeError, ValueError):
+        return []
+    return list(parsed.get("entries") or [])
+
+
+def consume_pending_upto(gh_pat: str, written_at_cutoff: str) -> list:
+    """Drain only entries with ``written_at <= written_at_cutoff``.
+
+    Keeps newer entries queued (they may carry a fresher rotation that the
+    monitor will pick up on the next tick). Returns the drained list.
+    """
+    if not gh_pat:
+        raise ValueError("gh_pat must be non-empty")
+    drained = {"entries": []}
+
+    def mutator(d):
+        if not isinstance(d, dict):
+            return {"entries": []}
+        all_entries = list(d.get("entries") or [])
+        kept = [e for e in all_entries if e.get("written_at", "") > written_at_cutoff]
+        drained["entries"] = [e for e in all_entries if e.get("written_at", "") <= written_at_cutoff]
+        return {"entries": kept}
+
+    result = cas_update(_gist_id(), PENDING_FILE, mutator, gh_pat)
+    if not result["ok"]:
+        raise RuntimeError(
+            f"Failed to consume pending rotations: {result.get('error')}")
+    return drained["entries"]
+
+
 # ── Self-test (no network) ──
 
 def _self_test():
