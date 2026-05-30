@@ -4068,21 +4068,6 @@ body.ai-page-active .ai-dot-grid {
   transform: none;
 }
 
-/* ─── FAB (floating action button) ─── */
-.fab {
-  position: fixed; right: var(--sp-4);
-  bottom: calc(var(--mobile-nav-height) + var(--sp-3) + env(safe-area-inset-bottom));
-  width: 52px; height: 52px; border-radius: var(--radius-full);
-  display: flex; align-items: center; justify-content: center;
-  background: var(--primary); color: var(--primary-foreground, #fff);
-  border: none; box-shadow: var(--shadow-lg);
-  z-index: 40; cursor: pointer;
-  transition: transform var(--duration-fast) var(--ease-out), box-shadow var(--duration-fast) var(--ease-out);
-}
-.fab:hover { box-shadow: var(--shadow-glow); }
-.fab:active { transform: scale(0.92); }
-.fab[hidden] { display: none; }
-
 /* ─── Filter chips ─── */
 .filter-chips { display: flex; gap: var(--sp-2); flex-wrap: wrap; align-items: center; }
 .filter-chip {

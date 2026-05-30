@@ -488,8 +488,6 @@ function navigate(hash) {
   // viewport when the AI tab is active. Must happen BEFORE init so the
   // chat scroll container has its final size when renderAll() runs.
   document.body.classList.toggle('ai-page-active', page === 'ai');
-  const _fab = document.getElementById('otFab');
-  if (_fab) _fab.hidden = (page !== 'ot');
   if (page === 'ai') {
     updateAiTopOffset();
     if (typeof window._startKbdPoll === 'function') window._startKbdPoll();
