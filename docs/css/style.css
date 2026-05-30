@@ -4121,17 +4121,33 @@ body.ai-page-active .ai-dot-grid {
 /* ─── Sticky month nav (OT + Timesheet) ─── */
 .month-nav-sticky {
   position: sticky; top: env(safe-area-inset-top);
-  z-index: 20; background: var(--background);
+  z-index: 20;
   padding: var(--sp-2) 0; margin-top: calc(var(--sp-2) * -1);
-  box-shadow: var(--shadow-md);
-  border-bottom: 1px solid var(--border);
+  /* Background / border / shadow / safe-area cover are applied ONLY once the
+     header is actually pinned (.is-stuck, toggled by IntersectionObserver).
+     While in normal flow they'd otherwise paint over the header bar above. */
+  background: transparent;
+  border-bottom: 1px solid transparent;
+  transition: background var(--duration-fast) var(--ease-out),
+              border-color var(--duration-fast) var(--ease-out),
+              box-shadow var(--duration-fast) var(--ease-out);
+}
+.month-nav-sticky.is-stuck {
+  background: var(--background);
+  border-bottom-color: var(--border);
 }
 /* Cover the safe-area (notch / Dynamic Island) strip above the header so page
-   content doesn't show through it once the body's top padding scrolls away. */
+   content doesn't show through it — only while pinned. */
 .month-nav-sticky::before {
   content: ''; position: absolute; left: 0; right: 0; bottom: 100%;
   height: env(safe-area-inset-top, 0px);
   background: var(--background);
+  opacity: 0; transition: opacity var(--duration-fast) var(--ease-out);
+}
+.month-nav-sticky.is-stuck::before { opacity: 1; }
+/* Elevation shadow is mobile-only (the desktop layout reads cleaner flat). */
+@media (max-width: 768px) {
+  .month-nav-sticky.is-stuck { box-shadow: var(--shadow-md); }
 }
 
 /* ─── Workflow card live state ─── */

@@ -229,6 +229,7 @@ function showDashboard() {
   const hashPage = location.hash.replace('#', '');
   const target = validPages.includes(hashPage) ? location.hash : '#dashboard';
   navigate(target);
+  initStickyHeaders();
   startAutoLock();
   startPolling();
   refresh();
@@ -253,6 +254,36 @@ function showDashboard() {
       if (r && r.applied) window.CloudSync.applyToUI();
     });
   }
+}
+
+/* Sticky month headers (OT + Timesheet): only paint background / border /
+   safe-area cover / mobile shadow once the header is actually pinned to the
+   top. A 0-height sentinel inserted just before each header is observed; when
+   it scrolls above the sticky offset the header is stuck. offsetParent guards
+   against hidden (display:none) pages reporting a false "stuck" state. */
+let _stickyHeadersInit = false;
+function initStickyHeaders() {
+  if (_stickyHeadersInit) return;
+  if (!('IntersectionObserver' in window)) return;
+  const headers = document.querySelectorAll('.month-nav-sticky');
+  if (!headers.length) return;
+  _stickyHeadersInit = true;
+  headers.forEach((header) => {
+    const topPx = parseFloat(getComputedStyle(header).top) || 0;
+    const sentinel = document.createElement('div');
+    sentinel.setAttribute('aria-hidden', 'true');
+    sentinel.style.cssText = 'height:0;margin:0;padding:0;pointer-events:none;';
+    header.parentNode.insertBefore(sentinel, header);
+    const obs = new IntersectionObserver(
+      (entries) => {
+        const e = entries[0];
+        if (header.offsetParent === null) { header.classList.remove('is-stuck'); return; }
+        header.classList.toggle('is-stuck', !e.isIntersecting);
+      },
+      { threshold: [0], rootMargin: `-${topPx + 1}px 0px 0px 0px` }
+    );
+    obs.observe(sentinel);
+  });
 }
 
 async function checkTokenScopes() {
