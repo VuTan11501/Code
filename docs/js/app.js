@@ -188,6 +188,7 @@ function lock() {
   stopAutoLock();
   stopPolling();
   updateLiveIndicator('paused', 0);
+  document.documentElement.classList.remove('booting-session');
   document.getElementById('dashboard').style.display = 'none';
   document.getElementById('authScreen').style.display = 'flex';
   document.getElementById('passphrase').value = '';
@@ -222,6 +223,8 @@ function showDashboard() {
   } catch (_) {}
   document.getElementById('authScreen').style.display = 'none';
   document.getElementById('dashboard').style.display = 'block';
+  // Tear down the boot splash now that the dashboard is on screen.
+  document.documentElement.classList.remove('booting-session');
   // Honour the URL hash on reload so users stay on the page they were
   // viewing. Only fall back to #dashboard when no valid hash is set
   // (e.g. fresh login, or PWA reopened from the home-screen icon).
@@ -1445,13 +1448,18 @@ function bootstrap() {
   if (restoreSession()) {
     // Session survived reload — go straight to dashboard
     showDashboard();
-  } else if (!hasVault()) {
-    switchTab('setup');
-    document.getElementById('authDesc').textContent = 'First time? Set up your encrypted vault.';
   } else {
-    document.getElementById('passphrase').focus();
-    // Try biometric auto-unlock if enrolled on this device
-    tryBiometricAutoUnlock();
+    // No restorable session: ensure the splash flag (set pre-paint) is cleared
+    // so the auth screen is visible.
+    document.documentElement.classList.remove('booting-session');
+    if (!hasVault()) {
+      switchTab('setup');
+      document.getElementById('authDesc').textContent = 'First time? Set up your encrypted vault.';
+    } else {
+      document.getElementById('passphrase').focus();
+      // Try biometric auto-unlock if enrolled on this device
+      tryBiometricAutoUnlock();
+    }
   }
 }
 

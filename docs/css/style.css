@@ -1443,6 +1443,27 @@ input[type="time"], input[type="date"], input[type="datetime-local"] {
   border: 1px solid var(--border);
 }
 
+/* ─── Boot splash (session restore — eliminates login-screen flash) ─── */
+#bootSplash { display: none; }
+html.booting-session #bootSplash {
+  display: grid; place-items: center;
+  position: fixed; inset: 0; z-index: 100;
+  background: var(--background);
+  animation: fade-in var(--duration-fast) var(--ease-out);
+}
+html.booting-session #authScreen { display: none !important; }
+.boot-spinner {
+  width: 34px; height: 34px; border-radius: var(--radius-full);
+  border: 3px solid rgba(var(--tint),0.14);
+  border-top-color: var(--primary);
+  animation: boot-spin 0.7s linear infinite;
+}
+@keyframes boot-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .boot-spinner { animation-duration: 1.4s; }
+  html.booting-session #bootSplash { animation: none; }
+}
+
 /* â”€â”€â”€ BUTTON VARIANTS (additional) â”€â”€â”€ */
 .btn-outline { background: transparent; border-color: var(--input); }
 .btn-outline:hover { background: var(--accent); border-color: rgba(var(--tint),0.15); }

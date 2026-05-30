@@ -46,12 +46,26 @@
     if (meta) meta.setAttribute('content', resolved === 'light' ? '#ffffff' : '#09090b');
   } catch (e) {}
 })();
+/* Auth bootstrap — if a session survived the reload, skip painting the login
+   card entirely. We flag <html> synchronously (before first paint) so CSS hides
+   #authScreen and shows a splash spinner; bootstrap()→showDashboard() clears it. */
+(function () {
+  try {
+    if (sessionStorage.getItem('wf_dash_session')) {
+      document.documentElement.classList.add('booting-session');
+    }
+  } catch (e) {}
+})();
 </script>
 <link rel="stylesheet" href="css/tailwind.css?v=1">
-<link rel="stylesheet" href="css/style.css?v=143">
+<link rel="stylesheet" href="css/style.css?v=144">
 <link rel="preconnect" href="https://api.github.com">
 </head>
 <body class="bg-background text-foreground font-sans text-sm antialiased min-h-dvh overflow-x-hidden">
+
+<!-- Boot splash — shown only while a saved session is being restored, to avoid
+     a flash of the login screen on reload. Pure CSS so it paints before the JS bundle. -->
+<div id="bootSplash" aria-hidden="true"><span class="boot-spinner"></span></div>
 
 <!-- Auth Screen -->
 <section id="authScreen" class="auth-screen fixed inset-0 flex items-center justify-center p-5 overflow-hidden bg-background" role="main" aria-label="Authentication">
@@ -1355,7 +1369,7 @@ wrangler login</pre>
      Source files live in docs/js/* for development; the bundle is what ships.
      To work on the raw source instead, comment the line below and re-enable
      the individual <script defer src="js/X.js"> tags (see git history). -->
-<script defer src="dist/app.bundle.min.js?v=63"></script>
+<script defer src="dist/app.bundle.min.js?v=64"></script>
 <!-- AI Proposal confirmation modal (Phase 3) -->
 <div id="aiProposalModal" class="proposal-modal" role="dialog" aria-modal="true" aria-labelledby="aiProposalTitle" hidden aria-hidden="true">
   <div class="proposal-modal-backdrop" onclick="AIProposals.closeModal()"></div>
