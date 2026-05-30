@@ -549,11 +549,16 @@ body.modal-open { overflow: hidden; }
 
 /* â”€â”€â”€ SETTINGS â”€â”€â”€ */
 .settings-body {
-  display: flex; flex-direction: column; gap: var(--sp-7);
-  max-width: 720px; margin: 0 auto;
+  display: flex; flex-direction: column; gap: var(--sp-8);
+  max-width: 960px; margin: 0 auto;
 }
-.settings-section { display: flex; flex-direction: column; gap: var(--sp-3); }
+.settings-section {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: var(--sp-3); align-items: start;
+}
 .settings-section-title {
+  grid-column: 1 / -1;
   display: flex; align-items: center; gap: var(--sp-2);
   font-size: var(--fs-xs); font-weight: 600;
   text-transform: uppercase; letter-spacing: 0.06em;
