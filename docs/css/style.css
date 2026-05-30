@@ -4058,7 +4058,9 @@ body.ai-page-active .ai-dot-grid {
 /* ─── Pull-to-refresh ─── */
 .uikit-ptr {
   position: fixed; top: 0; left: 50%;
-  transform: translate(-50%, calc(var(--ptr, 0px) - 44px));
+  /* Offset by the safe-area inset so the spinner drops BELOW the notch /
+     Dynamic Island instead of resting behind it (iOS). env()=0 elsewhere. */
+  transform: translate(-50%, calc(var(--ptr, 0px) - 44px + env(safe-area-inset-top, 0px)));
   width: 34px; height: 34px; border-radius: var(--radius-full);
   display: flex; align-items: center; justify-content: center;
   background: var(--card); border: 1px solid var(--border);
