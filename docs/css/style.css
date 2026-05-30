@@ -549,9 +549,17 @@ body.modal-open { overflow: hidden; }
 
 /* â”€â”€â”€ SETTINGS â”€â”€â”€ */
 .settings-body {
-  display: grid; gap: 16px;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  display: flex; flex-direction: column; gap: var(--sp-7);
+  max-width: 720px; margin: 0 auto;
 }
+.settings-section { display: flex; flex-direction: column; gap: var(--sp-3); }
+.settings-section-title {
+  display: flex; align-items: center; gap: var(--sp-2);
+  font-size: var(--fs-xs); font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--muted-foreground); padding: 0 var(--sp-1); margin: 0;
+}
+.settings-section-title [data-icon] { opacity: 0.7; }
 .settings-card {
   background: linear-gradient(180deg, rgba(var(--tint),0.02), rgba(var(--tint),0.005)), var(--card);
   border: 1px solid var(--border);
@@ -1647,9 +1655,6 @@ input[type="time"], input[type="date"], input[type="datetime-local"] {
   .wheel-column { max-width: 90px; }
   .wheel-item { font-size: 22px; }
   .wheel-item.active { font-size: 26px; }
-
-  /* Settings */
-  .settings-body { grid-template-columns: 1fr; }
 
   /* Modal: bottom sheet */
   .modal-overlay, .dialog-overlay { padding: 0; align-items: flex-end; }
@@ -4120,23 +4125,6 @@ body.ai-page-active .ai-dot-grid {
 }
 @keyframes wfRunPulse { 0% { opacity: 0.5; } 50% { opacity: 0.05; } 100% { opacity: 0.5; } }
 .workflow-card-elapsed { font-family: var(--font-mono); font-size: var(--fs-xs); color: var(--primary); }
-
-/* ─── Settings accordion ─── */
-.settings-group { border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; margin-bottom: var(--sp-3); background: var(--card); }
-.settings-group > summary {
-  display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2);
-  padding: var(--sp-3) var(--sp-4); cursor: pointer; list-style: none;
-  font-weight: 600; font-size: var(--fs-base); color: var(--foreground);
-}
-.settings-group > summary::-webkit-details-marker { display: none; }
-.settings-group > summary:hover { background: rgba(var(--tint), 0.03); }
-.settings-group[open] > summary { border-bottom: 1px solid var(--border); }
-.settings-group > summary .settings-group-status { font-size: var(--fs-xs); font-weight: 500; }
-.settings-group-status.ok { color: var(--green); }
-.settings-group-status.warn { color: var(--yellow); }
-.settings-group-chevron { transition: transform var(--duration-fast) var(--ease-out); color: var(--muted-foreground); }
-.settings-group[open] .settings-group-chevron { transform: rotate(180deg); }
-.settings-group-body { padding: var(--sp-3) var(--sp-4); }
 
 /* ─── Onboarding checklist ─── */
 .onboard-item { display: flex; align-items: center; gap: var(--sp-2); padding: var(--sp-1) 0; font-size: var(--fs-sm); color: var(--muted-foreground); }
