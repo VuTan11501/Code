@@ -4123,9 +4123,16 @@ body.ai-page-active .ai-dot-grid {
 .month-nav-sticky {
   position: sticky; top: env(safe-area-inset-top);
   z-index: 20; background: var(--background);
-  padding-top: var(--sp-2); margin-top: calc(var(--sp-2) * -1);
-  backdrop-filter: saturate(180%) blur(12px);
-  -webkit-backdrop-filter: saturate(180%) blur(12px);
+  padding: var(--sp-2) 0; margin-top: calc(var(--sp-2) * -1);
+  box-shadow: var(--shadow-md);
+  border-bottom: 1px solid var(--border);
+}
+/* Cover the safe-area (notch / Dynamic Island) strip above the header so page
+   content doesn't show through it once the body's top padding scrolls away. */
+.month-nav-sticky::before {
+  content: ''; position: absolute; left: 0; right: 0; bottom: 100%;
+  height: env(safe-area-inset-top, 0px);
+  background: var(--background);
 }
 
 /* ─── Workflow card live state ─── */
