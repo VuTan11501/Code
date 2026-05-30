@@ -46,33 +46,37 @@ describe('_calcLostForDay', () => {
   let fn;
   beforeAll(() => { fn = getFn('_calcLostForDay'); });
 
-  it('returns 0 lost when requested == recognized', () => {
-    const r = fn({ date: '2020-01-01', otRequest: '03:00', otNormal: '03:00', otSat: '00:00', otSun: '00:00' });
+  it('returns 0 lost when actual presence meets expected (std 8h + OT)', () => {
+    // Weekday: expected = 8h std + 3h OT = 11h. Actual 11h → no shortfall.
+    const r = fn({ date: '2020-01-01', otRequest: '03:00', actualWorking: '11:00' });
     expect(r.lostMin).toBe(0);
   });
 
   it('returns 0 within tolerance (<= 5 min)', () => {
-    const r = fn({ date: '2020-01-01', otRequest: '03:00', otNormal: '02:55', otSat: '00:00', otSun: '00:00' });
+    // 11h expected, 10:55 actual → 5min gap → within tolerance.
+    const r = fn({ date: '2020-01-01', otRequest: '03:00', actualWorking: '10:55' });
     expect(r.lostMin).toBe(0);
   });
 
-  it('flags lost minutes when recognized < requested - tolerance', () => {
-    // Requested 3h, got 2h → 60min lost
-    const r = fn({ date: '2020-01-01', otRequest: '03:00', otNormal: '02:00', otSat: '00:00', otSun: '00:00' });
+  it('flags lost minutes when presence is short by more than tolerance', () => {
+    // Weekday expected 11h, actual 10h → 60min short, capped at OT request.
+    const r = fn({ date: '2020-01-01', otRequest: '03:00', actualWorking: '10:00' });
     expect(r.lostMin).toBe(60);
     expect(r.sundayLostMin).toBe(0);
   });
 
   it('applies sunday flag to entire lost block', () => {
-    const r = fn({ date: '2020-01-05', isSunday: true, otRequest: '04:00', otNormal: '01:00', otSat: '00:00', otSun: '00:00' });
+    // Sunday: std=0, expected = 4h OT. Actual 1h → 3h (180min) lost, all Sunday.
+    const r = fn({ date: '2020-01-05', isSunday: true, otRequest: '04:00', actualWorking: '01:00' });
     expect(r.lostMin).toBe(180);
     expect(r.sundayLostMin).toBe(180);
   });
 
   it('computes night-lost portion from per-day midnight numbers', () => {
-    // Requested 3h with 2h midnight, got 1h with 0 midnight → lost=2h, night lost=2h (capped by gap)
+    // Weekday expected 11h, actual 9h → 2h lost. Requested 2h midnight, got 0 →
+    // night-lost = 2h (capped by the overall lost amount).
     const r = fn({
-      date: '2020-01-01', otRequest: '03:00', otNormal: '01:00', otSat: '00:00', otSun: '00:00',
+      date: '2020-01-01', otRequest: '03:00', actualWorking: '09:00',
       otRequestMidNum: 2, actualMidNum: 0,
     });
     expect(r.lostMin).toBe(120);

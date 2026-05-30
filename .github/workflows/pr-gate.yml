@@ -39,6 +39,9 @@ jobs:
     outputs:
       suica_pdf: ${{ steps.filter.outputs.suica_pdf }}
       docs_js: ${{ steps.filter.outputs.docs_js }}
+      tests: ${{ steps.filter.outputs.tests }}
+      scripts: ${{ steps.filter.outputs.scripts }}
+      build: ${{ steps.filter.outputs.build }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -51,6 +54,19 @@ jobs:
               - '.github/skills/suica-history-generator/**'
             docs_js:
               - 'docs/js/**'
+            tests:
+              - 'tests/**'
+              - 'docs/js/**'
+              - 'vitest.config.mjs'
+              - 'package.json'
+              - 'package-lock.json'
+            scripts:
+              - '.github/scripts/**'
+            build:
+              - 'docs/js/**'
+              - 'scripts/build-js.mjs'
+              - 'package.json'
+              - 'package-lock.json'
 
   suica-pdf-tests:
     name: Suica PDF pytest
@@ -101,3 +117,62 @@ jobs:
             fi
           done
           exit $fail
+
+  unit-tests-js:
+    name: Vitest unit tests
+    needs: changed-files
+    if: needs.changed-files.outputs.tests == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install pinned deps
+        run: npm ci
+      - name: Run vitest
+        run: npm run test:unit
+
+  scripts-selftest:
+    name: Python script self-tests
+    needs: changed-files
+    if: needs.changed-files.outputs.scripts == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Run self-tests
+        working-directory: .github/scripts
+        env:
+          PYTHONIOENCODING: utf-8
+        run: |
+          set -e
+          python gist_cas.py --self-test
+          python dispatcher_lease.py --self-test
+          python pending_rotation.py --self-test
+          python ai_client.py --self-test
+          python anomaly_rules.py
+
+  bundle-freshness:
+    name: Bundle freshness (dist matches source)
+    needs: changed-files
+    if: needs.changed-files.outputs.build == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install pinned deps
+        run: npm ci
+      - name: Rebuild bundle (deterministic minify-only)
+        run: node scripts/build-js.mjs
+      - name: Verify committed bundle is up to date
+        run: |
+          if ! git diff --exit-code docs/dist/app.bundle.min.js; then
+            echo "::error::docs/dist/app.bundle.min.js is stale. Run 'node scripts/build-js.mjs' and commit the result."
+            exit 1
+          fi
+          echo "Bundle is fresh."
