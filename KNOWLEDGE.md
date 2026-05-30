@@ -288,6 +288,12 @@ _(source: checkpoint 015)_
 - **Fix**: `scheduled-dispatch.yml` — step 1 writes `outputs.rechain=1` ONLY after the loop ran ≥ `MIN_RECHAIN_MIN` (5) min; step 2 gated on `steps.loop.outputs.rechain == '1'`. Early-exit runs (lease miss / rate-limit / crash) no longer respawn; backup cron `*/15` + watchdog recover the chain safely. Separately, shrank the gist (timesheet/payslip `backup=False` + compact JSON, ~1.25MB→~360KB) to reduce per-write pressure.
 - **Prevention**: NEVER unconditionally self-re-chain a self-looping workflow on `if: always()`. Gate re-chain on evidence the run did real work (min elapsed). A 403 with healthy `core.remaining` = **secondary** rate limit (bursty writes) — back off, don't retry into it. Rate limits are **per-user, shared across all tokens** — one runaway loop starves every other automation.
 
+### 3.31 GitHub now 400s `If-Match` on gist PATCH → every CAS write silently breaks
+- **Symptom**: After the §3.30 storm cleared and the secondary rate limit cooled, token-rotation queue writes (`pending_token_rotation.json` via `gist_cas`) flipped from `HTTP 403` to **`HTTP 400 Bad Request`**. A probe revealed the real body: `"Conditional request headers are not allowed in unsafe requests unless supported by the endpoint"`. General gist writes (timesheet via `gist_safety.py`) SUCCEEDED at the same time — only the CAS path 400'd. Email alert: "Pending rotation queue write FAILED — gh_ot_creator … HTTP 400 Bad Request" → rotated Azure refresh token LOST on worker exit (AADSTS700082 cascade risk).
+- **Root cause**: GitHub changed the API to reject conditional request headers (`If-Match`) on **unsafe** (write) methods. `gist_cas._gist_patch` (line ~123) and `docs/js/ai-proposals.js` (apply line 343 + rollback line 585) all sent `If-Match: <etag>` on gist PATCH for optimistic concurrency → every one now 400s. `gist_safety.py` was unaffected because it uses content-SHA race detection, not `If-Match`. The 403 storm had MASKED this underlying 400 (two distinct failures, same symptom file).
+- **Fix**: removed `If-Match` everywhere. Emulate CAS by re-reading the ETag immediately before PATCH and comparing to the caller's read-time ETag; if changed → conflict → retry with fresh state (`gist_cas._gist_patch` raises `_ConflictError`) / retry with original `baseSnapshot` for 3-way merge (`ai-proposals._applyToFile`, `retryCount < 1`). Rollback path relies on its existing content-equality pre-check. Sub-ms re-read→PATCH window = same guarantee as `gist_safety.py`. Commit `80a4a1b`.
+- **Prevention**: NEVER send conditional headers (`If-Match`/`If-None-Match`/`If-Unmodified-Since`) on gist **write** requests — GitHub rejects them with 400. `If-None-Match` on **GET** (caching) is still fine. For CAS, re-read ETag right before the write, or use content-SHA race detection like `gist_safety.py`. When two failures hit the same file, fix the loud one (rate limit) THEN re-probe — the quiet one (400) may be hiding underneath.
+
 ---
 
 ## 4. Build & test commands
@@ -382,4 +388,4 @@ If any step fails, capture the workflow log via `pwsh scripts/fetch-run-logs.ps1
 
 ---
 
-_Last reviewed: 2026-05-30_
+_Last reviewed: 2026-05-31_

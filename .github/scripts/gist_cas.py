@@ -33,8 +33,8 @@ def cas_update(gist_id, filename, mutator, token, max_retries=3, sleep_base=1.0)
     2. Parse content as JSON
     3. Call mutator(parsed) -> updated structure
     4. If unchanged, skip PATCH (no_change=True)
-    5. PATCH with If-Match: <etag>
-    6. On 412/409: retry with exponential backoff + jitter
+    5. PATCH, emulating CAS via a pre-write ETag re-read (If-Match is now 400'd)
+    6. On 409/conflict: retry with exponential backoff + jitter
 
     Returns: {'ok': bool, 'attempts': int, 'final_content': ..., 'error': str|None,
               'no_change': bool}
@@ -58,7 +58,7 @@ def cas_update(gist_id, filename, mutator, token, max_retries=3, sleep_base=1.0)
             return {'ok': True, 'attempts': attempt + 1, 'final_content': updated,
                     'error': None, 'no_change': True}
 
-        # Step 5: PATCH with If-Match
+        # Step 5: PATCH (CAS emulated via pre-write ETag re-read in _gist_patch)
         try:
             result = _gist_patch(gist_id, filename, updated_json, etag, token)
             return {'ok': True, 'attempts': attempt + 1, 'final_content': updated,
