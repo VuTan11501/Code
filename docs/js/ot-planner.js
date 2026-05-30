@@ -1512,32 +1512,25 @@ function renderOtBudget() {
         <div class="ot-budget-title">${ICON('hourglass', 14)} Budget · ${monthName}</div>
         <div class="ot-budget-gross" data-tooltip="Gross OT income (base 125% + Sunday +10% + night +25%) — paid IN ADDITION to fixed allowance ¥20,000/mo">${F(sal.gross)}</div>
       </div>
-      <div class="ot-budget-ring-row">
-        <div class="ui-ring" style="--ring-pct:${ringPct};--ring-color:${ringColor}">
-          <div class="ui-ring-label">${H(sal.totalHours)}<br><span class="text-muted-foreground text-xs">/ 75h</span></div>
+      <div class="ot-budget-row">
+        <div class="ot-budget-row-label">
+          <span>Monthly hours</span>
+          <span class="ot-budget-row-val">${H(sal.totalHours)} / ${S.MAX_HOURS_PER_MONTH}h</span>
         </div>
-        <div class="ot-budget-ring-meta">
-          <div class="ot-budget-row">
-            <div class="ot-budget-row-label">
-              <span>Monthly hours</span>
-              <span class="ot-budget-row-val">${H(sal.totalHours)} / ${S.MAX_HOURS_PER_MONTH}h</span>
-            </div>
-            <div class="ot-progress ${hoursCls}">
-              <div class="ot-progress-fill" style="width:${hoursPct}%"></div>
-            </div>
-          </div>
-          <div class="ot-budget-row">
-            <div class="ot-budget-row-label">
-              <span>Night hours (22:00–05:00)</span>
-              <span class="ot-budget-row-val">${H(sal.nightHours)} / ${S.NIGHT_REMARK_THRESHOLD}h</span>
-            </div>
-            <div class="ot-progress ${nightCls}">
-              <div class="ot-progress-fill" style="width:${nightPct}%"></div>
-            </div>
-          </div>
-          ${pacingHtml}
+        <div class="ot-progress ${hoursCls}">
+          <div class="ot-progress-fill" style="width:${hoursPct}%"></div>
         </div>
       </div>
+      <div class="ot-budget-row">
+        <div class="ot-budget-row-label">
+          <span>Night hours (22:00–05:00)</span>
+          <span class="ot-budget-row-val">${H(sal.nightHours)} / ${S.NIGHT_REMARK_THRESHOLD}h</span>
+        </div>
+        <div class="ot-progress ${nightCls}">
+          <div class="ot-progress-fill" style="width:${nightPct}%"></div>
+        </div>
+      </div>
+      ${pacingHtml}
       ${netHtml}
       <div class="ot-budget-breakdown">
         <span data-tooltip="125% rate on all OT hours — ${F(sal.baseOTLine)}">${ICON('clock', 11)} Base ${F(sal.baseOTLine)}</span>

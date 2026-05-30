@@ -22,36 +22,6 @@ let _tsState = {
   viewMonth: null,     // 0-indexed
 };
 
-// ─── Sync state for T4 badge ────────────────────────
-let _tsSyncStatus = 'idle'; // idle | syncing | success | error
-let _tsSyncTime = '';       // HH:mm of last success
-let _tsSyncError = '';      // last error message
-
-function _tsUpdateSyncBadge() {
-  const el = document.getElementById('tsSyncBadge');
-  if (!el) return;
-  const icon = (name, cls) => typeof ICON === 'function' ? ICON(name, 14, cls || '') : '';
-  if (_tsSyncStatus === 'syncing') {
-    el.className = 'status-badge status-running';
-    el.innerHTML = `${icon('refresh', 'ai-spin')} Đang đồng bộ…`;
-    el.onclick = null;
-  } else if (_tsSyncStatus === 'success') {
-    el.className = 'status-badge status-success';
-    el.innerHTML = `${icon('check')} Đã đồng bộ ${_tsSyncTime}`;
-    el.onclick = null;
-  } else if (_tsSyncStatus === 'error') {
-    el.className = 'status-badge status-failure';
-    el.style.cursor = 'pointer';
-    el.innerHTML = `${icon('alert-circle')} Lỗi đồng bộ`;
-    el.onclick = () => { syncTimesheetFromDokoKin(); };
-  } else {
-    el.className = 'status-badge';
-    el.innerHTML = `${icon('refresh')} Đồng bộ`;
-    el.style.cursor = 'pointer';
-    el.onclick = () => { syncTimesheetFromDokoKin(); };
-  }
-}
-
 // ─── Init ───────────────────────────────────────────
 function initTimesheetPage() {
   if (!_tsState.initialized) {
@@ -74,7 +44,6 @@ function initTimesheetPage() {
       _tsState.viewMonth = now.getMonth();
     }
   }
-  _tsUpdateSyncBadge();
   loadTimesheetData();
 }
 
@@ -469,36 +438,8 @@ function renderTimesheet() {
   }
 
   if (summaryEl) {
-    // T3: Visual metric cards
-    const workedH = s.displayTotalWorkingHours || '—';
-    const actualH = s.displayTotalActualWorkingTime || '—';
-    const otH = totalOT;
-    const lostH = totals.lostMin > 0 ? _minToHhmm(totals.lostMin) : '00:00';
-    const daysWorked = details.filter(d => d.in).length;
-
-    let metricsHtml = `<div class="ts-metric-grid">
-      <div class="card ts-metric-card">
-        <div class="ts-metric-label">Giờ làm việc</div>
-        <div class="ts-metric-value font-mono">${workedH}</div>
-      </div>
-      <div class="card ts-metric-card">
-        <div class="ts-metric-label">Giờ OT</div>
-        <div class="ts-metric-value font-mono">${otH}${totalOTSecondary}</div>
-      </div>
-      <div class="card ts-metric-card${totals.lostMin > 0 ? ' ts-metric-lost' : ''}">
-        <div class="ts-metric-label">OT bị mất</div>
-        <div class="ts-metric-value font-mono" style="${totals.lostMin > 0 ? 'color:var(--red)' : ''}">${lostH}</div>
-        ${totals.lostMin > 0 ? `<div class="ts-metric-sub" style="color:var(--red)">≈ ¥${totalLostYen.toLocaleString('en-US')}</div>` : ''}
-      </div>
-      <div class="card ts-metric-card">
-        <div class="ts-metric-label">Ngày đi làm</div>
-        <div class="ts-metric-value font-mono">${daysWorked}</div>
-      </div>
-    </div>`;
-
     summaryEl.innerHTML = `
       ${lostHtml}
-      ${metricsHtml}
       <div class="ts-summary-grid">${chipsHtml}</div>`;
   }
 
@@ -651,9 +592,6 @@ async function syncTimesheetFromDokoKin() {
     toast('🔒 Unlock first', 'error');
     return;
   }
-  // T4: update sync badge state
-  _tsSyncStatus = 'syncing';
-  _tsUpdateSyncBadge();
 
   const btn = document.getElementById('tsSyncBtn');
   const orig = btn ? btn.innerHTML : '';
@@ -680,18 +618,9 @@ async function syncTimesheetFromDokoKin() {
     await _waitForTimesheetFetchRun();
     await loadTimesheetData({ refresh: true });
     toast('✅ Timesheet synced', 'success');
-    // T4: sync success
-    _tsSyncStatus = 'success';
-    const n = jstNow();
-    _tsSyncTime = `${String(n.getHours()).padStart(2,'0')}:${String(n.getMinutes()).padStart(2,'0')}`;
-    _tsUpdateSyncBadge();
     if (typeof UIKit !== 'undefined' && typeof UIKit.haptic === 'function') UIKit.haptic('success');
   } catch (e) {
     toast(`❌ Sync failed: ${e.message}`, 'error');
-    // T4: sync error
-    _tsSyncStatus = 'error';
-    _tsSyncError = e.message;
-    _tsUpdateSyncBadge();
     if (typeof UIKit !== 'undefined' && typeof UIKit.haptic === 'function') UIKit.haptic('error');
   } finally {
     if (btn) {

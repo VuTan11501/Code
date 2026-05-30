@@ -48,7 +48,7 @@
 })();
 </script>
 <link rel="stylesheet" href="css/tailwind.css?v=1">
-<link rel="stylesheet" href="css/style.css?v=132">
+<link rel="stylesheet" href="css/style.css?v=133">
 <link rel="preconnect" href="https://api.github.com">
 </head>
 <body class="bg-background text-foreground font-sans text-sm antialiased min-h-dvh overflow-x-hidden">
@@ -498,7 +498,6 @@
           <span class="flex items-center gap-2"><span data-icon="list" data-size="16"></span> Daily detail</span>
           <div class="flex items-center gap-2">
             <span id="tsUpdatedAt" class="text-xs text-muted-foreground"></span>
-            <span id="tsSyncBadge"></span>
             <button id="tsSyncBtn" class="btn sm" onclick="syncTimesheetFromDokoKin()" data-tooltip="Trigger Timesheet Fetch workflow (~60s)"><span data-icon="sparkles" data-size="14"></span> Sync DokoKin</button>
             <button id="tsSyncPayslipBtn" class="btn sm" onclick="syncPayslipFromFJP()" data-tooltip="Re-fetch payslip for the currently-viewed work month from FJP (~30s)"><span data-icon="wallet" data-size="14"></span> Sync Payslip</button>
             <button id="tsRefreshBtn" class="btn sm" onclick="withBtnSpinner('tsRefreshBtn', () => loadTimesheetData({refresh:true}), 'Refreshing…')" data-tooltip="Refresh from Gist"><span data-icon="refresh" data-size="14"></span> Refresh</button>
@@ -1404,7 +1403,7 @@ wrangler login</pre>
      Source files live in docs/js/* for development; the bundle is what ships.
      To work on the raw source instead, comment the line below and re-enable
      the individual <script defer src="js/X.js"> tags (see git history). -->
-<script defer src="dist/app.bundle.min.js?v=49"></script>
+<script defer src="dist/app.bundle.min.js?v=50"></script>
 <!-- AI Proposal confirmation modal (Phase 3) -->
 <div id="aiProposalModal" class="proposal-modal" role="dialog" aria-modal="true" aria-labelledby="aiProposalTitle" hidden aria-hidden="true">
   <div class="proposal-modal-backdrop" onclick="AIProposals.closeModal()"></div>

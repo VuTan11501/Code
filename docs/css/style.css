@@ -4087,26 +4087,6 @@ body.ai-page-active .ai-dot-grid {
   font-family: var(--font-mono);
 }
 
-/* ─── Budget / progress ring ─── */
-.ui-ring {
-  --ring-size: 96px; --ring-thick: 9px; --ring-pct: 0; --ring-color: var(--primary);
-  position: relative; width: var(--ring-size); height: var(--ring-size); flex-shrink: 0;
-  border-radius: var(--radius-full);
-  background: conic-gradient(var(--ring-color) calc(var(--ring-pct) * 1%), var(--secondary) 0);
-  transition: background var(--duration-slow) var(--ease-out);
-}
-.ui-ring::before {
-  content: ''; position: absolute; inset: var(--ring-thick);
-  border-radius: var(--radius-full); background: var(--card);
-}
-.ui-ring-label {
-  position: absolute; inset: 0; display: flex; flex-direction: column;
-  align-items: center; justify-content: center; gap: 2px; text-align: center;
-  font-family: var(--font-mono); font-size: var(--fs-sm); font-weight: 700; color: var(--foreground);
-}
-.ui-ring-value { font-family: var(--font-mono); font-size: var(--fs-md); font-weight: 700; color: var(--foreground); line-height: 1; }
-.ui-ring-unit { font-size: var(--fs-xs); color: var(--muted-foreground); }
-
 /* ─── Now strip (dashboard today status) ─── */
 .now-strip {
   display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap;
@@ -4178,13 +4158,7 @@ body.ai-page-active .ai-dot-grid {
 .sched-conflict-warn { color: var(--red); vertical-align: middle; margin-left: 4px; }
 
 /* Timesheet metric cards (T3) */
-.ts-metric-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--sp-2); margin-bottom: var(--sp-3); }
-.ts-metric-card { padding: var(--sp-3); text-align: center; }
-.ts-metric-label { font-size: var(--fs-xs); color: var(--muted-foreground); margin-bottom: var(--sp-1); }
-.ts-metric-value { font-size: var(--fs-md); font-weight: 600; font-family: var(--font-mono); }
-.ts-metric-sub { font-size: var(--fs-xs); margin-top: var(--sp-1); }
 .ts-lost-tap { cursor: pointer; }
-@media (max-width: 640px) { .ts-metric-grid { grid-template-columns: repeat(2, 1fr); } }
 
 /* OT screen (O2-O5) */
 .ot-cell-yen { font-size: var(--fs-xs); color: var(--muted-foreground); line-height: 1; }
@@ -4192,8 +4166,6 @@ body.ai-page-active .ai-dot-grid {
 .ot-pacing-ok { color: var(--green); }
 .ot-pacing-ahead { color: var(--yellow); }
 .ot-pacing-behind { color: var(--red); }
-.ot-budget-ring-row { display: flex; align-items: center; gap: var(--sp-4); }
-.ot-budget-ring-meta { flex: 1; min-width: 0; }
 .ot-form-income-net { font-size: var(--fs-sm); color: var(--green); padding: var(--sp-1) 0; }
 .ot-opt-sheet-list { max-height: 320px; overflow-y: auto; }
 .ot-opt-sheet-row { display: grid; grid-template-columns: auto 1fr 1fr auto auto auto; gap: var(--sp-2); align-items: center; padding: var(--sp-2); border-bottom: 1px solid var(--border); }
