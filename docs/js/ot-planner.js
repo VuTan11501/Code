@@ -719,10 +719,14 @@ function _renderOtRow(ot, idx, isPast) {
         ? 'Delete (local entry only — already pushed to DokoKin; manually remove there if needed)'
         : 'Delete past entry')
     : 'Delete';
+  const isPastMonth = _isPastMonth(ot.date);
+  const pastDelBtn = isPastMonth
+    ? `<button class="btn danger sm" disabled aria-disabled="true" data-tooltip="Tháng trước — chỉ xem, không thể xoá">${ICON('trash', 14)}</button>`
+    : `<button class="btn danger sm" onclick="deleteOtRequest('${ot.id}')" data-tooltip="${_esc(delTip)}">${ICON('trash', 14)}</button>`;
   const actionsCell = isPast
     ? `<div class="actions-cell">
-        <span class="badge-readonly" data-tooltip="Past month — view only">${ICON('eye', 14)}</span>
-        <button class="btn danger sm" onclick="deleteOtRequest('${ot.id}')" data-tooltip="${_esc(delTip)}">${ICON('trash', 14)}</button>
+        <span class="badge-readonly" data-tooltip="${isPastMonth ? 'Tháng trước — chỉ xem' : 'Past — view only'}">${ICON('eye', 14)}</span>
+        ${pastDelBtn}
       </div>`
     : `<div class="actions-cell">
         ${fixBtn}
@@ -754,6 +758,18 @@ function _esc(s) {
 function _todayJSTStr() {
   const n = jstNow();
   return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}`;
+}
+
+// True when dateStr (YYYY-MM-DD) falls in a calendar month strictly before the
+// current JST month. Previous-month OT is historical (likely already pushed to
+// DokoKin + payroll closed) so it is view-only — deletion is blocked.
+function _isPastMonth(dateStr) {
+  if (!dateStr) return false;
+  const n = jstNow();
+  const curYM = n.getFullYear() * 12 + n.getMonth();
+  const p = String(dateStr).split('-');
+  const entYM = Number(p[0]) * 12 + (Number(p[1]) - 1);
+  return Number.isFinite(entYM) && entYM < curYM;
 }
 
 // ─── Conflict detection ───
@@ -1135,6 +1151,7 @@ async function submitOtForm() {
 async function deleteOtRequest(id) {
   const ot = _otState.requests.find(o => o.id === id);
   if (!ot) return;
+  if (_isPastMonth(ot.date)) { toast('Tháng trước — chỉ xem, không thể xoá OT', 'warning'); return; }
   const hasFix = !!ot.auto_co_id;
   const msg = hasFix
     ? `Delete OT ${ot.date} ${ot.start}-${ot.end}?\n\nThis will also revert auto-fix:\n• Remove skip-date from recurring CO\n• Remove once-CO entry`
