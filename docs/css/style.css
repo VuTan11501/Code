@@ -3357,7 +3357,8 @@ body.ai-page-active .ai-dot-grid {
     padding: 6px 8px 6px;
   }
   .ai-composer { padding: 6px 6px 6px 14px; border-radius: 22px; }
-  .ai-composer-input { font-size: var(--fs-base); }
+  /* Keep ≥16px: iOS Safari auto-zooms when focusing inputs smaller than 16px. */
+  .ai-composer-input { font-size: var(--fs-md); }
   .ai-composer-meta { margin-top: 4px; min-height: 0; font-size: 10px; }
   .ai-msg-actions { opacity: 1; }
   .ai-code-copy { opacity: 1; }
