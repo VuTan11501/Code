@@ -1,0 +1,91 @@
+name: Timesheet Action
+
+# Drives the DokoKin monthly-timesheet Calculate (計算) + Save Draft (一時保存)
+# actions for one month. Dispatched on-demand from the PWA "Timesheet" tab.
+#
+# Safety (enforced in gh_timesheet_action.py, not here):
+#   • Only ever Save Draft (status stays 1). NEVER Submit (申請).
+#   • Round-trips the server's OWN month object — never hand-builds payload.
+#   • Hard-refuses non-Draft / leader-or-HR-confirmed months (FORCE can't bypass).
+#   • Anomaly guard blocks save on missing checkout / invalid working-place /
+#     invalid break; FORCE=1 overrides ONLY that guard.
+#   • calc-save saves ONLY if /calculate succeeded with a validated response.
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "calculate | save | calc-save"
+        required: false
+        default: "calc-save"
+        type: choice
+        options:
+          - calc-save
+          - calculate
+          - save
+      year:
+        description: "Year (default: current JST year)"
+        required: false
+        default: ""
+      month:
+        description: "Month 1-12 (default: current JST month)"
+        required: false
+        default: ""
+      account:
+        description: "DokoKin account (default: tanvc)"
+        required: false
+        default: "tanvc"
+      dry_run:
+        description: "Do everything except the final POST /save"
+        required: false
+        type: boolean
+        default: false
+      force:
+        description: "Override the anomaly guard ONLY (not the status gate)"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+env:
+  TZ: Asia/Tokyo
+
+concurrency:
+  # Serialize per month so two dispatches never race a save.
+  group: timesheet-action-${{ github.event.inputs.year }}-${{ github.event.inputs.month }}
+  cancel-in-progress: false
+
+jobs:
+  action:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            .github/scripts
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run timesheet action
+        env:
+          AZURE_REFRESH_TOKEN: ${{ secrets.AZURE_REFRESH_TOKEN }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          NOTIFY_EMAIL: ${{ secrets.NOTIFY_EMAIL }}
+          ACTION: ${{ inputs.action || 'calc-save' }}
+          YEAR: ${{ inputs.year || '' }}
+          MONTH: ${{ inputs.month || '' }}
+          ACCOUNT: ${{ inputs.account || 'tanvc' }}
+          DRY_RUN: ${{ inputs.dry_run && '1' || '' }}
+          FORCE: ${{ inputs.force && '1' || '' }}
+        run: python .github/scripts/gh_timesheet_action.py
+      # Phase 3: token rotation is queued into Gist pending_token_rotation.json
+      # and applied centrally by token-monitor.yml.

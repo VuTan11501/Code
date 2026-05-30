@@ -511,6 +511,8 @@
           <span class="flex items-center gap-2"><span data-icon="list" data-size="16"></span> Daily detail</span>
           <div class="flex items-center gap-2">
             <span id="tsUpdatedAt" class="text-xs text-muted-foreground"></span>
+            <button id="tsRecalcBtn" class="btn btn-outline sm" onclick="recalcTimesheet()" data-tooltip="Recalculate month totals on DokoKin (FES /timesheet/calculate)"><span data-icon="calculator" data-size="14"></span> Calculate</button>
+            <button id="tsSaveDraftBtn" class="btn btn-outline sm" onclick="calcAndSaveTimesheetDraft()" data-tooltip="Calculate then save month as Draft (一時保存) on DokoKin — does NOT submit"><span data-icon="save" data-size="14"></span> Save Draft</button>
             <button id="tsSyncBtn" class="btn btn-outline sm" onclick="syncTimesheetFromDokoKin()" data-tooltip="Trigger Timesheet Fetch workflow (~60s)"><span data-icon="sparkles" data-size="14"></span> Sync DokoKin</button>
             <button id="tsSyncPayslipBtn" class="btn btn-outline sm" onclick="syncPayslipFromFJP()" data-tooltip="Re-fetch payslip for the currently-viewed work month from FJP (~30s)"><span data-icon="wallet" data-size="14"></span> Sync Payslip</button>
             <button id="tsRefreshBtn" class="btn btn-outline sm" onclick="withBtnSpinner('tsRefreshBtn', () => loadTimesheetData({refresh:true}), 'Refreshing…')" data-tooltip="Refresh from Gist"><span data-icon="refresh" data-size="14"></span> Refresh</button>
@@ -1368,7 +1370,7 @@ wrangler login</pre>
      Source files live in docs/js/* for development; the bundle is what ships.
      To work on the raw source instead, comment the line below and re-enable
      the individual <script defer src="js/X.js"> tags (see git history). -->
-<script defer src="dist/app.bundle.min.js?v=73"></script>
+<script defer src="dist/app.bundle.min.js?v=74"></script>
 <!-- AI Proposal confirmation modal (Phase 3) -->
 <div id="aiProposalModal" class="proposal-modal" role="dialog" aria-modal="true" aria-labelledby="aiProposalTitle" hidden aria-hidden="true">
   <div class="proposal-modal-backdrop" onclick="AIProposals.closeModal()"></div>

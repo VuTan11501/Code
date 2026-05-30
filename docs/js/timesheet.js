@@ -8,6 +8,7 @@
 const TS_FILE = 'timesheet-history.json';
 const TS_FETCH_WF = 'timesheet-fetch.yml';
 const PAYSLIP_FETCH_WF = 'payslip-fetch.yml';
+const TS_ACTION_WF = 'timesheet-action.yml';
 
 // Tolerance: anything ≤ this is "rounding noise", not a real loss.
 // DokoKin rounds to the minute; 5 min covers minor clock drift.
@@ -729,6 +730,143 @@ async function _waitForPayslipFetchRun() {
   throw new Error('Timed out waiting for Payslip Fetch run');
 }
 
+// ─── Timesheet Calculate / Save Draft (write actions) ───
+// Dispatch `timesheet-action.yml` which calls DokoKin's FES
+// /api/timesheet/{calculate,save} endpoints. Writes go through Actions
+// (PAT can't call DokoKin directly). `calculate` recomputes server-side
+// totals; `calc-save` recomputes THEN persists as Draft (status=1, 一時保存).
+// Submit (申請) is intentionally NOT wired — user does that on DokoKin.
+
+async function _dispatchTimesheetAction(action, opts = {}) {
+  const year = _tsState.viewYear;
+  const month = _tsState.viewMonth + 1;
+  if (year == null) throw new Error('No month selected');
+  const inputs = {
+    action,
+    year: String(year),
+    month: String(month),
+    account: _tsState.account || 'tanvc',
+  };
+  if (opts.force) inputs.force = 'true';
+  const res = await fetch(
+    `${API}/repos/${OWNER}/${REPO}/actions/workflows/${TS_ACTION_WF}/dispatches`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${sessionToken}`,
+      'Accept': 'application/vnd.github+json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ ref: 'main', inputs }),
+  });
+  if (res.status !== 204) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`HTTP ${res.status}${body ? ': ' + body.slice(0, 80) : ''}`);
+  }
+}
+
+async function _waitForTimesheetActionRun() {
+  const start = Date.now();
+  const TIMEOUT_MS = 4 * 60 * 1000;
+  await new Promise(r => setTimeout(r, 4000));
+  while (Date.now() - start < TIMEOUT_MS) {
+    try {
+      const data = await apiFetch(
+        `/repos/${OWNER}/${REPO}/actions/workflows/${TS_ACTION_WF}/runs?per_page=1&event=workflow_dispatch`);
+      const run = data && data.workflow_runs && data.workflow_runs[0];
+      if (run && run.status === 'completed') return run; // caller inspects conclusion
+    } catch { /* ignore transient */ }
+    await new Promise(r => setTimeout(r, 5000));
+  }
+  throw new Error('Timed out waiting for Timesheet Action run');
+}
+
+// action=calculate — recompute server totals, then re-pull to reflect them.
+async function recalcTimesheet() {
+  if (!sessionToken) { toast('🔒 Unlock first', 'error'); return; }
+  const btn = document.getElementById('tsRecalcBtn');
+  const orig = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = `${ICON('refresh', 14, 'animate-spin')} Calculating…`;
+  }
+  try {
+    await _dispatchTimesheetAction('calculate');
+    toast('🧮 Calculate dispatched — waiting…');
+    const run = await _waitForTimesheetActionRun();
+    if (run.conclusion !== 'success') {
+      throw new Error('Calculate failed — see Actions / email');
+    }
+    toast('🧮 Recalculated — refreshing…', 'success');
+    await syncTimesheetFromDokoKin();
+  } catch (e) {
+    toast(`❌ ${e.message}`, 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+  }
+}
+
+// action=calc-save — confirm modal showing viewed-month totals, then
+// recompute + persist Draft on DokoKin.
+function calcAndSaveTimesheetDraft() {
+  if (!sessionToken) { toast('🔒 Unlock first', 'error'); return; }
+  if (_tsState.viewYear == null) { toast('❌ No month selected', 'error'); return; }
+  const key = _tsKey();
+  const snap = _tsState.months[key];
+  const s = (snap && snap.summary) || {};
+  const monthLabel = `${monthNames[_tsState.viewMonth]} ${_tsState.viewYear}`;
+  const rows = [
+    ['Working hours', s.displayTotalWorkingHours],
+    ['Actual worked', s.displayTotalActualWorkingTime],
+    ['OT request', s.displayOTRequestHours],
+    ['OT weekday', s.displayOvertimeHours],
+    ['OT Sat/Hol', s.displayHolidayOvertimeHours],
+    ['OT Sun', s.displaySundayOvertimeHours],
+  ];
+  const tableRows = rows.map(([k, v]) =>
+    `<tr><td style="padding:4px 12px 4px 0;color:var(--muted-foreground)">${k}</td>`
+    + `<td style="padding:4px 0;font-family:var(--font-mono);text-align:right">${(v && String(v).trim()) || '—'}</td></tr>`
+  ).join('');
+  const bodyHTML =
+    `<p style="margin:0 0 var(--sp-3);font-size:var(--fs-sm);color:var(--muted-foreground)">`
+    + `Recompute &amp; save <strong style="color:var(--foreground)">${monthLabel}</strong> as `
+    + `<strong style="color:var(--foreground)">Draft (一時保存)</strong> on DokoKin. `
+    + `This will <strong style="color:var(--foreground)">not</strong> submit (申請) — review on DokoKin before submitting.</p>`
+    + `<table style="width:100%;border-collapse:collapse;font-size:var(--fs-sm)">${tableRows}</table>`
+    + `<p style="margin:var(--sp-3) 0 0;font-size:var(--fs-xs);color:var(--muted-foreground)">`
+    + `Pre-save guards run server-side; if anomalies are found the save is blocked and you'll get an email.</p>`;
+  UIKit.openSheet({
+    title: `Calculate & Save Draft`,
+    bodyHTML,
+    actions: [
+      { label: 'Cancel', variant: 'btn-outline sm' },
+      { label: 'Calculate & Save', variant: 'primary', onClick: () => _runCalcSaveTimesheet() },
+    ],
+  });
+}
+
+async function _runCalcSaveTimesheet(opts = {}) {
+  const btn = document.getElementById('tsSaveDraftBtn');
+  const orig = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = `${ICON('refresh', 14, 'animate-spin')} Saving…`;
+  }
+  try {
+    await _dispatchTimesheetAction('calc-save', opts);
+    toast('💾 Calculate & Save dispatched — waiting…');
+    const run = await _waitForTimesheetActionRun();
+    if (run.conclusion !== 'success') {
+      throw new Error('Not saved — blocked by guard or error. Check email / Actions.');
+    }
+    toast('✅ Draft saved on DokoKin — refreshing…', 'success');
+    await syncTimesheetFromDokoKin();
+  } catch (e) {
+    toast(`❌ ${e.message}`, 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+  }
+}
+
 // ─── Skeletons ──────────────────────────────────────
 function _tsSummarySkeleton() {
   let chips = '';
@@ -757,3 +895,5 @@ window.tsNavMonth = tsNavMonth;
 window.tsGoToday = tsGoToday;
 window.syncTimesheetFromDokoKin = syncTimesheetFromDokoKin;
 window.syncPayslipFromFJP = syncPayslipFromFJP;
+window.recalcTimesheet = recalcTimesheet;
+window.calcAndSaveTimesheetDraft = calcAndSaveTimesheetDraft;
