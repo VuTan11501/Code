@@ -32,6 +32,7 @@ Exit codes: 0 ok · 1 error · 2 blocked (anomaly/status guard) · 3 calc failed
 Stdlib only.
 """
 import os, sys, json, urllib.request, urllib.error, traceback
+import concurrent.futures
 from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -489,9 +490,14 @@ def main():
         raise RuntimeError("AZURE_REFRESH_TOKEN not set")
 
     az_tok, new_refresh = refresh_azure_token(refresh_token)
-    kt = get_kintai_token(az_tok)
-    fes = get_fjp_token(az_tok, "FES")
-    log("Tokens OK ✓ (KINTAI + FES)")
+    # KINTAI + FES token exchanges both depend ONLY on the Azure token and are
+    # independent of each other → run them in parallel to shave a round-trip.
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as ex:
+        f_kt = ex.submit(get_kintai_token, az_tok)
+        f_fes = ex.submit(get_fjp_token, az_tok, "FES")
+        kt = f_kt.result()
+        fes = f_fes.result()
+    log("Tokens OK ✓ (KINTAI + FES, parallel)")
 
     badge = "🚨 ERROR"
     blocked_reason = None

@@ -778,16 +778,58 @@ async function _dispatchTimesheetAction(action, opts = {}) {
   }
 }
 
-async function _waitForTimesheetActionRun() {
+// Latest action-run id BEFORE we dispatch, so the waiter can ignore a stale
+// previously-completed run while our fresh run is still queued.
+async function _peekLatestActionRunId() {
+  try {
+    const data = await apiFetch(
+      `/repos/${OWNER}/${REPO}/actions/workflows/${TS_ACTION_WF}/runs?per_page=1&event=workflow_dispatch`);
+    const run = data && data.workflow_runs && data.workflow_runs[0];
+    return run ? run.id : null;
+  } catch { return null; }
+}
+
+// Cheap peek at the freshness of one month inside the Gist cache. Returns the
+// month snapshot's `fetched_at` (or null). ETag-cached, so a 304 returns the
+// previous value (no false positive).
+async function _peekTimesheetFetchedAt(key) {
+  const gist = await apiFetch(`/gists/${GIST_ID}`);
+  const f = gist.files && gist.files[TS_FILE];
+  if (!f) return null;
+  let content = f.content || '';
+  if (f.truncated && f.raw_url) {
+    try { const r = await fetch(f.raw_url, { cache: 'no-store' }); if (r.ok) content = await r.text(); }
+    catch { /* keep truncated content */ }
+  }
+  if (!content) return null;
+  let raw; try { raw = JSON.parse(content); } catch { return null; }
+  const m = raw && raw.months && raw.months[key];
+  return (m && m.fetched_at) || null;
+}
+
+// Wait for the dispatched action to finish — but take a fast exit as soon as
+// the fresh month appears in the Gist (the action writes it BEFORE the ~4-8s
+// email-send + token-rotation tail), so the user sees results sooner. We still
+// watch run completion to catch blocked/error runs that never write the Gist.
+async function _waitForTimesheetActionResult(baselineFetchedAt, baselineRunId) {
   const start = Date.now();
   const TIMEOUT_MS = 4 * 60 * 1000;
+  const key = _tsKey();
   await new Promise(r => setTimeout(r, 2000));
   while (Date.now() - start < TIMEOUT_MS) {
+    // Fast-path: fresh month written to the Gist cache → success, done early.
+    try {
+      const fa = await _peekTimesheetFetchedAt(key);
+      if (fa && fa !== baselineFetchedAt) return { source: 'gist' };
+    } catch { /* ignore transient */ }
+    // Failure-path: run finished (blocked/error → no Gist write, or dry-run).
     try {
       const data = await apiFetch(
         `/repos/${OWNER}/${REPO}/actions/workflows/${TS_ACTION_WF}/runs?per_page=1&event=workflow_dispatch`);
       const run = data && data.workflow_runs && data.workflow_runs[0];
-      if (run && run.status === 'completed') return run; // caller inspects conclusion
+      if (run && run.id !== baselineRunId && run.status === 'completed') {
+        return { source: 'run', run };
+      }
     } catch { /* ignore transient */ }
     await new Promise(r => setTimeout(r, 3000));
   }
@@ -804,10 +846,12 @@ async function recalcTimesheet() {
     btn.innerHTML = `${ICON('refresh', 14, 'animate-spin')} Calculating…`;
   }
   try {
+    const baseFa = (_tsState.months[_tsKey()] || {}).fetched_at || null;
+    const baseRunId = await _peekLatestActionRunId();
     await _dispatchTimesheetAction('calculate');
     toast('🧮 Calculate dispatched — waiting…');
-    const run = await _waitForTimesheetActionRun();
-    if (run.conclusion !== 'success') {
+    const result = await _waitForTimesheetActionResult(baseFa, baseRunId);
+    if (result.source === 'run' && result.run.conclusion !== 'success') {
       throw new Error('Calculate failed — see Actions / email');
     }
     _tsState.calculatedKey = _tsKey();
@@ -875,10 +919,12 @@ async function _runCalcSaveTimesheet(opts = {}) {
     btn.innerHTML = `${ICON('refresh', 14, 'animate-spin')} Saving…`;
   }
   try {
+    const baseFa = (_tsState.months[_tsKey()] || {}).fetched_at || null;
+    const baseRunId = await _peekLatestActionRunId();
     await _dispatchTimesheetAction('calc-save', opts);
     toast('💾 Calculate & Save dispatched — waiting…');
-    const run = await _waitForTimesheetActionRun();
-    if (run.conclusion !== 'success') {
+    const result = await _waitForTimesheetActionResult(baseFa, baseRunId);
+    if (result.source === 'run' && result.run.conclusion !== 'success') {
       throw new Error('Not saved — blocked by guard or error. Check email / Actions.');
     }
     toast('✅ Draft saved on DokoKin — refreshing…', 'success');
