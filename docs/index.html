@@ -48,7 +48,7 @@
 })();
 </script>
 <link rel="stylesheet" href="css/tailwind.css?v=1">
-<link rel="stylesheet" href="css/style.css?v=130">
+<link rel="stylesheet" href="css/style.css?v=131">
 <link rel="preconnect" href="https://api.github.com">
 </head>
 <body class="bg-background text-foreground font-sans text-sm antialiased min-h-dvh overflow-x-hidden">
@@ -496,6 +496,7 @@
           <span class="flex items-center gap-2"><span data-icon="list" data-size="16"></span> Daily detail</span>
           <div class="flex items-center gap-2">
             <span id="tsUpdatedAt" class="text-xs text-muted-foreground"></span>
+            <span id="tsSyncBadge"></span>
             <button id="tsSyncBtn" class="btn sm" onclick="syncTimesheetFromDokoKin()" data-tooltip="Trigger Timesheet Fetch workflow (~60s)"><span data-icon="sparkles" data-size="14"></span> Sync DokoKin</button>
             <button id="tsSyncPayslipBtn" class="btn sm" onclick="syncPayslipFromFJP()" data-tooltip="Re-fetch payslip for the currently-viewed work month from FJP (~30s)"><span data-icon="wallet" data-size="14"></span> Sync Payslip</button>
             <button id="tsRefreshBtn" class="btn sm" onclick="withBtnSpinner('tsRefreshBtn', () => loadTimesheetData({refresh:true}), 'Refreshing…')" data-tooltip="Refresh from Gist"><span data-icon="refresh" data-size="14"></span> Refresh</button>
@@ -696,6 +697,20 @@
     <div class="page" id="page-settings" role="tabpanel" aria-labelledby="tab-settings">
       <div class="section-title text-sm font-medium text-muted-foreground mb-4 flex items-center gap-2"><span data-icon="settings" data-size="16"></span> Settings</div>
       <div class="settings-body">
+        <!-- Onboarding checklist (SE2) -->
+        <div class="card settings-card" id="onboardCard" hidden>
+          <div class="card-header">
+            <div class="card-title"><span data-icon="list" data-size="16"></span> Bắt đầu nhanh</div>
+            <div class="card-description">Hoàn tất các bước để dùng đầy đủ tính năng.</div>
+          </div>
+          <div class="card-content" id="onboardBody">
+            <!-- populated by renderOnboarding() -->
+          </div>
+        </div>
+
+        <details class="settings-group" open>
+          <summary><span>Giao diện</span><span class="settings-group-chevron" data-icon="chevronDown" data-size="16"></span></summary>
+          <div class="settings-group-body">
         <!-- Appearance / Theme -->
         <div class="card settings-card">
           <div class="card-header">
@@ -712,6 +727,12 @@
           </div>
         </div>
 
+          </div>
+        </details>
+
+        <details class="settings-group">
+          <summary><span>Bảo mật &amp; Vault</span><span class="settings-group-chevron" data-icon="chevronDown" data-size="16"></span></summary>
+          <div class="settings-group-body">
         <!-- Change Passphrase -->
         <div class="card settings-card">
           <div class="card-header">
@@ -763,6 +784,12 @@
           </div>
         </div>
 
+          </div>
+        </details>
+
+        <details class="settings-group">
+          <summary><span>Thông báo &amp; Token</span><span class="settings-group-chevron" data-icon="chevronDown" data-size="16"></span></summary>
+          <div class="settings-group-body">
         <!-- Notifications -->
         <div class="card settings-card">
           <div class="card-header">
@@ -798,6 +825,12 @@
           </div>
         </div>
 
+          </div>
+        </details>
+
+        <details class="settings-group">
+          <summary><span>Vị trí &amp; Sinh trắc học</span><span class="settings-group-chevron" data-icon="chevronDown" data-size="16"></span></summary>
+          <div class="settings-group-body">
         <!-- Location Settings -->
         <div class="card settings-card">
           <div class="card-header">
@@ -842,6 +875,12 @@
           </div>
         </div>
 
+          </div>
+        </details>
+
+        <details class="settings-group">
+          <summary><span>AI &amp; Đồng bộ</span><span class="settings-group-chevron" data-icon="chevronDown" data-size="16"></span></summary>
+          <div class="settings-group-body">
         <!-- AI Audit Log -->
         <div class="card settings-card">
           <div class="card-header">
@@ -890,6 +929,12 @@
           </div>
         </div>
 
+          </div>
+        </details>
+
+        <details class="settings-group">
+          <summary><span>Nâng cao</span><span class="settings-group-chevron" data-icon="chevronDown" data-size="16"></span></summary>
+          <div class="settings-group-body">
         <!-- GitHub API Proxy (optional, security hardening) -->
         <div class="card settings-card">
           <div class="card-header">
@@ -947,6 +992,9 @@ wrangler login</pre>
             </p>
           </div>
         </div>
+
+          </div>
+        </details>
 
         <!-- About -->
         <div class="card settings-card">
@@ -1354,7 +1402,7 @@ wrangler login</pre>
      Source files live in docs/js/* for development; the bundle is what ships.
      To work on the raw source instead, comment the line below and re-enable
      the individual <script defer src="js/X.js"> tags (see git history). -->
-<script defer src="dist/app.bundle.min.js?v=48"></script>
+<script defer src="dist/app.bundle.min.js?v=49"></script>
 <!-- AI Proposal confirmation modal (Phase 3) -->
 <div id="aiProposalModal" class="proposal-modal" role="dialog" aria-modal="true" aria-labelledby="aiProposalTitle" hidden aria-hidden="true">
   <div class="proposal-modal-backdrop" onclick="AIProposals.closeModal()"></div>

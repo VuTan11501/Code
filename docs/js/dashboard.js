@@ -471,12 +471,33 @@ function successRate(runs) {
 
 function renderWorkflowCard(wf, runs) {
   const lastRuns = runs.slice(0, 2);
+  const latest = runs[0];
+  const isRunning = latest && (latest.status === 'in_progress' || latest.status === 'queued');
+  const runningClass = isRunning ? ' is-running' : '';
+
+  // D1: elapsed time for running workflow
+  let elapsedHtml = '';
+  if (isRunning && latest.created_at) {
+    const elapsedMs = Date.now() - new Date(latest.created_at).getTime();
+    const totalSec = Math.max(0, Math.floor(elapsedMs / 1000));
+    const mins = Math.floor(totalSec / 60);
+    const secs = totalSec % 60;
+    elapsedHtml = `<span class="workflow-card-elapsed">${mins}m ${String(secs).padStart(2, '0')}s</span>`;
+  }
+
+  // D2: cancel button for running workflow
+  let cancelHtml = '';
+  if (isRunning && latest.id && typeof cancelWorkflowRun === 'function') {
+    cancelHtml = `<button class="btn btn-destructive sm" onclick="event.stopPropagation();if(typeof window.UIKit!=='undefined')window.UIKit.haptic('warning');cancelWorkflowRun(${latest.id})">✕ Cancel</button>`;
+  }
+
   return `
-    <div class="card workflow-card" draggable="true" data-wf-file="${wf.file}">
+    <div class="card workflow-card${runningClass}" draggable="true" data-wf-file="${wf.file}">
       <span class="workflow-drag-handle">${ICON('moreVertical', 14)}</span>
       <div class="card-header">
         <h2>${ICON(wf.iconName || 'play', 16)} ${wf.name}</h2>
         ${statusBadge(runs, wf)}
+        ${elapsedHtml}
       </div>
       <div class="card-body">
         <div class="stats-row">
@@ -508,6 +529,7 @@ function renderWorkflowCard(wf, runs) {
         </ul>
         <div class="trigger-actions">
           <button class="btn primary sm" onclick="triggerWorkflow('${wf.file}', event)">▶ Trigger</button>
+          ${cancelHtml}
           <a class="btn sm" href="https://github.com/${OWNER}/${REPO}/actions/workflows/${wf.file}" target="_blank" rel="noopener noreferrer">View →</a>
         </div>
       </div>
@@ -519,6 +541,7 @@ function renderWorkflowCard(wf, runs) {
 //  TRIGGER & CANCEL
 // ═══════════════════════════════════════════════════
 async function triggerWorkflow(file, ev) {
+  if (typeof window.UIKit !== 'undefined') window.UIKit.haptic('light');
   if (!sessionToken) { toast('⚠️ Not authenticated'); return; }
   const btn = ev && ev.currentTarget;
   const origHtml = btn ? btn.innerHTML : '';
@@ -973,6 +996,67 @@ document.getElementById('logModal').addEventListener('click', e => {
 });
 
 // ═══════════════════════════════════════════════════
+//  "NOW" STRIP — today's CI/CO/OT status at a glance
+// ═══════════════════════════════════════════════════
+async function updateNowStrip(allRuns) {
+  const el = document.getElementById('nowStrip');
+  if (!el) return;
+  try {
+    const now = new Date();
+    const todayJST = now.toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' }); // YYYY-MM-DD
+    const items = [];
+
+    // Helper: find latest run for a workflow file created today (JST)
+    function findTodayRun(wfFile) {
+      return allRuns.find(r => {
+        if (!r._wf || r._wf.file !== wfFile) return false;
+        const runDateJST = new Date(r.created_at).toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' });
+        return runDateJST === todayJST;
+      });
+    }
+
+    // Checkin status
+    const ciRun = findTodayRun('auto-checkin.yml');
+    if (ciRun && ciRun.conclusion === 'success') {
+      const t = new Date(ciRun.created_at).toLocaleTimeString('ja-JP', { timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit', hour12: false });
+      items.push(`<span class="now-item now-ok"><strong>✓ CI</strong> ${t}</span>`);
+    } else {
+      items.push(`<span class="now-item now-pending"><strong>CI chưa</strong></span>`);
+    }
+
+    // Checkout status
+    const coRun = findTodayRun('auto-checkout.yml');
+    if (coRun && coRun.conclusion === 'success') {
+      const t = new Date(coRun.created_at).toLocaleTimeString('ja-JP', { timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit', hour12: false });
+      items.push(`<span class="now-item now-ok"><strong>✓ CO</strong> ${t}</span>`);
+    } else {
+      items.push(`<span class="now-item now-pending"><strong>CO chưa</strong></span>`);
+    }
+
+    // OT tonight — fetch from gist (resilient)
+    try {
+      const gistData = await apiFetch(`/gists/${GIST_ID}`);
+      const otFile = gistData && gistData.files && gistData.files['ot-requests.json'];
+      if (otFile && otFile.content) {
+        const otList = JSON.parse(otFile.content);
+        if (Array.isArray(otList)) {
+          const todayOT = otList.find(e => e.date === todayJST);
+          if (todayOT) {
+            const label = todayOT.start ? `OT ${todayOT.start}` : 'OT tối nay';
+            items.push(`<span class="now-item"><strong>${label}</strong></span>`);
+          }
+        }
+      }
+    } catch (_) { /* OT fetch failed — just omit */ }
+
+    if (items.length > 0) {
+      el.innerHTML = items.join('<span class="now-sep"></span>');
+      el.hidden = false;
+    }
+  } catch (_) { /* never throw out of refresh */ }
+}
+
+// ═══════════════════════════════════════════════════
 //  MAIN REFRESH
 // ═══════════════════════════════════════════════════
 async function refresh() {
@@ -1027,6 +1111,9 @@ async function refresh() {
     adjustPollRate();
     detectStatusChanges(allRuns);
     checkForNewFailures(allRuns);
+
+    // D3: populate "Now" strip with today's CI/CO/OT status
+    if (sessionToken) updateNowStrip(allRuns);
 
     consecutiveErrors = 0;
     if (!document.hidden) updateLiveIndicator('active', pollInterval);

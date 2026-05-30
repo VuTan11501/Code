@@ -22,14 +22,59 @@ let _tsState = {
   viewMonth: null,     // 0-indexed
 };
 
+// ─── Sync state for T4 badge ────────────────────────
+let _tsSyncStatus = 'idle'; // idle | syncing | success | error
+let _tsSyncTime = '';       // HH:mm of last success
+let _tsSyncError = '';      // last error message
+
+function _tsUpdateSyncBadge() {
+  const el = document.getElementById('tsSyncBadge');
+  if (!el) return;
+  const icon = (name, cls) => typeof ICON === 'function' ? ICON(name, 14, cls || '') : '';
+  if (_tsSyncStatus === 'syncing') {
+    el.className = 'status-badge status-running';
+    el.innerHTML = `${icon('refresh', 'ai-spin')} Đang đồng bộ…`;
+    el.onclick = null;
+  } else if (_tsSyncStatus === 'success') {
+    el.className = 'status-badge status-success';
+    el.innerHTML = `${icon('check')} Đã đồng bộ ${_tsSyncTime}`;
+    el.onclick = null;
+  } else if (_tsSyncStatus === 'error') {
+    el.className = 'status-badge status-failure';
+    el.style.cursor = 'pointer';
+    el.innerHTML = `${icon('alert-circle')} Lỗi đồng bộ`;
+    el.onclick = () => { syncTimesheetFromDokoKin(); };
+  } else {
+    el.className = 'status-badge';
+    el.innerHTML = `${icon('refresh')} Đồng bộ`;
+    el.style.cursor = 'pointer';
+    el.onclick = () => { syncTimesheetFromDokoKin(); };
+  }
+}
+
 // ─── Init ───────────────────────────────────────────
 function initTimesheetPage() {
   if (!_tsState.initialized) {
     _tsState.initialized = true;
-    const now = jstNow();
-    _tsState.viewYear = now.getFullYear();
-    _tsState.viewMonth = now.getMonth();
+    // Adopt shared month from UIKit if available (ux-x4)
+    if (typeof UIKit !== 'undefined' && typeof UIKit.getSharedMonth === 'function') {
+      const shared = UIKit.getSharedMonth();
+      if (shared && /^\d{4}-\d{2}$/.test(shared)) {
+        const [sy, sm] = shared.split('-').map(Number);
+        _tsState.viewYear = sy;
+        _tsState.viewMonth = sm - 1;
+      } else {
+        const now = jstNow();
+        _tsState.viewYear = now.getFullYear();
+        _tsState.viewMonth = now.getMonth();
+      }
+    } else {
+      const now = jstNow();
+      _tsState.viewYear = now.getFullYear();
+      _tsState.viewMonth = now.getMonth();
+    }
   }
+  _tsUpdateSyncBadge();
   loadTimesheetData();
 }
 
@@ -105,6 +150,10 @@ function tsNavMonth(delta) {
   while (m > 11) { m -= 12; y += 1; }
   _tsState.viewYear = y;
   _tsState.viewMonth = m;
+  // ux-x4: broadcast month change
+  if (typeof UIKit !== 'undefined' && typeof UIKit.setSharedMonth === 'function') {
+    UIKit.setSharedMonth(`${y}-${String(m + 1).padStart(2, '0')}`);
+  }
   renderTimesheet();
 }
 
@@ -112,6 +161,10 @@ function tsGoToday() {
   const now = jstNow();
   _tsState.viewYear = now.getFullYear();
   _tsState.viewMonth = now.getMonth();
+  // ux-x4: broadcast month change
+  if (typeof UIKit !== 'undefined' && typeof UIKit.setSharedMonth === 'function') {
+    UIKit.setSharedMonth(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`);
+  }
   renderTimesheet();
 }
 
@@ -416,8 +469,36 @@ function renderTimesheet() {
   }
 
   if (summaryEl) {
+    // T3: Visual metric cards
+    const workedH = s.displayTotalWorkingHours || '—';
+    const actualH = s.displayTotalActualWorkingTime || '—';
+    const otH = totalOT;
+    const lostH = totals.lostMin > 0 ? _minToHhmm(totals.lostMin) : '00:00';
+    const daysWorked = details.filter(d => d.in).length;
+
+    let metricsHtml = `<div class="ts-metric-grid">
+      <div class="card ts-metric-card">
+        <div class="ts-metric-label">Giờ làm việc</div>
+        <div class="ts-metric-value font-mono">${workedH}</div>
+      </div>
+      <div class="card ts-metric-card">
+        <div class="ts-metric-label">Giờ OT</div>
+        <div class="ts-metric-value font-mono">${otH}${totalOTSecondary}</div>
+      </div>
+      <div class="card ts-metric-card${totals.lostMin > 0 ? ' ts-metric-lost' : ''}">
+        <div class="ts-metric-label">OT bị mất</div>
+        <div class="ts-metric-value font-mono" style="${totals.lostMin > 0 ? 'color:var(--red)' : ''}">${lostH}</div>
+        ${totals.lostMin > 0 ? `<div class="ts-metric-sub" style="color:var(--red)">≈ ¥${totalLostYen.toLocaleString('en-US')}</div>` : ''}
+      </div>
+      <div class="card ts-metric-card">
+        <div class="ts-metric-label">Ngày đi làm</div>
+        <div class="ts-metric-value font-mono">${daysWorked}</div>
+      </div>
+    </div>`;
+
     summaryEl.innerHTML = `
       ${lostHtml}
+      ${metricsHtml}
       <div class="ts-summary-grid">${chipsHtml}</div>`;
   }
 
@@ -459,7 +540,9 @@ function renderTimesheet() {
           if (parts.sundayLostMin > 0) lines.push(`+10% Sunday on ${_minToHhmm(parts.sundayLostMin)}`);
           if (parts.nightLostMin > 0)  lines.push(`+25% Night on ${_minToHhmm(parts.nightLostMin)}`);
           const tip = lines.join('\n').replace(/"/g, '&quot;');
-          deltaCell = `<td class="ts-cell ts-cell-delta text-destructive font-semibold tooltip-trigger" data-tooltip="${tip}">−${_minToHhmm(lost)}</td>`;
+          // T2: tappable lost-OT cell opens action sheet
+          const cellId = `ts-lost-${d.date}`;
+          deltaCell = `<td class="ts-cell ts-cell-delta text-destructive font-semibold tooltip-trigger ts-lost-tap" data-tooltip="${tip}" id="${cellId}" data-date="${d.date}">−${_minToHhmm(lost)}</td>`;
         } else if (isFuture && d.otRequest && _hhmmToMin(d.otRequest) > 0) {
           deltaCell = `<td class="ts-cell ts-cell-delta text-muted-foreground tooltip-trigger" data-tooltip="Future date — OT not yet worked, lost status unknown">?</td>`;
         } else {
@@ -485,6 +568,11 @@ function renderTimesheet() {
           </tr>`;
       }
       tableBody.innerHTML = rows;
+      // T2: attach click handlers for lost-OT tappable cells
+      tableBody.querySelectorAll('.ts-lost-tap').forEach(cell => {
+        cell.style.cursor = 'pointer';
+        cell.addEventListener('click', () => _openLostOtSheet(cell.dataset.date, details));
+      });
     }
   }
 
@@ -495,12 +583,78 @@ function renderTimesheet() {
   }
 }
 
+// ─── T2: Lost-OT action sheet ───────────────────────
+function _openLostOtSheet(date, details) {
+  if (typeof UIKit === 'undefined' || typeof UIKit.openSheet !== 'function') return;
+  const d = details.find(x => x.date === date);
+  if (!d) return;
+  const parts = _calcLostForDay(d);
+  if (parts.lostMin <= 0) return;
+
+  if (typeof UIKit.haptic === 'function') UIKit.haptic('warning');
+
+  const dayYen = _lostYenFromDay(parts);
+  const reqMin = _hhmmToMin(d.otRequest);
+  const stdMin = (d.isSunday || d.isSaturday || d.isHoliday) ? 0 : (8 * 60);
+  const expectedHhmm = _minToHhmm(stdMin + reqMin);
+
+  // Determine likely cause
+  let cause = '';
+  if (!d.out) {
+    cause = 'Chưa checkout — phiên làm việc chưa đóng, hệ thống không ghi nhận giờ ra.';
+  } else if (!d.in) {
+    cause = 'Thiếu checkin — không có giờ vào, không tính được thời gian làm.';
+  } else {
+    cause = 'Checkout quá sớm so với thời gian OT request. Giờ làm thực tế không đủ cover OT đã đăng ký.';
+  }
+
+  let breakdownHtml = `
+    <div style="margin-bottom:var(--sp-3)">
+      <div style="font-size:var(--fs-sm);color:var(--muted-foreground);margin-bottom:var(--sp-1)">Nguyên nhân</div>
+      <div style="font-size:var(--fs-base)">${cause}</div>
+    </div>
+    <div class="now-strip" style="margin-bottom:var(--sp-3)">
+      <div class="now-item"><span style="color:var(--muted-foreground)">OT request</span> <strong>${d.otRequest || '—'}</strong></div>
+      <div class="now-item"><span style="color:var(--muted-foreground)">Giờ thực tế</span> <strong>${d.actualWorking || '—'}</strong></div>
+      <div class="now-item"><span style="color:var(--muted-foreground)">Cần đạt</span> <strong>${expectedHhmm}</strong></div>
+      <div class="now-item"><span style="color:var(--muted-foreground)">CI/CO</span> <strong>${d.in || '?'} → ${d.out || '?'}</strong></div>
+    </div>
+    <div class="now-strip">
+      <div class="now-item"><span style="color:var(--red)">Mất</span> <strong style="color:var(--red)">${_minToHhmm(parts.lostMin)}</strong></div>
+      <div class="now-item"><span style="color:var(--red)">≈ Gross</span> <strong style="color:var(--red)">¥${dayYen.toLocaleString('en-US')}</strong></div>
+    </div>`;
+
+  if (parts.sundayLostMin > 0 || parts.nightLostMin > 0) {
+    let premiums = '';
+    if (parts.sundayLostMin > 0) premiums += `<div class="now-item">Sun +10%: ${_minToHhmm(parts.sundayLostMin)}</div>`;
+    if (parts.nightLostMin > 0) premiums += `<div class="now-item">Night +25%: ${_minToHhmm(parts.nightLostMin)}</div>`;
+    breakdownHtml += `<div class="now-strip" style="margin-top:var(--sp-2)">${premiums}</div>`;
+  }
+
+  breakdownHtml += `
+    <div style="margin-top:var(--sp-4);padding:var(--sp-3);background:var(--muted);border-radius:var(--radius-md);font-size:var(--fs-sm);color:var(--muted-foreground)">
+      💡 Khắc phục: vào DokoKin → 勤務時間変更 (Working time change) để sửa giờ ra trước payroll cutoff. Hoặc tạo lịch CO bù trong tab Schedule.
+    </div>`;
+
+  UIKit.openSheet({
+    title: `OT bị mất — ${date}`,
+    bodyHTML: breakdownHtml,
+    actions: [
+      { label: 'Hiểu nguyên nhân', variant: 'secondary', close: true },
+    ],
+  });
+}
+
 // ─── Sync (dispatch workflow) ───────────────────────
 async function syncTimesheetFromDokoKin() {
   if (!sessionToken) {
     toast('🔒 Unlock first', 'error');
     return;
   }
+  // T4: update sync badge state
+  _tsSyncStatus = 'syncing';
+  _tsUpdateSyncBadge();
+
   const btn = document.getElementById('tsSyncBtn');
   const orig = btn ? btn.innerHTML : '';
   if (btn) {
@@ -526,8 +680,19 @@ async function syncTimesheetFromDokoKin() {
     await _waitForTimesheetFetchRun();
     await loadTimesheetData({ refresh: true });
     toast('✅ Timesheet synced', 'success');
+    // T4: sync success
+    _tsSyncStatus = 'success';
+    const n = jstNow();
+    _tsSyncTime = `${String(n.getHours()).padStart(2,'0')}:${String(n.getMinutes()).padStart(2,'0')}`;
+    _tsUpdateSyncBadge();
+    if (typeof UIKit !== 'undefined' && typeof UIKit.haptic === 'function') UIKit.haptic('success');
   } catch (e) {
     toast(`❌ Sync failed: ${e.message}`, 'error');
+    // T4: sync error
+    _tsSyncStatus = 'error';
+    _tsSyncError = e.message;
+    _tsUpdateSyncBadge();
+    if (typeof UIKit !== 'undefined' && typeof UIKit.haptic === 'function') UIKit.haptic('error');
   } finally {
     if (btn) {
       btn.disabled = false;

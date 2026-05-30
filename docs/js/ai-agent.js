@@ -732,7 +732,67 @@ Hôm nay (JST): ${today}.`;
   function renderEmpty() {
     const empty = $('#aiEmpty');
     if (!empty) return;
-    empty.style.display = messages.length === 0 ? '' : 'none';
+    const visible = messages.length === 0;
+    empty.style.display = visible ? '' : 'none';
+    if (visible) _renderContextualChips();
+  }
+
+  // ─── Contextual suggestion chips (A1) ───────────────
+  function _getJSTNow() {
+    return new Date(Date.now() + (new Date().getTimezoneOffset() + 540) * 60000);
+  }
+  function _renderContextualChips() {
+    const grid = document.getElementById('aiSuggestions');
+    if (!grid) return;
+    const chips = _buildContextualSuggestions();
+    grid.innerHTML = chips.map(c => `<button type="button" class="ai-suggest-card" data-prompt="${esc(c.prompt)}">
+        <span class="ai-suggest-icon" data-icon="${esc(c.icon)}" data-size="16"></span>
+        <div class="ai-suggest-body">
+          <div class="ai-suggest-label">${esc(c.label)}</div>
+          <div class="ai-suggest-text">${esc(c.text)}</div>
+        </div>
+      </button>`).join('');
+    if (typeof renderIcons === 'function') renderIcons(grid);
+  }
+  function _buildContextualSuggestions() {
+    const now = _getJSTNow();
+    const hour = now.getHours();
+    const day = now.getDate();
+    const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    const dow = now.getDay(); // 0=Sun
+    const results = [];
+
+    // Time-based contextual chip
+    if (hour >= 6 && hour < 11) {
+      results.push({ icon: 'clock', label: 'Checkin', text: 'Hôm nay tôi đã check-in chưa?', prompt: 'Hôm nay tôi đã check-in chưa? Kiểm tra trạng thái.' });
+    } else if (hour >= 17 && hour < 22) {
+      results.push({ icon: 'moon', label: 'OT tối', text: 'Tối nay có OT không?', prompt: 'Tối nay tôi có OT request nào không? Kiểm tra lịch.' });
+    } else if (hour >= 22 || hour < 5) {
+      results.push({ icon: 'moon', label: 'Night OT', text: 'OT đêm nay kết thúc lúc mấy giờ?', prompt: 'OT đêm nay kết thúc lúc mấy giờ? Kiểm tra checkout schedule.' });
+    } else {
+      results.push({ icon: 'activity', label: 'Status', text: 'Trạng thái hôm nay thế nào?', prompt: 'Trạng thái chấm công hôm nay thế nào? CI/CO đã chạy chưa?' });
+    }
+
+    // Near month-end chip
+    if (day >= daysInMonth - 5) {
+      results.push({ icon: 'coins', label: 'Month Summary', text: 'Tóm tắt OT tháng này', prompt: 'Tóm tắt OT tháng này: tổng giờ, gross JPY, cap còn lại.' });
+    } else {
+      results.push({ icon: 'clock', label: 'OT Budget', text: 'Tháng này còn bao nhiêu OT?', prompt: 'Tháng này còn bao nhiêu OT có thể làm?' });
+    }
+
+    // Day-of-week chip
+    if (dow === 1) {
+      results.push({ icon: 'calendar', label: 'Tuần này', text: 'Kiểm tra lịch tuần này', prompt: 'Lịch checkin/checkout 7 ngày tới có gì?' });
+    } else if (dow === 5 || dow === 6) {
+      results.push({ icon: 'target', label: 'Weekend OT', text: 'OT cuối tuần sắp tới?', prompt: 'Cuối tuần này có OT request nào không? Kiểm tra lịch.' });
+    } else {
+      results.push({ icon: 'calendar', label: 'Schedule', text: 'Lịch checkin/checkout sắp tới', prompt: 'Lịch checkin/checkout 7 ngày tới có gì?' });
+    }
+
+    // Evergreen chip (always slot 4)
+    results.push({ icon: 'target', label: 'Optimize', text: 'Tối ưu OT tháng sau', prompt: 'Tối ưu OT cho tháng tới để đạt full 75h cap, gợi ý lịch.' });
+
+    return results.slice(0, 4);
   }
 
   function renderAll() {
@@ -1099,11 +1159,22 @@ Hôm nay (JST): ${today}.`;
   function previewOtBreakdown(r) {
     if (!r.totals) return '';
     const t = r.totals;
-    return `<div class="ai-rt-stats">
+    let statsHtml = `<div class="ai-rt-stats">
       <div class="ai-rt-stat"><div class="ai-rt-stat-l">Shifts</div><div class="ai-rt-stat-v">${esc(String((r.per_shift || []).length))}</div></div>
       <div class="ai-rt-stat"><div class="ai-rt-stat-l">Hours</div><div class="ai-rt-stat-v">${esc(String(t.hours ?? '—'))}h</div></div>
       <div class="ai-rt-stat"><div class="ai-rt-stat-l">Gross</div><div class="ai-rt-stat-v">${_yen(t.gross)}</div></div>
     </div>`;
+    const shifts = Array.isArray(r.per_shift) ? r.per_shift : [];
+    if (shifts.length > 0 && shifts.length <= 12) {
+      const rows = shifts.map(s => `<tr>
+        <td>${esc(s.date || '—')}</td>
+        <td>${esc(s.start || '')}–${esc(s.end || '')}</td>
+        <td>${esc(String(s.hours ?? ''))}h</td>
+        <td>${_yen(s.gross)}</td>
+      </tr>`).join('');
+      statsHtml += `<table class="ai-table ai-rt-table"><thead><tr><th>Date</th><th>Time</th><th>Hours</th><th>Gross</th></tr></thead><tbody>${rows}</tbody></table>`;
+    }
+    return statsHtml;
   }
 
   // ─── Voice input (Web Speech API) ───────────────────
@@ -2143,6 +2214,7 @@ Hôm nay (JST): ${today}.`;
       try { if (_stopVoice) _stopVoice(); } catch {}
       // If button is in STOP state, abort current stream instead of submitting.
       if (send.classList.contains('is-stop')) {
+        try { if (typeof UIKit !== 'undefined' && UIKit.haptic) UIKit.haptic('warning'); } catch {}
         try { if (currentAbort) currentAbort.abort(); } catch {}
         return;
       }
@@ -2176,16 +2248,20 @@ Hôm nay (JST): ${today}.`;
       });
     }
 
-    // Suggested prompts (tans-agent card style)
-    document.querySelectorAll('.ai-suggest-card, .ai-suggest-chip').forEach(card => {
-      card.addEventListener('click', () => {
+    // Suggested prompts (tans-agent card style) — delegated for dynamic chips
+    const suggestGrid = document.getElementById('aiSuggestions');
+    if (suggestGrid) {
+      suggestGrid.addEventListener('click', (e) => {
+        const card = e.target && e.target.closest && e.target.closest('.ai-suggest-card, .ai-suggest-chip');
+        if (!card) return;
         const prompt = card.getAttribute('data-prompt');
         if (!prompt) return;
+        try { if (typeof UIKit !== 'undefined' && UIKit.haptic) UIKit.haptic('select'); } catch {}
         input.value = prompt;
         autogrow();
         form.requestSubmit();
       });
-    });
+    }
 
     // Click delegation: Retry (assistant) / Edit (user) / Copy
     const scrollContainer = $('#aiChatScroll');

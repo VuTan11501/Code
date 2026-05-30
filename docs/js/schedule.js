@@ -3,6 +3,7 @@
 // ═══════════════════════════════════════════════════
 let scheduleInitialized = false;
 let dispatchTimer = null;
+let schedQueueFilter = 'all'; // 'all' | 'once' | 'recurring' | 'history'
 
 function initSchedulePage() {
   // ── One-time setup (calendars, modal wiring, listeners) ──
@@ -1288,22 +1289,123 @@ async function clientSideDispatchOverdue(entries) {
   return dispatched > 0;
 }
 
+function renderScheduleQueueChips() {
+  const container = document.getElementById('schedQueueChips');
+  if (!container) return;
+  const chips = [
+    { key: 'all', label: 'Tất cả' },
+    { key: 'once', label: 'Một lần' },
+    { key: 'recurring', label: 'Định kỳ' },
+    { key: 'history', label: 'Lịch sử' },
+  ];
+  container.innerHTML = chips.map(c =>
+    `<button class="filter-chip${schedQueueFilter === c.key ? ' is-active' : ''}" data-filter="${c.key}">${c.label}</button>`
+  ).join('');
+  container.onclick = (ev) => {
+    const chip = ev.target.closest('[data-filter]');
+    if (!chip) return;
+    const key = chip.dataset.filter;
+    if (key === schedQueueFilter) return;
+    schedQueueFilter = key;
+    if (window.UIKit && UIKit.haptic) UIKit.haptic('select');
+    renderScheduleQueueChips();
+    if (scheduleTableData) renderScheduledQueue(scheduleTableData);
+  };
+}
+
+function detectScheduleConflicts(entries) {
+  const conflictIds = new Set();
+  if (!entries || entries.length < 2) return conflictIds;
+  const nowJST = jstNow();
+  // Build effective datetime key per entry
+  const keys = entries.map(e => {
+    try {
+      if (e.type === 'once' && e.run_at) {
+        const d = new Date(e.run_at);
+        if (isNaN(d)) return null;
+        return { wf: e.workflow, key: e.workflow + '|' + d.toISOString().slice(0, 16), id: e.id };
+      } else if (e.type === 'recurring' && e.recurrence) {
+        const r = e.recurrence;
+        const [h, m] = (r.time || '00:00').split(':').map(Number);
+        const todayDow = nowJST.getDay();
+        let todayMatches = false;
+        if (r.pattern === 'daily') todayMatches = true;
+        else if (r.pattern === 'weekdays') todayMatches = [1,2,3,4,5].includes(todayDow);
+        else if (r.pattern === 'weekly') todayMatches = (r.days || []).includes(todayDow);
+        else if (r.pattern === 'monthly') todayMatches = (r.dates || []).includes(nowJST.getDate());
+        if (!todayMatches) return null;
+        if (e.enabled === false) return null;
+        const dt = new Date(nowJST);
+        dt.setHours(h, m, 0, 0);
+        return { wf: e.workflow, key: e.workflow + '|' + dt.toISOString().slice(0, 16), id: e.id };
+      }
+    } catch { /* skip malformed */ }
+    return null;
+  });
+  // O(n^2) is fine for small N
+  for (let i = 0; i < keys.length; i++) {
+    if (!keys[i]) continue;
+    for (let j = i + 1; j < keys.length; j++) {
+      if (!keys[j]) continue;
+      if (keys[i].key === keys[j].key) {
+        if (entries[i].id) conflictIds.add(entries[i].id);
+        if (entries[j].id) conflictIds.add(entries[j].id);
+      }
+    }
+  }
+  return conflictIds;
+}
+
+function scrollToScheduleForm() {
+  const form = document.querySelector('.scheduler-form');
+  if (form) form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
 function renderScheduledQueue(entries) {
   // Store data for table (full history)
   scheduleTableData = entries;
 
-  // Queue shows only ACTIVE entries (not dispatched once entries)
-  const activeEntries = entries
-    .map((e, origIdx) => ({ e, origIdx }))
-    .filter(({ e }) => !(e.type === 'once' && e.dispatched));
+  // Render filter chips
+  renderScheduleQueueChips();
+
+  // Detect conflicts
+  const conflictIds = detectScheduleConflicts(entries);
+
+  // Apply queue filter
+  let filtered;
+  if (schedQueueFilter === 'once') {
+    filtered = entries.map((e, origIdx) => ({ e, origIdx })).filter(({ e }) => e.type === 'once' && !e.dispatched);
+  } else if (schedQueueFilter === 'recurring') {
+    filtered = entries.map((e, origIdx) => ({ e, origIdx })).filter(({ e }) => e.type === 'recurring' && e.enabled !== false);
+  } else if (schedQueueFilter === 'history') {
+    filtered = entries.map((e, origIdx) => ({ e, origIdx })).filter(({ e }) => e.type === 'once' && e.dispatched === true);
+  } else {
+    // 'all' — default: active entries (not dispatched once entries)
+    filtered = entries.map((e, origIdx) => ({ e, origIdx })).filter(({ e }) => !(e.type === 'once' && e.dispatched));
+  }
 
   // Render queue cards
   const queue = document.getElementById('schedulerQueue');
-  if (!activeEntries.length) {
-    queue.innerHTML = '<div class="empty">No active scheduled runs</div>';
+  if (!filtered.length) {
+    const emptyMsg = schedQueueFilter === 'history' ? 'Chưa có lịch sử chạy' : 'Chưa có lịch nào';
+    const emptySub = schedQueueFilter === 'history' ? 'Lịch đã dispatch sẽ hiển thị ở đây' : 'Nhấn để thêm lịch chạy workflow';
+    if (schedQueueFilter !== 'history' && window.UIKit && UIKit.emptyStateHTML) {
+      queue.innerHTML = UIKit.emptyStateHTML({
+        icon: 'calendar-plus',
+        title: emptyMsg,
+        sub: emptySub,
+        action: { label: 'Thêm lịch', onclick: 'scrollToScheduleForm()' }
+      });
+    } else if (window.UIKit && UIKit.emptyStateHTML) {
+      queue.innerHTML = UIKit.emptyStateHTML({ icon: 'calendar', title: emptyMsg, sub: emptySub });
+    } else {
+      queue.innerHTML = `<div class="empty">${emptyMsg}</div>`;
+    }
     renderScheduleTable();
     return;
   }
+
+  const activeEntries = filtered;
 
   // Compute next fire time for each entry (used for sorting + badge)
   const nowJST = jstNow();
@@ -1404,11 +1506,14 @@ function renderScheduledQueue(entries) {
       }
     }
 
-    return `<div class="sched-item${!enabled ? ' disabled' : ''}">
+    const hasConflict = entry.id && conflictIds.has(entry.id);
+    const conflictMark = hasConflict ? ` <span class="sched-conflict-warn" title="Trùng lịch">${ICON('alert-triangle', 14)}</span>` : '';
+
+    return `<div class="sched-item${!enabled ? ' disabled' : ''}${hasConflict ? ' is-conflict' : ''}">
       <div class="sched-item-main">
         <span class="sched-icon">${ICON(iconName, 18)}</span>
         <div class="sched-item-info">
-          <span class="sched-label">${label}</span>
+          <span class="sched-label">${label}${conflictMark}</span>
           <span class="sched-sublabel">${sublabel}</span>
         </div>
         ${nextInfo}
@@ -1898,6 +2003,8 @@ function renderScheduleTable() {
   const countEl = document.getElementById('tableCount');
   if (!tbody) return;
 
+  const conflictIds = detectScheduleConflicts(scheduleTableData || []);
+
   const filtered = getFilteredEntries();
   const totalPages = Math.max(1, Math.ceil(filtered.length / TABLE_PAGE_SIZE));
   if (tablePage > totalPages) tablePage = totalPages;
@@ -1960,7 +2067,9 @@ function renderScheduleTable() {
     // Created date
     const created = entry.created ? new Date(entry.created).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' }) : '—';
 
-    return `<tr>
+    const trConflict = entry.id && conflictIds.has(entry.id);
+
+    return `<tr${trConflict ? ' class="is-conflict"' : ''}>
       <td data-label="#" class="text-muted-foreground font-mono">${realIdx + 1}</td>
       <td data-label="Type"><span class="badge-${entry.type}">${isOnce ? 'Once' : 'Recurring'}</span></td>
       <td data-label="Workflow" class="font-medium">${wfName}</td>

@@ -5,8 +5,44 @@ let settingsInitialized = false;
 const VAULT_META_KEY = 'wf_dash_vault_meta';
 let cachedGithubUser = null;
 
+// SE2 — Onboarding checklist
+function renderOnboarding() {
+  const card = document.getElementById('onboardCard');
+  const body = document.getElementById('onboardBody');
+  if (!card || !body) return;
+  const ls = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
+  const has = (k) => { const v = ls(k); if (!v) return false; try { const p = JSON.parse(v); return p && (Array.isArray(p) ? p.length > 0 : Object.keys(p).length > 0); } catch { return true; } };
+
+  const isPwa = (typeof Biometric !== 'undefined' && typeof Biometric.isPwa === 'function') ? Biometric.isPwa() : false;
+  const biometricEnrolled = !!ls('wf_dash_biometric');
+  const notifGranted = (typeof Notification !== 'undefined' && Notification.permission === 'granted');
+
+  const items = [
+    { done: !!ls('wf_dash_vault'), label: 'Tạo vault mã hoá', hint: 'PAT được mã hoá bằng passphrase' },
+    { done: (typeof sessionToken !== 'undefined' && !!sessionToken), label: 'Mở khoá phiên làm việc', hint: 'Đăng nhập bằng passphrase hoặc sinh trắc học' },
+    { done: has('workflow_locations_v1'), label: 'Cấu hình vị trí GPS', hint: 'Toạ độ cho checkin/checkout' },
+    { done: notifGranted, label: 'Bật thông báo trình duyệt', hint: 'Nhận cảnh báo khi workflow chạy' },
+  ];
+  if (isPwa) {
+    items.push({ done: biometricEnrolled, label: 'Bật mở khoá sinh trắc học', hint: 'Face ID / Touch ID / Windows Hello', optional: true });
+  }
+
+  const allEssentialDone = items.filter(i => !i.optional).every(i => i.done);
+  if (allEssentialDone && (!isPwa || biometricEnrolled)) { card.hidden = true; return; }
+  card.hidden = false;
+
+  const check = (done) => done
+    ? '<span class="onboard-check" data-icon="check" data-size="16"></span>'
+    : '<span class="onboard-check" data-icon="square" data-size="16"></span>';
+  body.innerHTML = items.map(i =>
+    `<div class="onboard-item${i.done ? ' is-done' : ''}">${check(i.done)}<span>${esc(i.label)}${i.optional ? ' <em class="text-muted-foreground">(tuỳ chọn)</em>' : ''}</span></div>`
+  ).join('');
+  if (typeof renderIcons === 'function') renderIcons(body);
+}
+
 function initSettingsPage() {
   settingsInitialized = true;
+  renderOnboarding();
   renderVaultInfo();
   loadTokenStatus();
   renderCloudSyncStatus();

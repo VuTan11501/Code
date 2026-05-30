@@ -37,6 +37,14 @@ function initOtPlannerPage() {
     const now = jstNow();
     _otState.viewYear = now.getFullYear();
     _otState.viewMonth = now.getMonth();
+    // Adopt shared month from Timesheet if available
+    if (typeof UIKit !== 'undefined' && typeof UIKit.getSharedMonth === 'function') {
+      const shared = UIKit.getSharedMonth();
+      if (shared && /^\d{4}-\d{2}$/.test(shared)) {
+        const [sy, sm] = shared.split('-').map(Number);
+        if (sy && sm >= 1 && sm <= 12) { _otState.viewYear = sy; _otState.viewMonth = sm - 1; }
+      }
+    }
     // Click delegation for take-home widget → open payslip detail modal
     document.addEventListener('click', (e) => {
       const tgt = e.target.closest('.ot-takehome-clickable');
@@ -182,6 +190,8 @@ function otNavMonth(delta) {
   while (m > 11) { m -= 12; y += 1; }
   _otState.viewYear = y;
   _otState.viewMonth = m;
+  const monthStr = `${y}-${String(m + 1).padStart(2, '0')}`;
+  if (typeof UIKit !== 'undefined' && typeof UIKit.setSharedMonth === 'function') UIKit.setSharedMonth(monthStr);
   renderOtCalendar();
   renderOtList();
 }
@@ -190,6 +200,8 @@ function otGoToday() {
   const now = jstNow();
   _otState.viewYear = now.getFullYear();
   _otState.viewMonth = now.getMonth();
+  const monthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  if (typeof UIKit !== 'undefined' && typeof UIKit.setSharedMonth === 'function') UIKit.setSharedMonth(monthStr);
   renderOtCalendar();
   renderOtList();
 }
@@ -495,16 +507,99 @@ function renderOtCalendar() {
       }
     }
     const label = `${dateStr}${ots.length ? `, ${ots.length} OT` : ''}${!inWindow && !ots.length ? ' (không thể tạo)' : ''}`;
-    html += `<div class="${classes.join(' ')}" onclick="${click}" role="button" tabindex="0" aria-label="${label}" aria-disabled="${!inWindow && !ots.length}">`;
+    html += `<div class="${classes.join(' ')}" data-date="${dateStr}" role="button" tabindex="0" aria-label="${label}" aria-disabled="${!inWindow && !ots.length}">`;
     html += `<div class="ot-cell-num">${d}</div>`;
     if (ots.length) {
       html += `<div class="ot-badge" title="${totalH}h total">${totalH}h</div>`;
+      // Gross hint per day
+      let _grossHint = '';
+      if (window.OT_SALARY) { try { _grossHint = '¥' + Math.round(ots.reduce((s, o) => s + window.OT_SALARY.calcOtBreakdown(o).gross, 0) / 1000) + 'k'; } catch {} }
+      if (_grossHint) html += `<div class="ot-cell-yen">${_grossHint}</div>`;
       if (hasConflict) html += `<div class="ot-cell-warn" title="Conflict detected">${ICON('alertTriangle', 11)}</div>`;
     }
     html += '</div>';
   }
   html += '</div>';
   grid.innerHTML = html;
+  // Attach tap + long-press handlers via delegation
+  _otCalendarAttachHandlers(grid, byDate);
+}
+
+// Long-press + tap + contextmenu delegation for calendar cells
+function _otCalendarAttachHandlers(grid, byDate) {
+  let lpTimer = null;
+  let lpFired = false;
+  const LONG_PRESS_MS = 500;
+
+  function handleLongPress(cell) {
+    lpFired = true;
+    if (typeof UIKit !== 'undefined' && typeof UIKit.haptic === 'function') UIKit.haptic('medium');
+    const dateStr = cell.dataset.date;
+    if (!dateStr) return;
+    const ots = byDate[dateStr] || [];
+    const inWindow = _isDateInWindow(dateStr);
+    const isPastMonth = _isViewMonthPast();
+    const actions = [];
+    if (!isPastMonth && inWindow) {
+      actions.push({ label: 'Thêm OT', variant: 'primary', close: true, onClick: () => openOtForm(dateStr) });
+    }
+    if (ots.length) {
+      actions.push({ label: 'Xem chi tiết', variant: 'secondary', close: true, onClick: () => openOtForm(null, ots[0].id) });
+      if (!isPastMonth) {
+        actions.push({ label: 'Xoá OT', variant: 'destructive', close: true, onClick: () => deleteOtRequest(ots[0].id) });
+      }
+    }
+    if (!actions.length) return;
+    UIKit.openSheet({ title: `📅 ${dateStr}`, actions });
+  }
+
+  function cancelLp() { if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; } }
+
+  // Touch events
+  grid.addEventListener('touchstart', (e) => {
+    const cell = e.target.closest('.ot-cell:not(.ot-cell-empty)');
+    if (!cell) return;
+    lpFired = false;
+    lpTimer = setTimeout(() => handleLongPress(cell), LONG_PRESS_MS);
+  }, { passive: true });
+  grid.addEventListener('touchmove', cancelLp, { passive: true });
+  grid.addEventListener('touchend', (e) => {
+    cancelLp();
+    if (lpFired) { e.preventDefault(); return; }
+    // Normal tap
+    const cell = e.target.closest('.ot-cell:not(.ot-cell-empty)');
+    if (cell) _otCellTap(cell, byDate);
+  });
+  grid.addEventListener('touchcancel', cancelLp, { passive: true });
+
+  // Desktop: click = tap, contextmenu = long-press
+  grid.addEventListener('click', (e) => {
+    const cell = e.target.closest('.ot-cell:not(.ot-cell-empty)');
+    if (cell) _otCellTap(cell, byDate);
+  });
+  grid.addEventListener('contextmenu', (e) => {
+    const cell = e.target.closest('.ot-cell:not(.ot-cell-empty)');
+    if (!cell) return;
+    e.preventDefault();
+    handleLongPress(cell);
+  });
+}
+
+function _otCellTap(cell, byDate) {
+  const dateStr = cell.dataset.date;
+  if (!dateStr) return;
+  const ots = byDate[dateStr] || [];
+  const isPastMonth = _isViewMonthPast();
+  const inWindow = _isDateInWindow(dateStr);
+  if (isPastMonth) {
+    toast(ots.length ? `📅 ${dateStr}: ${ots.length} OT (past month, view only)` : '📅 Past month — view only', 'info');
+  } else if (ots.length) {
+    openOtForm(null, ots[0].id);
+  } else if (inWindow) {
+    openOtForm(dateStr);
+  } else {
+    _showOutOfWindowToast(dateStr);
+  }
 }
 
 // ─── Table render ───
@@ -837,11 +932,27 @@ function _renderOtFormIncome(date, start, end, hours) {
   const sameAsCurrent = best && best.start === start && best.end === end;
 
   el.className = 'ot-form-income';
+  // Net take-home delta for this shift
+  let netLine = '';
+  if (typeof S.calcTakeHomeDelta === 'function') {
+    try {
+      const profile = _otGetProfile();
+      const y = _otState.viewYear, mo = _otState.viewMonth;
+      const monthPrefix = `${y}-${String(mo + 1).padStart(2, '0')}-`;
+      const monthEntries = (_otState.requests || []).filter(o => o.date && o.date.startsWith(monthPrefix) && o.id !== _otState.editId);
+      const currentMonthOtGross = monthEntries.reduce((s, o) => { try { return s + S.calcOtBreakdown(o).gross; } catch { return s; } }, 0);
+      const delta = S.calcTakeHomeDelta(br.gross, profile, currentMonthOtGross);
+      if (delta && delta.takeHomeDelta > 0) {
+        netLine = `<div class="ot-form-income-net">Thực nhận ~${yen(delta.takeHomeDelta)}</div>`;
+      }
+    } catch {}
+  }
   el.innerHTML = `
     <div class="ot-form-income-header">
       <span>${ICON('coins', 14)} <strong>Estimated income</strong></span>
       <span class="ot-form-income-gross">${yen(br.gross)}</span>
     </div>
+    ${netLine}
     <div class="ot-form-income-rows">
       <span class="lbl">Base OT (125%)</span><span class="hrs">${br.totalHours.toFixed(2)}h</span><span class="yen">${yen(Math.floor(br.baseOT))}</span>
       ${br.nightHours > 0 ? `<span class="lbl">+ Night (22-05)</span><span class="hrs">${br.nightHours.toFixed(2)}h</span><span class="yen">+${yen(Math.floor(br.nightPremium))}</span>` : ''}
@@ -1346,27 +1457,38 @@ function renderOtBudget() {
   const todayMonthKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
   const isPastMonth = monthKey < todayMonthKey;
 
+  // Ring color
+  const ringPct = Math.min(100, Math.round(hoursPct));
+  const ringColor = ringPct >= 100 ? 'var(--red)' : (ringPct > 80 ? 'var(--yellow)' : 'var(--primary)');
+
+  // Pacing (linear pace for current month only)
+  let pacingHtml = '';
+  if (monthKey === todayMonthKey) {
+    const daysInMonth = new Date(y, m + 1, 0).getDate();
+    const dayOfMonth = today.getDate();
+    const expectedHours = (75 * dayOfMonth) / daysInMonth;
+    const diff = sal.totalHours - expectedHours;
+    if (Math.abs(diff) < 1) {
+      pacingHtml = `<span class="ot-pacing ot-pacing-ok">Đúng tiến độ</span>`;
+    } else if (diff > 0) {
+      pacingHtml = `<span class="ot-pacing ot-pacing-ahead">Vượt ${Math.abs(diff).toFixed(1)}h</span>`;
+    } else {
+      pacingHtml = `<span class="ot-pacing ot-pacing-behind">Chậm ${Math.abs(diff).toFixed(1)}h</span>`;
+    }
+  }
+
   // Net take-home: prefer real payslip when available; otherwise estimate
-  // using the latest payslip as fixed-cost baseline (insurance, rent, …).
   const realSlip = window.OT_SALARY.findPayslipForWorkMonth(_otState.payslips, monthKey);
   const baseline = window.OT_SALARY.pickBaselineForWorkMonth(_otState.payslips, monthKey);
   let netHtml = '';
   if (realSlip && realSlip.take_home != null) {
-    // ━━ ACTUAL from payslip ━━
     netHtml = `
       <div class="ot-budget-takehome" data-payslip-month="${monthKey}">
         <span class="ot-takehome-label">${ICON('wallet', 12)} Net take-home <span class="ot-takehome-est ot-real-badge">actual</span></span>
         <span class="ot-takehome-val">${F(realSlip.take_home)}<button class="ot-takehome-eye ot-takehome-clickable" data-payslip-month="${monthKey}" aria-label="View payslip detail">${ICON('eye', 14)}</button></span>
       </div>`;
   } else if (baseline) {
-    // ━━ ESTIMATE using baseline payslip fixed components ━━
-    // For past months with no slip yet: index=1.0. For current month: estimate
-    // index from working day ratio elapsed (rough). For future months: index=1.0.
     let idx = 1.0;
-    if (monthKey === todayMonthKey) {
-      // Rough: don't reduce index — assume user will work the rest of the month.
-      idx = 1.0;
-    }
     const est = window.OT_SALARY.calcFullMonthEstimate(sal.gross, baseline, { basicSalaryIndex: idx });
     netHtml = `
       <div class="ot-budget-takehome" data-payslip-month="${monthKey}" data-payslip-estimate="1">
@@ -1374,7 +1496,6 @@ function renderOtBudget() {
         <span class="ot-takehome-val">${F(est.takeHome)}<button class="ot-takehome-eye ot-takehome-clickable" data-payslip-month="${monthKey}" data-payslip-estimate="1" aria-label="View payslip detail">${ICON('eye', 14)}</button></span>
       </div>`;
   } else {
-    // ━━ No payslip data at all — fall back to OT-delta only ━━
     const profile = _otGetProfile();
     const delta = window.OT_SALARY.calcTakeHomeDelta(sal.gross, profile);
     const keepPct = delta.effectiveKeepRate > 0 ? (delta.effectiveKeepRate * 100).toFixed(1) : '—';
@@ -1391,22 +1512,30 @@ function renderOtBudget() {
         <div class="ot-budget-title">${ICON('hourglass', 14)} Budget · ${monthName}</div>
         <div class="ot-budget-gross" data-tooltip="Gross OT income (base 125% + Sunday +10% + night +25%) — paid IN ADDITION to fixed allowance ¥20,000/mo">${F(sal.gross)}</div>
       </div>
-      <div class="ot-budget-row">
-        <div class="ot-budget-row-label">
-          <span>Monthly hours</span>
-          <span class="ot-budget-row-val">${H(sal.totalHours)} / ${S.MAX_HOURS_PER_MONTH}h</span>
+      <div class="ot-budget-ring-row">
+        <div class="ui-ring" style="--ring-pct:${ringPct};--ring-color:${ringColor}">
+          <div class="ui-ring-label">${H(sal.totalHours)}<br><span class="text-muted-foreground text-xs">/ 75h</span></div>
         </div>
-        <div class="ot-progress ${hoursCls}">
-          <div class="ot-progress-fill" style="width:${hoursPct}%"></div>
-        </div>
-      </div>
-      <div class="ot-budget-row">
-        <div class="ot-budget-row-label">
-          <span>Night hours (22:00–05:00)</span>
-          <span class="ot-budget-row-val">${H(sal.nightHours)} / ${S.NIGHT_REMARK_THRESHOLD}h</span>
-        </div>
-        <div class="ot-progress ${nightCls}">
-          <div class="ot-progress-fill" style="width:${nightPct}%"></div>
+        <div class="ot-budget-ring-meta">
+          <div class="ot-budget-row">
+            <div class="ot-budget-row-label">
+              <span>Monthly hours</span>
+              <span class="ot-budget-row-val">${H(sal.totalHours)} / ${S.MAX_HOURS_PER_MONTH}h</span>
+            </div>
+            <div class="ot-progress ${hoursCls}">
+              <div class="ot-progress-fill" style="width:${hoursPct}%"></div>
+            </div>
+          </div>
+          <div class="ot-budget-row">
+            <div class="ot-budget-row-label">
+              <span>Night hours (22:00–05:00)</span>
+              <span class="ot-budget-row-val">${H(sal.nightHours)} / ${S.NIGHT_REMARK_THRESHOLD}h</span>
+            </div>
+            <div class="ot-progress ${nightCls}">
+              <div class="ot-progress-fill" style="width:${nightPct}%"></div>
+            </div>
+          </div>
+          ${pacingHtml}
         </div>
       </div>
       ${netHtml}
@@ -1765,7 +1894,6 @@ function renderOtOptimizerResults(selected, ctx) {
   if (!host) return;
   const F = window.OT_SALARY.formatYen;
   const H = window.OT_SALARY.formatHours;
-  const win = _otCreationWindow();
 
   if (!selected.length) {
     host.innerHTML = `<div class="empty text-muted-foreground text-sm p-3 text-center">No eligible days found (all booked/conflicted, or target not reachable within 75h cap).</div>`;
@@ -1775,26 +1903,7 @@ function renderOtOptimizerResults(selected, ctx) {
   const profile = _otGetProfile();
   const deltaTotal = window.OT_SALARY.calcTakeHomeDelta(ctx.projGross - ctx.currentGross, profile, ctx.currentGross);
 
-  let rows = '';
-  for (let i = 0; i < selected.length; i++) {
-    const c = selected[i];
-    const isQueued = c.date > win.maxStr;
-    const isInWindow = !isQueued && c.date >= win.today;
-    const statusBadge = isQueued
-      ? `<span class="status-badge status-pending" data-tooltip="Beyond DokoKin +7d window — saved to Gist, auto-created when in range">queued</span>`
-      : `<span class="status-badge status-info" data-tooltip="Within DokoKin window — Auto OT Creator picks up at next 10:00 JST run">eligible</span>`;
-    const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-    rows += `
-      <tr>
-        <td class="px-3 py-2"><input type="checkbox" class="ot-opt-cb" data-idx="${i}" checked></td>
-        <td class="px-3 py-2 font-mono text-xs">${c.date} <span class="text-muted-foreground">${dayNames[c.dow]}</span></td>
-        <td class="px-3 py-2 font-mono text-xs">${c.start}→${c.end}</td>
-        <td class="px-3 py-2 text-right">${H(c.hours)}</td>
-        <td class="px-3 py-2 text-right font-mono">${F(c.gross)}</td>
-        <td class="px-3 py-2">${statusBadge}</td>
-      </tr>
-    `;
-  }
+  // Render inline results in modal (existing behavior kept)
   host.innerHTML = `
     <div class="ot-opt-summary">
       <div class="ot-opt-summary-row">
@@ -1814,22 +1923,117 @@ function renderOtOptimizerResults(selected, ctx) {
         <span><strong>${F(deltaTotal.takeHomeDelta)}</strong> <span class="text-muted-foreground">(keep ${(deltaTotal.effectiveKeepRate * 100).toFixed(1)}%)</span></span>
       </div>
     </div>
-    <div class="sched-table-wrap overflow-x-auto rounded-lg border border-border mt-3">
-      <table class="sched-table w-full text-sm">
-        <thead><tr class="bg-muted/50 border-b border-border">
-          <th class="px-3 py-2 text-left"><input type="checkbox" id="otOptCbAll" checked onchange="document.querySelectorAll('.ot-opt-cb').forEach(c=>c.checked=this.checked)"></th>
-          <th class="px-3 py-2 text-left text-xs font-medium text-muted-foreground uppercase">Date</th>
-          <th class="px-3 py-2 text-left text-xs font-medium text-muted-foreground uppercase">Time</th>
-          <th class="px-3 py-2 text-right text-xs font-medium text-muted-foreground uppercase">Hours</th>
-          <th class="px-3 py-2 text-right text-xs font-medium text-muted-foreground uppercase">Income</th>
-          <th class="px-3 py-2 text-left text-xs font-medium text-muted-foreground uppercase">Status</th>
-        </tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-    </div>
-    <button class="btn primary w-full mt-3" onclick="applyOtOptimizer()"><span data-icon="save" data-size="14"></span> Apply Selected</button>
+    <button class="btn primary w-full mt-3" onclick="_openOptimizerSheet()">Xem & áp dụng</button>
   `;
-  if (typeof renderIcons === 'function') renderIcons(host);
+}
+
+function _openOptimizerSheet() {
+  const selected = _otState.optimizerResults;
+  if (!selected || !selected.length) return;
+  const F = window.OT_SALARY.formatYen;
+  const H = window.OT_SALARY.formatHours;
+  const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+  // Check which dates already have OT
+  const existingDates = {};
+  (_otState.requests || []).forEach(o => { existingDates[o.date] = true; });
+
+  const profile = _otGetProfile();
+  const y = _otState.viewYear, mo = _otState.viewMonth;
+  const monthPrefix = `${y}-${String(mo + 1).padStart(2, '0')}-`;
+  const monthEntries = (_otState.requests || []).filter(o => o.date && o.date.startsWith(monthPrefix));
+  const currentGross = monthEntries.reduce((s, o) => { try { return s + window.OT_SALARY.calcOtBreakdown(o).gross; } catch { return s; } }, 0);
+
+  // Build sheet body
+  const container = document.createElement('div');
+  container.className = 'ot-opt-sheet';
+  let totalH = 0, totalGross = 0;
+  const items = selected.map((c, i) => {
+    const alreadyHas = existingDates[c.date];
+    totalH += alreadyHas ? 0 : c.hours;
+    totalGross += alreadyHas ? 0 : c.gross;
+    return { ...c, idx: i, disabled: alreadyHas };
+  });
+
+  // Summary
+  const deltaTotal = (typeof window.OT_SALARY.calcTakeHomeDelta === 'function')
+    ? window.OT_SALARY.calcTakeHomeDelta(totalGross, profile, currentGross)
+    : null;
+  const summaryDiv = document.createElement('div');
+  summaryDiv.className = 'ot-opt-summary mb-3';
+  summaryDiv.innerHTML = `
+    <div class="ot-opt-summary-row is-projected"><span>Tổng chọn</span><span><strong>${H(totalH)}</strong> · ${F(totalGross)}</span></div>
+    ${deltaTotal ? `<div class="ot-opt-summary-row is-takehome"><span>${ICON('wallet', 12)} Thực nhận</span><span><strong>${F(deltaTotal.takeHomeDelta)}</strong></span></div>` : ''}
+  `;
+  container.appendChild(summaryDiv);
+
+  // Shift list with checkboxes
+  const listDiv = document.createElement('div');
+  listDiv.className = 'ot-opt-sheet-list';
+  listDiv.setAttribute('data-scroll-area', '');
+  for (const item of items) {
+    const row = document.createElement('label');
+    row.className = `ot-opt-sheet-row${item.disabled ? ' is-disabled' : ''}`;
+    row.innerHTML = `
+      <input type="checkbox" class="ot-opt-sheet-cb" data-idx="${item.idx}" ${item.disabled ? 'disabled' : 'checked'}>
+      <span class="font-mono text-xs">${item.date} ${dayNames[item.dow]}</span>
+      <span class="font-mono text-xs">${item.start}→${item.end}</span>
+      <span class="text-right text-xs">${H(item.hours)}</span>
+      <span class="text-right font-mono text-xs">${F(item.gross)}</span>
+      ${item.disabled ? '<span class="text-xs text-muted-foreground">đã có OT</span>' : ''}
+    `;
+    listDiv.appendChild(row);
+  }
+  container.appendChild(listDiv);
+
+  // Open sheet
+  if (typeof UIKit !== 'undefined' && typeof UIKit.openSheet === 'function') {
+    UIKit.openSheet({
+      title: `Optimizer: ${selected.length} ca đề xuất`,
+      node: container,
+      className: 'ot-opt-sheet-modal',
+      actions: [
+        {
+          label: 'Áp dụng đã chọn',
+          variant: 'primary',
+          close: true,
+          onClick: () => _applyOptimizerChecked(container),
+        },
+        { label: 'Huỷ', variant: 'secondary', close: true },
+      ],
+    });
+  } else {
+    // Fallback: just apply all
+    applyOtOptimizer();
+  }
+}
+
+async function _applyOptimizerChecked(container) {
+  const cbs = container.querySelectorAll('.ot-opt-sheet-cb:checked:not(:disabled)');
+  const indices = Array.from(cbs).map(c => Number(c.dataset.idx)).filter(i => !isNaN(i));
+  if (!indices.length) return toast('⚠️ Chọn ít nhất 1 ca', 'warning');
+  const toAdd = indices.map(i => _otState.optimizerResults[i]).filter(Boolean);
+  try {
+    await loadOtData();
+    const existing = [..._otState.requests];
+    for (const c of toAdd) {
+      if (existing.some(o => o.date === c.date)) continue;
+      existing.push({
+        id: _otId(),
+        date: c.date, start: c.start, end: c.end, hours: c.hours,
+        reason: c.start === '15:30' ? 'Sunday OT — full day' : 'task shishin',
+        created_at: new Date().toISOString(),
+        created_by: 'optimizer',
+      });
+    }
+    await _saveOtRequests(existing);
+    if (typeof UIKit !== 'undefined' && typeof UIKit.haptic === 'function') UIKit.haptic('success');
+    closeOtOptimizer();
+    toast(`✓ Đã áp dụng ${toAdd.length} ca OT`, 'success');
+    await loadOtData();
+  } catch (e) {
+    toast(`⚠️ ${e.message}`, 'error');
+  }
 }
 
 async function applyOtOptimizer() {
@@ -1848,7 +2052,6 @@ async function applyOtOptimizer() {
     await loadOtData();
     const existing = [..._otState.requests];
     for (const c of toAdd) {
-      // Double-check no duplicate (race-safe after re-fetch)
       if (existing.some(o => o.date === c.date)) continue;
       existing.push({
         id: _otId(),
@@ -1859,6 +2062,7 @@ async function applyOtOptimizer() {
       });
     }
     await _saveOtRequests(existing);
+    if (typeof UIKit !== 'undefined' && typeof UIKit.haptic === 'function') UIKit.haptic('success');
     closeOtOptimizer();
     toast(`✓ Applied ${toAdd.length} OT entries`, 'success');
     await loadOtData();
