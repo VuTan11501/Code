@@ -282,6 +282,12 @@ _(source: checkpoint 015)_
 - **Fix**: Added `write_pending_or_alert()` wrapper in `pending_rotation.py` that sends SMTP email on persistent failure (masked token + run URL + recovery instructions). All 6 callers updated via `from pending_rotation import write_pending_or_alert as write_pending` — no other code change. Worker still succeeds (alert is best-effort), but human is now loudly notified.
 - **Prevention**: Any catch-and-log of an exception around a write that's the ONLY persistence of important state MUST escalate. Silent best-effort logging is only safe when the state is already redundantly stored elsewhere.
 
+### 3.30 Dispatcher respawn storm pins the account-wide REST limit → every Gist write 403s
+- **Symptom**: `gh_timesheet_fetch.py` and `gh_ot_creator` (token rotation queue) both started failing with `HTTP 403 Forbidden` on Gist PATCH, persistently, for ~40 min. `gh api /rate_limit` showed `core.remaining` HEALTHY (4500+), yet even a TINY single-file PATCH 403'd with `"API rate limit exceeded for user ID …"`. Public Gist READS still returned 200. `gh run list` showed the **Scheduled Run Dispatcher completing a new run every ~10 seconds**.
+- **Root cause**: Phase-4 lease logic made a dispatcher that can't acquire the lease `sys.exit(0)` (exit clean). But step 2 `Re-trigger self` used `if: always()` and **unconditionally** re-chained `gh workflow run`. So every early-exit run spawned a replacement within seconds. Once the account brushed GitHub's **secondary write-abuse limit** (a separate bucket from primary `core`, NOT shown in `/rate_limit`, triggered by bursty mutating requests), `lease_acquire`'s own Gist CAS write started 403'ing → dispatcher exits clean → re-chains → repeat. Self-sustaining storm that kept the secondary limit pinned, 403'ing ALL Gist writes (timesheet, payslip, token rotation, dispatcher state) account-wide because the 5000/hr primary AND the secondary write limit are shared across ALL tokens owned by the user (GH_PAT in workflows + dashboard PAT + gh CLI).
+- **Fix**: `scheduled-dispatch.yml` — step 1 writes `outputs.rechain=1` ONLY after the loop ran ≥ `MIN_RECHAIN_MIN` (5) min; step 2 gated on `steps.loop.outputs.rechain == '1'`. Early-exit runs (lease miss / rate-limit / crash) no longer respawn; backup cron `*/15` + watchdog recover the chain safely. Separately, shrank the gist (timesheet/payslip `backup=False` + compact JSON, ~1.25MB→~360KB) to reduce per-write pressure.
+- **Prevention**: NEVER unconditionally self-re-chain a self-looping workflow on `if: always()`. Gate re-chain on evidence the run did real work (min elapsed). A 403 with healthy `core.remaining` = **secondary** rate limit (bursty writes) — back off, don't retry into it. Rate limits are **per-user, shared across all tokens** — one runaway loop starves every other automation.
+
 ---
 
 ## 4. Build & test commands
@@ -376,4 +382,4 @@ If any step fails, capture the workflow log via `pwsh scripts/fetch-run-logs.ps1
 
 ---
 
-_Last reviewed: 2026-05-31_
+_Last reviewed: 2026-05-30_
