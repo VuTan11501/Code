@@ -116,13 +116,31 @@ def _gist_get(gist_id, filename, token):
 
 
 def _gist_patch(gist_id, filename, content_json, etag, token):
-    """PATCH gist with If-Match. Raises _ConflictError on 412/409."""
+    """PATCH gist file, emulating CAS without the (now-unsupported) If-Match header.
+
+    GitHub changed the gist API to REJECT conditional headers on unsafe requests:
+        HTTP 400 "Conditional request headers are not allowed in unsafe requests
+                  unless supported by the endpoint"
+    so `If-Match: <etag>` on PATCH now 400s and breaks every write. We instead
+    emulate optimistic concurrency: re-read the ETag immediately before writing;
+    if it changed since the caller's read (`etag`), another writer raced us →
+    raise _ConflictError so cas_update retries with the fresh state. The re-read→
+    PATCH window is sub-millisecond (no work between), so the clobber window is
+    tiny — same guarantee level as gist_safety.py's sha race-check.
+
+    Raises _ConflictError on detected race; _GistError on other HTTP failures.
+    """
     url = f'{GITHUB_API}/gists/{gist_id}'
+    # CAS pre-check: bail if the file changed since the caller's GET.
+    if etag:
+        try:
+            fresh_etag, _ = _gist_get(gist_id, filename, token)
+        except _GistError:
+            fresh_etag = ''  # read failed — proceed (best-effort), PATCH may still 4xx
+        if fresh_etag and fresh_etag != etag:
+            raise _ConflictError('ETag changed before PATCH (concurrent write)')
     body = json.dumps({'files': {filename: {'content': content_json}}}).encode()
-    headers = _make_headers(token, {
-        'If-Match': etag,
-        'Content-Type': 'application/json',
-    })
+    headers = _make_headers(token, {'Content-Type': 'application/json'})
     req = Request(url, data=body, headers=headers, method='PATCH')
     try:
         resp = urlopen(req)

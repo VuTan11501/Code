@@ -258,10 +258,10 @@
     const token = typeof sessionToken !== 'undefined' ? sessionToken : null;
     if (!token) throw new Error('No session token');
 
-    // Raw GET so we can capture the ETag for the PATCH If-Match header.
+    // Raw GET so we can capture the ETag for CAS conflict detection.
     // apiFetch caches via in-memory ETag map but doesn't expose the header
     // value, which we need to detect concurrent writes between our GET
-    // and PATCH (412 → retry with fresh state + ORIGINAL baseSnapshot).
+    // and PATCH (changed ETag → retry with fresh state + ORIGINAL baseSnapshot).
     const proxyBase = (typeof localStorage !== 'undefined' && localStorage.getItem('wf_dash_gh_proxy_url')) || 'https://api.github.com';
     const getResp = await fetch(`${proxyBase}/gists/${GIST_ID}`, {
       headers: {
@@ -332,15 +332,28 @@
       content = JSON.stringify(currentData, null, 2);
     }
 
-    // PATCH Gist — send If-Match with the ETag captured during our GET so
-    // concurrent writes between GET and PATCH return 412 and trigger retry.
+    // GitHub now REJECTS If-Match on gist PATCH (HTTP 400 "Conditional request
+    // headers are not allowed in unsafe requests"). Emulate CAS instead: re-read
+    // the ETag right before PATCH; if it changed since our GET, another writer
+    // raced us → retry with the ORIGINAL baseSnapshot so 3-way merge reconciles.
+    if (currentEtag && retryCount < 1) {
+      try {
+        const recheck = await fetch(`${proxyBase}/gists/${GIST_ID}`, {
+          headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/vnd.github+json' },
+        });
+        const freshEtag = recheck.headers.get('ETag') || recheck.headers.get('etag') || null;
+        if (recheck.ok && freshEtag && freshEtag !== currentEtag) {
+          console.log('[proposals] ETag changed before PATCH, retrying with 3-way merge...');
+          return _applyToFile(file, proposals, retryCount + 1, baseSnapshot);
+        }
+      } catch (_) { /* best-effort CAS recheck — proceed on failure */ }
+    }
     const patchBody = { files: { [file]: { content } } };
     const patchHeaders = {
       'Authorization': `Bearer ${token}`,
       'Content-Type': 'application/json',
       'Accept': 'application/vnd.github+json',
     };
-    if (currentEtag) patchHeaders['If-Match'] = currentEtag;
     let patchResp;
     try {
       patchResp = await fetch(`${proxyBase}/gists/${GIST_ID}`, {
@@ -542,9 +555,8 @@
     // ─── Safety pre-check: refuse rollback if remote diverged from what we
     // stored at apply time. This guards against silently overwriting edits a
     // user (or autopilot) made on another device after the apply landed.
-    // GitHub Gist PATCH ignores `If-Match` in practice, so a content-equality
-    // check is the reliable signal; we still send If-Match as belt-and-braces
-    // in case the API starts honouring it.
+    // The content-equality check below is the reliable signal. (We no longer
+    // send If-Match — GitHub now 400s conditional headers on gist PATCH.)
     if (entry.after_snapshot !== undefined && entry.after_snapshot !== null) {
       try {
         if (typeof apiFetch !== 'function') throw new Error('apiFetch not available');
@@ -582,7 +594,6 @@
       'Content-Type': 'application/json',
       'Accept': 'application/vnd.github+json',
     };
-    if (entry.gist_etag) headers['If-Match'] = entry.gist_etag;
 
     try {
       const resp = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
