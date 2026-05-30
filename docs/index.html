@@ -48,7 +48,7 @@
 })();
 </script>
 <link rel="stylesheet" href="css/tailwind.css?v=1">
-<link rel="stylesheet" href="css/style.css?v=131">
+<link rel="stylesheet" href="css/style.css?v=132">
 <link rel="preconnect" href="https://api.github.com">
 </head>
 <body class="bg-background text-foreground font-sans text-sm antialiased min-h-dvh overflow-x-hidden">
@@ -325,11 +325,13 @@
             </div>
             <button class="btn primary w-full px-4 py-2.5" onclick="addScheduledRun()"><span data-icon="plus" data-size="16"></span> Add Schedule</button>
           </div>
-          <div class="filter-chips mb-3" id="schedQueueChips" aria-label="Filter scheduled runs"></div>
-          <div class="scheduler-queue" id="schedulerQueue" aria-label="Scheduled runs queue">
-            <div class="skeleton" style="height:56px;width:100%;border-radius:var(--radius-md);margin-bottom:8px"></div>
-            <div class="skeleton" style="height:56px;width:100%;border-radius:var(--radius-md);margin-bottom:8px"></div>
-            <div class="skeleton" style="height:56px;width:100%;border-radius:var(--radius-md)"></div>
+          <div class="scheduler-queue-wrap">
+            <div class="filter-chips mb-3" id="schedQueueChips" aria-label="Filter scheduled runs"></div>
+            <div class="scheduler-queue" id="schedulerQueue" aria-label="Scheduled runs queue">
+              <div class="skeleton" style="height:56px;width:100%;border-radius:var(--radius-md);margin-bottom:8px"></div>
+              <div class="skeleton" style="height:56px;width:100%;border-radius:var(--radius-md);margin-bottom:8px"></div>
+              <div class="skeleton" style="height:56px;width:100%;border-radius:var(--radius-md)"></div>
+            </div>
           </div>
         </div>
       </section>

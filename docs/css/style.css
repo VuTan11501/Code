@@ -564,7 +564,8 @@ body.modal-open { overflow: hidden; }
 .settings-card .card-content { padding: 0; }
 
 /* â”€â”€â”€ SCHEDULER PANEL â”€â”€â”€ */
-.scheduler-panel { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.scheduler-panel { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+.scheduler-queue-wrap { display: flex; flex-direction: column; min-width: 0; }
 .scheduler-form {
   background: linear-gradient(180deg, rgba(var(--tint),0.02), rgba(var(--tint),0.005)), var(--card);
   border: 1px solid var(--border);
