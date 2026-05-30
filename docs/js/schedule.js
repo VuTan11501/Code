@@ -1312,7 +1312,7 @@ function renderScheduleQueueChips() {
   };
 }
 
-function detectScheduleConflicts(entries) {
+function collectConflictIds(entries) {
   const conflictIds = new Set();
   if (!entries || entries.length < 2) return conflictIds;
   const nowJST = jstNow();
@@ -1368,7 +1368,7 @@ function renderScheduledQueue(entries) {
   renderScheduleQueueChips();
 
   // Detect conflicts
-  const conflictIds = detectScheduleConflicts(entries);
+  const conflictIds = collectConflictIds(entries);
 
   // Apply queue filter
   let filtered;
@@ -2002,7 +2002,7 @@ function renderScheduleTable() {
   const countEl = document.getElementById('tableCount');
   if (!tbody) return;
 
-  const conflictIds = detectScheduleConflicts(scheduleTableData || []);
+  const conflictIds = collectConflictIds(scheduleTableData || []);
 
   const filtered = getFilteredEntries();
   const totalPages = Math.max(1, Math.ceil(filtered.length / TABLE_PAGE_SIZE));
