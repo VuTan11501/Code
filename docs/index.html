@@ -1206,7 +1206,7 @@ wrangler login</pre>
     </div>
     <div class="dialog-body modal-body" style="padding:20px">
       <div class="flex flex-col gap-4">
-        <div class="field">
+        <div class="field" id="otFormTemplateField">
           <label class="field-label text-xs text-muted-foreground font-medium block mb-1" for="otFormTemplate">Template (optional)</label>
           <div class="flex gap-2">
             <select class="select w-full" id="otFormTemplate" onchange="applyOtTemplate()"></select>
@@ -1238,8 +1238,8 @@ wrangler login</pre>
         <div id="otFormIncome" class="ot-form-income"></div>
         <div id="otFormPreview"></div>
         <div class="flex gap-3 pt-2">
-          <button class="btn primary flex-1" onclick="submitOtForm()"><span data-icon="save" data-size="14"></span> Save</button>
-          <button class="btn flex-1" onclick="closeOtForm()">Cancel</button>
+          <button class="btn primary flex-1" id="otFormSaveBtn" onclick="submitOtForm()"><span data-icon="save" data-size="14"></span> Save</button>
+          <button class="btn flex-1" id="otFormCancelBtn" onclick="closeOtForm()">Cancel</button>
         </div>
       </div>
     </div>
@@ -1356,7 +1356,7 @@ wrangler login</pre>
      Source files live in docs/js/* for development; the bundle is what ships.
      To work on the raw source instead, comment the line below and re-enable
      the individual <script defer src="js/X.js"> tags (see git history). -->
-<script defer src="dist/app.bundle.min.js?v=60"></script>
+<script defer src="dist/app.bundle.min.js?v=61"></script>
 <!-- AI Proposal confirmation modal (Phase 3) -->
 <div id="aiProposalModal" class="proposal-modal" role="dialog" aria-modal="true" aria-labelledby="aiProposalTitle" hidden aria-hidden="true">
   <div class="proposal-modal-backdrop" onclick="AIProposals.closeModal()"></div>

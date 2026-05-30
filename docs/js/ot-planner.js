@@ -949,7 +949,16 @@ function openOtForm(dateStr, existingId) {
   const modal = document.getElementById('otFormModal');
   if (!modal) return;
   _otState.editId = existingId || null;
-  document.getElementById('otFormTitle').textContent = existingId ? 'Edit OT Request' : 'New OT Request';
+
+  // An existing entry whose date precedes the creation window (yesterday) is
+  // historical — already executed, payroll-relevant — so it cannot be edited.
+  // Render the form as a read-only detail view: disabled inputs, no Save.
+  const existing = existingId ? _otState.requests.find(o => o.id === existingId) : null;
+  const readonly = !!(existing && existing.date < _otCreationWindow().minStr);
+  _applyOtFormReadonly(readonly);
+
+  document.getElementById('otFormTitle').textContent =
+    readonly ? 'OT Request (view only)' : (existingId ? 'Edit OT Request' : 'New OT Request');
   // Constrain date input to creation window (only for new entries)
   const dateInput = document.getElementById('otFormDate');
   const win = _otCreationWindow();
@@ -962,7 +971,7 @@ function openOtForm(dateStr, existingId) {
     dateInput.max = win.maxStr;
   }
   if (existingId) {
-    const ot = _otState.requests.find(o => o.id === existingId);
+    const ot = existing;
     if (!ot) return;
     document.getElementById('otFormDate').value = ot.date;
     document.getElementById('otFormStart').value = ot.start;
@@ -976,8 +985,23 @@ function openOtForm(dateStr, existingId) {
     document.getElementById('otFormReason').value = '';
   }
   _updateOtFormPreview();
-  refreshOtFormTemplateDropdown();
+  if (!readonly) refreshOtFormTemplateDropdown();
   modal.classList.add('open');
+}
+
+// Toggle the OT form between editable and read-only (view-only) presentation.
+function _applyOtFormReadonly(readonly) {
+  const ids = ['otFormDate', 'otFormStart', 'otFormEnd', 'otFormReason', 'otFormTemplate'];
+  ids.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.disabled = readonly;
+  });
+  const tplField = document.getElementById('otFormTemplateField');
+  if (tplField) tplField.style.display = readonly ? 'none' : '';
+  const saveBtn = document.getElementById('otFormSaveBtn');
+  if (saveBtn) saveBtn.style.display = readonly ? 'none' : '';
+  const cancelBtn = document.getElementById('otFormCancelBtn');
+  if (cancelBtn) cancelBtn.textContent = readonly ? 'Close' : 'Cancel';
 }
 
 function closeOtForm() {
@@ -1123,6 +1147,13 @@ function applyOtBestSlot() {
 }
 
 async function submitOtForm() {
+  // Defensive: historical entries are view-only — never persist edits.
+  if (_otState.editId) {
+    const cur = _otState.requests.find(o => o.id === _otState.editId);
+    if (cur && cur.date < _otCreationWindow().minStr) {
+      return closeOtForm();
+    }
+  }
   const date = document.getElementById('otFormDate').value;
   const start = document.getElementById('otFormStart').value;
   const end = document.getElementById('otFormEnd').value;
