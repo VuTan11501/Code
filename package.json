@@ -12,13 +12,16 @@
     "test:smoke": "playwright test",
     "test:smoke:install": "playwright install --with-deps chromium",
     "test:unit": "vitest run",
-    "test": "vitest run"
+    "test": "vitest run",
+    "generate:codegraph": "madge --json src > docs/codegraph/deps.json",
+    "generate:codegraph:graph": "madge --image docs/codegraph/deps.png src"
   },
   "devDependencies": {
     "@playwright/test": "^1.60.0",
     "esbuild": "^0.28.0",
     "javascript-obfuscator": "^5.4.3",
     "tailwindcss": "^3.4.13",
-    "vitest": "^4.1.7"
+    "vitest": "^4.1.7",
+    "madge": "^5.0.0"
   }
 }

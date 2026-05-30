@@ -1,0 +1,87 @@
+﻿{
+  "cloudflare-worker-fare/fare.js": [],
+  "cloudflare-worker/heartbeat.js": [],
+  "docs/dist/app.bundle.min.js": [],
+  "docs/js/ai-agent.js": [],
+  "docs/js/ai-audit.js": [],
+  "docs/js/ai-proposals.js": [],
+  "docs/js/ai-tools.js": [],
+  "docs/js/ai-validators.js": [],
+  "docs/js/app.js": [],
+  "docs/js/auth.js": [],
+  "docs/js/biometric.js": [],
+  "docs/js/cloud-sync.js": [],
+  "docs/js/dashboard.js": [],
+  "docs/js/icons.js": [],
+  "docs/js/insights.js": [],
+  "docs/js/locations.js": [],
+  "docs/js/log-viewer.js": [],
+  "docs/js/no-autofill.js": [],
+  "docs/js/ot-planner.js": [],
+  "docs/js/ot-salary.js": [],
+  "docs/js/schedule.js": [],
+  "docs/js/settings.js": [],
+  "docs/js/suica-date-range.js": [],
+  "docs/js/suica-history.js": [],
+  "docs/js/suica-planner.js": [],
+  "docs/js/theme.js": [],
+  "docs/js/timesheet.js": [],
+  "docs/js/ui-kit.js": [],
+  "docs/js/ui-toast.js": [],
+  "docs/sw.js": [],
+  "graph-dashboard/assets/CodeViewer-yFWoJrcF.js": [
+    "graph-dashboard/assets/graph-layout-7tFr_anw.js",
+    "graph-dashboard/assets/index-CvaRa5y8.js",
+    "graph-dashboard/assets/react-vendor-BVoutfaX.js",
+    "graph-dashboard/assets/xyflow-CYMCcsWN.js"
+  ],
+  "graph-dashboard/assets/KeyboardShortcutsHelp-BJDwQP1Z.js": [
+    "graph-dashboard/assets/graph-layout-7tFr_anw.js",
+    "graph-dashboard/assets/index-CvaRa5y8.js",
+    "graph-dashboard/assets/react-vendor-BVoutfaX.js",
+    "graph-dashboard/assets/xyflow-CYMCcsWN.js"
+  ],
+  "graph-dashboard/assets/LearnPanel-B7zhvULR.js": [
+    "graph-dashboard/assets/graph-layout-7tFr_anw.js",
+    "graph-dashboard/assets/index-CvaRa5y8.js",
+    "graph-dashboard/assets/markdown-DpllbSd9.js",
+    "graph-dashboard/assets/react-vendor-BVoutfaX.js",
+    "graph-dashboard/assets/xyflow-CYMCcsWN.js"
+  ],
+  "graph-dashboard/assets/OnboardingOverlay-BIH23k-6.js": [
+    "graph-dashboard/assets/graph-layout-7tFr_anw.js",
+    "graph-dashboard/assets/index-CvaRa5y8.js",
+    "graph-dashboard/assets/react-vendor-BVoutfaX.js",
+    "graph-dashboard/assets/xyflow-CYMCcsWN.js"
+  ],
+  "graph-dashboard/assets/PathFinderModal-DI7IFGv3.js": [
+    "graph-dashboard/assets/graph-layout-7tFr_anw.js",
+    "graph-dashboard/assets/index-CvaRa5y8.js",
+    "graph-dashboard/assets/react-vendor-BVoutfaX.js",
+    "graph-dashboard/assets/xyflow-CYMCcsWN.js"
+  ],
+  "graph-dashboard/assets/graph-layout-7tFr_anw.js": [
+    "graph-dashboard/assets/xyflow-CYMCcsWN.js"
+  ],
+  "graph-dashboard/assets/index-CvaRa5y8.js": [
+    "graph-dashboard/assets/CodeViewer-yFWoJrcF.js",
+    "graph-dashboard/assets/KeyboardShortcutsHelp-BJDwQP1Z.js",
+    "graph-dashboard/assets/LearnPanel-B7zhvULR.js",
+    "graph-dashboard/assets/OnboardingOverlay-BIH23k-6.js",
+    "graph-dashboard/assets/PathFinderModal-DI7IFGv3.js",
+    "graph-dashboard/assets/graph-layout-7tFr_anw.js",
+    "graph-dashboard/assets/react-vendor-BVoutfaX.js",
+    "graph-dashboard/assets/xyflow-CYMCcsWN.js"
+  ],
+  "graph-dashboard/assets/markdown-DpllbSd9.js": [
+    "graph-dashboard/assets/react-vendor-BVoutfaX.js"
+  ],
+  "graph-dashboard/assets/react-vendor-BVoutfaX.js": [],
+  "graph-dashboard/assets/xyflow-CYMCcsWN.js": [
+    "graph-dashboard/assets/react-vendor-BVoutfaX.js"
+  ],
+  "playwright.config.js": [],
+  "tailwind.config.js": [],
+  "tests/smoke.spec.js": [],
+  "worker/src/index.js": []
+}
