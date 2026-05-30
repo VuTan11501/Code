@@ -281,6 +281,11 @@ function _isViewMonthPast() {
   return (vY < curY) || (vY === curY && vM < curM);
 }
 
+function _isViewMonthCurrent() {
+  const now = jstNow();
+  return _otState.viewYear === now.getFullYear() && _otState.viewMonth === now.getMonth();
+}
+
 function _updateOtMutationButtons() {
   const isPast = _isViewMonthPast();
   const ids = ['otAddBtn', 'otOptBtn', 'otTplBtn', 'otSyncBtn'];
@@ -310,14 +315,18 @@ function _updateOtMutationButtons() {
       refreshBtn.setAttribute('data-tooltip', 'Fetch fresh OT data from DokoKin API for this month');
     } else {
       refreshBtn.innerHTML = `${ICON('refresh', 14)} Refresh`;
-      refreshBtn.setAttribute('data-tooltip', 'Refresh from Gist');
+      refreshBtn.setAttribute('data-tooltip', _isViewMonthCurrent()
+        ? 'Reload from Gist + sync DokoKin approval status in background'
+        : 'Refresh from Gist');
     }
   }
 }
 
 // Smart refresh: past months pull fresh data from DokoKin via the
-// ot-history-fetch workflow; current/future months just re-read the Gist
-// (which is updated continuously by Auto OT Creator).
+// ot-history-fetch workflow (blocking). For the CURRENT month we re-read the
+// Gist instantly for snappy feedback, then kick off a guarded *background*
+// DokoKin sync so approval status (Submitted→Approved/Rejected) stays fresh.
+// Future months only re-read the Gist (DokoKin search can't see future OT).
 async function refreshOtData() {
   const btn = document.getElementById('otRefreshBtn');
   const origHtml = btn ? btn.innerHTML : '';
@@ -330,12 +339,55 @@ async function refreshOtData() {
       await pullOtFromDokoKin();
     } else {
       await loadOtData({ refresh: true });
+      if (_isViewMonthCurrent()) {
+        // Fire-and-forget: don't block the button on the ~60–90s worker.
+        _backgroundSyncDokokinStatus();
+      }
     }
   } finally {
     if (btn) {
       btn.disabled = false;
       btn.innerHTML = origHtml;
     }
+  }
+}
+
+// Background DokoKin approval-status sync for the current month. Dispatches the
+// ot-history-fetch worker (which writes dokokin_status back to the Gist), waits
+// for it to complete, then reloads. Guarded against concurrent/rapid re-runs.
+let _otStatusSyncInFlight = false;
+let _otStatusSyncLastAt = 0;
+const OT_STATUS_SYNC_COOLDOWN_MS = 2 * 60 * 1000;
+
+async function _backgroundSyncDokokinStatus() {
+  if (typeof sessionToken === 'undefined' || !sessionToken) return;
+  if (_otStatusSyncInFlight) return;
+  if (Date.now() - _otStatusSyncLastAt < OT_STATUS_SYNC_COOLDOWN_MS) return;
+  _otStatusSyncInFlight = true;
+  const dispatchStart = Date.now();
+  try {
+    const res = await fetch(`${API}/repos/${OWNER}/${REPO}/actions/workflows/${OT_HISTORY_FETCH_WF}/dispatches`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${sessionToken}`,
+        'Accept': 'application/vnd.github+json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        ref: 'main',
+        inputs: { months_back: '1', clean_seeds: 'false', fetch_timesheet: 'false' },
+      }),
+    });
+    if (res.status !== 204) return; // silent — gist data already shown
+    toast('🔄 Syncing DokoKin approval status…');
+    await _waitForOtHistoryFetchRun(dispatchStart);
+    _otStatusSyncLastAt = Date.now();
+    await loadOtData({ refresh: true });
+    toast('✅ DokoKin status synced', 'success');
+  } catch {
+    /* non-fatal — the instant Gist read already refreshed the table */
+  } finally {
+    _otStatusSyncInFlight = false;
   }
 }
 
@@ -356,6 +408,7 @@ async function pullOtFromDokoKin() {
     btn.innerHTML = `${ICON('refresh', 14, 'animate-spin')} Pulling…`;
   }
   _showOtPullOverlay(`Pulling ${monthsBack} month${monthsBack > 1 ? 's' : ''} from DokoKin…`);
+  const dispatchStart = Date.now();
   try {
     const res = await fetch(`${API}/repos/${OWNER}/${REPO}/actions/workflows/${OT_HISTORY_FETCH_WF}/dispatches`, {
       method: 'POST',
@@ -379,7 +432,7 @@ async function pullOtFromDokoKin() {
     }
     toast(`☁️ Pull dispatched (${monthsBack}mo) — waiting for workflow…`);
     // Poll the workflow run until it completes, then reload Gist.
-    await _waitForOtHistoryFetchRun();
+    await _waitForOtHistoryFetchRun(dispatchStart);
     await loadOtData({ refresh: true });
     toast('✅ Synced from DokoKin', 'success');
   } catch (e) {
@@ -393,18 +446,22 @@ async function pullOtFromDokoKin() {
   }
 }
 
-// Poll the latest OT History Fetch run until it leaves "in_progress"/"queued".
-// Returns when the run completes (success or failure). Times out at 3 min.
-async function _waitForOtHistoryFetchRun() {
+// Poll the OT History Fetch run dispatched at/after `sinceMs` until it leaves
+// "in_progress"/"queued". Returns when the run completes (success or failure).
+// Times out at 3 min. `sinceMs` avoids latching onto an older/unrelated run.
+async function _waitForOtHistoryFetchRun(sinceMs) {
   const overlay = document.getElementById('otPullOverlay');
   const start = Date.now();
   const TIMEOUT_MS = 3 * 60 * 1000;
+  const floor = (typeof sinceMs === 'number' ? sinceMs : start) - 5000;
   // Brief delay so the dispatch propagates into a visible run
   await new Promise(r => setTimeout(r, 4000));
   while (Date.now() - start < TIMEOUT_MS) {
     try {
-      const data = await apiFetch(`/repos/${OWNER}/${REPO}/actions/workflows/${OT_HISTORY_FETCH_WF}/runs?per_page=1&event=workflow_dispatch`);
-      const run = data && data.workflow_runs && data.workflow_runs[0];
+      const data = await apiFetch(`/repos/${OWNER}/${REPO}/actions/workflows/${OT_HISTORY_FETCH_WF}/runs?per_page=5&event=workflow_dispatch`);
+      const runs = (data && data.workflow_runs) || [];
+      // Pick the newest run created at/after our dispatch timestamp.
+      const run = runs.find(r => new Date(r.created_at).getTime() >= floor) || null;
       if (run) {
         const elapsed = Math.floor((Date.now() - start) / 1000);
         if (overlay) {
@@ -617,7 +674,10 @@ function renderOtList() {
 
   if (countEl) {
     const created = inMonth.filter(o => !!o.kintai_created_at).length;
-    countEl.textContent = `${all.length} entr${all.length === 1 ? 'y' : 'ies'} in ${monthName} (${created} created)`;
+    const approved = inMonth.filter(o => Number(o.dokokin_status) === 2).length;
+    const parts = [`${created} created`];
+    if (approved) parts.push(`${approved} approved`);
+    countEl.textContent = `${all.length} entr${all.length === 1 ? 'y' : 'ies'} in ${monthName} (${parts.join(' · ')})`;
   }
 
   if (!all.length) {
@@ -637,6 +697,34 @@ function renderOtList() {
   tbody.innerHTML = all.map((ot, idx) => _renderOtRow(ot, idx, ot.date < minStr)).join('');
 }
 
+// Map DokoKin OT approval status → a badge descriptor.
+// dokokin_status enum: 1=Submitted(申請中), 2=Approved(承認), 3=Rejected, 4=Cancelled.
+// Returns null when the status is unknown (entry not yet synced from DokoKin).
+// `primary:true` = terminal/important state that should override other badges.
+function _otApprovalBadge(ot) {
+  if (!ot || ot.dokokin_status == null) return null;
+  const s = Number(ot.dokokin_status);
+  const ts = ot.kintai_created_at
+    ? ` (synced ${String(ot.kintai_created_at).slice(0, 16).replace('T', ' ')} JST)`
+    : '';
+  switch (s) {
+    case 2:
+      return { status: 2, primary: true, cls: 'badge-enabled', icon: 'checkCheck',
+        label: 'Approved', tip: `Approved in DokoKin${ts}` };
+    case 3:
+      return { status: 3, primary: true, cls: 'badge-destructive', icon: 'ban',
+        label: 'Rejected', tip: `Rejected in DokoKin${ts}` };
+    case 4:
+      return { status: 4, primary: true, cls: 'badge-disabled', icon: 'ban',
+        label: 'Cancelled', tip: `Cancelled in DokoKin${ts}` };
+    case 1:
+      return { status: 1, primary: false, cls: 'badge-once', icon: 'check',
+        label: 'Submitted', tip: `Created in DokoKin — pending manager approval${ts}` };
+    default:
+      return null;
+  }
+}
+
 function _renderOtRow(ot, idx, isPast) {
   const conf = detectConflict(ot);
   const crossMid = ot.end < ot.start;
@@ -644,16 +732,28 @@ function _renderOtRow(ot, idx, isPast) {
   const fixed = !!ot.auto_co_id;
   const created = !!ot.kintai_created_at;
   const inWindow = _isDateInWindow(ot.date);
+  const approval = _otApprovalBadge(ot);
 
   // Status badge palette aligned with Schedule tab tokens:
   //   blue (badge-once)        = upcoming / will-fire (Pending in window, Queued out of window)
-  //   green (badge-enabled)    = active in DokoKin (Created)
+  //   green (badge-enabled)    = active in DokoKin (Created / Approved)
   //   purple (badge-recurring) = system-generated artifact (Auto-fixed CO)
   //   yellow (badge-warning)   = needs attention (Conflict)
-  //   grey (badge-disabled)    = past / inactive
+  //   red (badge-destructive)  = DokoKin rejected
+  //   grey (badge-disabled)    = past / inactive / cancelled
+  //
+  // DokoKin approval status (when known) takes precedence:
+  //   • terminal states (Approved/Rejected/Cancelled) are always primary
+  //   • Submitted (status 1) occupies the "created" slot but yields to a
+  //     live conflict on actionable (non-past) entries.
   let statusBadge;
-  if (isPast) {
-    if (created) {
+  if (approval && approval.primary) {
+    const lbl = isPast && approval.status !== 2 ? `Past · ${approval.label}` : approval.label;
+    statusBadge = `<span class="${approval.cls}" data-tooltip="${_esc(approval.tip)}">${ICON(approval.icon, 11)} ${lbl}</span>`;
+  } else if (isPast) {
+    if (approval) {
+      statusBadge = `<span class="badge-disabled" data-tooltip="${_esc(approval.tip)}">${ICON('check', 11)} Past · Submitted</span>`;
+    } else if (created) {
       const ts = String(ot.kintai_created_at).slice(0, 16).replace('T', ' ');
       statusBadge = `<span class="badge-disabled" data-tooltip="Was created in DokoKin at ${_esc(ts)} JST">${ICON('check', 11)} Past · Created</span>`;
     } else {
@@ -661,6 +761,8 @@ function _renderOtRow(ot, idx, isPast) {
     }
   } else if (conf.hasConflict) {
     statusBadge = `<span class="badge-warning" data-tooltip="${_esc(conf.message)}">${ICON('alertTriangle', 11)} Conflict</span>`;
+  } else if (approval) {
+    statusBadge = `<span class="${approval.cls}" data-tooltip="${_esc(approval.tip)}">${ICON(approval.icon, 11)} ${approval.label}</span>`;
   } else if (created) {
     const ts = String(ot.kintai_created_at).slice(0, 16).replace('T', ' ');
     statusBadge = `<span class="badge-enabled" data-tooltip="Created in DokoKin at ${_esc(ts)} JST">${ICON('check', 11)} Created</span>`;

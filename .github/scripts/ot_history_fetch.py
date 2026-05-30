@@ -232,6 +232,17 @@ def _merge(existing: list, fetched: list) -> tuple[int, int]:
             if not cur.get("hours"):
                 cur["hours"] = f["hours"]
                 changed = True
+            # Approval status is DokoKin-sourced and mutates over time
+            # (Submitted→Approved/Rejected). Always refresh when DokoKin
+            # returns a value and it differs from what we have.
+            fs = f.get("dokokin_status")
+            if fs is not None and cur.get("dokokin_status") != fs:
+                cur["dokokin_status"] = fs
+                changed = True
+            fid = f.get("dokokin_id")
+            if fid and cur.get("dokokin_id") != fid:
+                cur["dokokin_id"] = fid
+                changed = True
             if changed:
                 updated += 1
         else:
