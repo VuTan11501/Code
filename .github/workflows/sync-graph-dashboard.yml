@@ -50,3 +50,18 @@ jobs:
           else
             echo "No changes — graph-dashboard already up to date."
           fi
+
+      - name: Deploy to Cloudflare Pages
+        # Requires repo secrets CLOUDFLARE_API_TOKEN (Pages:Edit) + CLOUDFLARE_ACCOUNT_ID.
+        # Skips gracefully if the token isn't configured (e.g. you deploy manually).
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -z "$CF_TOKEN" ]; then
+            echo "CLOUDFLARE_API_TOKEN not set — skipping CF Pages deploy."
+            exit 0
+          fi
+          npx --yes wrangler@4 pages deploy graph-dashboard \
+            --project-name=code-graph --branch=main --commit-dirty=true

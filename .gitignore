@@ -22,6 +22,7 @@ copilot-session-*.md
 # Private docs - keep out of repo
 README.md
 AGENTS.md
+!graph-dashboard/README.md
 
 
 cloudflare-worker/.wrangler/
