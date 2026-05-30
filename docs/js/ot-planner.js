@@ -613,10 +613,14 @@ function _otCalendarAttachHandlers(grid) {
   grid.addEventListener('touchend', (e) => {
     cancelLp();
     if (lpFired) { e.preventDefault(); return; }
-    // Normal tap
+    // Normal tap — suppress the synthesized ghost click that would otherwise
+    // re-fire _otCellTap (double toast on mobile).
     const cell = e.target.closest('.ot-cell:not(.ot-cell-empty)');
-    if (cell) _otCellTap(cell, grid._otByDate || {});
-  });
+    if (cell) {
+      e.preventDefault();
+      _otCellTap(cell, grid._otByDate || {});
+    }
+  }, { passive: false });
   grid.addEventListener('touchcancel', cancelLp, { passive: true });
 
   // Desktop: click = tap, contextmenu = long-press

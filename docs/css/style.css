@@ -4170,6 +4170,7 @@ body.ai-page-active .ai-dot-grid {
   height: env(safe-area-inset-top, 0px);
   background: var(--background);
   opacity: 0; transition: opacity var(--duration-fast) var(--ease-out);
+  pointer-events: none;   /* notch cover must never intercept taps on the header bar */
 }
 .month-nav-sticky.is-stuck::before { opacity: 1; }
 /* Elevation shadow is mobile-only (the desktop layout reads cleaner flat). */
