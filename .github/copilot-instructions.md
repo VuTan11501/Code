@@ -359,6 +359,11 @@ Dự án dùng **shadcn/ui design system** (port sang vanilla HTML/CSS — khôn
 
 3. **Refactor trước khi tạo mới**: trước khi viết 1 component CSS mới, grep `style.css` xem đã có primitive tương tự chưa. Nếu có → dùng/extend. Nếu phải tạo mới → đặt tên + tokens nhất quán với existing.
 
+   **🔘 Settings-card action-row buttons — quy ước CỨNG**: mọi nút trong hàng action của 1 settings-card (Settings page) PHẢI dùng `class="btn btn-outline sm"` (giống "Export Vault" / "Import Vault" / "Check now" / "Re-authenticate"). Biến thể destructive (Disable / Clear log / Re-enroll-nguy-hiểm) thêm `danger-outline` → `class="btn btn-outline sm danger-outline"`.
+   - ⛔ KHÔNG dùng `btn-secondary`, `btn-destructive`, `btn-ghost`, hay bare `btn` (filled green primary) cho các hàng action này — sẽ lệch size + màu so với phần còn lại.
+   - ✅ Nút **stateful toggle** (vd proxy Enable/Disable) phải đổi cả label + class trong render fn (`renderProxyStatus`): active → `danger-outline` "Disable", off → bỏ `danger-outline` "Enable". KHÔNG để 1 label tĩnh không phản ánh state.
+   - Ngoại lệ hợp lệ: full-width primary CTA độc lập (vd "Add Location", "Change Passphrase") giữ `btn primary` + `width:100%`/`sm`; modal-footer Cancel/Save pairs theo convention modal riêng.
+
 4. **Cấm tuyệt đối**:
    - ⛔ Inline `style="..."` cho thuộc tính UI (color/font/spacing) — chỉ chấp nhận inline cho dynamic giá trị JS tính ra (vd `transform: translate(${x}px)`)
    - ⛔ `!important` trừ khi defeat third-party (Tailwind CDN edge case) — phải comment giải thích

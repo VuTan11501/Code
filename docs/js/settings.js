@@ -68,6 +68,7 @@ function _getProxyLast() {
 function renderProxyStatus() {
   const host = document.getElementById('proxyStatus');
   const input = document.getElementById('proxyUrlInput');
+  const toggleBtn = document.getElementById('proxyToggleBtn');
   if (!host) return;
   const url = _getProxyUrl();
   // Keep the field populated with the active URL, or fall back to the last-used
@@ -80,6 +81,32 @@ function renderProxyStatus() {
     host.innerHTML = `<div>⚪ <strong>Direct API</strong> — calls go straight to <code>api.github.com</code> with your PAT in headers.</div>
       <div style="margin-top:4px;opacity:0.8">Paste a Worker URL below to harden security.</div>`;
   }
+  // Toggle button reflects the live state: Disable (destructive) when active,
+  // Enable (neutral) when off.
+  if (toggleBtn) {
+    if (url) {
+      toggleBtn.classList.add('danger-outline');
+      toggleBtn.innerHTML = '<span data-icon="trash" data-size="14"></span> Disable';
+      toggleBtn.setAttribute('data-tooltip', 'Stop routing through the Worker → direct api.github.com calls (PAT visible in DevTools)');
+    } else {
+      toggleBtn.classList.remove('danger-outline');
+      toggleBtn.innerHTML = '<span data-icon="shield" data-size="14"></span> Enable';
+      toggleBtn.setAttribute('data-tooltip', 'Route GitHub API calls through the saved Worker URL (hides the PAT)');
+    }
+    if (window.refreshIcons) window.refreshIcons();
+  }
+}
+
+// Single stateful control: enable the proxy with the entered/remembered URL when
+// off, or disable it when currently active.
+function toggleProxy() {
+  if (_getProxyUrl()) { clearProxyUrl(); return; }
+  const input = document.getElementById('proxyUrlInput');
+  if (!input || !(input.value || '').trim()) {
+    toast('⚠️ Nhập Worker URL trước rồi mới Enable', 'warning');
+    return;
+  }
+  saveProxyUrl();
 }
 
 async function testProxy() {
