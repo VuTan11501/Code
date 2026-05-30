@@ -54,6 +54,9 @@
   --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.4), 0 2px 4px -2px rgba(0,0,0,0.3);
   --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.5), 0 4px 6px -4px rgba(0,0,0,0.4);
   --shadow-glow: 0 0 0 1px var(--ring);
+  /* Bottom-only elevation for pinned sticky headers — negative spread keeps the
+     blur from bleeding past the left/right edges so it reads as a clean underline. */
+  --shadow-sticky: 0 6px 7px -5px rgba(0,0,0,0.5);
   --duration-fast: 150ms;
   --duration-normal: 200ms;
   --duration-slow: 300ms;
@@ -95,6 +98,7 @@
   --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.08), 0 2px 4px -2px rgba(0,0,0,0.06);
   --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.10), 0 4px 6px -4px rgba(0,0,0,0.08);
   --shadow-glow: 0 0 0 1px var(--ring);
+  --shadow-sticky: 0 6px 7px -5px rgba(0,0,0,0.14);
   color-scheme: light;
 }
 :root { color-scheme: dark; }
@@ -4183,6 +4187,7 @@ body.ai-page-active .ai-dot-grid {
 .month-nav-sticky.is-stuck {
   background: var(--background);
   border-bottom-color: var(--border);
+  box-shadow: var(--shadow-sticky);   /* bottom-only, desktop + mobile, pinned-only */
 }
 /* Cover the safe-area (notch / Dynamic Island) strip above the header so page
    content doesn't show through it — only while pinned. */
@@ -4194,10 +4199,6 @@ body.ai-page-active .ai-dot-grid {
   pointer-events: none;   /* notch cover must never intercept taps on the header bar */
 }
 .month-nav-sticky.is-stuck::before { opacity: 1; }
-/* Elevation shadow is mobile-only (the desktop layout reads cleaner flat). */
-@media (max-width: 768px) {
-  .month-nav-sticky.is-stuck { box-shadow: var(--shadow-md); }
-}
 
 /* ─── Workflow card live state ─── */
 .workflow-card.is-running { border-color: color-mix(in srgb, var(--primary), transparent 50%); }
