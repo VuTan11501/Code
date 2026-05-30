@@ -4059,15 +4059,30 @@ body.ai-page-active .ai-dot-grid {
   background: var(--card); border: 1px solid var(--border);
   box-shadow: var(--shadow-md);
   color: var(--muted-foreground);
-  z-index: 60; opacity: calc(var(--ptr, 0px) / 52);
+  z-index: 60; opacity: min(1, var(--ptr-p, 0));
   pointer-events: none;
-  transition: transform var(--duration-fast) var(--ease-out), opacity var(--duration-fast) var(--ease-out);
+  transition: transform var(--duration-fast) var(--ease-out),
+              opacity var(--duration-fast) var(--ease-out),
+              box-shadow var(--duration-normal) var(--ease-out),
+              border-color var(--duration-normal) var(--ease-out);
 }
-.uikit-ptr-spinner { display: flex; transition: transform var(--duration-normal) var(--ease-out); }
-.uikit-ptr.ready { color: var(--primary); border-color: var(--primary); }
-.uikit-ptr.ready .uikit-ptr-spinner { transform: rotate(180deg); }
-.uikit-ptr.refreshing { color: var(--primary); }
-.uikit-ptr.refreshing .uikit-ptr-spinner { animation: spinner-rotate 0.7s linear infinite; }
+/* Icon tracks the finger: rotates 0→180° and grows as you pull. */
+.uikit-ptr-spinner {
+  display: flex;
+  transform: rotate(calc(var(--ptr-p, 0) * 180deg)) scale(calc(0.5 + min(1, var(--ptr-p, 0)) * 0.5));
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+.uikit-ptr.ready {
+  color: var(--primary); border-color: var(--primary);
+  box-shadow: var(--shadow-glow);
+}
+/* Locked "pop" detent once armed — overshoots the tracked rotation slightly. */
+.uikit-ptr.ready .uikit-ptr-spinner { transform: rotate(180deg) scale(1.15); }
+.uikit-ptr.refreshing { color: var(--primary); border-color: var(--primary); }
+.uikit-ptr.refreshing .uikit-ptr-spinner {
+  animation: spinner-rotate 0.7s linear infinite;
+  transform: none;
+}
 
 /* ─── FAB (floating action button) ─── */
 .fab {

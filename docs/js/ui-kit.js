@@ -159,7 +159,7 @@
       + (typeof ICON === 'function' ? ICON('refresh', 18) : '') + `</div>`;
     document.body.appendChild(ind);
 
-    let startY = 0, pulling = false, dist = 0;
+    let startY = 0, pulling = false, dist = 0, armed = false;
 
     function eligible() {
       const page = _activePage();
@@ -167,31 +167,49 @@
       if (document.body.classList.contains('modal-open')) return false;
       return (window.scrollY || document.documentElement.scrollTop || 0) <= 0;
     }
-    function setPull(px) { ind.style.setProperty('--ptr', px + 'px'); }
+    // Publish both the raw pull (px) and a normalised progress (0→1+ at the
+    // trigger point) so CSS can drive opacity, icon rotation and scale smoothly.
+    function setPull(px) {
+      ind.style.setProperty('--ptr', px + 'px');
+      ind.style.setProperty('--ptr-p', (px / THRESH).toFixed(3));
+    }
 
     window.addEventListener('touchstart', (e) => {
       if (!eligible() || e.touches.length !== 1) { pulling = false; return; }
-      startY = e.touches[0].clientY; pulling = true; dist = 0;
+      startY = e.touches[0].clientY; pulling = true; dist = 0; armed = false;
     }, { passive: true });
 
     window.addEventListener('touchmove', (e) => {
       if (!pulling) return;
       dist = e.touches[0].clientY - startY;
-      if (dist <= 0) { setPull(0); ind.classList.remove('ready'); return; }
+      if (dist <= 0) {
+        setPull(0);
+        if (armed) { armed = false; ind.classList.remove('ready'); }
+        return;
+      }
       const pull = Math.min(MAX, dist * DAMP);
       setPull(pull);
-      ind.classList.toggle('ready', pull >= THRESH);
+      const nowArmed = pull >= THRESH;
+      if (nowArmed !== armed) {
+        armed = nowArmed;
+        ind.classList.toggle('ready', armed);
+        // Detent "click" the instant we cross the trigger point — this is the
+        // tactile cue telling the user they can release now. (Android only;
+        // iOS Safari has no Vibration API, so this is a silent no-op there.)
+        if (armed) haptic('light');
+      }
     }, { passive: true });
 
     window.addEventListener('touchend', async () => {
       if (!pulling) return;
-      const pull = Math.min(MAX, dist * DAMP);
+      const trigger = armed;
       pulling = false;
-      if (pull >= THRESH) {
+      armed = false;
+      ind.classList.remove('ready');
+      if (trigger) {
         ind.classList.add('refreshing');
-        ind.classList.remove('ready');
         setPull(52);
-        haptic('medium');
+        haptic('success');
         try {
           const fn = _refreshers[_activePage()];
           if (fn) await fn();
@@ -199,7 +217,6 @@
         ind.classList.remove('refreshing');
       }
       setPull(0);
-      ind.classList.remove('ready');
     }, { passive: true });
   }
 
