@@ -294,6 +294,12 @@ _(source: checkpoint 015)_
 - **Fix**: removed `If-Match` everywhere. Emulate CAS by re-reading the ETag immediately before PATCH and comparing to the caller's read-time ETag; if changed → conflict → retry with fresh state (`gist_cas._gist_patch` raises `_ConflictError`) / retry with original `baseSnapshot` for 3-way merge (`ai-proposals._applyToFile`, `retryCount < 1`). Rollback path relies on its existing content-equality pre-check. Sub-ms re-read→PATCH window = same guarantee as `gist_safety.py`. Commit `80a4a1b`.
 - **Prevention**: NEVER send conditional headers (`If-Match`/`If-None-Match`/`If-Unmodified-Since`) on gist **write** requests — GitHub rejects them with 400. `If-None-Match` on **GET** (caching) is still fine. For CAS, re-read ETag right before the write, or use content-SHA race detection like `gist_safety.py`. When two failures hit the same file, fix the loud one (rate limit) THEN re-probe — the quiet one (400) may be hiding underneath.
 
+### 3.32 Duplicate top-level function name in the concatenated bundle silently shadows
+- **Symptom**: All Schedules table goes empty on Refresh; pagination dead when switching to the "Định kỳ" (Recurring) filter; History empty state logs `⚠️ h.has is not a function` / `⚠️ g[iU(...)] is not a function` (minified). Intermittent-looking but 100% reproducible once you hit those code paths.
+- **Root cause**: `docs/js/schedule.js` declared TWO top-level `function detectScheduleConflicts(...)`: a Set-returning bulk conflict-ID detector (line ~1315, used by `renderScheduledQueue` + `renderScheduleTable`) and a per-entry form validator returning an array (line ~1729). The build (`scripts/build-js.mjs`) concatenates all 21 JS files into ONE script scope, so standard JS hoisting applies: the LATER declaration wins everywhere. The renderers therefore received the validator, called `.has()` on its array return → threw → bailed before painting the tbody. Three different user-visible symptoms, one root cause.
+- **Fix**: renamed the Set version to `collectConflictIds` + updated its two callers (1371, 2005). Validator keeps the original name (its callers 1642/2233 already matched). Commit `dfcb768`.
+- **Prevention**: function names are GLOBAL across the whole bundle — never reuse a top-level `function foo` name in any `docs/js/*.js` file. Before adding a new top-level function, `grep -rn "function <name>" docs/js/` first. No linter catches this today (no ESLint `no-redeclare` in pipeline); a quick grep is the guard.
+
 ---
 
 ## 4. Build & test commands
