@@ -147,9 +147,19 @@ export default {
       ...(['GET', 'HEAD'].includes(request.method) ? {} : { duplex: 'half' }),
     };
 
+    // Endpoints that 302-redirect to a presigned blob (job/run logs, artifact
+    // zips). The redirect target carries its own SAS token in the query string,
+    // so forwarding our PAT to that origin makes the blob reject the request
+    // (40x). Follow the redirect manually with a clean, un-authenticated fetch.
+    const redirectProne = /\/logs$|\/zip$/.test(path);
+
     let ghResp;
     try {
-      ghResp = await fetch(ghUrl, init);
+      ghResp = await fetch(ghUrl, redirectProne ? { ...init, redirect: 'manual' } : init);
+      if (redirectProne && ghResp.status >= 300 && ghResp.status < 400) {
+        const loc = ghResp.headers.get('Location');
+        if (loc) ghResp = await fetch(loc);
+      }
     } catch (e) {
       return deny(`Upstream fetch failed: ${e.message}`, 502, origin);
     }
