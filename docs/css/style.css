@@ -549,22 +549,9 @@ body.modal-open { overflow: hidden; }
 
 /* â”€â”€â”€ SETTINGS â”€â”€â”€ */
 .settings-body {
-  display: flex; flex-direction: column; gap: var(--sp-8);
-  max-width: 960px; margin: 0 auto;
-}
-.settings-section {
-  display: grid;
+  display: grid; gap: 16px;
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: var(--sp-3); align-items: start;
 }
-.settings-section-title {
-  grid-column: 1 / -1;
-  display: flex; align-items: center; gap: var(--sp-2);
-  font-size: var(--fs-xs); font-weight: 600;
-  text-transform: uppercase; letter-spacing: 0.06em;
-  color: var(--muted-foreground); padding: 0 var(--sp-1); margin: 0;
-}
-.settings-section-title [data-icon] { opacity: 0.7; }
 .settings-card {
   background: linear-gradient(180deg, rgba(var(--tint),0.02), rgba(var(--tint),0.005)), var(--card);
   border: 1px solid var(--border);
@@ -575,6 +562,26 @@ body.modal-open { overflow: hidden; }
 .settings-card:hover { border-color: rgba(var(--tint),0.16); }
 .settings-card .card-header { padding: 0; border-bottom: none; margin-bottom: 16px; }
 .settings-card .card-content { padding: 0; }
+
+/* ─── Settings accordion ─── */
+.settings-group { border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; margin-bottom: var(--sp-3); background: var(--card); }
+.settings-group > summary {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-4); cursor: pointer; list-style: none;
+  font-weight: 600; font-size: var(--fs-base); color: var(--foreground);
+}
+.settings-group > summary::-webkit-details-marker { display: none; }
+.settings-group > summary:hover { background: rgba(var(--tint), 0.03); }
+.settings-group[open] > summary { border-bottom: 1px solid var(--border); }
+.settings-group > summary .settings-group-status { font-size: var(--fs-xs); font-weight: 500; }
+.settings-group-status.ok { color: var(--green); }
+.settings-group-status.warn { color: var(--yellow); }
+.settings-group-chevron { transition: transform var(--duration-fast) var(--ease-out); color: var(--muted-foreground); }
+.settings-group[open] .settings-group-chevron { transform: rotate(180deg); }
+.settings-group-body { padding: var(--sp-3) var(--sp-4); }
+@media (max-width: 600px) {
+  .settings-body { grid-template-columns: 1fr; }
+}
 
 /* â”€â”€â”€ SCHEDULER PANEL â”€â”€â”€ */
 .scheduler-panel { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }

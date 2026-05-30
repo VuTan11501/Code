@@ -48,7 +48,7 @@
 })();
 </script>
 <link rel="stylesheet" href="css/tailwind.css?v=1">
-<link rel="stylesheet" href="css/style.css?v=135">
+<link rel="stylesheet" href="css/style.css?v=136">
 <link rel="preconnect" href="https://api.github.com">
 </head>
 <body class="bg-background text-foreground font-sans text-sm antialiased min-h-dvh overflow-x-hidden">
@@ -698,19 +698,9 @@
     <div class="page" id="page-settings" role="tabpanel" aria-labelledby="tab-settings">
       <div class="section-title text-sm font-medium text-muted-foreground mb-4 flex items-center gap-2"><span data-icon="settings" data-size="16"></span> Settings</div>
       <div class="settings-body">
-        <!-- Onboarding checklist (SE2) -->
-        <div class="card settings-card" id="onboardCard" hidden>
-          <div class="card-header">
-            <div class="card-title"><span data-icon="list" data-size="16"></span> Bắt đầu nhanh</div>
-            <div class="card-description">Hoàn tất các bước để dùng đầy đủ tính năng.</div>
-          </div>
-          <div class="card-content" id="onboardBody">
-            <!-- populated by renderOnboarding() -->
-          </div>
-        </div>
-
-        <section class="settings-section">
-          <h2 class="settings-section-title"><span data-icon="sun" data-size="14"></span> Giao diện</h2>
+        <details class="settings-group" open>
+          <summary><span>Giao diện</span><span class="settings-group-chevron" data-icon="chevronDown" data-size="16"></span></summary>
+          <div class="settings-group-body">
         <!-- Appearance / Theme -->
         <div class="card settings-card">
           <div class="card-header">
@@ -727,10 +717,12 @@
           </div>
         </div>
 
-        </section>
+          </div>
+        </details>
 
-        <section class="settings-section">
-          <h2 class="settings-section-title"><span data-icon="lockKeyhole" data-size="14"></span> Bảo mật &amp; Vault</h2>
+        <details class="settings-group">
+          <summary><span>Bảo mật &amp; Vault</span><span class="settings-group-chevron" data-icon="chevronDown" data-size="16"></span></summary>
+          <div class="settings-group-body">
         <!-- Change Passphrase -->
         <div class="card settings-card">
           <div class="card-header">
@@ -782,10 +774,12 @@
           </div>
         </div>
 
-        </section>
+          </div>
+        </details>
 
-        <section class="settings-section">
-          <h2 class="settings-section-title"><span data-icon="bell" data-size="14"></span> Thông báo &amp; Token</h2>
+        <details class="settings-group">
+          <summary><span>Thông báo &amp; Token</span><span class="settings-group-chevron" data-icon="chevronDown" data-size="16"></span></summary>
+          <div class="settings-group-body">
         <!-- Notifications -->
         <div class="card settings-card">
           <div class="card-header">
@@ -821,10 +815,12 @@
           </div>
         </div>
 
-        </section>
+          </div>
+        </details>
 
-        <section class="settings-section">
-          <h2 class="settings-section-title"><span data-icon="mapPin" data-size="14"></span> Vị trí &amp; Sinh trắc học</h2>
+        <details class="settings-group">
+          <summary><span>Vị trí &amp; Sinh trắc học</span><span class="settings-group-chevron" data-icon="chevronDown" data-size="16"></span></summary>
+          <div class="settings-group-body">
         <!-- Location Settings -->
         <div class="card settings-card">
           <div class="card-header">
@@ -869,10 +865,12 @@
           </div>
         </div>
 
-        </section>
+          </div>
+        </details>
 
-        <section class="settings-section">
-          <h2 class="settings-section-title"><span data-icon="refresh" data-size="14"></span> AI &amp; Đồng bộ</h2>
+        <details class="settings-group">
+          <summary><span>AI &amp; Đồng bộ</span><span class="settings-group-chevron" data-icon="chevronDown" data-size="16"></span></summary>
+          <div class="settings-group-body">
         <!-- AI Audit Log -->
         <div class="card settings-card">
           <div class="card-header">
@@ -921,10 +919,12 @@
           </div>
         </div>
 
-        </section>
+          </div>
+        </details>
 
-        <section class="settings-section">
-          <h2 class="settings-section-title"><span data-icon="settings" data-size="14"></span> Nâng cao</h2>
+        <details class="settings-group">
+          <summary><span>Nâng cao</span><span class="settings-group-chevron" data-icon="chevronDown" data-size="16"></span></summary>
+          <div class="settings-group-body">
         <!-- GitHub API Proxy (optional, security hardening) -->
         <div class="card settings-card">
           <div class="card-header">
@@ -983,7 +983,8 @@ wrangler login</pre>
           </div>
         </div>
 
-        </section>
+          </div>
+        </details>
 
         <!-- About -->
         <div class="card settings-card">
