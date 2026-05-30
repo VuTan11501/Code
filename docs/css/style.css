@@ -4105,18 +4105,39 @@ body.ai-page-active .ai-dot-grid {
 
 /* ─── Now strip (dashboard today status) ─── */
 .now-strip {
-  display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap;
-  padding: var(--sp-2) var(--sp-3); margin-bottom: var(--sp-3);
-  border-radius: var(--radius-lg);
-  background: var(--card); border: 1px solid var(--border);
-  font-size: var(--fs-sm);
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(108px, 1fr));
+  gap: var(--sp-2); margin-bottom: var(--sp-3);
 }
-.now-strip .now-item { display: inline-flex; align-items: center; gap: var(--sp-1); color: var(--muted-foreground); }
-.now-strip .now-item strong { color: var(--foreground); font-weight: 600; font-family: var(--font-mono); }
-.now-strip .now-sep { width: 1px; height: 14px; background: var(--border); }
-.now-strip .now-ok { color: var(--green); }
-.now-strip .now-pending { color: var(--yellow); }
 .now-strip[hidden] { display: none; }
+/* Stat-chip-style status cards (Checkin / Checkout / OT) */
+.now-card {
+  background: var(--muted); border: 1px solid var(--border);
+  border-radius: var(--radius-md); padding: var(--sp-2) var(--sp-3);
+  display: flex; flex-direction: column; gap: 2px; min-width: 0;
+}
+.now-card-head { display: flex; align-items: center; gap: var(--sp-1); }
+.now-card-ic { display: inline-flex; color: var(--muted-foreground); }
+.now-card-lbl {
+  font-size: 10px; color: var(--muted-foreground);
+  text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600;
+}
+.now-card-val {
+  font-size: var(--fs-md); font-weight: 700; color: var(--foreground);
+  font-family: var(--font-mono); line-height: 1.15;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%;
+}
+.now-card-sub {
+  font-size: var(--fs-xs); color: var(--muted-foreground);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%;
+}
+.now-card.is-ok { border-color: color-mix(in srgb, var(--green), transparent 65%); }
+.now-card.is-ok .now-card-ic,
+.now-card.is-ok .now-card-val { color: var(--green); }
+.now-card.is-pending .now-card-ic { color: var(--yellow); }
+.now-card.is-info { border-color: color-mix(in srgb, var(--primary), transparent 65%); }
+.now-card.is-info .now-card-ic,
+.now-card.is-info .now-card-val { color: var(--primary); }
 
 /* ─── Sticky month nav (OT + Timesheet) ─── */
 .month-nav-sticky {

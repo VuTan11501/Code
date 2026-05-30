@@ -1006,6 +1006,15 @@ async function updateNowStrip(allRuns) {
     const todayJST = now.toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' }); // YYYY-MM-DD
     const items = [];
 
+    // Render a stat-chip-style status card
+    function nowCard({ icon, label, state, val, sub }) {
+      return `<div class="now-card ${state}">
+        <div class="now-card-head"><span class="now-card-ic">${ICON(icon, 14)}</span><span class="now-card-lbl">${label}</span></div>
+        <div class="now-card-val">${val}</div>
+        <div class="now-card-sub">${sub}</div>
+      </div>`;
+    }
+
     // Helper: find latest run for a workflow file created today (JST)
     function findTodayRun(wfFile) {
       return allRuns.find(r => {
@@ -1019,18 +1028,18 @@ async function updateNowStrip(allRuns) {
     const ciRun = findTodayRun('auto-checkin.yml');
     if (ciRun && ciRun.conclusion === 'success') {
       const t = new Date(ciRun.created_at).toLocaleTimeString('ja-JP', { timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit', hour12: false });
-      items.push(`<span class="now-item now-ok"><strong>✓ CI</strong> ${t}</span>`);
+      items.push(nowCard({ icon: 'logIn', label: 'Checkin', state: 'is-ok', val: t, sub: 'Hoàn thành' }));
     } else {
-      items.push(`<span class="now-item now-pending"><strong>CI chưa</strong></span>`);
+      items.push(nowCard({ icon: 'logIn', label: 'Checkin', state: 'is-pending', val: '—', sub: 'Chưa check-in' }));
     }
 
     // Checkout status
     const coRun = findTodayRun('auto-checkout.yml');
     if (coRun && coRun.conclusion === 'success') {
       const t = new Date(coRun.created_at).toLocaleTimeString('ja-JP', { timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit', hour12: false });
-      items.push(`<span class="now-item now-ok"><strong>✓ CO</strong> ${t}</span>`);
+      items.push(nowCard({ icon: 'logOut', label: 'Checkout', state: 'is-ok', val: t, sub: 'Hoàn thành' }));
     } else {
-      items.push(`<span class="now-item now-pending"><strong>CO chưa</strong></span>`);
+      items.push(nowCard({ icon: 'logOut', label: 'Checkout', state: 'is-pending', val: '—', sub: 'Chưa check-out' }));
     }
 
     // OT tonight — fetch from gist (resilient)
@@ -1042,15 +1051,18 @@ async function updateNowStrip(allRuns) {
         if (Array.isArray(otList)) {
           const todayOT = otList.find(e => e.date === todayJST);
           if (todayOT) {
-            const label = todayOT.start ? `OT ${todayOT.start}` : 'OT tối nay';
-            items.push(`<span class="now-item"><strong>${label}</strong></span>`);
+            items.push(nowCard({
+              icon: 'moon', label: 'OT', state: 'is-info',
+              val: todayOT.start || 'Tối nay',
+              sub: todayOT.end ? `→ ${todayOT.end}` : 'Đã lên lịch',
+            }));
           }
         }
       }
     } catch (_) { /* OT fetch failed — just omit */ }
 
     if (items.length > 0) {
-      el.innerHTML = items.join('<span class="now-sep"></span>');
+      el.innerHTML = items.join('');
       el.hidden = false;
     }
   } catch (_) { /* never throw out of refresh */ }
