@@ -1613,7 +1613,13 @@ if (document.readyState === 'loading') {
 
   function position(trigger) {
     const el = ensureTip();
+    // Guard: if the trigger was removed from the DOM or is hidden (a frequent
+    // case since dashboard polling re-renders buttons under the cursor), its
+    // getBoundingClientRect() is all-zero — positioning against that flings the
+    // tooltip to the top-left corner (~0,0). Bail out instead.
+    if (!trigger.isConnected) return false;
     const r = trigger.getBoundingClientRect();
+    if (r.width === 0 && r.height === 0) return false;
     // measure
     el.style.left = '0px';
     el.style.top = '0px';
@@ -1633,11 +1639,12 @@ if (document.readyState === 'loading') {
     el.style.top = top + 'px';
     el.style.setProperty('--arrow-x', arrowX + 'px');
     if (below) el.classList.add('below');
+    return true;
   }
 
   function show(trigger) {
     const text = trigger.getAttribute('data-tooltip');
-    if (!text) return;
+    if (!text || !trigger.isConnected) return;
     // If element opts into "only-when-truncated" mode and text isn't actually
     // overflowing, skip the tooltip (avoids redundant hover boxes on short text).
     if (trigger.hasAttribute('data-tooltip-truncate-only')) {
@@ -1649,8 +1656,10 @@ if (document.readyState === 'loading') {
     el.textContent = text;
     el.classList.remove('visible');
     requestAnimationFrame(() => {
-      position(trigger);
-      el.classList.add('visible');
+      // The trigger may have detached between scheduling and this frame.
+      if (currentTrigger !== trigger || !trigger.isConnected) return;
+      if (position(trigger)) el.classList.add('visible');
+      else hide();
     });
   }
 
@@ -1684,6 +1693,9 @@ if (document.readyState === 'loading') {
   });
   window.addEventListener('scroll', hide, true);
   window.addEventListener('resize', hide);
+  // A tap (or any press) often triggers a re-render of the pressed control;
+  // cancel any pending/visible tooltip so it can't drift to the corner.
+  document.addEventListener('pointerdown', () => { clearTimeout(showTimer); hide(); }, true);
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') hide(); });
 })();
 
