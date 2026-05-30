@@ -4059,12 +4059,14 @@ body.ai-page-active .ai-dot-grid {
 .uikit-ptr {
   position: fixed; top: 0; left: 50%;
   /* Offset by the safe-area inset so the spinner drops BELOW the notch /
-     Dynamic Island instead of resting behind it (iOS). env()=0 elsewhere. */
-  transform: translate(-50%, calc(var(--ptr, 0px) - 44px + env(safe-area-inset-top, 0px)));
-  width: 34px; height: 34px; border-radius: var(--radius-full);
+     Dynamic Island instead of resting behind it (iOS). env()=0 elsewhere.
+     The pill also scales up subtly as the pull progresses. */
+  transform: translate(-50%, calc(var(--ptr, 0px) - 44px + env(safe-area-inset-top, 0px)))
+             scale(calc(0.82 + min(1, var(--ptr-p, 0)) * 0.18));
+  width: 38px; height: 38px; border-radius: var(--radius-full);
   display: flex; align-items: center; justify-content: center;
   background: var(--card); border: 1px solid var(--border);
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-lg);
   color: var(--muted-foreground);
   z-index: 60; opacity: min(1, var(--ptr-p, 0));
   pointer-events: none;
@@ -4073,22 +4075,39 @@ body.ai-page-active .ai-dot-grid {
               box-shadow var(--duration-normal) var(--ease-out),
               border-color var(--duration-normal) var(--ease-out);
 }
-/* Icon tracks the finger: rotates 0→180° and grows as you pull. */
+/* Determinate progress ring — fills clockwise as you pull (conic-gradient
+   masked into a thin ring, matching the design-system spinner look). */
+.uikit-ptr-ring {
+  position: absolute; inset: 3px; border-radius: var(--radius-full);
+  background: conic-gradient(var(--primary) calc(min(1, var(--ptr-p, 0)) * 360deg),
+                             rgba(var(--tint), 0.10) 0);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2.5px), #000 calc(100% - 2.5px));
+          mask: radial-gradient(farthest-side, transparent calc(100% - 2.5px), #000 calc(100% - 2.5px));
+}
+/* Center glyph fades + scales in as you pull. */
 .uikit-ptr-spinner {
-  display: flex;
-  transform: rotate(calc(var(--ptr-p, 0) * 180deg)) scale(calc(0.5 + min(1, var(--ptr-p, 0)) * 0.5));
-  transition: transform var(--duration-fast) var(--ease-out);
+  display: flex; position: relative; z-index: 1;
+  transform: scale(calc(0.4 + min(1, var(--ptr-p, 0)) * 0.5));
+  opacity: calc(0.3 + min(1, var(--ptr-p, 0)) * 0.7);
+  transition: transform var(--duration-fast) var(--ease-out),
+              opacity var(--duration-fast) var(--ease-out),
+              color var(--duration-fast) var(--ease-out);
 }
-.uikit-ptr.ready {
-  color: var(--primary); border-color: var(--primary);
-  box-shadow: var(--shadow-glow);
-}
-/* Locked "pop" detent once armed — overshoots the tracked rotation slightly. */
-.uikit-ptr.ready .uikit-ptr-spinner { transform: rotate(180deg) scale(1.15); }
-.uikit-ptr.refreshing { color: var(--primary); border-color: var(--primary); }
-.uikit-ptr.refreshing .uikit-ptr-spinner {
+/* Armed: glow + a quick pop on the ring telling you to release. */
+.uikit-ptr.ready { border-color: transparent; box-shadow: var(--shadow-glow); }
+.uikit-ptr.ready .uikit-ptr-spinner { color: var(--primary); transform: scale(1); opacity: 1; }
+.uikit-ptr.ready .uikit-ptr-ring { animation: ptr-pop var(--duration-normal) var(--ease-out); }
+/* Refreshing: ring becomes an indeterminate spinning arc, glyph fades out. */
+.uikit-ptr.refreshing { border-color: transparent; box-shadow: var(--shadow-glow); }
+.uikit-ptr.refreshing .uikit-ptr-ring {
+  background: conic-gradient(from 0deg, transparent 0deg, var(--primary) 280deg, transparent 320deg);
   animation: spinner-rotate 0.7s linear infinite;
-  transform: none;
+}
+.uikit-ptr.refreshing .uikit-ptr-spinner { opacity: 0; transform: scale(0.4); }
+@keyframes ptr-pop {
+  0% { transform: scale(0.88); }
+  55% { transform: scale(1.12); }
+  100% { transform: scale(1); }
 }
 
 /* ─── Filter chips ─── */
@@ -4200,7 +4219,8 @@ body.ai-page-active .ai-dot-grid {
 @media (prefers-reduced-motion: reduce) {
   .skeleton { animation: none; }
   .uikit-ptr, .uikit-ptr-spinner { transition: none; }
-  .uikit-ptr.refreshing .uikit-ptr-spinner { animation-duration: 1.2s; }
+  .uikit-ptr.ready .uikit-ptr-ring { animation: none; }
+  .uikit-ptr.refreshing .uikit-ptr-ring { animation-duration: 1.2s; }
   .workflow-card.is-running::after { animation: none; opacity: 0.25; }
 }
 

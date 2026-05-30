@@ -140,8 +140,9 @@
     const ind = document.createElement('div');
     ind.className = 'uikit-ptr';
     ind.setAttribute('aria-hidden', 'true');
-    ind.innerHTML = `<div class="uikit-ptr-spinner">`
-      + (typeof ICON === 'function' ? ICON('refresh', 18) : '') + `</div>`;
+    ind.innerHTML = `<div class="uikit-ptr-ring"></div>`
+      + `<div class="uikit-ptr-spinner">`
+      + (typeof ICON === 'function' ? ICON('refresh', 15) : '') + `</div>`;
     document.body.appendChild(ind);
 
     let startY = 0, pulling = false, dist = 0, armed = false;
