@@ -868,6 +868,11 @@ function _isPastMonth(dateStr) {
 // Returns { hasConflict, message, canAutoFix, schedIdx, targetDate, coTime }
 function detectConflict(ot) {
   if (!ot || !ot.date || !ot.start || !ot.end) return { hasConflict: false };
+  // Conflict detection is forward-looking: it warns that an upcoming recurring
+  // CO would close the work session before OT, and proposes a skip/once-CO fix.
+  // For past dates the checkin/checkout already executed, so the warning (and
+  // its auto-fix) is moot — suppress it to avoid noisy historical warnings.
+  if (ot.date < _todayJSTStr()) return { hasConflict: false };
   const crossMid = ot.end < ot.start;
   if (!crossMid) {
     // Same-day OT: check if any recurring CO falls within [start, end]
