@@ -34,6 +34,7 @@ jobs:
           sparse-checkout-cone-mode: false
 
       - name: Self-looping dispatcher (checks every 30s)
+        id: loop
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
           GH_PAT: ${{ secrets.GH_PAT }}
@@ -71,6 +72,12 @@ jobs:
           RUN_URL = f"https://github.com/{REPO}/actions/runs/{RUN_ID}"
           # Lease TTL = loop length + 15min buffer (covers chain transition + new run startup)
           LEASE_TTL_MIN = LOOP_MINUTES + 15
+          # Storm guard: only self re-chain if this run actually looped this long (minutes).
+          # A run that exits early (lease miss, rate-limit 403 on acquire, crash) MUST NOT
+          # re-chain — otherwise step 2 spawns a replacement in seconds → respawn storm that
+          # pins the account-wide REST limit and 403s every Gist write. Cron */15 + watchdog
+          # recover the chain instead. See KNOWLEDGE §3 (dispatcher respawn storm).
+          MIN_RECHAIN_MIN = 5
 
           def send_alert(subject, body):
               """Minimal SMTP alert — inlined (mirrors heartbeat.yml pattern)."""
@@ -409,6 +416,15 @@ jobs:
 
               elapsed_min = (time.time() - loop_start) / 60
               print(f"\n✅ Loop ended: {elapsed_min:.1f} min, {iteration} iter, {total_dispatched} dispatched")
+              # Storm guard: signal step 2 to re-chain ONLY if we looped long enough.
+              # Early exits (lease miss / rate-limit / crash) bypass this → no respawn.
+              gho = os.environ.get('GITHUB_OUTPUT')
+              if gho and elapsed_min >= MIN_RECHAIN_MIN:
+                  with open(gho, 'a') as _f:
+                      _f.write('rechain=1\n')
+                  print(f"  ↻ re-chain armed (looped {elapsed_min:.1f} min ≥ {MIN_RECHAIN_MIN})")
+              else:
+                  print(f"  ⛔ re-chain suppressed (looped {elapsed_min:.1f} min < {MIN_RECHAIN_MIN}) — cron/watchdog will recover")
           finally:
               # Always release on exit so next run can acquire immediately.
               if lease_held:
@@ -420,7 +436,10 @@ jobs:
           EOF
 
       - name: Re-trigger self (chain next run)
-        if: always()
+        # Only re-chain when the loop ran a meaningful duration (storm guard).
+        # Early-exit runs leave outputs.rechain unset → no respawn. Recovery falls
+        # back to backup cron */15 + watchdog, which is safe (no rate-limit storm).
+        if: always() && steps.loop.outputs.rechain == '1'
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
