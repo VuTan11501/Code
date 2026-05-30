@@ -3909,6 +3909,13 @@ body.ai-page-active .ai-dot-grid {
 .ai-action-btn.ai-action-reapply:hover { background: color-mix(in srgb, var(--primary) 14%, transparent); border-color: color-mix(in srgb, var(--primary) 50%, transparent); }
 
 /* ─── Timesheet tab ─────────────────────────────────────── */
+.ts-action-row { row-gap: var(--sp-2); }
+@media (max-width: 480px) {
+  /* "Synced …" timestamp takes its own full-width row above the buttons,
+     then the action buttons lay out 2-per-row so nothing overflows. */
+  .ts-action-row #tsUpdatedAt { flex: 1 0 100%; order: -1; text-align: right; }
+  .ts-action-row .btn { flex: 1 1 calc(50% - 4px); justify-content: center; }
+}
 .ts-summary { display: flex; flex-direction: column; gap: 12px; }
 .ts-summary-grid {
   display: grid;

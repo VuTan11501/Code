@@ -21,6 +21,7 @@ let _tsState = {
   updatedAt: '',
   viewYear: null,
   viewMonth: null,     // 0-indexed
+  calculatedKey: null, // month key with a successful Calculate this session (gates Save Draft)
 };
 
 // ─── Init ───────────────────────────────────────────
@@ -143,6 +144,18 @@ function _tsKey() {
   return `${_tsState.viewYear}-${String(_tsState.viewMonth + 1).padStart(2, '0')}`;
 }
 
+// Save Draft is gated behind a successful Calculate for the *currently
+// viewed* month (mirrors DokoKin's own Calculate → Save Draft flow).
+function _refreshSaveDraftState() {
+  const btn = document.getElementById('tsSaveDraftBtn');
+  if (!btn) return;
+  const ready = _tsState.calculatedKey === _tsKey();
+  btn.disabled = !ready;
+  btn.setAttribute('data-tooltip', ready
+    ? 'Calculate then save month as Draft (一時保存) on DokoKin — does NOT submit'
+    : 'Bấm Calculate trước để bật Save Draft');
+}
+
 // "HH:MM" → minutes. Returns 0 for falsy/invalid.
 function _hhmmToMin(s) {
   if (!s || typeof s !== 'string') return 0;
@@ -262,6 +275,7 @@ function renderTimesheet() {
       ? `Synced ${_tsState.updatedAt.replace('T', ' ').slice(0, 16)} JST`
       : '';
   }
+  _refreshSaveDraftState();
 
   if (!snap) {
     if (summaryEl) summaryEl.innerHTML = `
@@ -796,6 +810,8 @@ async function recalcTimesheet() {
     if (run.conclusion !== 'success') {
       throw new Error('Calculate failed — see Actions / email');
     }
+    _tsState.calculatedKey = _tsKey();
+    _refreshSaveDraftState();
     toast('🧮 Recalculated — refreshing…', 'success');
     await syncTimesheetFromDokoKin();
   } catch (e) {
@@ -810,9 +826,14 @@ async function recalcTimesheet() {
 function calcAndSaveTimesheetDraft() {
   if (!sessionToken) { toast('🔒 Unlock first', 'error'); return; }
   if (_tsState.viewYear == null) { toast('❌ No month selected', 'error'); return; }
+  if (_tsState.calculatedKey !== _tsKey()) {
+    toast('🧮 Bấm Calculate trước', 'warning');
+    return;
+  }
   const key = _tsKey();
   const snap = _tsState.months[key];
   const s = (snap && snap.summary) || {};
+  const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const monthLabel = `${monthNames[_tsState.viewMonth]} ${_tsState.viewYear}`;
   const rows = [
     ['Working hours', s.displayTotalWorkingHours],
