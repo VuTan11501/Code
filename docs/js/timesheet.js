@@ -532,8 +532,6 @@ function _openLostOtSheet(date, details) {
   const parts = _calcLostForDay(d);
   if (parts.lostMin <= 0) return;
 
-  if (typeof UIKit.haptic === 'function') UIKit.haptic('warning');
-
   const dayYen = _lostYenFromDay(parts);
   const reqMin = _hhmmToMin(d.otRequest);
   const stdMin = (d.isSunday || d.isSaturday || d.isHoliday) ? 0 : (8 * 60);
@@ -618,10 +616,8 @@ async function syncTimesheetFromDokoKin() {
     await _waitForTimesheetFetchRun();
     await loadTimesheetData({ refresh: true });
     toast('✅ Timesheet synced', 'success');
-    if (typeof UIKit !== 'undefined' && typeof UIKit.haptic === 'function') UIKit.haptic('success');
   } catch (e) {
     toast(`❌ Sync failed: ${e.message}`, 'error');
-    if (typeof UIKit !== 'undefined' && typeof UIKit.haptic === 'function') UIKit.haptic('error');
   } finally {
     if (btn) {
       btn.disabled = false;

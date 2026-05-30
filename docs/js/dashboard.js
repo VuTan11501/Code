@@ -488,7 +488,7 @@ function renderWorkflowCard(wf, runs) {
   // D2: cancel button for running workflow
   let cancelHtml = '';
   if (isRunning && latest.id && typeof cancelWorkflowRun === 'function') {
-    cancelHtml = `<button class="btn btn-destructive sm" onclick="event.stopPropagation();if(typeof window.UIKit!=='undefined')window.UIKit.haptic('warning');cancelWorkflowRun(${latest.id})">✕ Cancel</button>`;
+    cancelHtml = `<button class="btn btn-destructive sm" onclick="event.stopPropagation();cancelWorkflowRun(${latest.id})">✕ Cancel</button>`;
   }
 
   return `
@@ -541,7 +541,6 @@ function renderWorkflowCard(wf, runs) {
 //  TRIGGER & CANCEL
 // ═══════════════════════════════════════════════════
 async function triggerWorkflow(file, ev) {
-  if (typeof window.UIKit !== 'undefined') window.UIKit.haptic('light');
   if (!sessionToken) { toast('⚠️ Not authenticated'); return; }
   const btn = ev && ev.currentTarget;
   const origHtml = btn ? btn.innerHTML : '';

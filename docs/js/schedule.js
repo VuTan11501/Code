@@ -1307,7 +1307,6 @@ function renderScheduleQueueChips() {
     const key = chip.dataset.filter;
     if (key === schedQueueFilter) return;
     schedQueueFilter = key;
-    if (window.UIKit && UIKit.haptic) UIKit.haptic('select');
     renderScheduleQueueChips();
     if (scheduleTableData) renderScheduledQueue(scheduleTableData);
   };

@@ -580,7 +580,6 @@ function _otCalendarAttachHandlers(grid) {
 
   function handleLongPress(cell) {
     lpFired = true;
-    if (typeof UIKit !== 'undefined' && typeof UIKit.haptic === 'function') UIKit.haptic('medium');
     const dateStr = cell.dataset.date;
     if (!dateStr) return;
     const ots = (grid._otByDate || {})[dateStr] || [];
@@ -2169,7 +2168,6 @@ async function _applyOptimizerChecked(container) {
       });
     }
     await _saveOtRequests(existing);
-    if (typeof UIKit !== 'undefined' && typeof UIKit.haptic === 'function') UIKit.haptic('success');
     closeOtOptimizer();
     toast(`✓ Đã áp dụng ${toAdd.length} ca OT`, 'success');
     await loadOtData();
@@ -2204,7 +2202,6 @@ async function applyOtOptimizer() {
       });
     }
     await _saveOtRequests(existing);
-    if (typeof UIKit !== 'undefined' && typeof UIKit.haptic === 'function') UIKit.haptic('success');
     closeOtOptimizer();
     toast(`✓ Applied ${toAdd.length} OT entries`, 'success');
     await loadOtData();

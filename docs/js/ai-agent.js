@@ -2214,7 +2214,6 @@ Hôm nay (JST): ${today}.`;
       try { if (_stopVoice) _stopVoice(); } catch {}
       // If button is in STOP state, abort current stream instead of submitting.
       if (send.classList.contains('is-stop')) {
-        try { if (typeof UIKit !== 'undefined' && UIKit.haptic) UIKit.haptic('warning'); } catch {}
         try { if (currentAbort) currentAbort.abort(); } catch {}
         return;
       }
@@ -2256,7 +2255,6 @@ Hôm nay (JST): ${today}.`;
         if (!card) return;
         const prompt = card.getAttribute('data-prompt');
         if (!prompt) return;
-        try { if (typeof UIKit !== 'undefined' && UIKit.haptic) UIKit.haptic('select'); } catch {}
         input.value = prompt;
         autogrow();
         form.requestSubmit();

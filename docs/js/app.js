@@ -484,7 +484,6 @@ function navigate(hash) {
     nav.classList.add('active');
     nav.setAttribute('aria-selected', 'true');
   }
-  if (prevActive && prevActive.id !== ('page-' + page) && window.UIKit) window.UIKit.haptic('select');
   updateRovingTabindex(page);
 
   // Toggle body class so CSS can lock body scroll + size #page-ai to the
