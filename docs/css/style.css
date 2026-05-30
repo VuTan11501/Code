@@ -563,22 +563,6 @@ body.modal-open { overflow: hidden; }
 .settings-card .card-header { padding: 0; border-bottom: none; margin-bottom: 16px; }
 .settings-card .card-content { padding: 0; }
 
-/* ─── Settings accordion ─── */
-.settings-group { border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; margin-bottom: var(--sp-3); background: var(--card); }
-.settings-group > summary {
-  display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2);
-  padding: var(--sp-3) var(--sp-4); cursor: pointer; list-style: none;
-  font-weight: 600; font-size: var(--fs-base); color: var(--foreground);
-}
-.settings-group > summary::-webkit-details-marker { display: none; }
-.settings-group > summary:hover { background: rgba(var(--tint), 0.03); }
-.settings-group[open] > summary { border-bottom: 1px solid var(--border); }
-.settings-group > summary .settings-group-status { font-size: var(--fs-xs); font-weight: 500; }
-.settings-group-status.ok { color: var(--green); }
-.settings-group-status.warn { color: var(--yellow); }
-.settings-group-chevron { transition: transform var(--duration-fast) var(--ease-out); color: var(--muted-foreground); }
-.settings-group[open] .settings-group-chevron { transform: rotate(180deg); }
-.settings-group-body { padding: var(--sp-3) var(--sp-4); }
 @media (max-width: 600px) {
   .settings-body { grid-template-columns: 1fr; }
 }
