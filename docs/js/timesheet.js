@@ -781,7 +781,7 @@ async function _dispatchTimesheetAction(action, opts = {}) {
 async function _waitForTimesheetActionRun() {
   const start = Date.now();
   const TIMEOUT_MS = 4 * 60 * 1000;
-  await new Promise(r => setTimeout(r, 4000));
+  await new Promise(r => setTimeout(r, 2000));
   while (Date.now() - start < TIMEOUT_MS) {
     try {
       const data = await apiFetch(
@@ -789,7 +789,7 @@ async function _waitForTimesheetActionRun() {
       const run = data && data.workflow_runs && data.workflow_runs[0];
       if (run && run.status === 'completed') return run; // caller inspects conclusion
     } catch { /* ignore transient */ }
-    await new Promise(r => setTimeout(r, 5000));
+    await new Promise(r => setTimeout(r, 3000));
   }
   throw new Error('Timed out waiting for Timesheet Action run');
 }
@@ -813,7 +813,9 @@ async function recalcTimesheet() {
     _tsState.calculatedKey = _tsKey();
     _refreshSaveDraftState();
     toast('🧮 Recalculated — refreshing…', 'success');
-    await syncTimesheetFromDokoKin();
+    // The action already wrote the recalculated month into the Gist cache,
+    // so just reload from Gist — no second timesheet-fetch workflow needed.
+    await loadTimesheetData({ refresh: true });
   } catch (e) {
     toast(`❌ ${e.message}`, 'error');
   } finally {
@@ -880,7 +882,8 @@ async function _runCalcSaveTimesheet(opts = {}) {
       throw new Error('Not saved — blocked by guard or error. Check email / Actions.');
     }
     toast('✅ Draft saved on DokoKin — refreshing…', 'success');
-    await syncTimesheetFromDokoKin();
+    // Action already pushed the saved month into the Gist cache → reload direct.
+    await loadTimesheetData({ refresh: true });
   } catch (e) {
     toast(`❌ ${e.message}`, 'error');
   } finally {

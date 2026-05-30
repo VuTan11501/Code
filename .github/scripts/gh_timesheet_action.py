@@ -36,11 +36,13 @@ from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from gh_ot_creator import (  # type: ignore
-    JST, API_BASE, ACCOUNT as DEFAULT_ACCOUNT,
+    JST, API_BASE, GIST_ID, ACCOUNT as DEFAULT_ACCOUNT,
     log, LOG_LINES, refresh_azure_token, get_kintai_token,
     api_headers, send_email,
 )
 from gh_payslip_fetch import get_fjp_token, fjp_headers  # type: ignore
+from gh_timesheet_fetch import normalize_month, TIMESHEET_GIST_FILE  # type: ignore
+from gist_safety import read_gist_file, safe_patch_gist_file  # type: ignore
 
 try:
     from user_config import EMPLOYEE_ID, BASE_HOURLY_RATE
@@ -400,6 +402,50 @@ def build_timesheet_html(obj, account, year, month, action, badge, blocked_reaso
 </td></tr></table></body></html>'''
 
 
+def push_month_to_gist(obj, account, year, month):
+    """Write the fresh/recalculated month straight into timesheet-history.json
+    so the PWA can reload from the Gist WITHOUT dispatching a second
+    timesheet-fetch workflow (saves a whole ~60-90s round-trip). Non-fatal."""
+    pat = os.environ.get("GH_PAT") or os.environ.get("GH_TOKEN")
+    if not pat:
+        log("  ⚠ GH_PAT missing — skip Gist cache update (PWA will need manual Sync)")
+        return
+    key = f"{year}-{month:02d}"
+    try:
+        snap = normalize_month(obj)
+        snapshot = read_gist_file(pat, GIST_ID, TIMESHEET_GIST_FILE, log=log)
+        existing = snapshot.get("parsed")
+        if not isinstance(existing, dict) or "months" not in existing:
+            existing = {"months": {}, "account": account}
+        months = existing.get("months")
+        if not isinstance(months, dict):
+            months = {}
+        months[key] = snap
+        payload = {
+            "account": account,
+            "updated_at": datetime.now(JST).isoformat(timespec="seconds"),
+            "months_keep": existing.get("months_keep", 24),
+            "months": months,
+        }
+        new_content = json.dumps(payload, separators=(",", ":"), ensure_ascii=False)
+
+        def _shape_ok(parsed):
+            if not isinstance(parsed, dict) or "months" not in parsed:
+                raise ValueError("missing 'months' key")
+
+        st = safe_patch_gist_file(
+            pat, GIST_ID, TIMESHEET_GIST_FILE,
+            new_content=new_content,
+            snapshot=snapshot,
+            shape_validator=_shape_ok,
+            backup=False,
+            log=log,
+        )
+        log(f"  📤 Gist cache updated {key} (HTTP {st}) — PWA can reload directly")
+    except Exception as e:
+        log(f"  ⚠ Gist cache update failed (non-fatal): {e}")
+
+
 def emit_token_rotation(new_refresh, refresh_token):
     if new_refresh == refresh_token:
         return
@@ -522,6 +568,14 @@ def main():
         badge = "🚨 ERROR"
         blocked_reason = str(e)
         log(f"❌ {e}")
+
+    # ── Push fresh month into the Gist cache so the PWA can reload directly
+    #    (skips a whole second timesheet-fetch workflow). Only on success. ──
+    if isinstance(month_obj, dict) and (badge.startswith("✅") or badge == "🧮 CALCULATED"):
+        if not dry_run:
+            push_month_to_gist(month_obj, account, year, month)
+        else:
+            log("  (dry-run: skipping Gist cache update)")
 
     # ── Email summary (always) ──
     subject = f"{badge} · Timesheet {year}-{month:02d} · {action}"

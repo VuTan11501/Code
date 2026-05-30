@@ -68,11 +68,6 @@ jobs:
           sparse-checkout: |
             .github/scripts
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
       - name: Run timesheet action
         env:
           AZURE_REFRESH_TOKEN: ${{ secrets.AZURE_REFRESH_TOKEN }}
@@ -86,6 +81,8 @@ jobs:
           ACCOUNT: ${{ inputs.account || 'tanvc' }}
           DRY_RUN: ${{ inputs.dry_run && '1' || '' }}
           FORCE: ${{ inputs.force && '1' || '' }}
-        run: python .github/scripts/gh_timesheet_action.py
+        # Use the runner's preinstalled Python 3.12 (script is stdlib-only) —
+        # skipping actions/setup-python saves ~15-25s of cold-start per run.
+        run: python3 .github/scripts/gh_timesheet_action.py
       # Phase 3: token rotation is queued into Gist pending_token_rotation.json
       # and applied centrally by token-monitor.yml.
