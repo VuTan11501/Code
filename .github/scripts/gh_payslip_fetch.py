@@ -296,7 +296,8 @@ def upsert_payslips(new_records: list[dict], force: bool) -> int:
     payslips.sort(key=lambda p: (p.get("month") or "", 1 if p.get("bonus") else 0))
     existing["payslips"] = payslips
     existing["updated_at"] = datetime.now(JST).isoformat(timespec="seconds")
-    new_content = json.dumps(existing, ensure_ascii=False, indent=2)
+    # Compact JSON (regenerable cache) — keep the gist small.
+    new_content = json.dumps(existing, ensure_ascii=False, separators=(",", ":"))
 
     def _shape_ok(parsed):
         if not isinstance(parsed, dict) or "payslips" not in parsed:
@@ -308,6 +309,7 @@ def upsert_payslips(new_records: list[dict], force: bool) -> int:
             new_content=new_content,
             snapshot=snapshot,
             shape_validator=_shape_ok,
+            backup=False,  # regenerable cache → no in-gist .bak (purges stale one)
             log=log,
         )
         log(f"✅ Gist PATCH HTTP {st} ({changed} record(s))")

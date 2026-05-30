@@ -299,7 +299,9 @@ def main():
         "months_keep": months_keep,
         "months": new_months,
     }
-    new_content = json.dumps(new_payload, indent=2, ensure_ascii=False)
+    # Compact JSON (no indent) — this is a regenerable cache, not human-edited.
+    # Keeps the gist small so it never approaches size/secondary-write limits.
+    new_content = json.dumps(new_payload, separators=(",", ":"), ensure_ascii=False)
 
     # Shape validator: gist_safety passes the already-parsed object (not raw string).
     def _shape_ok(parsed):
@@ -313,6 +315,7 @@ def main():
             new_content=new_content,
             snapshot=snapshot,
             shape_validator=_shape_ok,
+            backup=False,  # regenerable cache → no in-gist .bak (purges stale one)
             log=log,
         )
         log(f"Gist PATCH HTTP {st} ✓ ({len(new_months)} months total)")

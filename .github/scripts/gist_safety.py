@@ -182,6 +182,7 @@ def safe_patch_gist_file(pat: str, gist_id: str, filename: str,
                         new_content: str, snapshot,
                         shape_validator=None,
                         skip_backup: bool = False,
+                        backup: bool = True,
                         log=None) -> int:
     """Atomically PATCH a gist file with safety rails.
 
@@ -192,6 +193,10 @@ def safe_patch_gist_file(pat: str, gist_id: str, filename: str,
       snapshot: dict from read_gist_file() taken at read time
       shape_validator: optional callable(parsed_new) → raises ShapeInvalid
       skip_backup: pass True if writing to a `.bak.json` file (avoid recursion)
+      backup: when False, do NOT write a rolling `.bak.json` AND purge any existing
+              one in the same PATCH. Use for REGENERABLE caches (timesheet, payslip)
+              that can be re-fetched from DokoKin — their backups only bloat the gist
+              (every read transfers them; large total trips secondary write limits).
       log: optional logger
 
     Behavior:
@@ -226,12 +231,19 @@ def safe_patch_gist_file(pat: str, gist_id: str, filename: str,
 
     # 3. Build atomic PATCH body
     files_payload = {filename: {"content": new_content}}
-    if not skip_backup and snapshot["content"]:
+    # Derive the rolling-backup filename (used for either write or purge).
+    if filename.endswith(".json"):
+        bak_name = filename[:-5] + ".bak.json"
+    else:
+        bak_name = filename + ".bak"
+    if not skip_backup and not backup:
+        # Regenerable cache: skip the rolling backup AND delete any stale one so the
+        # gist stays small. Setting the file to null in the PATCH deletes it.
+        if bak_name in (current.get("all_files") or []):
+            files_payload[bak_name] = None
+            _log(f"🧹 Purging stale {bak_name} (backup disabled for regenerable cache)")
+    elif not skip_backup and snapshot["content"]:
         # Rolling backup: stem.bak.json (e.g. ot-requests.json → ot-requests.bak.json)
-        if filename.endswith(".json"):
-            bak_name = filename[:-5] + ".bak.json"
-        else:
-            bak_name = filename + ".bak"
         # Wrap backup content with metadata so it's self-describing
         bak_payload = {
             "_backup_of": filename,
