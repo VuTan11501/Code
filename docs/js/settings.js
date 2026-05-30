@@ -56,9 +56,13 @@ function initSettingsPage() {
 // GitHub API Worker proxy — settings UI handlers
 // ─────────────────────────────────────────────────────────────
 const PROXY_URL_KEY = 'wf_dash_gh_proxy_url';
+const PROXY_LAST_KEY = 'wf_dash_gh_proxy_url_last';   // remembered URL (survives disable + reload)
 
 function _getProxyUrl() {
   try { return (localStorage.getItem(PROXY_URL_KEY) || '').trim(); } catch { return ''; }
+}
+function _getProxyLast() {
+  try { return (localStorage.getItem(PROXY_LAST_KEY) || '').trim(); } catch { return ''; }
 }
 
 function renderProxyStatus() {
@@ -66,7 +70,9 @@ function renderProxyStatus() {
   const input = document.getElementById('proxyUrlInput');
   if (!host) return;
   const url = _getProxyUrl();
-  if (input && !input.value) input.value = url;
+  // Keep the field populated with the active URL, or fall back to the last-used
+  // one so a disabled proxy can be re-enabled without retyping.
+  if (input && !input.value) input.value = url || _getProxyLast();
   if (url) {
     host.innerHTML = `<div>✅ <strong>Active</strong> — using proxy at <code>${escapeHtml(url)}</code></div>
       <div style="margin-top:4px;opacity:0.8">PAT is server-side. Authorization header is stripped from outgoing requests.</div>`;
@@ -106,7 +112,7 @@ function saveProxyUrl() {
   const url = (input?.value || '').trim().replace(/\/+$/, '');
   if (url && !/^https:\/\//.test(url)) { toast('⚠️ URL phải bắt đầu bằng https://', 'warning'); return; }
   try {
-    if (url) localStorage.setItem(PROXY_URL_KEY, url);
+    if (url) { localStorage.setItem(PROXY_URL_KEY, url); localStorage.setItem(PROXY_LAST_KEY, url); }
     else localStorage.removeItem(PROXY_URL_KEY);
   } catch (e) {
     toast('⚠️ Không lưu được: ' + e.message, 'error'); return;
@@ -117,8 +123,13 @@ function saveProxyUrl() {
 
 function clearProxyUrl() {
   const input = document.getElementById('proxyUrlInput');
-  if (input) input.value = '';
-  try { localStorage.removeItem(PROXY_URL_KEY); } catch {}
+  // Remember the URL so the field stays populated and re-enabling is one click.
+  const remembered = (input?.value || '').trim().replace(/\/+$/, '') || _getProxyUrl();
+  try {
+    localStorage.removeItem(PROXY_URL_KEY);
+    if (remembered) localStorage.setItem(PROXY_LAST_KEY, remembered);
+  } catch {}
+  if (input && remembered) input.value = remembered;   // keep the string visible
   renderProxyStatus();
   toast('Proxy disabled. Reload to apply.', 'info');
 }

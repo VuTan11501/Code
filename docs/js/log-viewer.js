@@ -180,7 +180,17 @@
       _jobLogCache.set(jobId, parsed);
       return parsed;
     } catch (e) {
-      return { error: e.message };
+      let msg = e.message;
+      const proxied = (() => {
+        try { return !!(localStorage.getItem('wf_dash_gh_proxy_url') || '').trim(); }
+        catch { return false; }
+      })();
+      if (/Failed to fetch|NetworkError/i.test(msg) && !proxied) {
+        msg = 'Log cần GitHub API proxy — blob storage chặn CORS khi gọi trực tiếp. Bật proxy trong Settings rồi reload.';
+      } else if (/HTTP 4\d\d/.test(msg) && proxied) {
+        msg = msg + ' — Worker proxy có thể chưa deploy bản fix log. Chạy `wrangler deploy`.';
+      }
+      return { error: msg };
     }
   }
 
