@@ -4234,10 +4234,6 @@ body.ai-page-active .ai-dot-grid {
 
 /* OT screen (O2-O5) */
 .ot-cell-yen { font-size: var(--fs-xs); color: var(--muted-foreground); line-height: 1; }
-.ot-pacing { font-size: var(--fs-xs); margin-top: var(--sp-1); }
-.ot-pacing-ok { color: var(--green); }
-.ot-pacing-ahead { color: var(--yellow); }
-.ot-pacing-behind { color: var(--red); }
 .ot-form-income-net { font-size: var(--fs-sm); color: var(--green); padding: var(--sp-1) 0; }
 .ot-opt-sheet-list { max-height: 320px; overflow-y: auto; }
 .ot-opt-sheet-row { display: grid; grid-template-columns: auto 1fr 1fr auto auto auto; gap: var(--sp-2); align-items: center; padding: var(--sp-2); border-bottom: 1px solid var(--border); }

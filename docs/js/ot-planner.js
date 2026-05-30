@@ -1601,29 +1601,10 @@ function renderOtBudget() {
 
   const monthName = new Date(y, m, 1).toLocaleString('en-US', { month: 'long', year: 'numeric' });
   const monthKey = `${y}-${String(m + 1).padStart(2, '0')}`;
-  const today = jstNow();
-  const todayMonthKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
-  const isPastMonth = monthKey < todayMonthKey;
 
   // Ring color
   const ringPct = Math.min(100, Math.round(hoursPct));
   const ringColor = ringPct >= 100 ? 'var(--red)' : (ringPct > 80 ? 'var(--yellow)' : 'var(--primary)');
-
-  // Pacing (linear pace for current month only)
-  let pacingHtml = '';
-  if (monthKey === todayMonthKey) {
-    const daysInMonth = new Date(y, m + 1, 0).getDate();
-    const dayOfMonth = today.getDate();
-    const expectedHours = (75 * dayOfMonth) / daysInMonth;
-    const diff = sal.totalHours - expectedHours;
-    if (Math.abs(diff) < 1) {
-      pacingHtml = `<span class="ot-pacing ot-pacing-ok">Đúng tiến độ</span>`;
-    } else if (diff > 0) {
-      pacingHtml = `<span class="ot-pacing ot-pacing-ahead">Vượt ${Math.abs(diff).toFixed(1)}h</span>`;
-    } else {
-      pacingHtml = `<span class="ot-pacing ot-pacing-behind">Chậm ${Math.abs(diff).toFixed(1)}h</span>`;
-    }
-  }
 
   // Net take-home: prefer real payslip when available; otherwise estimate
   const realSlip = window.OT_SALARY.findPayslipForWorkMonth(_otState.payslips, monthKey);
@@ -1678,7 +1659,6 @@ function renderOtBudget() {
           <div class="ot-progress-fill" style="width:${nightPct}%"></div>
         </div>
       </div>
-      ${pacingHtml}
       ${netHtml}
       <div class="ot-budget-breakdown">
         <span data-tooltip="125% rate on all OT hours — ${F(sal.baseOTLine)}">${ICON('clock', 11)} Base ${F(sal.baseOTLine)}</span>
