@@ -39,7 +39,7 @@ $allowedTypes = @(
 $allowedScopes = @(
   'suica-pdf','suica-ui','suica-planner','suica-history','suica-fare',
   'dokokin','ot','rakuraku','dashboard','dashboard-ui','i18n','worker',
-  'ci','agents-ui','docs','repo'
+  'ci','agents-ui','docs','repo','graph-dashboard'
 )
 
 $subject = ($Message -split "`n")[0].Trim()

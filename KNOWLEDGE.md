@@ -62,6 +62,7 @@ Format: `<type>(<scope>): <subject>` + optional body + `Co-authored-by:` trailer
 | `ci` | Workflow YAML, build scripts |
 | `agents-ui` | Next.js Tans Agents UI (`src/`) |
 | `docs` | Markdown documentation only |
+| `graph-dashboard` | Understand-Anything knowledge-graph dashboard (`graph-dashboard/`, `scripts/sync-graph-dashboard.mjs`, `.understand-anything/`) |
 
 ### Examples
 ✅ `fix(suica-pdf): remap U+00AD soft-hyphen in ToUnicode CMap`

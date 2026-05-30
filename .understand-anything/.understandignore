@@ -1,0 +1,46 @@
+# .understandignore — patterns for files/dirs to exclude from analysis
+# Syntax: same as .gitignore
+#
+# Built-in defaults (always excluded unless negated):
+#   node_modules/, .git/, dist/, build/, obj/, *.lock, *.min.js, etc.
+#
+# --- From .gitignore (uncomment to exclude) ---
+
+# .env
+# .env.local
+# *.pyc
+# .azure_tokens.json
+# .dokokin_sms_token.json
+# finance/data/*.db
+# finance/data/*.html
+# finance/data/models/*.pkl
+# copilot-session-*.md
+# .github/skills/dokokin-auto-checkin/scripts/*.log
+# .github/skills/dokokin-auto-checkin/scripts/.azure_tokens.json
+# README.md
+# AGENTS.md
+# cloudflare-worker/.wrangler/
+# test-results/
+# playwright-report/
+# playwright/.cache/
+# worker/.dev.vars
+# worker/.wrangler/
+# worker/node_modules/
+# todos.md
+# msg.tmp
+# git_msg.tmp
+# _drw.py
+# _meta.py
+# _meta.txt
+
+# --- Detected directories (uncomment to exclude) ---
+
+# tests/
+# docs/
+# scripts/
+
+# --- Test file patterns (uncomment to exclude) ---
+
+# *.test.*
+# *.spec.*
+# *.snap
