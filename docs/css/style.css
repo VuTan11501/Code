@@ -4006,3 +4006,162 @@ body.ai-page-active .ai-dot-grid {
 }
 .workflow-card.drag-over { outline: 2px dashed var(--primary); outline-offset: -2px; }
 .workflow-drag-handle { display: none; }
+
+/* ═══════════════════════════════════════════════════
+   UI KIT — shared UX primitives (ui-kit.js)
+   Empty-state · Pull-to-refresh · FAB · Filter chips ·
+   Budget ring · Now strip · Sticky month nav · etc.
+   All values use design tokens — no hardcoded hex.
+   ═══════════════════════════════════════════════════ */
+
+/* ─── Empty state ─── */
+.uikit-empty {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: var(--sp-2); text-align: center;
+  padding: var(--sp-7) var(--sp-4);
+  color: var(--muted-foreground);
+}
+.uikit-empty-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 52px; height: 52px; border-radius: var(--radius-full);
+  background: rgba(var(--tint), 0.05);
+  color: var(--muted-foreground);
+  margin-bottom: var(--sp-1);
+}
+.uikit-empty-title { font-size: var(--fs-base); font-weight: 600; color: var(--foreground); }
+.uikit-empty-sub { font-size: var(--fs-sm); max-width: 32ch; line-height: 1.5; }
+.uikit-empty-action { margin-top: var(--sp-2); }
+
+/* ─── Pull-to-refresh ─── */
+.uikit-ptr {
+  position: fixed; top: 0; left: 50%;
+  transform: translate(-50%, calc(var(--ptr, 0px) - 44px));
+  width: 34px; height: 34px; border-radius: var(--radius-full);
+  display: flex; align-items: center; justify-content: center;
+  background: var(--card); border: 1px solid var(--border);
+  box-shadow: var(--shadow-md);
+  color: var(--muted-foreground);
+  z-index: 60; opacity: calc(var(--ptr, 0px) / 52);
+  pointer-events: none;
+  transition: transform var(--duration-fast) var(--ease-out), opacity var(--duration-fast) var(--ease-out);
+}
+.uikit-ptr-spinner { display: flex; transition: transform var(--duration-normal) var(--ease-out); }
+.uikit-ptr.ready { color: var(--primary); border-color: var(--primary); }
+.uikit-ptr.ready .uikit-ptr-spinner { transform: rotate(180deg); }
+.uikit-ptr.refreshing { color: var(--primary); }
+.uikit-ptr.refreshing .uikit-ptr-spinner { animation: spinner-rotate 0.7s linear infinite; }
+
+/* ─── FAB (floating action button) ─── */
+.fab {
+  position: fixed; right: var(--sp-4);
+  bottom: calc(var(--mobile-nav-height) + var(--sp-3) + env(safe-area-inset-bottom));
+  width: 52px; height: 52px; border-radius: var(--radius-full);
+  display: flex; align-items: center; justify-content: center;
+  background: var(--primary); color: var(--primary-foreground, #fff);
+  border: none; box-shadow: var(--shadow-lg);
+  z-index: 40; cursor: pointer;
+  transition: transform var(--duration-fast) var(--ease-out), box-shadow var(--duration-fast) var(--ease-out);
+}
+.fab:hover { box-shadow: var(--shadow-glow); }
+.fab:active { transform: scale(0.92); }
+.fab[hidden] { display: none; }
+
+/* ─── Filter chips ─── */
+.filter-chips { display: flex; gap: var(--sp-2); flex-wrap: wrap; align-items: center; }
+.filter-chip {
+  display: inline-flex; align-items: center; gap: var(--sp-1);
+  padding: 4px var(--sp-3); border-radius: var(--radius-full);
+  font-size: var(--fs-xs); font-weight: 500;
+  background: var(--secondary); color: var(--muted-foreground);
+  border: 1px solid var(--border); cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out);
+}
+.filter-chip:hover { background: var(--muted); color: var(--foreground); }
+.filter-chip.is-active {
+  background: color-mix(in srgb, var(--primary), transparent 84%);
+  color: var(--primary); border-color: var(--primary);
+}
+.filter-chip .filter-chip-count {
+  font-size: var(--fs-xs); opacity: 0.7;
+  font-family: var(--font-mono);
+}
+
+/* ─── Budget / progress ring ─── */
+.ui-ring { --ring-size: 96px; --ring-thick: 9px; position: relative; width: var(--ring-size); height: var(--ring-size); flex-shrink: 0; }
+.ui-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+.ui-ring .ui-ring-track { stroke: var(--secondary); }
+.ui-ring .ui-ring-fill { stroke: var(--primary); stroke-linecap: round; transition: stroke-dashoffset var(--duration-slow) var(--ease-out); }
+.ui-ring .ui-ring-pace { stroke: var(--muted-foreground); opacity: 0.5; }
+.ui-ring-label {
+  position: absolute; inset: 0; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 2px;
+}
+.ui-ring-value { font-family: var(--font-mono); font-size: var(--fs-md); font-weight: 700; color: var(--foreground); line-height: 1; }
+.ui-ring-unit { font-size: var(--fs-xs); color: var(--muted-foreground); }
+.ui-ring.is-over .ui-ring-fill { stroke: var(--red); }
+.ui-ring.is-near .ui-ring-fill { stroke: var(--yellow); }
+
+/* ─── Now strip (dashboard today status) ─── */
+.now-strip {
+  display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap;
+  padding: var(--sp-2) var(--sp-3); margin-bottom: var(--sp-3);
+  border-radius: var(--radius-lg);
+  background: var(--card); border: 1px solid var(--border);
+  font-size: var(--fs-sm);
+}
+.now-strip .now-item { display: inline-flex; align-items: center; gap: var(--sp-1); color: var(--muted-foreground); }
+.now-strip .now-item strong { color: var(--foreground); font-weight: 600; font-family: var(--font-mono); }
+.now-strip .now-sep { width: 1px; height: 14px; background: var(--border); }
+.now-strip .now-ok { color: var(--green); }
+.now-strip .now-pending { color: var(--yellow); }
+.now-strip[hidden] { display: none; }
+
+/* ─── Sticky month nav (OT + Timesheet) ─── */
+.month-nav-sticky {
+  position: sticky; top: env(safe-area-inset-top);
+  z-index: 20; background: var(--background);
+  padding-top: var(--sp-2); margin-top: calc(var(--sp-2) * -1);
+  backdrop-filter: saturate(180%) blur(12px);
+  -webkit-backdrop-filter: saturate(180%) blur(12px);
+}
+
+/* ─── Workflow card live state ─── */
+.wf-card.is-running { border-color: color-mix(in srgb, var(--primary), transparent 50%); }
+.wf-card.is-running::after {
+  content: ''; position: absolute; inset: 0; border-radius: inherit;
+  border: 1px solid var(--primary); opacity: 0; pointer-events: none;
+  animation: wfRunPulse 1.8s var(--ease-out) infinite;
+}
+@keyframes wfRunPulse { 0% { opacity: 0.5; } 50% { opacity: 0.05; } 100% { opacity: 0.5; } }
+.wf-card-elapsed { font-family: var(--font-mono); font-size: var(--fs-xs); color: var(--primary); }
+
+/* ─── Settings accordion ─── */
+.settings-group { border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; margin-bottom: var(--sp-3); background: var(--card); }
+.settings-group > summary {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-4); cursor: pointer; list-style: none;
+  font-weight: 600; font-size: var(--fs-base); color: var(--foreground);
+}
+.settings-group > summary::-webkit-details-marker { display: none; }
+.settings-group > summary:hover { background: rgba(var(--tint), 0.03); }
+.settings-group[open] > summary { border-bottom: 1px solid var(--border); }
+.settings-group > summary .settings-group-status { font-size: var(--fs-xs); font-weight: 500; }
+.settings-group-status.ok { color: var(--green); }
+.settings-group-status.warn { color: var(--yellow); }
+.settings-group-chevron { transition: transform var(--duration-fast) var(--ease-out); color: var(--muted-foreground); }
+.settings-group[open] .settings-group-chevron { transform: rotate(180deg); }
+.settings-group-body { padding: var(--sp-3) var(--sp-4); }
+
+/* ─── Onboarding checklist ─── */
+.onboard-item { display: flex; align-items: center; gap: var(--sp-2); padding: var(--sp-1) 0; font-size: var(--fs-sm); color: var(--muted-foreground); }
+.onboard-item .onboard-check { display: inline-flex; color: var(--muted-foreground); }
+.onboard-item.is-done .onboard-check { color: var(--green); }
+.onboard-item.is-done { color: var(--foreground); }
+
+/* ─── Reduced motion ─── */
+@media (prefers-reduced-motion: reduce) {
+  .skeleton { animation: none; }
+  .uikit-ptr, .uikit-ptr-spinner { transition: none; }
+  .uikit-ptr.refreshing .uikit-ptr-spinner { animation-duration: 1.2s; }
+  .wf-card.is-running::after { animation: none; opacity: 0.25; }
+}

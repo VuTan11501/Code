@@ -450,12 +450,15 @@ function navigate(hash) {
     nav.classList.add('active');
     nav.setAttribute('aria-selected', 'true');
   }
+  if (prevActive && prevActive.id !== ('page-' + page) && window.UIKit) window.UIKit.haptic('select');
   updateRovingTabindex(page);
 
   // Toggle body class so CSS can lock body scroll + size #page-ai to the
   // viewport when the AI tab is active. Must happen BEFORE init so the
   // chat scroll container has its final size when renderAll() runs.
   document.body.classList.toggle('ai-page-active', page === 'ai');
+  const _fab = document.getElementById('otFab');
+  if (_fab) _fab.hidden = (page !== 'ot');
   if (page === 'ai') {
     updateAiTopOffset();
     if (typeof window._startKbdPoll === 'function') window._startKbdPoll();
@@ -1407,6 +1410,7 @@ function bootstrap() {
   if (window.Theme && typeof window.Theme.init === 'function') {
     try { window.Theme.init(); } catch {}
   }
+  registerPullToRefresh();
   updateNotifBtn();
   setupTabKeyboardNav();
   if (restoreSession()) {
@@ -1420,6 +1424,17 @@ function bootstrap() {
     // Try biometric auto-unlock if enrolled on this device
     tryBiometricAutoUnlock();
   }
+}
+
+// Register each tab's refresh handler so the shared pull-to-refresh gesture
+// (ui-kit.js) can invoke the right loader for whichever tab is active.
+function registerPullToRefresh() {
+  if (!window.UIKit || typeof window.UIKit.registerRefresh !== 'function') return;
+  const R = window.UIKit.registerRefresh;
+  R('dashboard', () => { if (typeof refresh === 'function') return refresh(); });
+  R('schedule', () => { if (typeof loadScheduledRuns === 'function') return loadScheduledRuns(); });
+  R('ot', () => { if (typeof refreshOtData === 'function') return refreshOtData(); });
+  R('timesheet', () => { if (typeof loadTimesheetData === 'function') return loadTimesheetData({ refresh: true }); });
 }
 
 async function tryBiometricAutoUnlock() {

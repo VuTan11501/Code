@@ -48,7 +48,7 @@
 })();
 </script>
 <link rel="stylesheet" href="css/tailwind.css?v=1">
-<link rel="stylesheet" href="css/style.css?v=129">
+<link rel="stylesheet" href="css/style.css?v=130">
 <link rel="preconnect" href="https://api.github.com">
 </head>
 <body class="bg-background text-foreground font-sans text-sm antialiased min-h-dvh overflow-x-hidden">
@@ -171,6 +171,8 @@
     <div class="page active" id="page-dashboard" role="tabpanel" aria-labelledby="tab-dashboard">
 
       <div id="dashInfraToggleBar" class="dash-infra-toggle-bar"></div>
+
+      <div class="now-strip" id="nowStrip" hidden aria-label="Today status"></div>
 
       <section class="grid" id="workflowGrid" aria-label="Workflow status cards">
         <div class="skeleton skeleton-card"></div>
@@ -323,6 +325,7 @@
             </div>
             <button class="btn primary w-full px-4 py-2.5" onclick="addScheduledRun()"><span data-icon="plus" data-size="16"></span> Add Schedule</button>
           </div>
+          <div class="filter-chips mb-3" id="schedQueueChips" aria-label="Filter scheduled runs"></div>
           <div class="scheduler-queue" id="schedulerQueue" aria-label="Scheduled runs queue">
             <div class="skeleton" style="height:56px;width:100%;border-radius:var(--radius-md);margin-bottom:8px"></div>
             <div class="skeleton" style="height:56px;width:100%;border-radius:var(--radius-md);margin-bottom:8px"></div>
@@ -384,7 +387,7 @@
     <!-- PAGE: OT PLANNER -->
     <div class="page" id="page-ot" role="tabpanel" aria-labelledby="tab-ot">
       <section aria-label="OT Calendar">
-        <div class="section-title text-sm font-medium text-muted-foreground mb-4 flex items-center justify-between gap-2">
+        <div class="section-title month-nav-sticky text-sm font-medium text-muted-foreground mb-4 flex items-center justify-between gap-2">
           <span class="flex items-center gap-2"><span data-icon="clock" data-size="16"></span> <span id="otMonthLabel">OT Planner</span></span>
           <div class="flex items-center gap-1">
             <button class="btn sm btn-ghost btn-icon" onclick="otNavMonth(-1)" aria-label="Previous month"><span data-icon="chevronLeft" data-size="16"></span></button>
@@ -470,7 +473,7 @@
     <!-- PAGE: TIMESHEET -->
     <div class="page" id="page-timesheet" role="tabpanel" aria-labelledby="tab-timesheet">
       <section aria-label="Timesheet month summary">
-        <div class="section-title text-sm font-medium text-muted-foreground mb-4 flex items-center justify-between gap-2">
+        <div class="section-title month-nav-sticky text-sm font-medium text-muted-foreground mb-4 flex items-center justify-between gap-2">
           <span class="flex items-center gap-2"><span data-icon="hourglass" data-size="16"></span> <span id="tsMonthLabel">Timesheet</span></span>
           <div class="flex items-center gap-1">
             <button class="btn sm btn-ghost btn-icon" onclick="tsNavMonth(-1)" aria-label="Previous month"><span data-icon="chevronLeft" data-size="16"></span></button>
@@ -1332,6 +1335,7 @@ wrangler login</pre>
 -->
 <div class="toast-stack" id="toastStack" aria-live="polite" aria-atomic="false"></div>
 <div class="toast" id="toast" role="alert" aria-live="assertive" hidden></div>
+<button class="fab" id="otFab" hidden aria-label="Add OT" onclick="if(window.UIKit)UIKit.haptic('light'); openOtForm();"><span data-icon="plus" data-size="24"></span></button>
 </div>
 
 <!-- Dashboard Customize Modal -->
@@ -1350,7 +1354,7 @@ wrangler login</pre>
      Source files live in docs/js/* for development; the bundle is what ships.
      To work on the raw source instead, comment the line below and re-enable
      the individual <script defer src="js/X.js"> tags (see git history). -->
-<script defer src="dist/app.bundle.min.js?v=47"></script>
+<script defer src="dist/app.bundle.min.js?v=48"></script>
 <!-- AI Proposal confirmation modal (Phase 3) -->
 <div id="aiProposalModal" class="proposal-modal" role="dialog" aria-modal="true" aria-labelledby="aiProposalTitle" hidden aria-hidden="true">
   <div class="proposal-modal-backdrop" onclick="AIProposals.closeModal()"></div>
