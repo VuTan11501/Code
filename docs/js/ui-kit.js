@@ -16,18 +16,60 @@
   }
 
   // ─── Haptics ──────────────────────────────────────
-  // Short vibration patterns. No-op when unsupported (iOS Safari) or when
-  // the user prefers reduced motion.
+  // Short vibration patterns. Android/supported browsers use the Vibration
+  // API; iOS Safari/PWA has no Vibration API so we fall back to Apple's hidden
+  // <input switch> trick (toggling it via a label emits a real system haptic
+  // on iOS 17.4+). No-op when the user prefers reduced motion.
   const HAPTIC_PATTERNS = {
     light: 8, medium: 16, heavy: 28, select: 5,
     success: [10, 40, 12], warning: [18, 28, 18], error: [24, 32, 24, 32],
   };
-  function haptic(kind = 'light') {
+  let _iosHapticLabel = null;
+  function _iosHapticTick() {
     try {
-      if (!('vibrate' in navigator) || reducedMotion()) return;
-      navigator.vibrate(HAPTIC_PATTERNS[kind] || HAPTIC_PATTERNS.light);
+      if (!_iosHapticLabel) {
+        const label = document.createElement('label');
+        label.setAttribute('aria-hidden', 'true');
+        label.style.display = 'none';
+        const input = document.createElement('input');
+        input.type = 'checkbox';
+        input.setAttribute('switch', '');   // Apple switch control → haptic on toggle
+        label.appendChild(input);
+        (document.body || document.documentElement).appendChild(label);
+        _iosHapticLabel = label;
+      }
+      _iosHapticLabel.click();   // toggles the switch → iOS system haptic
     } catch { /* ignore */ }
   }
+  let _lastHapticAt = 0;
+  function haptic(kind = 'light') {
+    try {
+      if (reducedMotion()) return;
+      const now = Date.now();
+      // Dedupe rapid duplicate events from a single gesture (e.g. the global
+      // press-haptic plus an explicit action-haptic fired back-to-back).
+      if (now - _lastHapticAt < 40) return;
+      _lastHapticAt = now;
+      if ('vibrate' in navigator && typeof navigator.vibrate === 'function') {
+        navigator.vibrate(HAPTIC_PATTERNS[kind] || HAPTIC_PATTERNS.light);
+        return;
+      }
+      _iosHapticTick();   // iOS fallback
+    } catch { /* ignore */ }
+  }
+
+  // Global tap feedback: a light haptic on press for common interactive
+  // controls, so every button / tab / cell tap feels responsive — not just the
+  // handful of spots that call haptic() explicitly. Capture + passive keeps it
+  // cheap; the throttle inside haptic() prevents double-buzz with explicit calls.
+  const _TAP_SEL = 'button, .btn, [role="button"], .nav-item, .tabs-trigger, '
+    + '.ot-cell:not(.ot-cell-empty), .filter-chip, .switch, a.btn, label.btn, '
+    + '.stat-chip, .toggle';
+  document.addEventListener('pointerdown', (e) => {
+    const t = (e.target && e.target.closest) ? e.target.closest(_TAP_SEL) : null;
+    if (!t || t.disabled || t.getAttribute('aria-disabled') === 'true') return;
+    haptic('light');
+  }, { passive: true, capture: true });
 
   // ─── Empty state ──────────────────────────────────
   // Returns a shadcn-style empty-state HTML string. `action` (optional) is
