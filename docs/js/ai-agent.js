@@ -426,7 +426,7 @@ window.AIAgent = (function () {
 
   // ─── System prompt (TODAY_JST injected each request) ─
   function systemPrompt() {
-    const today = new Date(Date.now() + (new Date().getTimezoneOffset() + 540) * 60000).toISOString().slice(0, 10);
+    const today = new Date(Date.now() + 540 * 60000).toISOString().slice(0, 10);
     return `Bạn là OT Coach — trợ lý AI nội bộ của Vu Cao Tan (TanVC, EmpID 8883) tại FJP.
 Mục tiêu: giúp Tan quản lý chấm công DokoKin, tối ưu OT, hiểu lương net.
 
@@ -739,7 +739,7 @@ Hôm nay (JST): ${today}.`;
 
   // ─── Contextual suggestion chips (A1) ───────────────
   function _getJSTNow() {
-    return new Date(Date.now() + (new Date().getTimezoneOffset() + 540) * 60000);
+    return new Date(Date.now() + 540 * 60000);
   }
   function _renderContextualChips() {
     const grid = document.getElementById('aiSuggestions');

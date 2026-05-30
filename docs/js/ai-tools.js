@@ -12,11 +12,17 @@
   // ─── Helpers ─────────────────────────────────────────
   const JST_OFFSET_MIN = 9 * 60;
   function jstNow() {
-    const d = new Date();
-    return new Date(d.getTime() + (d.getTimezoneOffset() + JST_OFFSET_MIN) * 60000);
+    // UTC fields of the returned Date represent JST wall-clock time,
+    // independent of the host machine's timezone.
+    return new Date(Date.now() + JST_OFFSET_MIN * 60000);
   }
   function todayJST() { return jstNow().toISOString().slice(0, 10); }
   function currentMonthJST() { return jstNow().toISOString().slice(0, 7); }
+  function jstDateOf(iso) {
+    const ms = new Date(iso).getTime();
+    if (isNaN(ms)) return null;
+    return new Date(ms + JST_OFFSET_MIN * 60000).toISOString().slice(0, 10);
+  }
   function inMonth(dateStr, monthYYYYMM) {
     return typeof dateStr === 'string' && dateStr.slice(0, 7) === monthYYYYMM;
   }
@@ -39,7 +45,6 @@
   // True DokoKin state is server-side only; this is the closest proxy.
   async function exec_get_today_status() {
     const today = todayJST();
-    const todayPrefix = today;
     const out = { date_jst: today, checkin: null, checkout: null, source: 'workflow_runs' };
     if (typeof apiFetch !== 'function' || typeof WORKFLOWS === 'undefined') {
       return { ...out, error: 'apiFetch/WORKFLOWS not loaded' };
@@ -50,10 +55,7 @@
         const data = await apiFetch(`/repos/${OWNER}/${REPO}/actions/workflows/${wfFile}/runs?per_page=10`);
         const runs = (data.workflow_runs || []).filter(r => {
           const t = r.run_started_at || r.created_at;
-          return t && t.startsWith(todayPrefix.slice(0, 4)) && (
-            // server is UTC; today JST might span 2 UTC days. Be inclusive.
-            new Date(t).getTime() >= new Date(today + 'T00:00:00+09:00').getTime() - 3600000
-          );
+          return t && jstDateOf(t) === today;
         });
         const latest = runs[0];
         if (latest) {
