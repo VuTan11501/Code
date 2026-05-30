@@ -491,21 +491,6 @@ function renderOtCalendar() {
     const totalH = ots.reduce((s, o) => s + (o.hours || 0), 0);
     const hasConflict = ots.some(o => detectConflict(o).hasConflict);
     if (hasConflict) classes.push('has-conflict');
-    let click;
-    if (isPastMonth) {
-      click = ots.length
-        ? `toast('📅 ${dateStr}: ${ots.length} OT entr${ots.length === 1 ? 'y' : 'ies'} (past month, view only)', 'info')`
-        : `toast('📅 Past month — view only', 'info')`;
-    } else {
-      if (ots.length) {
-        // Day already has OT → edit the first one (use table or Add button for a 2nd entry)
-        click = `openOtForm(null, '${ots[0].id}')`;
-      } else {
-        click = inWindow
-          ? `openOtForm('${dateStr}')`
-          : `_showOutOfWindowToast('${dateStr}')`;
-      }
-    }
     const label = `${dateStr}${ots.length ? `, ${ots.length} OT` : ''}${!inWindow && !ots.length ? ' (không thể tạo)' : ''}`;
     html += `<div class="${classes.join(' ')}" data-date="${dateStr}" role="button" tabindex="0" aria-label="${label}" aria-disabled="${!inWindow && !ots.length}">`;
     html += `<div class="ot-cell-num">${d}</div>`;
@@ -521,12 +506,17 @@ function renderOtCalendar() {
   }
   html += '</div>';
   grid.innerHTML = html;
-  // Attach tap + long-press handlers via delegation
-  _otCalendarAttachHandlers(grid, byDate);
+  // Stash the date→OT map and attach delegated handlers exactly once. Re-running
+  // this on every render previously stacked a new set of listeners each time,
+  // firing one toast per accumulated listener (the "9 toasts" bug).
+  grid._otByDate = byDate;
+  _otCalendarAttachHandlers(grid);
 }
 
 // Long-press + tap + contextmenu delegation for calendar cells
-function _otCalendarAttachHandlers(grid, byDate) {
+function _otCalendarAttachHandlers(grid) {
+  if (grid._otHandlersAttached) return;   // idempotent — listeners read grid._otByDate live
+  grid._otHandlersAttached = true;
   let lpTimer = null;
   let lpFired = false;
   const LONG_PRESS_MS = 500;
@@ -536,7 +526,7 @@ function _otCalendarAttachHandlers(grid, byDate) {
     if (typeof UIKit !== 'undefined' && typeof UIKit.haptic === 'function') UIKit.haptic('medium');
     const dateStr = cell.dataset.date;
     if (!dateStr) return;
-    const ots = byDate[dateStr] || [];
+    const ots = (grid._otByDate || {})[dateStr] || [];
     const inWindow = _isDateInWindow(dateStr);
     const isPastMonth = _isViewMonthPast();
     const actions = [];
@@ -568,14 +558,14 @@ function _otCalendarAttachHandlers(grid, byDate) {
     if (lpFired) { e.preventDefault(); return; }
     // Normal tap
     const cell = e.target.closest('.ot-cell:not(.ot-cell-empty)');
-    if (cell) _otCellTap(cell, byDate);
+    if (cell) _otCellTap(cell, grid._otByDate || {});
   });
   grid.addEventListener('touchcancel', cancelLp, { passive: true });
 
   // Desktop: click = tap, contextmenu = long-press
   grid.addEventListener('click', (e) => {
     const cell = e.target.closest('.ot-cell:not(.ot-cell-empty)');
-    if (cell) _otCellTap(cell, byDate);
+    if (cell) _otCellTap(cell, grid._otByDate || {});
   });
   grid.addEventListener('contextmenu', (e) => {
     const cell = e.target.closest('.ot-cell:not(.ot-cell-empty)');
