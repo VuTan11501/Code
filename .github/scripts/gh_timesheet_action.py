@@ -264,6 +264,142 @@ def build_summary(obj, account, year, month):
     return "\n".join(lines)
 
 
+def _esc(v):
+    return str(v).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def build_timesheet_html(obj, account, year, month, action, badge, blocked_reason=None):
+    """shadcn/ui dark-themed HTML email — matches gh_checkin / gh_ot_creator."""
+    BG, CARD, BORDER = "#0a0a0a", "#0f0f0f", "#262626"
+    FG, MUTED, MUTED_BG = "#fafafa", "#a3a3a3", "#171717"
+    accents = {
+        "success": {"bg": "rgba(34,197,94,0.12)", "fg": "#4ade80", "border": "rgba(34,197,94,0.25)"},
+        "info":    {"bg": "rgba(59,130,246,0.12)", "fg": "#60a5fa", "border": "rgba(59,130,246,0.25)"},
+        "warning": {"bg": "rgba(234,179,8,0.12)",  "fg": "#facc15", "border": "rgba(234,179,8,0.25)"},
+        "error":   {"bg": "rgba(239,68,68,0.12)",  "fg": "#f87171", "border": "rgba(239,68,68,0.25)"},
+    }
+    if badge.startswith("✅"):
+        status = "success"
+    elif badge.startswith("🧮"):
+        status = "info"
+    elif badge.startswith("⛔"):
+        status = "warning"
+    else:
+        status = "error"
+    a = accents[status]
+
+    s = lambda k: _esc(obj.get(k) or "")
+    gross, _parts = rough_ot_gross(obj)
+    status_txt = s("statusDisplay") or _esc(obj.get("status"))
+    actual = s("displayTotalActualWorkingTime") or "—"
+    ot_req = s("displayOTRequestHours") or "—"
+    ot_total = s("displayTotalOTHours") or s("displayOvertimeHours") or "—"
+    badge_clean = _esc(badge)
+
+    def row(k, v, mono=False, accent=None):
+        vcol = accent or FG
+        vstyle = (f"color:{vcol};font-size:13px;"
+                  + ("font-family:ui-monospace,SFMono-Regular,Consolas,monospace;" if mono else ""))
+        return (f'<tr><td style="padding:10px 0;color:{MUTED};font-size:12px;width:120px;'
+                f'border-bottom:1px solid {BORDER};">{k}</td>'
+                f'<td style="padding:10px 0;{vstyle}border-bottom:1px solid {BORDER};text-align:right;">{v}</td></tr>')
+
+    def tile(label, value):
+        return (f'<td width="50%" style="padding:0 4px;">'
+                f'<div style="background:{MUTED_BG};border:1px solid {BORDER};border-radius:10px;padding:14px 16px;">'
+                f'<div style="color:{MUTED};font-size:11px;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">{label}</div>'
+                f'<div style="color:{FG};font-size:22px;font-weight:700;letter-spacing:-0.01em;'
+                f'font-family:ui-monospace,SFMono-Regular,Consolas,monospace;">{value}</div></div></td>')
+
+    rows = ""
+    rows += row("Status", status_txt or "—", mono=True)
+    rows += row("Std hours", f"{s('displayStandardWorkingHour') or '—'} "
+                f"<span style='color:{MUTED}'>→ {s('displayTotalWorkingHours') or '—'}</span>", mono=True)
+    rows += row("Recognized OT", ot_total, mono=True)
+    rows += row("OT request", f"{ot_req} <span style='color:{MUTED}'>/ cap 75:00</span>", mono=True)
+    gap = s("displayTotalWorkingTimeGap")
+    if gap:
+        rows += row("Gap (lost)", gap, mono=True, accent="#facc15")
+    rows += row("Est. OT gross", f"≈ ¥{gross:,}", mono=True, accent=a["fg"])
+
+    # OT breakdown sub-card
+    bd = [("Weekday", s("displayOvertimeHours")),
+          ("Sat / holiday", s("displayHolidayOvertimeHours")),
+          ("Sunday", s("displaySundayOvertimeHours")),
+          ("Night (subset +25%)", s("displayNightWorkingHours"))]
+    bd_rows = "".join(
+        f'<tr><td style="padding:6px 0;color:{MUTED};font-size:12px;">{k}</td>'
+        f'<td style="padding:6px 0;color:{FG};font-size:12px;text-align:right;'
+        f'font-family:ui-monospace,SFMono-Regular,Consolas,monospace;">{v or "—"}</td></tr>'
+        for k, v in bd)
+
+    blocked_html = ""
+    if blocked_reason:
+        bcol = a["fg"]
+        blocked_html = (f'<div style="background:{a["bg"]};border:1px solid {a["border"]};border-radius:8px;'
+                        f'padding:14px;margin-top:18px;">'
+                        f'<div style="color:{bcol};font-size:12px;font-weight:600;text-transform:uppercase;'
+                        f'letter-spacing:0.04em;margin-bottom:6px;">Note</div>'
+                        f'<div style="color:{FG};font-size:13px;line-height:1.5;">{_esc(blocked_reason)}</div></div>')
+
+    log_html = "<br>".join(_esc(x) for x in LOG_LINES)
+    date_str = datetime.now(JST).strftime("%Y-%m-%d %H:%M")
+
+    return f'''<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="color-scheme" content="dark"><meta name="supported-color-schemes" content="dark"></head>
+<body style="margin:0;padding:0;background:{BG};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:{FG};-webkit-font-smoothing:antialiased;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="{BG}" style="background:{BG};">
+<tr><td align="center" style="padding:24px 12px;">
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:520px;background:{CARD};border:1px solid {BORDER};border-radius:12px;overflow:hidden;">
+
+  <tr><td style="padding:24px 24px 0;">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+      <td style="background:{a['bg']};border:1px solid {a['border']};border-radius:9999px;padding:4px 12px;color:{a['fg']};font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;">{badge_clean}</td>
+    </tr></table>
+    <h1 style="margin:14px 0 4px;font-size:22px;font-weight:700;letter-spacing:-0.01em;color:{FG};">Timesheet {year}-{month:02d}</h1>
+    <p style="margin:0 0 4px;color:{MUTED};font-size:13px;">DokoKin monthly timesheet · {_esc(action)} · {_esc(account)}</p>
+  </td></tr>
+
+  <!-- Highlight tiles -->
+  <tr><td style="padding:18px 20px 0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
+      {tile("Actual worked", actual)}
+      {tile("OT request", ot_req)}
+    </tr></table>
+  </td></tr>
+
+  <tr><td style="padding:20px 24px 0;"><div style="height:1px;background:{BORDER};"></div></td></tr>
+
+  <tr><td style="padding:4px 24px 8px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">{rows}</table>
+  </td></tr>
+
+  <!-- OT breakdown -->
+  <tr><td style="padding:8px 24px 4px;">
+    <div style="background:{MUTED_BG};border:1px solid {BORDER};border-radius:8px;padding:12px 14px;">
+      <div style="color:{MUTED};font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px;">OT breakdown</div>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">{bd_rows}</table>
+    </div>
+    {blocked_html}
+  </td></tr>
+
+  <!-- Log (collapsed) -->
+  <tr><td style="padding:16px 24px 20px;">
+    <details style="background:{MUTED_BG};border:1px solid {BORDER};border-radius:8px;">
+      <summary style="cursor:pointer;padding:10px 14px;color:{MUTED};font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;">Execution log ({len(LOG_LINES)} lines)</summary>
+      <div style="padding:0 14px 14px;font:11px/1.7 ui-monospace,SFMono-Regular,Consolas,monospace;color:#d4d4d4;max-height:360px;overflow:auto;white-space:pre-wrap;word-break:break-word;">{log_html}</div>
+    </details>
+  </td></tr>
+
+  <tr><td style="padding:14px 24px;border-top:1px solid {BORDER};background:#080808;">
+    <div style="color:#737373;font-size:11px;letter-spacing:0.02em;">Timesheet Action · GitHub Actions · {date_str} JST · rough gross @ ¥{BASE_HOURLY_RATE}/h</div>
+  </td></tr>
+</table>
+
+</td></tr></table></body></html>'''
+
+
 def emit_token_rotation(new_refresh, refresh_token):
     if new_refresh == refresh_token:
         return
@@ -399,8 +535,15 @@ def main():
         body_lines.append(f"(summary unavailable: {e})")
     body_lines.append("\n── Log ──\n" + "\n".join(LOG_LINES))
     body = "\n".join(body_lines)
+    html_body = None
+    if isinstance(month_obj, dict):
+        try:
+            html_body = build_timesheet_html(
+                month_obj, account, year, month, action, badge, blocked_reason)
+        except Exception as e:
+            log(f"⚠️ html email build failed (sending plain): {e}")
     try:
-        send_email(subject, body)
+        send_email(subject, body, html=html_body)
     except Exception as e:
         log(f"⚠️ email failed: {e}")
 
