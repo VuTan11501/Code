@@ -212,7 +212,7 @@ function renderCardPicker() {
     </div>
   `;
   footer.innerHTML = `
-    <button class="btn sm btn-outline" onclick="resetCardVisibility()" data-tooltip="Show only Auto Checkin / Checkout / Request OT">${ICON('undo', 12)} Reset to defaults</button>
+    <button class="btn btn-outline sm" onclick="resetCardVisibility()" data-tooltip="Show only Auto Checkin / Checkout / Request OT">${ICON('undo', 12)} Reset to defaults</button>
     <button class="btn sm primary" onclick="closeCardPicker()">Done</button>
   `;
 }
@@ -238,9 +238,9 @@ function renderInfraToggle() {
   const hasCustomOrder = !!localStorage.getItem(CARD_ORDER_KEY);
   bar.innerHTML = `
     <span class="dash-infra-label">Showing <strong>${visibleCount}</strong> / ${WORKFLOWS_ALL.length} workflows</span>
-    ${hasCustomOrder ? `<button class="btn sm btn-outline" onclick="resetCardOrder()" data-tooltip="Restore default card order">${ICON('undo', 12)} Reset order</button>` : ''}
+    ${hasCustomOrder ? `<button class="btn btn-outline sm" onclick="resetCardOrder()" data-tooltip="Restore default card order">${ICON('undo', 12)} Reset order</button>` : ''}
     <button type="button"
-            class="btn sm"
+            class="btn btn-outline sm"
             onclick="openCardPicker()"
             data-tooltip="Choose which workflows appear on the dashboard">
       ${ICON('settings', 12)} Customize
@@ -488,7 +488,7 @@ function renderWorkflowCard(wf, runs) {
   // D2: cancel button for running workflow
   let cancelHtml = '';
   if (isRunning && latest.id && typeof cancelWorkflowRun === 'function') {
-    cancelHtml = `<button class="btn btn-destructive sm" onclick="event.stopPropagation();cancelWorkflowRun(${latest.id})">✕ Cancel</button>`;
+    cancelHtml = `<button class="btn btn-outline sm danger-outline" onclick="event.stopPropagation();cancelWorkflowRun(${latest.id})">✕ Cancel</button>`;
   }
 
   return `
@@ -530,7 +530,7 @@ function renderWorkflowCard(wf, runs) {
         <div class="trigger-actions">
           <button class="btn primary sm" onclick="triggerWorkflow('${wf.file}', event)">▶ Trigger</button>
           ${cancelHtml}
-          <a class="btn sm" href="https://github.com/${OWNER}/${REPO}/actions/workflows/${wf.file}" target="_blank" rel="noopener noreferrer">View →</a>
+          <a class="btn btn-outline sm" href="https://github.com/${OWNER}/${REPO}/actions/workflows/${wf.file}" target="_blank" rel="noopener noreferrer">View →</a>
         </div>
       </div>
     </div>
@@ -697,7 +697,7 @@ async function loadRunJobs(runId, container, status) {
     let html = '';
     if (isRunning) {
       html += `<div class="logs-cancel-bar">
-        <button class="btn danger sm" onclick="cancelWorkflowRun(${runId})">⏹ Cancel this run</button>
+        <button class="btn btn-outline sm danger-outline" onclick="cancelWorkflowRun(${runId})">⏹ Cancel this run</button>
       </div>`;
     }
 

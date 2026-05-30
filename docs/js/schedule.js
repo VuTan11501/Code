@@ -656,7 +656,7 @@ function openPipActions(entryIdx, pipEl) {
 
   const toggleBtn = (isOnce && entry.dispatched)
     ? ''
-    : `<button class="btn sm" onclick="toggleScheduleEntryEnabled(${entryIdx}); closePipPopover();">${ICON(enabled ? 'pause' : 'play', 14)} ${enabled ? 'Disable' : 'Enable'}</button>`;
+    : `<button class="btn btn-outline sm" onclick="toggleScheduleEntryEnabled(${entryIdx}); closePipPopover();">${ICON(enabled ? 'pause' : 'play', 14)} ${enabled ? 'Disable' : 'Enable'}</button>`;
 
   const pop = document.createElement('div');
   pop.id = 'pipActionsPopover';
@@ -667,11 +667,11 @@ function openPipActions(entryIdx, pipEl) {
       <div class="pip-popover-sub text-muted">${subtitle}</div>
     </div>
     <div class="pip-popover-actions">
-      <button class="btn sm" onclick="runScheduledNow(${entryIdx})">${ICON('play', 14)} Run now</button>
-      <button class="btn sm" onclick="openEditSchedModal(${entryIdx}); closePipPopover();">${ICON('edit', 14)} Edit</button>
-      <button class="btn sm" onclick="duplicateScheduledRun(${entryIdx})">${ICON('copy', 14)} Duplicate</button>
+      <button class="btn btn-outline sm" onclick="runScheduledNow(${entryIdx})">${ICON('play', 14)} Run now</button>
+      <button class="btn btn-outline sm" onclick="openEditSchedModal(${entryIdx}); closePipPopover();">${ICON('edit', 14)} Edit</button>
+      <button class="btn btn-outline sm" onclick="duplicateScheduledRun(${entryIdx})">${ICON('copy', 14)} Duplicate</button>
       ${toggleBtn}
-      <button class="btn danger sm pip-action-wide" onclick="deleteScheduledRun(${entryIdx}); closePipPopover();">${ICON('trash', 14)} Delete</button>
+      <button class="btn btn-outline sm danger-outline pip-action-wide" onclick="deleteScheduledRun(${entryIdx}); closePipPopover();">${ICON('trash', 14)} Delete</button>
     </div>
   `;
   document.body.appendChild(pop);
@@ -1519,7 +1519,7 @@ function renderScheduledQueue(entries) {
       </div>
       <div class="sched-item-actions">
         <div class="${toggleCls}" role="switch" aria-checked="${enabled}" tabindex="0" onclick="toggleScheduleEntryEnabled(${i})" data-tooltip="${enabled ? 'Disable' : 'Enable'}"></div>
-        <button class="btn danger sm" onclick="deleteScheduledRun(${i})" data-tooltip="Delete">${ICON('trash', 14)}</button>
+        <button class="btn btn-outline sm danger-outline" onclick="deleteScheduledRun(${i})" data-tooltip="Delete">${ICON('trash', 14)}</button>
       </div>
     </div>`;
   }).join('');
@@ -2082,8 +2082,8 @@ function renderScheduleTable() {
       <td data-label="Status"><div class="flex items-center gap-2">${switchHtml}${statusBadge}</div></td>
       <td data-label="Created" class="text-muted-foreground text-xs">${created}</td>
       <td class="actions-cell"><div class="actions-cell">
-        <button class="btn sm" onclick="openEditSchedModal(${realIdx})" data-tooltip="Edit">${ICON('edit', 14)}</button>
-        <button class="btn danger sm" onclick="deleteScheduledRun(${realIdx})" data-tooltip="Delete">${ICON('trash', 14)}</button>
+        <button class="btn btn-outline sm" onclick="openEditSchedModal(${realIdx})" data-tooltip="Edit">${ICON('edit', 14)}</button>
+        <button class="btn btn-outline sm danger-outline" onclick="deleteScheduledRun(${realIdx})" data-tooltip="Delete">${ICON('trash', 14)}</button>
       </div></td>
     </tr>`;
   }).join('');

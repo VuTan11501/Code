@@ -395,7 +395,7 @@
         <nav role="navigation" aria-label="pagination" class="sched-pagination mt-3" id="schedulePagination"></nav>
         <div class="flex items-center justify-between mt-3 text-xs text-muted-foreground" id="tableFooter">
           <span id="tableCount">0 entries</span>
-          <button class="btn sm" id="schedRefreshBtn" onclick="withBtnSpinner('schedRefreshBtn', () => loadScheduledRuns(), 'Refreshing…')" data-tooltip="Refresh"><span data-icon="refresh" data-size="14"></span> Refresh</button>
+          <button class="btn btn-outline sm" id="schedRefreshBtn" onclick="withBtnSpinner('schedRefreshBtn', () => loadScheduledRuns(), 'Refreshing…')" data-tooltip="Refresh"><span data-icon="refresh" data-size="14"></span> Refresh</button>
         </div>
       </section>
     </div>
@@ -406,7 +406,7 @@
         <span class="flex items-center gap-2"><span data-icon="clock" data-size="16"></span> <span id="otMonthLabel">OT Planner</span></span>
         <div class="flex items-center gap-1">
           <button class="btn sm btn-ghost btn-icon" onclick="otNavMonth(-1)" aria-label="Previous month"><span data-icon="chevronLeft" data-size="16"></span></button>
-          <button class="btn sm" onclick="otGoToday()">Today</button>
+          <button class="btn btn-outline sm" onclick="otGoToday()">Today</button>
           <button class="btn sm btn-ghost btn-icon" onclick="otNavMonth(1)" aria-label="Next month"><span data-icon="chevronRight" data-size="16"></span></button>
         </div>
       </div>
@@ -450,8 +450,8 @@
         <div class="section-title text-sm font-medium text-muted-foreground mb-4 flex items-center justify-between gap-2 flex-wrap">
           <span class="flex items-center gap-2"><span data-icon="clipboard" data-size="16"></span> OT Requests</span>
           <div class="flex items-center gap-2 ot-actions-bar">
-            <button id="otOptBtn" class="btn sm ot-action-btn" onclick="openOtOptimizer()" data-tooltip="Optimize" aria-label="Optimize"><span data-icon="target" data-size="14"></span><span class="btn-label"> Optimize</span></button>
-            <button id="otTplBtn" class="btn sm ot-action-btn" onclick="openOtTemplateManager()" data-tooltip="Templates" aria-label="Templates"><span data-icon="list" data-size="14"></span><span class="btn-label"> Templates</span></button>
+            <button id="otOptBtn" class="btn btn-outline sm ot-action-btn" onclick="openOtOptimizer()" data-tooltip="Optimize" aria-label="Optimize"><span data-icon="target" data-size="14"></span><span class="btn-label"> Optimize</span></button>
+            <button id="otTplBtn" class="btn btn-outline sm ot-action-btn" onclick="openOtTemplateManager()" data-tooltip="Templates" aria-label="Templates"><span data-icon="list" data-size="14"></span><span class="btn-label"> Templates</span></button>
             <button id="otAddBtn" class="btn sm primary ot-action-btn" onclick="openOtForm()" data-tooltip="Add OT" aria-label="Add OT"><span data-icon="plus" data-size="14"></span><span class="btn-label"> Add OT</span></button>
           </div>
         </div>
@@ -479,8 +479,8 @@
         <div class="flex items-center justify-between mt-3 text-xs text-muted-foreground">
           <span id="otTableCount">0 entries</span>
           <div class="flex items-center gap-2">
-            <button id="otSyncBtn" class="btn sm" onclick="syncOtWithDokoKin()" data-tooltip="Trigger Auto OT Creator now (~60–90s)"><span data-icon="sparkles" data-size="14"></span> Sync DokoKin</button>
-            <button id="otRefreshBtn" class="btn sm" onclick="refreshOtData()" data-tooltip="Refresh from Gist"><span data-icon="refresh" data-size="14"></span> Refresh</button>
+            <button id="otSyncBtn" class="btn btn-outline sm" onclick="syncOtWithDokoKin()" data-tooltip="Trigger Auto OT Creator now (~60–90s)"><span data-icon="sparkles" data-size="14"></span> Sync DokoKin</button>
+            <button id="otRefreshBtn" class="btn btn-outline sm" onclick="refreshOtData()" data-tooltip="Refresh from Gist"><span data-icon="refresh" data-size="14"></span> Refresh</button>
           </div>
         </div>
       </section>
@@ -492,7 +492,7 @@
         <span class="flex items-center gap-2"><span data-icon="hourglass" data-size="16"></span> <span id="tsMonthLabel">Timesheet</span></span>
         <div class="flex items-center gap-1">
           <button class="btn sm btn-ghost btn-icon" onclick="tsNavMonth(-1)" aria-label="Previous month"><span data-icon="chevronLeft" data-size="16"></span></button>
-          <button class="btn sm" onclick="tsGoToday()">Today</button>
+          <button class="btn btn-outline sm" onclick="tsGoToday()">Today</button>
           <button class="btn sm btn-ghost btn-icon" onclick="tsNavMonth(1)" aria-label="Next month"><span data-icon="chevronRight" data-size="16"></span></button>
         </div>
       </div>
@@ -512,9 +512,9 @@
           <span class="flex items-center gap-2"><span data-icon="list" data-size="16"></span> Daily detail</span>
           <div class="flex items-center gap-2">
             <span id="tsUpdatedAt" class="text-xs text-muted-foreground"></span>
-            <button id="tsSyncBtn" class="btn sm" onclick="syncTimesheetFromDokoKin()" data-tooltip="Trigger Timesheet Fetch workflow (~60s)"><span data-icon="sparkles" data-size="14"></span> Sync DokoKin</button>
-            <button id="tsSyncPayslipBtn" class="btn sm" onclick="syncPayslipFromFJP()" data-tooltip="Re-fetch payslip for the currently-viewed work month from FJP (~30s)"><span data-icon="wallet" data-size="14"></span> Sync Payslip</button>
-            <button id="tsRefreshBtn" class="btn sm" onclick="withBtnSpinner('tsRefreshBtn', () => loadTimesheetData({refresh:true}), 'Refreshing…')" data-tooltip="Refresh from Gist"><span data-icon="refresh" data-size="14"></span> Refresh</button>
+            <button id="tsSyncBtn" class="btn btn-outline sm" onclick="syncTimesheetFromDokoKin()" data-tooltip="Trigger Timesheet Fetch workflow (~60s)"><span data-icon="sparkles" data-size="14"></span> Sync DokoKin</button>
+            <button id="tsSyncPayslipBtn" class="btn btn-outline sm" onclick="syncPayslipFromFJP()" data-tooltip="Re-fetch payslip for the currently-viewed work month from FJP (~30s)"><span data-icon="wallet" data-size="14"></span> Sync Payslip</button>
+            <button id="tsRefreshBtn" class="btn btn-outline sm" onclick="withBtnSpinner('tsRefreshBtn', () => loadTimesheetData({refresh:true}), 'Refreshing…')" data-tooltip="Refresh from Gist"><span data-icon="refresh" data-size="14"></span> Refresh</button>
           </div>
         </div>
         <div class="sched-table-wrap overflow-x-auto rounded-lg border border-border">
@@ -1369,7 +1369,7 @@ wrangler login</pre>
      Source files live in docs/js/* for development; the bundle is what ships.
      To work on the raw source instead, comment the line below and re-enable
      the individual <script defer src="js/X.js"> tags (see git history). -->
-<script defer src="dist/app.bundle.min.js?v=68"></script>
+<script defer src="dist/app.bundle.min.js?v=69"></script>
 <!-- AI Proposal confirmation modal (Phase 3) -->
 <div id="aiProposalModal" class="proposal-modal" role="dialog" aria-modal="true" aria-labelledby="aiProposalTitle" hidden aria-hidden="true">
   <div class="proposal-modal-backdrop" onclick="AIProposals.closeModal()"></div>

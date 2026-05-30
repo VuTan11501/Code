@@ -690,7 +690,7 @@ function renderOtList() {
         <div class="text-sm mb-4">Plan a new OT block or pull existing ones from DokoKin.</div>
         <div class="flex gap-2 justify-center flex-wrap">
           <button class="btn primary sm" onclick="openOtForm && openOtForm()"><span data-icon="plus" data-size="14"></span> Add OT</button>
-          <button class="btn sm" onclick="syncOtWithDokoKin && syncOtWithDokoKin()"><span data-icon="sparkles" data-size="14"></span> Sync DokoKin</button>
+          <button class="btn btn-outline sm" onclick="syncOtWithDokoKin && syncOtWithDokoKin()"><span data-icon="sparkles" data-size="14"></span> Sync DokoKin</button>
         </div>
       </td></tr>`;
     if (typeof renderIcons === 'function') renderIcons();
@@ -806,7 +806,7 @@ function _renderOtRow(ot, idx, isPast) {
     : `<span class="tooltip-trigger" tabindex="0" data-tooltip="${_esc(reasonRaw)}" aria-label="${_esc(reasonRaw)}">${_esc(reasonRaw.slice(0, 30))}…</span>`;
 
   const fixBtn = (!isPast && conf.canAutoFix && !fixed)
-    ? `<button class="btn sm" style="color:var(--orange);border-color:rgba(249,115,22,0.32)" onclick="autoFixOtConflict('${ot.id}')" data-tooltip="Auto-fix conflict">${ICON('sparkles', 14)}</button>`
+    ? `<button class="btn btn-outline sm" style="color:var(--orange);border-color:rgba(249,115,22,0.32)" onclick="autoFixOtConflict('${ot.id}')" data-tooltip="Auto-fix conflict">${ICON('sparkles', 14)}</button>`
     : '';
 
   const delTip = isPast
@@ -816,8 +816,8 @@ function _renderOtRow(ot, idx, isPast) {
     : 'Delete';
   const isPastMonth = _isPastMonth(ot.date);
   const pastDelBtn = isPastMonth
-    ? `<button class="btn danger sm" disabled aria-disabled="true" data-tooltip="Tháng trước — chỉ xem, không thể xoá">${ICON('trash', 14)}</button>`
-    : `<button class="btn danger sm" onclick="deleteOtRequest('${ot.id}')" data-tooltip="${_esc(delTip)}">${ICON('trash', 14)}</button>`;
+    ? `<button class="btn btn-outline sm danger-outline" disabled aria-disabled="true" data-tooltip="Tháng trước — chỉ xem, không thể xoá">${ICON('trash', 14)}</button>`
+    : `<button class="btn btn-outline sm danger-outline" onclick="deleteOtRequest('${ot.id}')" data-tooltip="${_esc(delTip)}">${ICON('trash', 14)}</button>`;
   const actionsCell = isPast
     ? `<div class="actions-cell">
         <span class="badge-readonly" data-tooltip="${isPastMonth ? 'Tháng trước — chỉ xem' : 'Past — view only'}">${ICON('eye', 14)}</span>
@@ -825,8 +825,8 @@ function _renderOtRow(ot, idx, isPast) {
       </div>`
     : `<div class="actions-cell">
         ${fixBtn}
-        <button class="btn sm" onclick="openOtForm(null, '${ot.id}')" data-tooltip="Edit">${ICON('edit', 14)}</button>
-        <button class="btn danger sm" onclick="deleteOtRequest('${ot.id}')" data-tooltip="Delete">${ICON('trash', 14)}</button>
+        <button class="btn btn-outline sm" onclick="openOtForm(null, '${ot.id}')" data-tooltip="Edit">${ICON('edit', 14)}</button>
+        <button class="btn btn-outline sm danger-outline" onclick="deleteOtRequest('${ot.id}')" data-tooltip="Delete">${ICON('trash', 14)}</button>
       </div>`;
 
   return `<tr${isPast ? ' class="opacity-60"' : ''}>
@@ -1782,7 +1782,7 @@ function renderOtTemplateList() {
       ? '<span class="status-badge status-info" data-tooltip="Built-in (read-only)">built-in</span>'
       : '<span class="status-badge status-success">custom</span>';
     const actions = t.builtin ? '' : `
-      <button class="btn sm btn-ghost btn-icon" onclick="deleteOtTemplate('${_esc(t.id)}')" data-tooltip="Delete"><span data-icon="trash" data-size="13"></span></button>
+      <button class="btn btn-outline sm danger-outline" onclick="deleteOtTemplate('${_esc(t.id)}')" data-tooltip="Delete"><span data-icon="trash" data-size="13"></span></button>
     `;
     html += `
       <div class="ot-template-row">
