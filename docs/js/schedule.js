@@ -1289,29 +1289,6 @@ async function clientSideDispatchOverdue(entries) {
   return dispatched > 0;
 }
 
-function renderScheduleQueueChips() {
-  const container = document.getElementById('schedQueueChips');
-  if (!container) return;
-  const chips = [
-    { key: 'all', label: 'Tất cả' },
-    { key: 'once', label: 'Một lần' },
-    { key: 'recurring', label: 'Định kỳ' },
-    { key: 'history', label: 'Lịch sử' },
-  ];
-  container.innerHTML = chips.map(c =>
-    `<button class="filter-chip${schedQueueFilter === c.key ? ' is-active' : ''}" data-filter="${c.key}">${c.label}</button>`
-  ).join('');
-  container.onclick = (ev) => {
-    const chip = ev.target.closest('[data-filter]');
-    if (!chip) return;
-    const key = chip.dataset.filter;
-    if (key === schedQueueFilter) return;
-    schedQueueFilter = key;
-    renderScheduleQueueChips();
-    if (scheduleTableData) renderScheduledQueue(scheduleTableData);
-  };
-}
-
 function collectConflictIds(entries) {
   const conflictIds = new Set();
   if (!entries || entries.length < 2) return conflictIds;
@@ -1363,9 +1340,6 @@ function scrollToScheduleForm() {
 function renderScheduledQueue(entries) {
   // Store data for table (full history)
   scheduleTableData = entries;
-
-  // Render filter chips
-  renderScheduleQueueChips();
 
   // Detect conflicts
   const conflictIds = collectConflictIds(entries);
