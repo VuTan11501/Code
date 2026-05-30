@@ -388,15 +388,15 @@
 
     <!-- PAGE: OT PLANNER -->
     <div class="page" id="page-ot" role="tabpanel" aria-labelledby="tab-ot">
-      <section aria-label="OT Calendar">
-        <div class="section-title month-nav-sticky text-sm font-medium text-muted-foreground mb-4 flex items-center justify-between gap-2">
-          <span class="flex items-center gap-2"><span data-icon="clock" data-size="16"></span> <span id="otMonthLabel">OT Planner</span></span>
-          <div class="flex items-center gap-1">
-            <button class="btn sm btn-ghost btn-icon" onclick="otNavMonth(-1)" aria-label="Previous month"><span data-icon="chevronLeft" data-size="16"></span></button>
-            <button class="btn sm" onclick="otGoToday()">Today</button>
-            <button class="btn sm btn-ghost btn-icon" onclick="otNavMonth(1)" aria-label="Next month"><span data-icon="chevronRight" data-size="16"></span></button>
-          </div>
+      <div class="section-title month-nav-sticky text-sm font-medium text-muted-foreground mb-4 flex items-center justify-between gap-2">
+        <span class="flex items-center gap-2"><span data-icon="clock" data-size="16"></span> <span id="otMonthLabel">OT Planner</span></span>
+        <div class="flex items-center gap-1">
+          <button class="btn sm btn-ghost btn-icon" onclick="otNavMonth(-1)" aria-label="Previous month"><span data-icon="chevronLeft" data-size="16"></span></button>
+          <button class="btn sm" onclick="otGoToday()">Today</button>
+          <button class="btn sm btn-ghost btn-icon" onclick="otNavMonth(1)" aria-label="Next month"><span data-icon="chevronRight" data-size="16"></span></button>
         </div>
+      </div>
+      <section aria-label="OT Calendar">
         <div id="otStats" class="schedule-stats ot-stats">
           <div class="skeleton" style="height:28px;width:80px;border-radius:var(--radius-full)"></div>
           <div class="skeleton" style="height:28px;width:100px;border-radius:var(--radius-full)"></div>
@@ -474,15 +474,15 @@
 
     <!-- PAGE: TIMESHEET -->
     <div class="page" id="page-timesheet" role="tabpanel" aria-labelledby="tab-timesheet">
-      <section aria-label="Timesheet month summary">
-        <div class="section-title month-nav-sticky text-sm font-medium text-muted-foreground mb-4 flex items-center justify-between gap-2">
-          <span class="flex items-center gap-2"><span data-icon="hourglass" data-size="16"></span> <span id="tsMonthLabel">Timesheet</span></span>
-          <div class="flex items-center gap-1">
-            <button class="btn sm btn-ghost btn-icon" onclick="tsNavMonth(-1)" aria-label="Previous month"><span data-icon="chevronLeft" data-size="16"></span></button>
-            <button class="btn sm" onclick="tsGoToday()">Today</button>
-            <button class="btn sm btn-ghost btn-icon" onclick="tsNavMonth(1)" aria-label="Next month"><span data-icon="chevronRight" data-size="16"></span></button>
-          </div>
+      <div class="section-title month-nav-sticky text-sm font-medium text-muted-foreground mb-4 flex items-center justify-between gap-2">
+        <span class="flex items-center gap-2"><span data-icon="hourglass" data-size="16"></span> <span id="tsMonthLabel">Timesheet</span></span>
+        <div class="flex items-center gap-1">
+          <button class="btn sm btn-ghost btn-icon" onclick="tsNavMonth(-1)" aria-label="Previous month"><span data-icon="chevronLeft" data-size="16"></span></button>
+          <button class="btn sm" onclick="tsGoToday()">Today</button>
+          <button class="btn sm btn-ghost btn-icon" onclick="tsNavMonth(1)" aria-label="Next month"><span data-icon="chevronRight" data-size="16"></span></button>
         </div>
+      </div>
+      <section aria-label="Timesheet month summary">
         <div id="tsSummary" class="ts-summary">
           <div class="skeleton" style="height:48px;border-radius:var(--radius-md)"></div>
           <div class="skeleton" style="height:48px;border-radius:var(--radius-md)"></div>
