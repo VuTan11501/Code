@@ -301,6 +301,18 @@ _(source: checkpoint 015)_
 - **Fix**: renamed the Set version to `collectConflictIds` + updated its two callers (1371, 2005). Validator keeps the original name (its callers 1642/2233 already matched). Commit `dfcb768`.
 - **Prevention**: function names are GLOBAL across the whole bundle — never reuse a top-level `function foo` name in any `docs/js/*.js` file. Before adding a new top-level function, `grep -rn "function <name>" docs/js/` first. No linter catches this today (no ESLint `no-redeclare` in pipeline); a quick grep is the guard.
 
+### 3.33 Two writers touching the SAME gist within ~a minute trip a 403 secondary rate limit
+- **Symptom**: `gh_timesheet_fetch.py` failed on its Gist PATCH with a bare `❌ HTTP Error 403: Forbidden` (no body — the code swallowed it). The Timesheet **Action** run that wrote the same `timesheet-history.json` ~18s earlier SUCCEEDED. Timesheet Fetch normally succeeds — intermittent, not every run. `timesheet-history.json` was only ~298KB (well under size limits), so not a payload-size issue.
+- **Root cause**: GitHub's **secondary write-abuse limit** (separate bucket, not in `/rate_limit`, see §3.30) fires when two mutating requests hit the same gist in quick succession. The May-30 timesheet-calculate speedup made `gh_timesheet_action.py:push_month_to_gist` a SECOND writer of `timesheet-history.json` (previously only timesheet-fetch wrote it). So a calc-save (Action writes gist) followed by a manual Sync DokoKin (Fetch writes the same gist) = two writes within a minute → the second 403s. The PATCH never applied, so it was safe to retry.
+- **Fix**: `gist_safety.py:safe_patch_gist_file` — wrapped the single PATCH in a bounded retry loop (4 attempts) that retries on 403/429/5xx with `Retry-After`-aware exponential backoff (2/4/8/≤20s), and now READS + logs the real 403 body (was swallowed). Idempotent because the failed PATCH never applied. Distinct from §3.30's storm (a self-respawning loop) — this is a single bounded write that backs off, exactly the §3.30 prevention advice.
+- **Prevention**: any code path that adds a NEW writer to an existing gist file must assume it can collide with the existing writer → rely on `safe_patch_gist_file`'s retry. Don't have two workflows write the same gist file on the same user action if avoidable. A 403 on gist PATCH with healthy `core.remaining` = secondary limit → back off + retry, never tight-loop. Always read `HTTPError.read()` to surface GitHub's real message before re-raising.
+
+### 3.34 Regenerating package-lock.json on Windows prunes Linux-needed cross-platform optional deps
+- **Symptom**: `Deploy to GitHub Pages` failed at `npm ci` with `Missing: @emnapi/core@1.10.0 from lock file` / `@emnapi/runtime@1.10.0`. Had just regenerated `package-lock.json` (on Windows) to add a `madge` devDependency that an earlier commit added to `package.json` without updating the lock. First `npm ci` failure was the madge drift; after regen, a SECOND failure surfaced the emnapi prune.
+- **Root cause**: `npm install --package-lock-only` on Windows computes the ideal tree for win32 and PRUNES wasm/optional transitive deps (`@emnapi/core`, `@emnapi/runtime` — `optional:true, peer:true`) that the win32 native binary path doesn't need but the Linux CI runner DOES. So a Windows-regenerated lock is missing entries `npm ci` on Linux requires. Recurring class — see prior commits `90e209f`, `b1a0337` ("regenerate package-lock to include @emnapi optional deps").
+- **Fix**: re-inserted the two `@emnapi/{core,runtime}` blocks (verbatim from the last good lock) before `@emnapi/wasi-threads` in `package-lock.json`; their referrers were untouched so the tree validates. Commit `e771bfe`. `npm ci` + `build:css` + `build:js` then pass.
+- **Prevention**: do NOT regenerate `package-lock.json` on Windows for this repo — it silently drops cross-platform optional deps. Either regen on Linux/CI, or after a Windows regen `git diff package-lock.json | grep emnapi` and restore any removed `@emnapi/*` (and other `optional:true` cross-platform) entries. Whoever edits `package.json` deps MUST regenerate the lock in the SAME commit.
+
 ---
 
 ## 4. Build & test commands
@@ -395,4 +407,4 @@ If any step fails, capture the workflow log via `pwsh scripts/fetch-run-logs.ps1
 
 ---
 
-_Last reviewed: 2026-05-31_
+_Last reviewed: 2026-05-30_

@@ -29,6 +29,7 @@ data loss into loud, actionable failures.
 """
 import json
 import hashlib
+import time
 import urllib.request
 import urllib.error
 from datetime import datetime, timezone, timedelta
@@ -259,17 +260,51 @@ def safe_patch_gist_file(pat: str, gist_id: str, filename: str,
         _log(f"📦 Snapshotting previous {filename} → {bak_name} "
              f"(sha={snapshot['sha']}, size={len(snapshot['content'])}B)")
 
-    # 4. Single atomic PATCH
+    # 4. Single atomic PATCH (with retry/backoff on GitHub's secondary rate
+    #    limit). Two writers touching the SAME gist within ~a minute (e.g. the
+    #    timesheet Action write + a timesheet Fetch) can trip a 403/429
+    #    "secondary rate limit" even though the PATCH is otherwise valid. The
+    #    request never applied, so retrying the identical body is safe.
     body = json.dumps({"files": files_payload}).encode()
-    req = urllib.request.Request(
-        f"https://api.github.com/gists/{gist_id}",
-        data=body, method="PATCH", headers={
-            "Authorization": f"Bearer {pat}",
-            "Accept": "application/vnd.github+json",
-            "Content-Type": "application/json",
-        })
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        return resp.status
+    url = f"https://api.github.com/gists/{gist_id}"
+    headers = {
+        "Authorization": f"Bearer {pat}",
+        "Accept": "application/vnd.github+json",
+        "Content-Type": "application/json",
+    }
+    max_attempts = 4
+    for attempt in range(1, max_attempts + 1):
+        req = urllib.request.Request(url, data=body, method="PATCH", headers=headers)
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                return resp.status
+        except urllib.error.HTTPError as e:
+            err_body = ""
+            try:
+                err_body = (e.read() or b"").decode(errors="replace")
+            except Exception:
+                pass
+            retryable = e.code in (403, 429) or 500 <= e.code < 600
+            if retryable and attempt < max_attempts:
+                # Honor Retry-After when present; else exponential backoff.
+                ra = e.headers.get("Retry-After") if e.headers else None
+                try:
+                    wait = int(ra) if ra else 0
+                except (TypeError, ValueError):
+                    wait = 0
+                if wait <= 0:
+                    wait = min(2 ** attempt, 20)  # 2, 4, 8 …
+                snippet = err_body.strip().replace("\n", " ")[:160]
+                _log(f"⚠️ Gist PATCH HTTP {e.code} (attempt {attempt}/{max_attempts}) "
+                     f"— retrying in {wait}s · {snippet}")
+                time.sleep(wait)
+                continue
+            # Out of retries (or non-retryable) → surface the real reason.
+            snippet = err_body.strip().replace("\n", " ")[:300]
+            _log(f"❌ Gist PATCH HTTP {e.code} (final) · {snippet}")
+            raise
+    # Unreachable, but keep the type checker happy.
+    raise GistSafetyError("gist PATCH exhausted retries")
 
 
 def validate_ot_requests_shape(parsed) -> None:
