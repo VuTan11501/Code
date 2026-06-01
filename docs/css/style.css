@@ -508,12 +508,17 @@ textarea:focus-visible { outline: none; }
 .toast.success { border-color: rgba(34,197,94,0.4); background: color-mix(in srgb, var(--card), var(--green) 4%); }
 
 /* â”€â”€â”€ MODAL / DIALOG â”€â”€â”€ */
-body.modal-open { overflow: hidden; }
+html.modal-open,
+body.modal-open {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
 
 .modal-overlay, .dialog-overlay {
   position: fixed; inset: 0; background: rgba(0,0,0,0.8);
   backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
   z-index: 900; display: none; align-items: center; justify-content: center;
+  overscroll-behavior: contain;
   padding: 20px; animation: fadeIn var(--duration-fast);
 }
 .modal-overlay.open, .dialog-overlay.open { display: flex; }
