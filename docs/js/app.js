@@ -1582,56 +1582,14 @@ if (document.readyState === 'loading') {
 
 // ─── Body scroll-lock when any modal/dialog overlay is open ───
 (function initScrollLock() {
-  let lockApplied = false;
-  let lockScrollY = 0;
-
-  function applyLock() {
-    if (!document.body) return;
-    if (!lockApplied) {
-      lockApplied = true;
-      lockScrollY = window.scrollY || window.pageYOffset || 0;
-      document.body.dataset.modalLockY = String(lockScrollY);
-      document.body.style.position = 'fixed';
-      document.body.style.top = `-${lockScrollY}px`;
-      document.body.style.left = '0';
-      document.body.style.right = '0';
-      document.body.style.width = '100%';
-    }
-    document.body.classList.add('modal-open');
-    document.documentElement.classList.add('modal-open');
-  }
-
-  function releaseLock() {
-    if (!document.body) return;
-    if (!lockApplied) {
-      document.body.classList.remove('modal-open');
-      document.documentElement.classList.remove('modal-open');
-      return;
-    }
-    const restoreY = parseInt(document.body.dataset.modalLockY || '0', 10) || 0;
-    lockApplied = false;
-    document.body.style.position = '';
-    document.body.style.top = '';
-    document.body.style.left = '';
-    document.body.style.right = '';
-    document.body.style.width = '';
-    delete document.body.dataset.modalLockY;
-    document.body.classList.remove('modal-open');
-    document.documentElement.classList.remove('modal-open');
-    window.scrollTo(0, restoreY);
-  }
-
   function syncScrollLock() {
     const hasOpen = document.querySelector('.modal-overlay.open, .dialog-overlay.open, .spinner-overlay.open');
-    if (hasOpen) applyLock();
-    else releaseLock();
+    document.body.classList.toggle('modal-open', !!hasOpen);
   }
   const observer = new MutationObserver(syncScrollLock);
   observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'], subtree: true });
   // Also listen on DOMContentLoaded in case overlays exist at load
   document.addEventListener('DOMContentLoaded', syncScrollLock);
-  window.Modal = window.Modal || {};
-  window.Modal.syncBodyLock = syncScrollLock;
 })();
 
 // ─── Global tooltip portal (shadcn-style) ───

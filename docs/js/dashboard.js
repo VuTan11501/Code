@@ -1156,7 +1156,7 @@ async function updateNowStrip(allRuns) {
     const coRunTime = runTimeHint(coRun);
     const ciEta = nextRunEta(scheduledEntries, 'auto-checkin.yml');
     const coEta = nextRunEta(scheduledEntries, 'auto-checkout.yml');
-    const otFlowEta = nextRunEta(scheduledEntries, 'auto-ot-creator.yml');
+    const otEta = nextRunEta(scheduledEntries, 'auto-ot-creator.yml');
     const ciFlowRecorded = !ciFresh && ciRun && ciRun.conclusion === 'success' && !!ciRunTime;
     const coFlowRecorded = !coFresh && coRun && coRun.conclusion === 'success' && !!coRunTime;
 
@@ -1176,7 +1176,6 @@ async function updateNowStrip(allRuns) {
 
     // OT tonight — read from the same gist payload (resilient)
     let otCardAdded = false;
-    const nowMsForOt = Date.now();
     try {
       const otFile = gistData && gistData.files && gistData.files['ot-requests.json'];
       const otContent = otFile
@@ -1185,20 +1184,7 @@ async function updateNowStrip(allRuns) {
       if (otContent) {
         const parsed = JSON.parse(otContent);
         const otList = Array.isArray(parsed) ? parsed : (Array.isArray(parsed && parsed.requests) ? parsed.requests : []);
-        const toOtStartMs = (e) => {
-          if (!e || typeof e.date !== 'string' || typeof e.start !== 'string') return null;
-          const iso = `${e.date}T${String(e.start).slice(0, 5)}:00+09:00`;
-          const ms = new Date(iso).getTime();
-          return Number.isNaN(ms) ? null : ms;
-        };
-        let nextOt = null;
-        for (const e of otList) {
-          const ms = toOtStartMs(e);
-          if (!(ms >= nowMsForOt)) continue;
-          if (!nextOt || ms < nextOt.ms) nextOt = { ms, date: e.date, start: e.start };
-        }
         const todayOT = otList.find(e => e && e.date === todayJST);
-        const otEta = otFlowEta || (nextOt ? formatNextEta(nextOt.ms - nowMsForOt) : '');
         if (todayOT) {
           items.push(nowCard({
             icon: 'moon', label: 'OT', state: 'is-info',
@@ -1206,23 +1192,14 @@ async function updateNowStrip(allRuns) {
             sub: withEtaSub(todayOT.end ? `→ ${todayOT.end}` : 'Đã lên lịch', otEta),
           }));
           otCardAdded = true;
-        } else if (nextOt) {
-          const nextOtEta = formatNextEta(nextOt.ms - nowMsForOt);
-          const nextOtSub = nextOt.date === todayJST ? 'Đã lên lịch' : `Kế hoạch ${nextOt.date}`;
-          items.push(nowCard({
-            icon: 'moon', label: 'OT', state: 'is-pending',
-            val: nextOt.start || 'Tối nay',
-            sub: withEtaSub(nextOtSub, nextOtEta),
-          }));
-          otCardAdded = true;
         }
       }
     } catch (_) { /* OT parse failed — just omit */ }
-    if (!otCardAdded && otFlowEta) {
+    if (!otCardAdded && otEta) {
       items.push(nowCard({
         icon: 'moon', label: 'OT', state: 'is-pending',
         val: '—',
-        sub: otFlowEta,
+        sub: otEta,
       }));
     }
 

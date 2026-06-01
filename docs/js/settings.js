@@ -309,9 +309,7 @@ function openAiAuditModal() {
   if (!m) return;
   renderAiAuditModalBody();
   m.classList.add('open');
-  if (window.Modal && typeof window.Modal.syncBodyLock === 'function') {
-    window.Modal.syncBodyLock();
-  }
+  document.body.style.overflow = 'hidden';
   if (window.Modal && window.Modal.openTrapped) {
     _auditTrapHandle = window.Modal.openTrapped(m);
   }
@@ -321,9 +319,7 @@ function closeAiAuditModal() {
   const m = document.getElementById('aiAuditModal');
   if (!m) return;
   m.classList.remove('open');
-  if (window.Modal && typeof window.Modal.syncBodyLock === 'function') {
-    window.Modal.syncBodyLock();
-  }
+  document.body.style.overflow = '';
   if (_auditTrapHandle) { _auditTrapHandle.close(); _auditTrapHandle = null; }
 }
 
