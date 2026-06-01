@@ -46,7 +46,7 @@ jobs:
           NOTIFY_EMAIL: ${{ secrets.NOTIFY_EMAIL }}
         run: |
           python3 << 'EOF'
-          import json, os, sys, time, smtplib
+          import json, os, sys, time, smtplib, uuid
           from email.mime.text import MIMEText
           from datetime import datetime, timezone, timedelta
           import urllib.request
@@ -161,14 +161,43 @@ jobs:
                       locally_dispatched_ids.update(dispatched_ids_this_iter)
                   return ok
 
-              # Mutator merges OUR dispatch marks into whatever Gist currently holds.
-              # This is robust to concurrent edits (e.g. dashboard adding a new entry):
-              # we only flip `dispatched`/`last_run` on the ids we actually triggered,
-              # never overwriting fields owned by other writers.
-              marks = {e.get('id'): {'dispatched': e.get('dispatched'),
-                                     'last_run': e.get('last_run')}
-                       for e in updated_entries
-                       if e.get('id') and (e.get('dispatched') or e.get('last_run'))}
+              # Mutator merges OUR mark updates into whatever Gist currently holds.
+              # Besides dispatched/last_run, we also migrate legacy entries that
+              # have no `id` (older schema) by stamping generated ids. Without this,
+              # recurring/once entries with missing id cannot persist last_run/
+              # dispatched via CAS and get re-fired every loop.
+              def _entry_key(ent):
+                  et = ent.get('type', 'once')
+                  wf = ent.get('workflow', '')
+                  loc = ent.get('location', '')
+                  lat = ent.get('location_lat')
+                  lon = ent.get('location_lon')
+                  note = ent.get('note', '')
+                  if et == 'recurring':
+                      rec = ent.get('recurrence') or {}
+                      rec_key = json.dumps(rec, sort_keys=True, ensure_ascii=False)
+                      return f"rec|{wf}|{rec_key}|{loc}|{lat}|{lon}|{note}"
+                  run_at = ent.get('run_at') or ent.get('datetime') or ''
+                  return f"one|{wf}|{run_at}|{loc}|{lat}|{lon}|{note}"
+
+              marks_by_id = {}
+              marks_by_key = {}
+              for e in updated_entries:
+                  eid = e.get('id')
+                  if not eid:
+                      continue
+                  mark = {"id": eid}
+                  if e.get('dispatched') is not None:
+                      mark["dispatched"] = e.get('dispatched')
+                  if e.get('last_run'):
+                      mark["last_run"] = e.get('last_run')
+                  include_mark = ('dispatched' in mark) or ('last_run' in mark) or str(eid).startswith('legacy-')
+                  if not include_mark:
+                      continue
+                  marks_by_id[eid] = mark
+                  if str(eid).startswith('legacy-'):
+                      ek = _entry_key(e)
+                      marks_by_key.setdefault(ek, []).append(mark)
 
               def _mutator(current):
                   if not isinstance(current, list):
@@ -177,9 +206,18 @@ jobs:
                   out = []
                   for ent in current:
                       eid = ent.get('id')
-                      if eid in marks:
-                          m = marks[eid]
-                          if m.get('dispatched') is not None:
+                      m = marks_by_id.get(eid) if eid else None
+                      if m is None and not eid:
+                          # Legacy entry with no id in current gist: match by
+                          # structural key and consume one mark slot.
+                          ek = _entry_key(ent)
+                          bucket = marks_by_key.get(ek)
+                          if bucket:
+                              m = bucket.pop(0)
+                      if m:
+                          if m.get('id') and not ent.get('id'):
+                              ent['id'] = m['id']
+                          if 'dispatched' in m:
                               ent['dispatched'] = m['dispatched']
                           if m.get('last_run'):
                               ent['last_run'] = m['last_run']
@@ -272,6 +310,11 @@ jobs:
               changed = False
               dispatched_ids_this_iter = set()
               for entry in runs:
+                  # Back-compat migration: legacy entries could be missing `id`.
+                  # Generate one so CAS can persist marks and prevent re-dispatch.
+                  if not entry.get('id'):
+                      entry['id'] = f"legacy-{uuid.uuid4().hex[:12]}"
+                      changed = True
                   entry_type = entry.get('type', 'once')
                   entry_inputs = {}
                   if entry.get('location'):
