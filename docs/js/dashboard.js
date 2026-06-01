@@ -1035,21 +1035,42 @@ async function updateNowStrip(allRuns) {
     const ciRun = findTodayRun('auto-checkin.yml');
     const coRun = findTodayRun('auto-checkout.yml');
 
+    // Main gist keeps schedule/OT; timesheet may live in a separate shard gist.
     let gistData = null;
+    let tsGistData = null;
     try {
-      gistData = await apiFetch(`/gists/${GIST_ID}`);
+      const tsGistId = (typeof GIST_ID_TIMESHEET === 'string' && GIST_ID_TIMESHEET.trim())
+        ? GIST_ID_TIMESHEET
+        : GIST_ID;
+      if (tsGistId === GIST_ID) {
+        gistData = await apiFetch(`/gists/${GIST_ID}`);
+        tsGistData = gistData;
+      } else {
+        const [mainRes, tsRes] = await Promise.allSettled([
+          apiFetch(`/gists/${GIST_ID}`),
+          apiFetch(`/gists/${tsGistId}`),
+        ]);
+        gistData = mainRes.status === 'fulfilled' ? mainRes.value : null;
+        tsGistData = tsRes.status === 'fulfilled' ? tsRes.value : null;
+        if (!gistData) gistData = tsGistData;
+        if (!tsGistData) tsGistData = gistData;
+      }
     } catch (_) {
       gistData = null;
+      tsGistData = null;
     }
 
     let todayDetail = null;
+    let tsUpdatedAt = null;
     try {
-      const tsFile = gistData && gistData.files && gistData.files['timesheet-history.json'];
+      const tsFile = tsGistData && tsGistData.files && tsGistData.files['timesheet-history.json'];
       const tsContent = tsFile
         ? (window.readGistFile ? await window.readGistFile(tsFile) : (tsFile.content || ''))
         : '';
       if (tsContent) {
         const parsed = JSON.parse(tsContent);
+        tsUpdatedAt = parsed && parsed.updated_at ? new Date(parsed.updated_at) : null;
+        if (tsUpdatedAt && Number.isNaN(tsUpdatedAt.getTime())) tsUpdatedAt = null;
         const details = parsed && parsed.months && parsed.months[monthKey] && Array.isArray(parsed.months[monthKey].details)
           ? parsed.months[monthKey].details
           : [];
@@ -1061,13 +1082,21 @@ async function updateNowStrip(allRuns) {
 
     const ciRecorded = todayDetail && typeof todayDetail.in === 'string' ? todayDetail.in.trim() : '';
     const coRecorded = todayDetail && typeof todayDetail.out === 'string' ? todayDetail.out.trim() : '';
+    const staleAfterRun = (run) => {
+      if (!run || run.conclusion !== 'success' || !tsUpdatedAt) return false;
+      const runDone = new Date(run.updated_at || run.created_at);
+      if (Number.isNaN(runDone.getTime())) return false;
+      return runDone > tsUpdatedAt;
+    };
+    const ciFresh = !!ciRecorded && !staleAfterRun(ciRun);
+    const coFresh = !!coRecorded && !staleAfterRun(coRun);
 
-    items.push(ciRecorded
+    items.push(ciFresh
       ? nowCard({ icon: 'logIn', label: 'Checkin', state: 'is-ok', val: ciRecorded, sub: 'Ghi nhận DokoKin' })
       : nowCard({ icon: 'logIn', label: 'Checkin', state: 'is-pending', val: '—', sub: flowHint(ciRun, 'Chưa check-in') })
     );
 
-    items.push(coRecorded
+    items.push(coFresh
       ? nowCard({ icon: 'logOut', label: 'Checkout', state: 'is-ok', val: coRecorded, sub: 'Ghi nhận DokoKin' })
       : nowCard({ icon: 'logOut', label: 'Checkout', state: 'is-pending', val: '—', sub: flowHint(coRun, 'Chưa check-out') })
     );
