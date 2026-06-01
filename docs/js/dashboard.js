@@ -1046,6 +1046,42 @@ async function updateNowStrip(allRuns) {
       });
     }
 
+    function formatNextEta(diffMs) {
+      if (!(diffMs > 0)) return 'Lần tới sắp chạy';
+      const mins = Math.round(diffMs / 60000);
+      if (mins < 60) return `Lần tới sau ${Math.max(1, mins)}m`;
+      const h = Math.floor(mins / 60);
+      const m = mins % 60;
+      if (h < 24) return m ? `Lần tới sau ${h}h ${m}m` : `Lần tới sau ${h}h`;
+      const d = Math.floor(h / 24);
+      const hr = h % 24;
+      return hr ? `Lần tới sau ${d}d ${hr}h` : `Lần tới sau ${d}d`;
+    }
+
+    function nextRunEta(entries, workflowFile) {
+      if (!Array.isArray(entries) || !entries.length) return '';
+      const nowMs = Date.now();
+      const nowJST = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
+      let nextMs = Infinity;
+      for (const e of entries) {
+        if (!e || e.workflow !== workflowFile) continue;
+        let t = null;
+        if (typeof computeEntryNextFire === 'function') {
+          t = computeEntryNextFire(e, nowJST, nowMs);
+        } else if (e.type === 'once' && e.run_at && !e.dispatched && e.enabled !== false) {
+          const one = new Date(e.run_at).getTime();
+          t = Number.isNaN(one) ? null : one;
+        }
+        if (typeof t === 'number' && Number.isFinite(t) && t >= nowMs && t < nextMs) nextMs = t;
+      }
+      if (!Number.isFinite(nextMs)) return '';
+      return formatNextEta(nextMs - nowMs);
+    }
+
+    function withEtaSub(base, eta) {
+      return eta ? `${base} · ${eta}` : base;
+    }
+
     const ciRun = findTodayRun('auto-checkin.yml');
     const coRun = findTodayRun('auto-checkout.yml');
 
@@ -1076,6 +1112,7 @@ async function updateNowStrip(allRuns) {
 
     let todayDetail = null;
     let tsUpdatedAt = null;
+    let scheduledEntries = [];
     try {
       const tsFile = tsGistData && tsGistData.files && tsGistData.files['timesheet-history.json'];
       const tsContent = tsFile
@@ -1090,8 +1127,19 @@ async function updateNowStrip(allRuns) {
           : [];
         todayDetail = details.find(d => d && d.date === todayJST) || null;
       }
+      const schedFile = gistData && gistData.files && gistData.files['scheduled-runs.json'];
+      const schedContent = schedFile
+        ? (window.readGistFile ? await window.readGistFile(schedFile) : (schedFile.content || ''))
+        : '';
+      if (schedContent) {
+        const parsedSched = JSON.parse(schedContent);
+        scheduledEntries = Array.isArray(parsedSched)
+          ? parsedSched
+          : (Array.isArray(parsedSched && parsedSched.entries) ? parsedSched.entries : []);
+      }
     } catch (_) {
       todayDetail = null;
+      scheduledEntries = [];
     }
 
     const ciRecorded = todayDetail && typeof todayDetail.in === 'string' ? todayDetail.in.trim() : '';
@@ -1106,24 +1154,28 @@ async function updateNowStrip(allRuns) {
     const coFresh = !!coRecorded && !staleAfterRun(coRun);
     const ciRunTime = runTimeHint(ciRun);
     const coRunTime = runTimeHint(coRun);
+    const ciEta = nextRunEta(scheduledEntries, 'auto-checkin.yml');
+    const coEta = nextRunEta(scheduledEntries, 'auto-checkout.yml');
+    const otEta = nextRunEta(scheduledEntries, 'auto-ot-creator.yml');
     const ciFlowRecorded = !ciFresh && ciRun && ciRun.conclusion === 'success' && !!ciRunTime;
     const coFlowRecorded = !coFresh && coRun && coRun.conclusion === 'success' && !!coRunTime;
 
     items.push(ciFresh
-      ? nowCard({ icon: 'logIn', label: 'Checkin', state: 'is-ok', val: ciRecorded, sub: 'Ghi nhận DokoKin' })
+      ? nowCard({ icon: 'logIn', label: 'Checkin', state: 'is-ok', val: ciRecorded, sub: withEtaSub('Ghi nhận DokoKin', ciEta) })
       : ciFlowRecorded
-        ? nowCard({ icon: 'logIn', label: 'Checkin', state: 'is-ok', val: ciRunTime, sub: 'Ghi nhận DokoKin' })
-        : nowCard({ icon: 'logIn', label: 'Checkin', state: 'is-pending', val: ciRunTime || '—', sub: flowHint(ciRun, 'Chưa check-in') })
+        ? nowCard({ icon: 'logIn', label: 'Checkin', state: 'is-ok', val: ciRunTime, sub: withEtaSub('Ghi nhận DokoKin', ciEta) })
+        : nowCard({ icon: 'logIn', label: 'Checkin', state: 'is-pending', val: ciRunTime || '—', sub: withEtaSub(flowHint(ciRun, 'Chưa check-in'), ciEta) })
     );
 
     items.push(coFresh
-      ? nowCard({ icon: 'logOut', label: 'Checkout', state: 'is-ok', val: coRecorded, sub: 'Ghi nhận DokoKin' })
+      ? nowCard({ icon: 'logOut', label: 'Checkout', state: 'is-ok', val: coRecorded, sub: withEtaSub('Ghi nhận DokoKin', coEta) })
       : coFlowRecorded
-        ? nowCard({ icon: 'logOut', label: 'Checkout', state: 'is-ok', val: coRunTime, sub: 'Ghi nhận DokoKin' })
-        : nowCard({ icon: 'logOut', label: 'Checkout', state: 'is-pending', val: coRunTime || '—', sub: flowHint(coRun, 'Chưa check-out') })
+        ? nowCard({ icon: 'logOut', label: 'Checkout', state: 'is-ok', val: coRunTime, sub: withEtaSub('Ghi nhận DokoKin', coEta) })
+        : nowCard({ icon: 'logOut', label: 'Checkout', state: 'is-pending', val: coRunTime || '—', sub: withEtaSub(flowHint(coRun, 'Chưa check-out'), coEta) })
     );
 
     // OT tonight — read from the same gist payload (resilient)
+    let otCardAdded = false;
     try {
       const otFile = gistData && gistData.files && gistData.files['ot-requests.json'];
       const otContent = otFile
@@ -1137,11 +1189,19 @@ async function updateNowStrip(allRuns) {
           items.push(nowCard({
             icon: 'moon', label: 'OT', state: 'is-info',
             val: todayOT.start || 'Tối nay',
-            sub: todayOT.end ? `→ ${todayOT.end}` : 'Đã lên lịch',
+            sub: withEtaSub(todayOT.end ? `→ ${todayOT.end}` : 'Đã lên lịch', otEta),
           }));
+          otCardAdded = true;
         }
       }
     } catch (_) { /* OT parse failed — just omit */ }
+    if (!otCardAdded && otEta) {
+      items.push(nowCard({
+        icon: 'moon', label: 'OT', state: 'is-pending',
+        val: '—',
+        sub: otEta,
+      }));
+    }
 
     if (items.length > 0) {
       el.innerHTML = items.join('');
