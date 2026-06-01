@@ -12,13 +12,14 @@
 //   2. Route allowlist   — only the specific endpoints the dashboard
 //      actually uses are forwarded. Limits damage if the worker URL
 //      leaks (no `DELETE /repos/...` allowed, no arbitrary user repos).
-//   3. Gist allowlist    — only the configured GIST_ID is touchable.
+//   3. Gist allowlist    — only configured gist IDs are touchable.
 //   4. Read-only by default — POST/PATCH only allowed on safe routes.
 //
 // Setup:
 //   1. `npm install -g wrangler && wrangler login`
 //   2. `wrangler secret put GITHUB_PAT`   ← paste fine-grained PAT
 //   3. Edit `wrangler.toml`: set ALLOWED_ORIGIN, REPO_OWNER, REPO_NAME, GIST_ID
+//      (+ optional GIST_ID_TIMESHEET / GIST_ID_PAYSLIP shards)
 //   4. `wrangler deploy`
 //   5. Copy the worker URL → paste into Dashboard Settings → "Proxy URL"
 // ═══════════════════════════════════════════════════════════════════
@@ -30,7 +31,11 @@ const GITHUB_API = 'https://api.github.com';
 function buildRouteRules(env) {
   const owner = env.REPO_OWNER || '';
   const repo = env.REPO_NAME || '';
-  const gistId = env.GIST_ID || '';
+  const gistIds = [...new Set([
+    env.GIST_ID || '',
+    env.GIST_ID_TIMESHEET || '',
+    env.GIST_ID_PAYSLIP || '',
+  ].map((v) => String(v || '').trim()).filter(Boolean))];
   return [
     // Repo-scoped routes (only the configured repo) — used for workflow runs,
     // dispatches, artifacts, contents, etc.
@@ -38,9 +43,9 @@ function buildRouteRules(env) {
       test: (p) => owner && repo && p.startsWith(`/repos/${owner}/${repo}/`),
       methods: ['GET', 'HEAD', 'POST', 'PATCH', 'PUT'],
     },
-    // Gist read/write — only the configured Gist.
+    // Gist read/write — only configured gist IDs.
     {
-      test: (p) => gistId && (p === `/gists/${gistId}` || p.startsWith(`/gists/${gistId}/`)),
+      test: (p) => gistIds.some((id) => p === `/gists/${id}` || p.startsWith(`/gists/${id}/`)),
       methods: ['GET', 'HEAD', 'PATCH'],
     },
     // Identity-only — used to verify token validity in Settings.

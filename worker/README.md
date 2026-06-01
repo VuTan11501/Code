@@ -37,6 +37,7 @@ Mở `worker/wrangler.toml`, kiểm tra:
 - `ALLOWED_ORIGIN` — origin của site bạn (GH Pages URL)
 - `REPO_OWNER` / `REPO_NAME` — repo chứa workflows
 - `GIST_ID` — gist dashboard dùng để sync state
+- `GIST_ID_TIMESHEET` / `GIST_ID_PAYSLIP` — optional shard gist IDs (để trống nếu dùng 1 gist)
 
 Nếu khác giá trị mặc định, sửa lại.
 

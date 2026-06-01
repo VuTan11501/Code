@@ -29,18 +29,13 @@ jobs:
           sparse-checkout: |
             .github/scripts
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Generate OT report
+      - name: Generate OT report  # stdlib-only, uses preinstalled python3
         id: report
         env:
           INPUT_YEAR: ${{ inputs.year }}
           INPUT_MONTH: ${{ inputs.month }}
           GH_PAT: ${{ secrets.GH_PAT }}
-        run: python .github/scripts/ot_report.py > report.html
+        run: python3 .github/scripts/ot_report.py > report.html
 
       - name: Send report email
         uses: dawidd6/action-send-mail@v3
@@ -60,7 +55,7 @@ jobs:
           LINE_NOTIFY_TOKEN: ${{ secrets.LINE_NOTIFY_TOKEN }}
         run: |
           if [ "${{ job.status }}" = "success" ]; then
-            python .github/scripts/line_notify.py "📊 Monthly OT report generated and emailed."
+            python3 .github/scripts/line_notify.py "📊 Monthly OT report generated and emailed."
           else
-            python .github/scripts/line_notify.py "⚠️ Monthly OT report generation failed!"
+            python3 .github/scripts/line_notify.py "⚠️ Monthly OT report generation failed!"
           fi

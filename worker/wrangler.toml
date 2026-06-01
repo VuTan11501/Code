@@ -18,6 +18,9 @@ REPO_NAME = "Code"
 # Limit /gists/* to this single Gist (the one used by Dashboard for state sync).
 # Worker will refuse any /gists/{other-id}/* even if route shape matches.
 GIST_ID = "abc2a47c0a396025a72a6580227ff493"
+# Optional extra gist shards. Leave empty to disable.
+GIST_ID_TIMESHEET = ""
+GIST_ID_PAYSLIP = ""
 
 # ──────────────────────────────────────────────────────────────────
 # Secrets — set via `wrangler secret put GITHUB_PAT` (NEVER commit).

@@ -60,8 +60,9 @@ async function loadTimesheetData(opts) {
   const refreshBtn = document.getElementById('tsRefreshBtn');
   if (isManual && refreshBtn) refreshBtn.classList.add('is-loading');
   try {
-    const gist = await apiFetch(`/gists/${GIST_ID}`);
-    const f = gist.files && gist.files[TS_FILE];
+    // Timesheet file lives in the timesheet shard.
+    const tsGist = await apiFetch(`/gists/${GIST_ID_TIMESHEET}`);
+    const f = tsGist.files && tsGist.files[TS_FILE];
     let content = (f && f.content) || '';
     // GitHub truncates large file content in the Gist JSON response (~240KB).
     // Fall back to raw_url for the full body.
@@ -84,9 +85,13 @@ async function loadTimesheetData(opts) {
       _tsState.months = {};
     }
     // Also load payslip history (used to render Salary chip with real or
-    // estimated net take-home). Same gist file as the OT planner uses.
+    // estimated net take-home). Payslip lives in its own shard (which may
+    // alias to the main gist when not configured separately).
     _tsState.payslips = [];
-    const payFile = gist.files && gist.files['payslip-history.json'];
+    const payGist = (GIST_ID_PAYSLIP === GIST_ID_TIMESHEET)
+      ? tsGist
+      : await apiFetch(`/gists/${GIST_ID_PAYSLIP}`);
+    const payFile = payGist.files && payGist.files['payslip-history.json'];
     if (payFile) {
       let payContent = payFile.content || '';
       if (payFile.truncated && payFile.raw_url) {
@@ -282,9 +287,14 @@ function renderTimesheet() {
       <div class="card bg-card border border-border rounded-lg p-6 text-center">
         <div class="text-base font-semibold mb-1">No timesheet data for ${key}</div>
         <div class="text-sm text-muted-foreground mb-4">Pull the latest from DokoKin to see your recognized hours and lost OT.</div>
-        <button class="btn primary" onclick="syncTimesheetFromDokoKin && syncTimesheetFromDokoKin()">
-          <span data-icon="sparkles" data-size="14"></span> Sync DokoKin now
-        </button>
+        <div class="flex gap-2 justify-center flex-wrap">
+          <button class="btn primary" onclick="syncTimesheetFromDokoKin && syncTimesheetFromDokoKin()">
+            <span data-icon="sparkles" data-size="14"></span> Quick sync (6mo)
+          </button>
+          <button class="btn btn-outline sm" onclick="syncTimesheetFullBackfill && syncTimesheetFullBackfill()">
+            <span data-icon="refresh" data-size="14"></span> Full backfill (24mo)
+          </button>
+        </div>
       </div>`;
     if (tableBody) tableBody.innerHTML =
       `<tr><td colspan="12" class="text-center text-muted-foreground py-8">No data yet — tap <strong>Sync DokoKin</strong> above to fetch.</td></tr>`;
@@ -593,17 +603,24 @@ function _openLostOtSheet(date, details) {
 }
 
 // ─── Sync (dispatch workflow) ───────────────────────
-async function syncTimesheetFromDokoKin() {
+// Quick sync = recent months only (months_keep=6, fast ~30-60s).
+// Full backfill = months_keep=24 (covers the 2-year historical window the
+// FJP API exposes; slower, ~2-4 min).
+async function syncTimesheetFromDokoKin(opts = {}) {
+  const full = !!(opts && opts.full);
+  const monthsKeep = full ? '24' : '6';
+  const btnId = opts.btnId || (full ? 'tsSyncFullBtn' : 'tsSyncBtn');
+
   if (!sessionToken) {
     toast('🔒 Unlock first', 'error');
     return;
   }
 
-  const btn = document.getElementById('tsSyncBtn');
+  const btn = document.getElementById(btnId);
   const orig = btn ? btn.innerHTML : '';
   if (btn) {
     btn.disabled = true;
-    btn.innerHTML = `${ICON('refresh', 14, 'animate-spin')} Pulling…`;
+    btn.innerHTML = `${ICON('refresh', 14, 'animate-spin')} ${full ? 'Backfilling…' : 'Pulling…'}`;
   }
   try {
     const res = await fetch(
@@ -614,16 +631,18 @@ async function syncTimesheetFromDokoKin() {
         'Accept': 'application/vnd.github+json',
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ ref: 'main', inputs: { months_keep: '24' } }),
+      body: JSON.stringify({ ref: 'main', inputs: { months_keep: monthsKeep } }),
     });
     if (res.status !== 204) {
       const body = await res.text().catch(() => '');
       throw new Error(`HTTP ${res.status}${body ? ': ' + body.slice(0, 80) : ''}`);
     }
-    toast('☁️ Pull dispatched — waiting for workflow…');
-    await _waitForTimesheetFetchRun();
+    toast(full
+      ? '☁️ Full backfill dispatched (24mo) — this can take 2-4 min…'
+      : '☁️ Pull dispatched — waiting for workflow…');
+    await _waitForTimesheetFetchRun(full ? 6 * 60 * 1000 : 3 * 60 * 1000);
     await loadTimesheetData({ refresh: true });
-    toast('✅ Timesheet synced', 'success');
+    toast(full ? '✅ Timesheet backfilled (24mo)' : '✅ Timesheet synced', 'success');
   } catch (e) {
     toast(`❌ Sync failed: ${e.message}`, 'error');
   } finally {
@@ -634,9 +653,14 @@ async function syncTimesheetFromDokoKin() {
   }
 }
 
-async function _waitForTimesheetFetchRun() {
+// Convenience: full 24-month backfill (separate button).
+async function syncTimesheetFullBackfill() {
+  return syncTimesheetFromDokoKin({ full: true });
+}
+
+async function _waitForTimesheetFetchRun(timeoutMs = 3 * 60 * 1000) {
   const start = Date.now();
-  const TIMEOUT_MS = 3 * 60 * 1000;
+  const TIMEOUT_MS = timeoutMs;
   await new Promise(r => setTimeout(r, 4000));
   while (Date.now() - start < TIMEOUT_MS) {
     try {
@@ -675,11 +699,13 @@ async function syncPayslipFromFJP(workYearMonth, opts = {}) {
     payYM = window.OT_SALARY.workMonthToPayMonth(wym);
   }
   const force = opts.force !== false;  // default true (user explicitly asked to re-fetch)
-  const btn = opts.btn || document.getElementById('tsSyncPayslipBtn');
+  const full = !!opts.full;
+  const monthsBack = full ? '12' : '0';
+  const btn = opts.btn || document.getElementById(full ? 'tsSyncPayslipFullBtn' : 'tsSyncPayslipBtn');
   const orig = btn ? btn.innerHTML : '';
   if (btn) {
     btn.disabled = true;
-    btn.innerHTML = `${ICON('refresh', 14, 'animate-spin')} Fetching…`;
+    btn.innerHTML = `${ICON('refresh', 14, 'animate-spin')} ${full ? 'Backfilling…' : 'Fetching…'}`;
   }
   try {
     const res = await fetch(
@@ -692,7 +718,7 @@ async function syncPayslipFromFJP(workYearMonth, opts = {}) {
       },
       body: JSON.stringify({ ref: 'main', inputs: {
         year_month: payYM,
-        months_back: '0',
+        months_back: monthsBack,
         force: force ? 'true' : 'false',
       }}),
     });
@@ -700,10 +726,12 @@ async function syncPayslipFromFJP(workYearMonth, opts = {}) {
       const body = await res.text().catch(() => '');
       throw new Error(`HTTP ${res.status}${body ? ': ' + body.slice(0, 80) : ''}`);
     }
-    toast(`☁️ Pulling payslip ${payYM} (work ${wym}) — waiting…`);
-    await _waitForPayslipFetchRun();
+    toast(full
+      ? `☁️ Backfilling payslips (12mo back from ${payYM}) — this can take a few minutes…`
+      : `☁️ Pulling payslip ${payYM} (work ${wym}) — waiting…`);
+    await _waitForPayslipFetchRun(full ? 6 * 60 * 1000 : 3 * 60 * 1000);
     await loadTimesheetData({ refresh: true });
-    toast(`✅ Payslip ${payYM} synced`, 'success');
+    toast(full ? '✅ Payslips backfilled (12mo)' : `✅ Payslip ${payYM} synced`, 'success');
   } catch (e) {
     toast(`❌ Payslip sync failed: ${e.message}`, 'error');
   } finally {
@@ -714,9 +742,15 @@ async function syncPayslipFromFJP(workYearMonth, opts = {}) {
   }
 }
 
-async function _waitForPayslipFetchRun() {
+// Convenience: full 12-month payslip backfill (separate button). Anchors at
+// the currently-viewed work month (or current month) and goes 12 months back.
+async function syncPayslipFullBackfill(workYearMonth) {
+  return syncPayslipFromFJP(workYearMonth, { full: true });
+}
+
+async function _waitForPayslipFetchRun(timeoutMs = 3 * 60 * 1000) {
   const start = Date.now();
-  const TIMEOUT_MS = 3 * 60 * 1000;
+  const TIMEOUT_MS = timeoutMs;
   await new Promise(r => setTimeout(r, 4000));
   while (Date.now() - start < TIMEOUT_MS) {
     try {
@@ -786,7 +820,7 @@ async function _peekLatestActionRunId() {
 // month snapshot's `fetched_at` (or null). ETag-cached, so a 304 returns the
 // previous value (no false positive).
 async function _peekTimesheetFetchedAt(key) {
-  const gist = await apiFetch(`/gists/${GIST_ID}`);
+  const gist = await apiFetch(`/gists/${GIST_ID_TIMESHEET}`);
   const f = gist.files && gist.files[TS_FILE];
   if (!f) return null;
   let content = f.content || '';
@@ -957,6 +991,8 @@ window.loadTimesheetData = loadTimesheetData;
 window.tsNavMonth = tsNavMonth;
 window.tsGoToday = tsGoToday;
 window.syncTimesheetFromDokoKin = syncTimesheetFromDokoKin;
+window.syncTimesheetFullBackfill = syncTimesheetFullBackfill;
 window.syncPayslipFromFJP = syncPayslipFromFJP;
+window.syncPayslipFullBackfill = syncPayslipFullBackfill;
 window.recalcTimesheet = recalcTimesheet;
 window.calcAndSaveTimesheetDraft = calcAndSaveTimesheetDraft;

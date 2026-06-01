@@ -27,9 +27,11 @@ from datetime import datetime
 # Reuse helpers from gh_ot_creator
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from gh_ot_creator import (  # type: ignore
-    JST, API_BASE, GIST_ID, ACCOUNT as DEFAULT_ACCOUNT,
+    JST, API_BASE, ACCOUNT as DEFAULT_ACCOUNT,
     log, refresh_azure_token, get_kintai_token, api_headers,
 )
+# Use the timesheet-specific gist shard (falls back to GIST_ID when unset).
+from user_config import GIST_ID_TIMESHEET as GIST_ID  # noqa: E402
 from gist_safety import (  # type: ignore
     read_gist_file, safe_patch_gist_file,
     GistSafetyError, RaceDetected,

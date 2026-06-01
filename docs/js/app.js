@@ -5,6 +5,11 @@ const OWNER = localStorage.getItem('wf_dash_owner') || 'VuTan11501';
 const REPO = localStorage.getItem('wf_dash_repo') || 'Code';
 const API = 'https://api.github.com';
 const GIST_ID = localStorage.getItem('wf_dash_gist_id') || 'abc2a47c0a396025a72a6580227ff493';
+// Sharded gist IDs for large/heavy files. Fall back to the main GIST_ID when
+// the per-shard override is not configured, so existing single-gist setups
+// keep working unchanged.
+const GIST_ID_TIMESHEET = localStorage.getItem('wf_dash_gist_id_timesheet') || GIST_ID;
+const GIST_ID_PAYSLIP   = localStorage.getItem('wf_dash_gist_id_payslip')   || GIST_ID;
 const WORKFLOWS = [
   { name: 'Auto Checkin', icon: '📥', iconName: 'logIn', file: 'auto-checkin.yml' },
   { name: 'Auto Checkout', icon: '📤', iconName: 'logOut', file: 'auto-checkout.yml' },

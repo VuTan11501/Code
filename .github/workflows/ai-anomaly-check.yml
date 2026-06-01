@@ -41,12 +41,7 @@ jobs:
         with:
           sparse-checkout: .github/scripts/
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Run anomaly check
+      - name: Run anomaly check  # stdlib-only, uses preinstalled python3
         env:
           AZURE_REFRESH_TOKEN: ${{ secrets.AZURE_REFRESH_TOKEN }}
           AZURE_APP_ID: f5be0f68-7285-4365-b979-10af0f3f4106
@@ -61,4 +56,4 @@ jobs:
           FLAGS=""
           [[ "${{ inputs.dry_run }}" == "true" ]] && FLAGS="$FLAGS --dry-run"
           [[ -n "${{ inputs.days }}" && "${{ inputs.days }}" != "7" ]] && FLAGS="$FLAGS --days ${{ inputs.days }}"
-          python .github/scripts/ai_anomaly_check.py $FLAGS
+          python3 .github/scripts/ai_anomaly_check.py $FLAGS

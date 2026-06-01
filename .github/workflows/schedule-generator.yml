@@ -32,12 +32,7 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Generate schedule
+      - name: Generate schedule  # stdlib-only, uses preinstalled python3
         run: |
           ARGS=""
           if [ -n "${{ inputs.year }}" ]; then
@@ -52,7 +47,7 @@ jobs:
           if [ -n "${{ inputs.sunday_ot }}" ]; then
             ARGS="$ARGS --sunday-ot ${{ inputs.sunday_ot }}"
           fi
-          python .github/scripts/generate_schedule.py $ARGS
+          python3 .github/scripts/generate_schedule.py $ARGS
 
       - name: Commit if changed
         run: |
@@ -60,7 +55,7 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add .github/scripts/schedule.json
           if ! git diff --staged --quiet; then
-            MONTH_LABEL=$(python -c "
+            MONTH_LABEL=$(python3 -c "
           from datetime import date
           d = date.today()
           y, m = (d.year + 1, 1) if d.month == 12 else (d.year, d.month + 1)
@@ -77,4 +72,4 @@ jobs:
         if: failure()
         env:
           LINE_NOTIFY_TOKEN: ${{ secrets.LINE_NOTIFY_TOKEN }}
-        run: python .github/scripts/line_notify.py "⚠️ Schedule generation failed! Check GitHub Actions."
+        run: python3 .github/scripts/line_notify.py "⚠️ Schedule generation failed! Check GitHub Actions."

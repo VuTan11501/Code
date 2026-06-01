@@ -54,22 +54,20 @@ jobs:
           sparse-checkout: |
             .github/scripts
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
       - name: Run payslip fetch
         id: fetch
         env:
           AZURE_REFRESH_TOKEN: ${{ secrets.AZURE_REFRESH_TOKEN }}
           GH_PAT: ${{ secrets.GH_PAT }}
+          # Per-domain Gist shard with fallback chain to legacy single gist.
+          GIST_ID: ${{ vars.GIST_ID || 'abc2a47c0a396025a72a6580227ff493' }}
+          GIST_ID_PAYSLIP: ${{ vars.GIST_ID_PAYSLIP || vars.GIST_ID || 'abc2a47c0a396025a72a6580227ff493' }}
           FJP_PAYROLL_PASSCODE: ${{ secrets.FJP_PAYROLL_PASSCODE }}
           ACCOUNT: tanvc
           YEAR_MONTH: ${{ inputs.year_month || '' }}
           MONTHS_BACK: ${{ inputs.months_back || '0' }}
           FORCE: ${{ inputs.force && '1' || '' }}
-        run: python .github/scripts/gh_payslip_fetch.py
+        # Stdlib-only script; runner already has Python preinstalled.
+        run: python3 .github/scripts/gh_payslip_fetch.py
       # Phase 3: token rotation is queued by the worker into Gist
       # pending_token_rotation.json and applied centrally by token-monitor.yml.
-

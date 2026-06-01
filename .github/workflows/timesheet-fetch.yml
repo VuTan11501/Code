@@ -50,6 +50,9 @@ jobs:
         env:
           AZURE_REFRESH_TOKEN: ${{ secrets.AZURE_REFRESH_TOKEN }}
           GH_PAT: ${{ secrets.GH_PAT }}
+          # Per-domain Gist shard with fallback chain to legacy single gist.
+          GIST_ID: ${{ vars.GIST_ID || 'abc2a47c0a396025a72a6580227ff493' }}
+          GIST_ID_TIMESHEET: ${{ vars.GIST_ID_TIMESHEET || vars.GIST_ID || 'abc2a47c0a396025a72a6580227ff493' }}
           # Speed default: cron keeps only the recent 6 months.
           # Full backfill remains available via manual dispatch input.
           MONTHS_KEEP: ${{ github.event_name == 'schedule' && '6' || (inputs.months_keep || '24') }}

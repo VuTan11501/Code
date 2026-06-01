@@ -31,11 +31,7 @@ jobs:
         with:
           sparse-checkout: .github/scripts/
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Run monthly insight
+      - name: Run monthly insight  # stdlib-only, uses preinstalled python3
         id: insight
         env:
           AZURE_REFRESH_TOKEN: ${{ secrets.AZURE_REFRESH_TOKEN }}
@@ -54,7 +50,7 @@ jobs:
           if [ "${{ inputs.dry_run }}" = "true" ]; then
             FLAGS="$FLAGS --dry-run"
           fi
-          python .github/scripts/ai_monthly_insight.py $FLAGS
+          python3 .github/scripts/ai_monthly_insight.py $FLAGS
       # Phase 3: token rotation is queued by the worker into Gist
       # pending_token_rotation.json and applied centrally by token-monitor.yml.
 
