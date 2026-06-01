@@ -1106,15 +1106,21 @@ async function updateNowStrip(allRuns) {
     const coFresh = !!coRecorded && !staleAfterRun(coRun);
     const ciRunTime = runTimeHint(ciRun);
     const coRunTime = runTimeHint(coRun);
+    const ciFlowRecorded = !ciFresh && ciRun && ciRun.conclusion === 'success' && !!ciRunTime;
+    const coFlowRecorded = !coFresh && coRun && coRun.conclusion === 'success' && !!coRunTime;
 
     items.push(ciFresh
       ? nowCard({ icon: 'logIn', label: 'Checkin', state: 'is-ok', val: ciRecorded, sub: 'Ghi nhận DokoKin' })
-      : nowCard({ icon: 'logIn', label: 'Checkin', state: 'is-pending', val: ciRunTime || '—', sub: flowHint(ciRun, 'Chưa check-in') })
+      : ciFlowRecorded
+        ? nowCard({ icon: 'logIn', label: 'Checkin', state: 'is-ok', val: ciRunTime, sub: 'Ghi nhận DokoKin' })
+        : nowCard({ icon: 'logIn', label: 'Checkin', state: 'is-pending', val: ciRunTime || '—', sub: flowHint(ciRun, 'Chưa check-in') })
     );
 
     items.push(coFresh
       ? nowCard({ icon: 'logOut', label: 'Checkout', state: 'is-ok', val: coRecorded, sub: 'Ghi nhận DokoKin' })
-      : nowCard({ icon: 'logOut', label: 'Checkout', state: 'is-pending', val: coRunTime || '—', sub: flowHint(coRun, 'Chưa check-out') })
+      : coFlowRecorded
+        ? nowCard({ icon: 'logOut', label: 'Checkout', state: 'is-ok', val: coRunTime, sub: 'Ghi nhận DokoKin' })
+        : nowCard({ icon: 'logOut', label: 'Checkout', state: 'is-pending', val: coRunTime || '—', sub: flowHint(coRun, 'Chưa check-out') })
     );
 
     // OT tonight — read from the same gist payload (resilient)
