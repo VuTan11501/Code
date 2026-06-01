@@ -243,11 +243,6 @@ function showDashboard() {
   refresh();
   // Check token scopes (non-blocking)
   checkTokenScopes();
-  // Latest monthly AI insight widget on dashboard (non-blocking).
-  // AI scripts are lazy-loaded, so wait for them before rendering.
-  ensurePageScripts('ai').then(() => {
-    try { if (window.AIInsights) window.AIInsights.renderLatestInsight(); } catch {}
-  });
   // Cross-device settings sync — pull on unlock (non-blocking)
   if (window.CloudSync) {
     window.CloudSync.init({ getToken: () => sessionToken, toast: (m) => toast(m) });
