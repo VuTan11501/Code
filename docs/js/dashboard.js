@@ -1003,6 +1003,7 @@ async function updateNowStrip(allRuns) {
   try {
     const now = new Date();
     const todayJST = now.toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' }); // YYYY-MM-DD
+    const monthKey = todayJST.slice(0, 7);
     const items = [];
 
     // Render a stat-chip-style status card
@@ -1023,42 +1024,73 @@ async function updateNowStrip(allRuns) {
       });
     }
 
-    // Checkin status
+    function flowHint(run, idleText) {
+      if (!run) return idleText;
+      if (run.status === 'queued' || run.status === 'in_progress') return 'Flow đang chạy';
+      if (run.conclusion === 'success') return 'Flow OK · chờ đồng bộ';
+      if (run.conclusion === 'failure' || run.conclusion === 'cancelled' || run.conclusion === 'timed_out') return 'Flow lỗi';
+      return idleText;
+    }
+
     const ciRun = findTodayRun('auto-checkin.yml');
-    if (ciRun && ciRun.conclusion === 'success') {
-      const t = new Date(ciRun.created_at).toLocaleTimeString('ja-JP', { timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit', hour12: false });
-      items.push(nowCard({ icon: 'logIn', label: 'Checkin', state: 'is-ok', val: t, sub: 'Hoàn thành' }));
-    } else {
-      items.push(nowCard({ icon: 'logIn', label: 'Checkin', state: 'is-pending', val: '—', sub: 'Chưa check-in' }));
-    }
-
-    // Checkout status
     const coRun = findTodayRun('auto-checkout.yml');
-    if (coRun && coRun.conclusion === 'success') {
-      const t = new Date(coRun.created_at).toLocaleTimeString('ja-JP', { timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit', hour12: false });
-      items.push(nowCard({ icon: 'logOut', label: 'Checkout', state: 'is-ok', val: t, sub: 'Hoàn thành' }));
-    } else {
-      items.push(nowCard({ icon: 'logOut', label: 'Checkout', state: 'is-pending', val: '—', sub: 'Chưa check-out' }));
+
+    let gistData = null;
+    try {
+      gistData = await apiFetch(`/gists/${GIST_ID}`);
+    } catch (_) {
+      gistData = null;
     }
 
-    // OT tonight — fetch from gist (resilient)
+    let todayDetail = null;
     try {
-      const gistData = await apiFetch(`/gists/${GIST_ID}`);
+      const tsFile = gistData && gistData.files && gistData.files['timesheet-history.json'];
+      const tsContent = tsFile
+        ? (window.readGistFile ? await window.readGistFile(tsFile) : (tsFile.content || ''))
+        : '';
+      if (tsContent) {
+        const parsed = JSON.parse(tsContent);
+        const details = parsed && parsed.months && parsed.months[monthKey] && Array.isArray(parsed.months[monthKey].details)
+          ? parsed.months[monthKey].details
+          : [];
+        todayDetail = details.find(d => d && d.date === todayJST) || null;
+      }
+    } catch (_) {
+      todayDetail = null;
+    }
+
+    const ciRecorded = todayDetail && typeof todayDetail.in === 'string' ? todayDetail.in.trim() : '';
+    const coRecorded = todayDetail && typeof todayDetail.out === 'string' ? todayDetail.out.trim() : '';
+
+    items.push(ciRecorded
+      ? nowCard({ icon: 'logIn', label: 'Checkin', state: 'is-ok', val: ciRecorded, sub: 'Ghi nhận DokoKin' })
+      : nowCard({ icon: 'logIn', label: 'Checkin', state: 'is-pending', val: '—', sub: flowHint(ciRun, 'Chưa check-in') })
+    );
+
+    items.push(coRecorded
+      ? nowCard({ icon: 'logOut', label: 'Checkout', state: 'is-ok', val: coRecorded, sub: 'Ghi nhận DokoKin' })
+      : nowCard({ icon: 'logOut', label: 'Checkout', state: 'is-pending', val: '—', sub: flowHint(coRun, 'Chưa check-out') })
+    );
+
+    // OT tonight — read from the same gist payload (resilient)
+    try {
       const otFile = gistData && gistData.files && gistData.files['ot-requests.json'];
-      if (otFile && otFile.content) {
-        const otList = JSON.parse(otFile.content);
-        if (Array.isArray(otList)) {
-          const todayOT = otList.find(e => e.date === todayJST);
-          if (todayOT) {
-            items.push(nowCard({
-              icon: 'moon', label: 'OT', state: 'is-info',
-              val: todayOT.start || 'Tối nay',
-              sub: todayOT.end ? `→ ${todayOT.end}` : 'Đã lên lịch',
-            }));
-          }
+      const otContent = otFile
+        ? (window.readGistFile ? await window.readGistFile(otFile) : (otFile.content || ''))
+        : '';
+      if (otContent) {
+        const parsed = JSON.parse(otContent);
+        const otList = Array.isArray(parsed) ? parsed : (Array.isArray(parsed && parsed.requests) ? parsed.requests : []);
+        const todayOT = otList.find(e => e && e.date === todayJST);
+        if (todayOT) {
+          items.push(nowCard({
+            icon: 'moon', label: 'OT', state: 'is-info',
+            val: todayOT.start || 'Tối nay',
+            sub: todayOT.end ? `→ ${todayOT.end}` : 'Đã lên lịch',
+          }));
         }
       }
-    } catch (_) { /* OT fetch failed — just omit */ }
+    } catch (_) { /* OT parse failed — just omit */ }
 
     if (items.length > 0) {
       el.innerHTML = items.join('');
