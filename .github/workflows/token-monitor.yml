@@ -34,11 +34,6 @@ jobs:
           sparse-checkout: |
             .github/scripts
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
       - name: Check token health
         id: token_check
         env:
@@ -46,7 +41,8 @@ jobs:
           GH_TOKEN: ${{ secrets.GH_PAT }}
           GH_PAT: ${{ secrets.GH_PAT }}
           GIST_ID: ${{ vars.GIST_ID || 'abc2a47c0a396025a72a6580227ff493' }}
-        run: python .github/scripts/token_monitor.py --gist
+        # Stdlib-only script; runner already has Python preinstalled.
+        run: python3 .github/scripts/token_monitor.py --gist
 
       - name: Update secret if token rotated
         if: always() && steps.token_check.outputs.token_rotated == 'true'
@@ -69,7 +65,7 @@ jobs:
         if: failure()
         env:
           LINE_NOTIFY_TOKEN: ${{ secrets.LINE_NOTIFY_TOKEN }}
-        run: python .github/scripts/line_notify.py "🚨 DokoKin token is UNHEALTHY! Run dokokin_auth_login to refresh."
+        run: python3 .github/scripts/line_notify.py "🚨 DokoKin token is UNHEALTHY! Run dokokin_auth_login to refresh."
 
       - name: Send email alert on expiry
         if: failure()

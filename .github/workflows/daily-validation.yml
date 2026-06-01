@@ -22,15 +22,11 @@ jobs:
           sparse-checkout: |
             .github/scripts
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
       - name: Validate attendance
         env:
           AZURE_REFRESH_TOKEN: ${{ secrets.AZURE_REFRESH_TOKEN }}
-        run: python .github/scripts/daily_validation.py
+        # Stdlib-only script; runner already has Python preinstalled.
+        run: python3 .github/scripts/daily_validation.py
 
       - name: Alert on failure
         if: failure()
@@ -38,4 +34,4 @@ jobs:
           LINE_NOTIFY_TOKEN: ${{ secrets.LINE_NOTIFY_TOKEN }}
         run: |
           echo "::warning::Attendance validation failed! Check DokoKin status."
-          python .github/scripts/line_notify.py "⚠️ Attendance validation FAILED! Check DokoKin status."
+          python3 .github/scripts/line_notify.py "⚠️ Attendance validation FAILED! Check DokoKin status."

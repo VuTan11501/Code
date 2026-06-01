@@ -22,11 +22,6 @@ jobs:
           sparse-checkout: |
             .github/scripts
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
       - name: Run Auto Request OT
         id: ot_creator
         env:
@@ -35,7 +30,7 @@ jobs:
           SMTP_PASS: ${{ secrets.SMTP_PASS }}
           NOTIFY_EMAIL: ${{ secrets.NOTIFY_EMAIL }}
           GH_PAT: ${{ secrets.GH_PAT }}
-        run: python .github/scripts/gh_ot_creator.py
+        # Stdlib-only script; runner already has Python preinstalled.
+        run: python3 .github/scripts/gh_ot_creator.py
       # Phase 3: token rotation is queued by the worker into Gist
       # pending_token_rotation.json and applied centrally by token-monitor.yml.
-

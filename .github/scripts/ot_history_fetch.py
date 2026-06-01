@@ -8,11 +8,13 @@ the user's full history (not just dashboard-created entries).
 Inputs (env):
   AZURE_REFRESH_TOKEN   required
   GH_PAT                required (to PATCH gist)
-  MONTHS_BACK           optional, default 12 — how many months back from today
+  MONTHS_BACK           optional, default 24 — how many months back from today
+  FETCH_WORKERS         optional, default 4 (1..8)
 
 Stdlib only.
 """
 import os, sys, json, urllib.request, urllib.parse, traceback
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone, timedelta, date
 from calendar import monthrange
 
@@ -279,13 +281,46 @@ def _clean_seed_entries(arr: list) -> int:
     return removed
 
 
+def _fetch_month_bundle(token: str, year: int, month: int, fetch_ts: bool) -> dict:
+    recs, http = search_ot_requests_verbose(token, year, month)
+    normed = [_normalize_dokokin_record(r) for r in recs]
+    normed = [n for n in normed if n]
+    marker = "·" if not normed else "✓"
+    month_log = f"  {marker} {year}-{month:02d}: HTTP {http}, {len(recs)} raw → {len(normed)} normalized"
+
+    ts = None
+    ts_log = None
+    if fetch_ts:
+        ts_raw = fetch_timesheet_aggregate(token, year, month)
+        if ts_raw and any(v for v in [ts_raw.get("overtimeHours"), ts_raw.get("nightWorkingHours")]):
+            ts = ts_raw
+            ts_log = (f"      timesheet: OT={ts.get('overtimeHours')}h "
+                      f"Night={ts.get('nightWorkingHours')}h "
+                      f"Sun={ts.get('sundayWorkingHours')}h "
+                      f"Sat={ts.get('saturdayWorkingHours')}h "
+                      f"OTreq={ts.get('oTRequestHours')}h")
+    return {
+        "year": year,
+        "month": month,
+        "normed": normed,
+        "month_log": month_log,
+        "timesheet": ts,
+        "timesheet_log": ts_log,
+    }
+
+
 def main():
     now = datetime.now(JST)
     months_back = int(os.environ.get("MONTHS_BACK", "24"))
     clean_seeds = os.environ.get("CLEAN_SEEDS", "true").lower() in ("1", "true", "yes")
     fetch_ts = os.environ.get("FETCH_TIMESHEET", "true").lower() in ("1", "true", "yes")
+    try:
+        fetch_workers = int(os.environ.get("FETCH_WORKERS", "4"))
+    except Exception:
+        fetch_workers = 4
+    fetch_workers = max(1, min(fetch_workers, 8))
     log(f"OT History Fetch — {months_back} months back, ending {now:%Y-%m} "
-        f"(clean_seeds={clean_seeds}, fetch_timesheet={fetch_ts})")
+        f"(clean_seeds={clean_seeds}, fetch_timesheet={fetch_ts}, workers={fetch_workers})")
 
     refresh_token = os.environ.get("AZURE_REFRESH_TOKEN")
     if not refresh_token:
@@ -314,27 +349,45 @@ def main():
     timesheets: list[dict] = []
     first_data_month = None
     last_data_month = None
+    month_results: dict[tuple[int, int], dict] = {}
+    with ThreadPoolExecutor(max_workers=fetch_workers) as pool:
+        future_map = {
+            pool.submit(_fetch_month_bundle, kt, yy, mm, fetch_ts): (yy, mm)
+            for (yy, mm) in months
+        }
+        for fut in as_completed(future_map):
+            yy, mm = future_map[fut]
+            try:
+                month_results[(yy, mm)] = fut.result()
+            except Exception as e:
+                month_results[(yy, mm)] = {
+                    "year": yy,
+                    "month": mm,
+                    "normed": [],
+                    "month_log": f"  ⚠ {yy}-{mm:02d}: worker failed: {e}",
+                    "timesheet": None,
+                    "timesheet_log": None,
+                }
+
     for (yy, mm) in months:
-        recs, http = search_ot_requests_verbose(kt, yy, mm)
-        normed = [_normalize_dokokin_record(r) for r in recs]
-        normed = [n for n in normed if n]
-        marker = "·" if not normed else "✓"
-        log(f"  {marker} {yy}-{mm:02d}: HTTP {http}, {len(recs)} raw → {len(normed)} normalized")
+        res = month_results.get((yy, mm))
+        if not res:
+            log(f"  ⚠ {yy}-{mm:02d}: missing worker result")
+            continue
+        log(res.get("month_log") or f"  · {yy}-{mm:02d}: no log")
+
+        normed = res.get("normed") or []
         if normed:
             if first_data_month is None:
                 first_data_month = f"{yy}-{mm:02d}"
             last_data_month = f"{yy}-{mm:02d}"
         fetched_all.extend(normed)
 
-        if fetch_ts:
-            ts = fetch_timesheet_aggregate(kt, yy, mm)
-            if ts and any(v for v in [ts.get("overtimeHours"), ts.get("nightWorkingHours")]):
-                log(f"      timesheet: OT={ts.get('overtimeHours')}h "
-                    f"Night={ts.get('nightWorkingHours')}h "
-                    f"Sun={ts.get('sundayWorkingHours')}h "
-                    f"Sat={ts.get('saturdayWorkingHours')}h "
-                    f"OTreq={ts.get('oTRequestHours')}h")
-                timesheets.append(ts)
+        ts = res.get("timesheet")
+        if ts:
+            if res.get("timesheet_log"):
+                log(res["timesheet_log"])
+            timesheets.append(ts)
 
     log(f"Total fetched from DokoKin: {len(fetched_all)} OT records, "
         f"{len(timesheets)} timesheets")

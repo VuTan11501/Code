@@ -8,9 +8,9 @@ on:
   workflow_dispatch:
     inputs:
       months_keep:
-        description: "Rolling window — how many recent months to keep"
+        description: "Rolling window for manual runs (set 120 only for one-off backfill)"
         required: false
-        default: "120"
+        default: "24"
       account:
         description: "DokoKin account (default: tanvc)"
         required: false
@@ -45,20 +45,18 @@ jobs:
           sparse-checkout: |
             .github/scripts
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
       - name: Run timesheet fetch
         id: fetch
         env:
           AZURE_REFRESH_TOKEN: ${{ secrets.AZURE_REFRESH_TOKEN }}
           GH_PAT: ${{ secrets.GH_PAT }}
-          MONTHS_KEEP: ${{ inputs.months_keep || '120' }}
+          # Speed default: cron keeps only the recent 6 months.
+          # Full backfill remains available via manual dispatch input.
+          MONTHS_KEEP: ${{ github.event_name == 'schedule' && '6' || (inputs.months_keep || '24') }}
           ACCOUNT: ${{ inputs.account || 'tanvc' }}
           DEBUG_DUMP: ${{ inputs.debug_dump && '1' || '' }}
-        run: python .github/scripts/gh_timesheet_fetch.py
+          FETCH_WORKERS: "4"
+        # Stdlib-only script; runner already has Python preinstalled.
+        run: python3 .github/scripts/gh_timesheet_fetch.py
       # Phase 3: token rotation is queued by the worker into Gist
       # pending_token_rotation.json and applied centrally by token-monitor.yml.
-

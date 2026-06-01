@@ -41,11 +41,6 @@ jobs:
           sparse-checkout: |
             .github/scripts
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
       - name: Run OT history fetch
         id: fetch
         env:
@@ -54,7 +49,8 @@ jobs:
           MONTHS_BACK: ${{ inputs.months_back }}
           CLEAN_SEEDS: ${{ inputs.clean_seeds }}
           FETCH_TIMESHEET: ${{ inputs.fetch_timesheet }}
-        run: python .github/scripts/ot_history_fetch.py
+          FETCH_WORKERS: "4"
+        # Stdlib-only script; runner already has Python preinstalled.
+        run: python3 .github/scripts/ot_history_fetch.py
       # Phase 3: token rotation is queued by the worker into Gist
       # pending_token_rotation.json and applied centrally by token-monitor.yml.
-

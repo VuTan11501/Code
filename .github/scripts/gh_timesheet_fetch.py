@@ -14,12 +14,14 @@ Why this exists:
 Inputs (env):
   AZURE_REFRESH_TOKEN   required
   GH_PAT                required
-  MONTHS_KEEP           optional, default 6 (rolling window)
+  MONTHS_KEEP           optional (workflow sets 6 for cron, 24 for manual by default)
+  FETCH_WORKERS         optional, default 4 (1..8)
   ACCOUNT               optional, default "tanvc"
 
 Stdlib only.
 """
 import os, sys, json, urllib.request, traceback
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 
 # Reuse helpers from gh_ot_creator
@@ -172,6 +174,26 @@ def _months_back(now: datetime, count: int):
     return out
 
 
+def _fetch_month_snapshot(token: str, account: str, year: int, month: int) -> tuple[dict | None, str]:
+    raw = fetch_timesheet_month(token, account, year, month)
+    if not raw:
+        return None, f"  · {year}-{month:02d}: skipped (no data / fetch error)"
+    snap = normalize_month(raw)
+    # Skip empty calendar shells (months before user joined FJP).
+    # Heuristic: no actual working time AND no OT request AND no checkins.
+    s = snap["summary"]
+    actual = (s.get("displayTotalActualWorkingTime") or "00:00").strip()
+    otreq = (s.get("displayOTRequestHours") or "00:00").strip()
+    has_checkin = any(d.get("in") for d in snap["details"])
+    if actual in ("", "00:00") and otreq in ("", "00:00") and not has_checkin:
+        return None, f"  · {year}-{month:02d}: empty (pre-FJP or no activity) — skipped"
+    msg = (f"  ✓ {year}-{month:02d}: {len(snap['details'])} days, "
+           f"actual={s.get('displayTotalActualWorkingTime')}, "
+           f"OT={s.get('displayOvertimeHours')}, "
+           f"OTreq={s.get('displayOTRequestHours')}")
+    return snap, msg
+
+
 def _emit_token_rotation(new_refresh: str):
     # Phase 3 hardening: queue rotation; token-monitor drains centrally.
     print(f"::add-mask::{new_refresh}")
@@ -193,13 +215,17 @@ def _emit_token_rotation(new_refresh: str):
 
 def main():
     now = datetime.now(JST)
-    # Default 24 months (2 years) — matches the PWA's Sync DokoKin button.
-    # The workflow itself defaults to 120 (10 years) for cron runs, so the
-    # only path that hits this fallback is an env-less local run.
+    # Local fallback default (24) is used only when MONTHS_KEEP env is missing.
+    # In workflow runs: cron passes 6, manual dispatch defaults to 24.
     months_keep = max(1, int(os.environ.get("MONTHS_KEEP", "24")))
+    try:
+        fetch_workers = int(os.environ.get("FETCH_WORKERS", "4"))
+    except Exception:
+        fetch_workers = 4
+    fetch_workers = max(1, min(fetch_workers, 8))
     account = (os.environ.get("ACCOUNT") or DEFAULT_ACCOUNT).strip()
     log(f"Timesheet Fetch — account={account}, keeping {months_keep} months "
-        f"ending {now:%Y-%m}")
+        f"ending {now:%Y-%m} (workers={fetch_workers})")
 
     refresh_token = os.environ.get("AZURE_REFRESH_TOKEN")
     if not refresh_token:
@@ -243,27 +269,24 @@ def main():
 
     targets = _months_back(now, months_keep)
     fetched: dict[str, dict] = {}
+    month_results: dict[tuple[int, int], tuple[dict | None, str]] = {}
+    with ThreadPoolExecutor(max_workers=fetch_workers) as pool:
+        future_map = {
+            pool.submit(_fetch_month_snapshot, kt, account, y, m): (y, m)
+            for (y, m) in targets
+        }
+        for fut in as_completed(future_map):
+            y, m = future_map[fut]
+            try:
+                month_results[(y, m)] = fut.result()
+            except Exception as e:
+                month_results[(y, m)] = (None, f"  ⚠ {y}-{m:02d}: worker failed: {e}")
+
     for (y, m) in targets:
-        raw = fetch_timesheet_month(kt, account, y, m)
-        if not raw:
-            log(f"  · {y}-{m:02d}: skipped (no data / fetch error)")
-            continue
-        snap = normalize_month(raw)
-        # Skip empty calendar shells (months before user joined FJP).
-        # Heuristic: no actual working time AND no OT request AND no checkins.
-        s = snap["summary"]
-        actual = (s.get("displayTotalActualWorkingTime") or "00:00").strip()
-        otreq  = (s.get("displayOTRequestHours") or "00:00").strip()
-        has_checkin = any(d.get("in") for d in snap["details"])
-        if actual in ("", "00:00") and otreq in ("", "00:00") and not has_checkin:
-            log(f"  · {y}-{m:02d}: empty (pre-FJP or no activity) — skipped")
-            continue
-        key = f"{y}-{m:02d}"
-        fetched[key] = snap
-        log(f"  ✓ {key}: {len(snap['details'])} days, "
-            f"actual={s.get('displayTotalActualWorkingTime')}, "
-            f"OT={s.get('displayOvertimeHours')}, "
-            f"OTreq={s.get('displayOTRequestHours')}")
+        snap, msg = month_results.get((y, m), (None, f"  ⚠ {y}-{m:02d}: missing worker result"))
+        log(msg)
+        if snap:
+            fetched[f"{y}-{m:02d}"] = snap
 
     if not fetched:
         log("Nothing fetched — aborting (no write).")
