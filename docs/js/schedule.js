@@ -250,7 +250,17 @@ function renderScheduleCalendar(gistEntries) {
   const filter = _loadPipFilter();
   const isHidden = (k) => filter[k] === true;     // hidden when explicitly true
 
-  // Build pip records: { entryIdx, dayIdx, time, name, wfFile, enabled, typeKey, once, dateStr }
+  // Build pip records: { entryIdx, dayIdx, time, name, wfFile, enabled, typeKey, once, dateStr, skipDate }
+  const _nowJ = jstNow();
+  const _todayJstMid = new Date(_nowJ.getFullYear(), _nowJ.getMonth(), _nowJ.getDate());
+  const _upcomingDateByDow = {};
+  for (let dow = 0; dow < 7; dow++) {
+    const delta = (dow - _nowJ.getDay() + 7) % 7;
+    const d = new Date(_todayJstMid);
+    d.setDate(d.getDate() + delta);
+    _upcomingDateByDow[dow] = formatDate(d.getFullYear(), d.getMonth(), d.getDate());
+  }
+
   const pips = [];
   const typeCounts = { checkin: 0, checkout: 0, ot: 0, forecast: 0 };
   for (let i = 0; i < _calendarEntries.length; i++) {
@@ -269,15 +279,14 @@ function renderScheduleCalendar(gistEntries) {
     const time = r.time || '00:00';
     const skipSet = new Set(r.skip_dates || []);
     for (const d of days) {
-      pips.push({ entryIdx: i, dayIdx: d, time, name, wfFile: entry.workflow, enabled: entry.enabled !== false, typeKey, once: false, skipSet });
+      const skipDate = skipSet.has(_upcomingDateByDow[d]) ? _upcomingDateByDow[d] : null;
+      pips.push({ entryIdx: i, dayIdx: d, time, name, wfFile: entry.workflow, enabled: entry.enabled !== false, typeKey, once: false, skipSet, skipDate });
       if (entry.enabled !== false) typeCounts[typeKey] = (typeCounts[typeKey] || 0) + 1;
     }
   }
 
   // Also include pending one-time entries within the next 7 days
-  const _nowJ = jstNow();
-  const todayJstMid = new Date(_nowJ.getFullYear(), _nowJ.getMonth(), _nowJ.getDate());
-  const weekEndJst = new Date(todayJstMid); weekEndJst.setDate(weekEndJst.getDate() + 7);
+  const weekEndJst = new Date(_todayJstMid); weekEndJst.setDate(weekEndJst.getDate() + 7);
   const _jstFmt = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit',
     hour: '2-digit', minute: '2-digit', hour12: false, weekday: 'short',
@@ -292,7 +301,7 @@ function renderScheduleCalendar(gistEntries) {
     // Compute JST representation
     const parts = Object.fromEntries(_jstFmt.formatToParts(dt).map(p => [p.type, p.value]));
     const jstMid = new Date(`${parts.year}-${parts.month}-${parts.day}T00:00:00+09:00`);
-    if (jstMid < todayJstMid || jstMid >= weekEndJst) continue;
+    if (jstMid < _todayJstMid || jstMid >= weekEndJst) continue;
     const dayIdx = _dowMap[parts.weekday] ?? jstMid.getDay();
     const time = `${parts.hour}:${parts.minute}`;
     const wf = WORKFLOWS_ALL.find(w => w.file === entry.workflow);
@@ -303,12 +312,8 @@ function renderScheduleCalendar(gistEntries) {
     if (entry.enabled !== false) typeCounts[typeKey] = (typeCounts[typeKey] || 0) + 1;
   }
 
-  const todayDateStr = formatDate(_nowJ.getFullYear(), _nowJ.getMonth(), _nowJ.getDate());
   const visiblePips = pips.filter(p => {
     if (isHidden(p.typeKey)) return false;
-    // For recurring with skip_dates: hide pip if today's date column matches a skip date
-    // (skip_dates is per-actual-date; we only suppress on the today column to avoid mislabeling other weeks)
-    if (!p.once && p.skipSet && p.dayIdx === _nowJ.getDay() && p.skipSet.has(todayDateStr)) return false;
     return true;
   });
 
@@ -317,7 +322,7 @@ function renderScheduleCalendar(gistEntries) {
   const oneTimePending = _calendarEntries.filter(e => e.type === 'once' && !e.dispatched).length;
   const nextDelay = (typeof computeNextFireDelay === 'function') ? computeNextFireDelay(_calendarEntries) : null;
   const nextStr = (nextDelay && nextDelay > 0) ? _formatCountdown(nextDelay) : '—';
-  const weekRuns = visiblePips.filter(p => p.enabled).length;     // visible recurring runs/week
+  const weekRuns = visiblePips.filter(p => p.enabled && !p.skipDate).length;     // visible non-skipped runs/week
 
   // Collect unique times. Always include common slots so empty grid still useful.
   const baseTimes = ['09:00', '12:00', '18:00', '22:00'];
@@ -386,11 +391,13 @@ function renderScheduleCalendar(gistEntries) {
       for (const p of cellPips) {
         const dimmed = p.enabled ? '' : ' disabled';
         const onceCls = p.once ? ' once' : '';
+        const skipCls = p.skipDate ? ' skipped' : '';
         const tip = p.once
           ? `${p.name} · One-time · ${p.dateStr} ${p.time} JST`
-          : `${p.name}${p.enabled ? '' : ' (disabled)'}`;
+          : `${p.name}${p.enabled ? '' : ' (disabled)'}${p.skipDate ? ` · SKIP ${p.skipDate}` : ''}`;
         const txt = p.name.split(' ').slice(-1)[0];
-        html += `<span class="schedule-pip ${p.typeKey}${dimmed}${onceCls}" data-entry="${p.entryIdx}" data-tooltip="${tip}"><span class="pip-fill"></span><span class="pip-text">${txt}</span></span>`;
+        const skipBadge = p.skipDate ? '<span class="pip-badge-skip">SKIP</span>' : '';
+        html += `<span class="schedule-pip ${p.typeKey}${dimmed}${onceCls}${skipCls}" data-entry="${p.entryIdx}" data-tooltip="${tip}"><span class="pip-fill"></span><span class="pip-text">${txt}</span>${skipBadge}</span>`;
       }
       html += '</div>';
     }
@@ -400,6 +407,7 @@ function renderScheduleCalendar(gistEntries) {
   html += '<span class="legend-item"><span class="legend-dot today-col"></span>Today</span>';
   html += '<span class="legend-item"><span class="legend-dot next-time"></span>Next slot</span>';
   html += '<span class="legend-item"><span class="legend-pip-sample once"></span>One-time</span>';
+  html += '<span class="legend-item"><span class="legend-pip-sample skip"></span>Skipped (this week)</span>';
   html += '<span class="legend-divider" aria-hidden="true"></span>';
   html += '<span class="legend-hint"><kbd class="legend-kbd">Double-tap empty</kbd> add</span>';
   html += '<span class="legend-hint"><kbd class="legend-kbd">Tap pip</kbd> actions</span>';
