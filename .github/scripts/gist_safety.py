@@ -57,6 +57,18 @@ def _hash(content: str) -> str:
     return hashlib.sha256(content.encode("utf-8")).hexdigest()[:16]
 
 
+def _header_int(headers, key: str):
+    if not headers:
+        return None
+    raw = headers.get(key)
+    if raw is None:
+        return None
+    try:
+        return int(str(raw).strip())
+    except Exception:
+        return None
+
+
 def read_gist_file(pat: str, gist_id: str, filename: str, log=None) -> dict:
     """Read a file from a Gist. Returns dict with keys:
         content: str (raw json string, never None)
@@ -273,6 +285,7 @@ def safe_patch_gist_file(pat: str, gist_id: str, filename: str,
         "Content-Type": "application/json",
     }
     max_attempts = 4
+    max_wait_sec = 300
     for attempt in range(1, max_attempts + 1):
         req = urllib.request.Request(url, data=body, method="PATCH", headers=headers)
         try:
@@ -286,17 +299,29 @@ def safe_patch_gist_file(pat: str, gist_id: str, filename: str,
                 pass
             retryable = e.code in (403, 429) or 500 <= e.code < 600
             if retryable and attempt < max_attempts:
-                # Honor Retry-After when present; else exponential backoff.
-                ra = e.headers.get("Retry-After") if e.headers else None
-                try:
-                    wait = int(ra) if ra else 0
-                except (TypeError, ValueError):
-                    wait = 0
-                if wait <= 0:
+                # Honor server retry hints first; fallback to exponential backoff.
+                wait = 0
+                reason = "backoff"
+                retry_after = _header_int(e.headers, "Retry-After")
+                rate_remaining = _header_int(e.headers, "X-RateLimit-Remaining")
+                rate_reset = _header_int(e.headers, "X-RateLimit-Reset")
+                reset_wait = None
+                if rate_remaining == 0 and rate_reset:
+                    reset_wait = max(0, rate_reset - int(time.time())) + 1
+
+                if retry_after and retry_after > 0:
+                    wait = retry_after
+                    reason = "Retry-After"
+                elif reset_wait and reset_wait > 0:
+                    wait = reset_wait
+                    reason = f"rate-limit reset ({reset_wait}s)"
+                else:
                     wait = min(2 ** attempt, 20)  # 2, 4, 8 …
+
+                wait = min(wait, max_wait_sec)
                 snippet = err_body.strip().replace("\n", " ")[:160]
                 _log(f"⚠️ Gist PATCH HTTP {e.code} (attempt {attempt}/{max_attempts}) "
-                     f"— retrying in {wait}s · {snippet}")
+                     f"— retrying in {wait}s ({reason}) · {snippet}")
                 time.sleep(wait)
                 continue
             # Out of retries (or non-retryable) → surface the real reason.

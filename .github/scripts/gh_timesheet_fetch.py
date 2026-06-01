@@ -293,6 +293,23 @@ def main():
             f"{sorted_keys[:-months_keep]}")
     new_months = {k: months_obj[k] for k in pruned}
 
+    # Skip PATCH if content is unchanged. `updated_at` is metadata only and should
+    # not force a write when month snapshots are identical.
+    old_months = existing.get("months") if isinstance(existing, dict) else None
+    old_account = existing.get("account") if isinstance(existing, dict) else None
+    try:
+        old_keep = int(existing.get("months_keep")) if isinstance(existing, dict) else None
+    except Exception:
+        old_keep = None
+    if (isinstance(old_months, dict)
+            and old_months == new_months
+            and str(old_account or "") == str(account)
+            and old_keep == months_keep):
+        log("No month-level changes detected — skip Gist PATCH.")
+        if new_refresh != refresh_token:
+            _emit_token_rotation(new_refresh)
+        return
+
     new_payload = {
         "account": account,
         "updated_at": datetime.now(JST).isoformat(timespec="seconds"),

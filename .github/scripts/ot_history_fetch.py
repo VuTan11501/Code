@@ -105,6 +105,11 @@ def _date_str(iso_dt: str) -> str:
         return iso_dt[:10] if len(iso_dt) >= 10 else ""
 
 
+def _stable_json(v) -> str:
+    # Canonical dump for cheap equality checks before deciding to PATCH Gist.
+    return json.dumps(v, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
 def _normalize_dokokin_record(r: dict) -> dict | None:
     """Map a DokoKin OT response → ot-requests.json entry shape.
     Returns None if the record can't be parsed.
@@ -348,6 +353,9 @@ def main():
         log("Gist file not found or empty, creating new array")
         wrapper = None
         arr = []
+    existing_timesheets = []
+    if isinstance(wrapper, dict) and isinstance(wrapper.get("timesheets"), list):
+        existing_timesheets = wrapper.get("timesheets") or []
 
     # Snapshot original array for sanity diff (deep-copied via json round-trip)
     old_arr_snapshot = json.loads(json.dumps(arr))
@@ -363,14 +371,19 @@ def main():
     log(f"Merge: existing={before}, updated={updated}, added={added}, "
         f"seeds_removed={seeds_removed}, new total={len(arr)}")
 
-    # Save timesheets into wrapper (so dashboard can show payslip-aligned aggregates)
+    # Save timesheets only when changed to avoid no-op PATCHes.
+    timesheets_changed = False
     if timesheets:
-        if wrapper is None:
-            wrapper = {"requests": arr}
-        wrapper["timesheets"] = timesheets
-        wrapper["timesheets_fetched_at"] = datetime.now(JST).isoformat(timespec="seconds")
+        if _stable_json(existing_timesheets) != _stable_json(timesheets):
+            timesheets_changed = True
+            if wrapper is None:
+                wrapper = {"requests": arr}
+            wrapper["timesheets"] = timesheets
+            wrapper["timesheets_fetched_at"] = datetime.now(JST).isoformat(timespec="seconds")
+        else:
+            log("Timesheet aggregates unchanged — skip timesheet write-back.")
 
-    if updated == 0 and added == 0 and seeds_removed == 0 and not timesheets:
+    if updated == 0 and added == 0 and seeds_removed == 0 and not timesheets_changed:
         log("No changes to write.")
         if new_refresh != refresh_token:
             _emit_token_rotation(new_refresh)
