@@ -780,19 +780,20 @@ select option { background: var(--card); color: var(--foreground); }
   transition: transform var(--duration-fast) var(--ease-out), opacity var(--duration-fast);
   position: relative; isolation: isolate;
 }
-/* Hold-to-confirm fill â€” shadcn/radix Progress style.
-   A full-width indicator that translates from -101% to 0 over 1s,
-   creating a smooth GPU-accelerated sweep (no layout reflow per frame). */
+/* Hold-to-confirm fill - determinate progress overlay.
+   Use scaleX(0->1) so the fill stays clipped inside the pip even when the
+   pip itself allows overflow (needed for SKIP badge positioning). */
 .schedule-pip .pip-fill {
-  position: absolute; left: 0; top: 0; bottom: 0;
-  width: 100%; z-index: 1; pointer-events: none;
+  position: absolute; left: 0; right: 0; top: 0; bottom: 0;
+  z-index: 1; pointer-events: none;
   border-radius: inherit;
-  transform: translateX(-101%);
+  transform-origin: left center;
+  transform: scaleX(0);
   transition: transform 0ms linear;
   will-change: transform;
 }
 .schedule-pip.pressing .pip-fill {
-  transform: translateX(0);
+  transform: scaleX(1);
   transition: transform 1000ms cubic-bezier(0.65, 0, 0.35, 1);
 }
 .schedule-pip .pip-text {
