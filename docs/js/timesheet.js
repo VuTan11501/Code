@@ -354,7 +354,9 @@ function renderTimesheet() {
     const baseOTLine   = Math.floor(totalH  * w * SAL.OT_BASE_RATE);
     const sundayLine   = Math.floor(sundayH * w * SAL.SUNDAY_PREMIUM);
     const nightLine    = Math.floor(nightH  * w * SAL.NIGHT_PREMIUM);
-    const otGross      = baseOTLine + sundayLine + nightLine + SAL.FIXED_ALLOWANCE_YEN;
+    // Keep OT gross variable-only here. calcFullMonthEstimate already includes
+    // fixed_allowance inside contract gross, so adding it again would double-count.
+    const otGross      = baseOTLine + sundayLine + nightLine;
     const F = window.OT_SALARY.formatYen;
 
     const realSlip = window.OT_SALARY.findPayslipForWorkMonth(_tsState.payslips, key);
