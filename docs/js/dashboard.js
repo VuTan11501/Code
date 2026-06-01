@@ -1032,6 +1032,20 @@ async function updateNowStrip(allRuns) {
       return idleText;
     }
 
+    // When flow succeeded but timesheet snapshot is still stale, show the
+    // workflow completion time as a provisional value instead of a blank dash.
+    function runTimeHint(run) {
+      if (!run || run.conclusion !== 'success') return '';
+      const d = new Date(run.updated_at || run.created_at);
+      if (Number.isNaN(d.getTime())) return '';
+      return d.toLocaleTimeString('ja-JP', {
+        timeZone: 'Asia/Tokyo',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      });
+    }
+
     const ciRun = findTodayRun('auto-checkin.yml');
     const coRun = findTodayRun('auto-checkout.yml');
 
@@ -1090,15 +1104,17 @@ async function updateNowStrip(allRuns) {
     };
     const ciFresh = !!ciRecorded && !staleAfterRun(ciRun);
     const coFresh = !!coRecorded && !staleAfterRun(coRun);
+    const ciRunTime = runTimeHint(ciRun);
+    const coRunTime = runTimeHint(coRun);
 
     items.push(ciFresh
       ? nowCard({ icon: 'logIn', label: 'Checkin', state: 'is-ok', val: ciRecorded, sub: 'Ghi nhận DokoKin' })
-      : nowCard({ icon: 'logIn', label: 'Checkin', state: 'is-pending', val: '—', sub: flowHint(ciRun, 'Chưa check-in') })
+      : nowCard({ icon: 'logIn', label: 'Checkin', state: 'is-pending', val: ciRunTime || '—', sub: flowHint(ciRun, 'Chưa check-in') })
     );
 
     items.push(coFresh
       ? nowCard({ icon: 'logOut', label: 'Checkout', state: 'is-ok', val: coRecorded, sub: 'Ghi nhận DokoKin' })
-      : nowCard({ icon: 'logOut', label: 'Checkout', state: 'is-pending', val: '—', sub: flowHint(coRun, 'Chưa check-out') })
+      : nowCard({ icon: 'logOut', label: 'Checkout', state: 'is-pending', val: coRunTime || '—', sub: flowHint(coRun, 'Chưa check-out') })
     );
 
     // OT tonight — read from the same gist payload (resilient)
