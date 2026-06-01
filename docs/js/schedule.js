@@ -4,6 +4,9 @@
 let scheduleInitialized = false;
 let dispatchTimer = null;
 let schedQueueFilter = 'all'; // 'all' | 'once' | 'recurring' | 'history'
+// Browser-side auto-dispatch is intentionally off to avoid triggering
+// checkin/checkout flows just by opening the Schedule screen.
+const CLIENT_AUTO_DISPATCH_ENABLED = false;
 
 function initSchedulePage() {
   // ── One-time setup (calendars, modal wiring, listeners) ──
@@ -158,6 +161,7 @@ function computeNextFireDelay(entries) {
  */
 function scheduleNextDispatch(entries) {
   if (dispatchTimer) { clearTimeout(dispatchTimer); dispatchTimer = null; }
+  if (!CLIENT_AUTO_DISPATCH_ENABLED) return;
   const delay = computeNextFireDelay(entries);
   if (delay === null) {
     // Nothing upcoming — fallback: re-check in 5 min
@@ -171,6 +175,7 @@ function scheduleNextDispatch(entries) {
 
 async function checkAndDispatchOverdue() {
   dispatchTimer = null;
+  if (!CLIENT_AUTO_DISPATCH_ENABLED) return;
   if (!sessionToken) {
     // Try again later in case user just unlocked
     dispatchTimer = setTimeout(checkAndDispatchOverdue, 60 * 1000);
@@ -1192,13 +1197,17 @@ async function loadScheduledRuns() {
     const file = gist.files['scheduled-runs.json'];
     const fileContent = file ? (window.readGistFile ? await window.readGistFile(file) : file.content || '') : '';
     const entries = fileContent ? JSON.parse(fileContent) : [];
-    // Client-side fallback: dispatch overdue runs directly
-    await clientSideDispatchOverdue(entries);
+    if (CLIENT_AUTO_DISPATCH_ENABLED) {
+      // Optional fallback: dispatch overdue runs directly from browser.
+      await clientSideDispatchOverdue(entries);
+    }
     // Update calendar visualization with live data
     renderScheduleCalendar(entries);
     renderScheduledQueue(entries);
-    // Smart wake-up: schedule a precise timer for the next upcoming entry
-    scheduleNextDispatch(entries);
+    if (CLIENT_AUTO_DISPATCH_ENABLED) {
+      // Smart wake-up: schedule a precise timer for the next upcoming entry
+      scheduleNextDispatch(entries);
+    }
   } catch (e) {
     if (e.message.includes('404')) {
       queue.innerHTML = '<div class="empty">No scheduled runs yet</div>';
@@ -1213,7 +1222,7 @@ async function loadScheduledRuns() {
 
 // Fallback: if GitHub cron hasn't fired, dispatch overdue runs from the browser
 async function clientSideDispatchOverdue(entries) {
-  if (!sessionToken || !entries.length) return false;
+  if (!CLIENT_AUTO_DISPATCH_ENABLED || !sessionToken || !entries.length) return false;
   const now = new Date();
   const nowJST = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
   const todayStr = formatDate(nowJST.getFullYear(), nowJST.getMonth(), nowJST.getDate());
