@@ -1456,12 +1456,16 @@ function renderScheduledQueue(entries) {
     const iconName = wf?.iconName || 'settings';
     const isOnce = entry.type === 'once';
     const toggleCls = enabled ? 'sched-toggle active' : 'sched-toggle';
+    const skipMeta = getSkipDatesMeta(entry);
 
     // Build display label: use note as primary label if available
     const label = entry.note || wfName;
     const sublabel = isOnce
       ? `${entry.run_at?.slice(0,16).replace('T',' ')} JST`
       : describeRecurrence(entry.recurrence);
+    const skipHint = skipMeta
+      ? `<span class="sched-skip-meta" data-tooltip="${escapeHtml(skipMeta.tooltip)}" aria-label="${escapeHtml(skipMeta.tooltip)}">${ICON('ban', 12)} Skip: ${escapeHtml(skipMeta.summary)}</span>`
+      : '';
 
     // Status badge
     let nextInfo = '';
@@ -1497,6 +1501,7 @@ function renderScheduledQueue(entries) {
         <div class="sched-item-info">
           <span class="sched-label">${label}${conflictMark}</span>
           <span class="sched-sublabel">${sublabel}</span>
+          ${skipHint}
         </div>
         ${nextInfo}
       </div>
@@ -1520,6 +1525,28 @@ function describeRecurrence(r) {
   else if (r.pattern === 'weekly') desc += (r.days || []).map(d => dayNames[d]).join(', ');
   else if (r.pattern === 'monthly') desc += `Day ${(r.dates || []).join(', ')}`;
   return desc;
+}
+
+function getSkipDatesMeta(entry) {
+  if (!entry || entry.type !== 'recurring') return null;
+  const raw = entry.recurrence?.skip_dates;
+  if (!Array.isArray(raw) || !raw.length) return null;
+
+  const dates = [...new Set(
+    raw.filter(d => typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d))
+  )].sort();
+  if (!dates.length) return null;
+
+  const now = jstNow();
+  const today = formatDate(now.getFullYear(), now.getMonth(), now.getDate());
+  const pivot = dates.find(d => d >= today) || dates[dates.length - 1];
+  const extra = dates.length - 1;
+
+  return {
+    count: dates.length,
+    summary: extra > 0 ? `${pivot} +${extra}` : pivot,
+    tooltip: `Skip dates: ${dates.join(', ')}`,
+  };
 }
 
 // ─── Gist Helper ───
@@ -2008,6 +2035,7 @@ function renderScheduleTable() {
     const wf = WORKFLOWS_ALL.find(w => w.file === entry.workflow);
     const wfName = wf ? `<span class="inline-flex items-center gap-1.5">${ICON(wf.iconName || 'play', 14)} ${wf.name}</span>` : entry.workflow;
     const isOnce = entry.type === 'once';
+    const skipMeta = getSkipDatesMeta(entry);
 
     // Schedule description
     let schedDesc = '';
@@ -2021,6 +2049,9 @@ function renderScheduleTable() {
       else if (r.pattern === 'weekly') schedDesc += (r.days || []).map(d => dayNames[d]).join(', ');
       else if (r.pattern === 'monthly') schedDesc += 'Day ' + (r.dates || []).join(', ');
     }
+    const skipBadge = skipMeta
+      ? ` <span class="badge-warning" data-tooltip="${escapeHtml(skipMeta.tooltip)}" aria-label="${escapeHtml(skipMeta.tooltip)}">${ICON('ban', 11)} Skip ${escapeHtml(skipMeta.summary)}</span>`
+      : '';
 
     // Status
     const enabled = entry.enabled !== false;
@@ -2055,7 +2086,7 @@ function renderScheduleTable() {
       <td data-label="#" class="text-muted-foreground font-mono">${realIdx + 1}</td>
       <td data-label="Type"><span class="badge-${entry.type}">${isOnce ? 'Once' : 'Recurring'}</span></td>
       <td data-label="Workflow" class="font-medium">${wfName}</td>
-      <td data-label="Schedule" class="font-mono text-xs">${schedDesc}</td>
+      <td data-label="Schedule" class="font-mono text-xs">${schedDesc}${skipBadge}</td>
       <td data-label="Note" class="text-muted-foreground">${(() => {
         const n = entry.note || '';
         if (!n) return '—';
