@@ -359,45 +359,22 @@ function renderTimesheet() {
 
     const realSlip = window.OT_SALARY.findPayslipForWorkMonth(_tsState.payslips, key);
     const baseline = window.OT_SALARY.pickBaselineForWorkMonth(_tsState.payslips, key);
-    const payDateStr = window.OT_SALARY.formatPayDate(key);
     const eyeIcon = (window.ICON ? window.ICON('eye', 14) : '👁');
 
-    let salaryVal, salaryTip, salaryExtras = '';
+    let salaryVal, salaryExtras = '';
     if (realSlip && realSlip.take_home != null) {
-      const eyeBtn = `<button class="ts-chip-eye ot-takehome-clickable" data-payslip-month="${key}" aria-label="View payslip detail">${eyeIcon}</button>`;
+      const eyeBtn = `<button type="button" class="ts-chip-eye ot-takehome-clickable" data-payslip-month="${key}" aria-label="View payslip detail">${eyeIcon}</button>`;
       salaryVal = `${F(realSlip.take_home)} <span class="ts-chip-badge ts-chip-badge-actual">act.</span>`;
       salaryExtras = eyeBtn;
-      salaryTip = `Actual take-home for work month ${key}\n`
-                + `(paid ${payDateStr} · payslip ${realSlip.month})\n`
-                + `• Gross: ${F(realSlip.gross || 0)}\n`
-                + `• Take-home: ${F(realSlip.take_home)}\n`
-                + `(All deductions applied: insurance, taxes, rent, fees)\n`
-                + `Click 👁 for full breakdown.`;
     } else if (baseline) {
       const est = window.OT_SALARY.calcFullMonthEstimate(otGross, baseline, { basicSalaryIndex: 1.0 });
-      const eyeBtn = `<button class="ts-chip-eye ot-takehome-clickable" data-payslip-month="${key}" data-payslip-estimate="1" aria-label="View payslip estimate">${eyeIcon}</button>`;
+      const eyeBtn = `<button type="button" class="ts-chip-eye ot-takehome-clickable" data-payslip-month="${key}" data-payslip-estimate="1" aria-label="View payslip estimate">${eyeIcon}</button>`;
       salaryVal = `${F(est.takeHome)} <span class="ts-chip-badge">est.</span>`;
       salaryExtras = eyeBtn;
-      salaryTip = `Estimated take-home for work month ${key}\n`
-                + `(will be paid ${payDateStr} · baseline: payslip ${baseline.month})\n`
-                + `• Total gross: ${F(est.gross)}\n`
-                + `  · contract: ${F(est.contractGross)}\n`
-                + `  · OT (incl. ¥20k fixed): ${F(est.otGross)}\n`
-                + `• − Insurance: ${F(est.insuranceTotal)}\n`
-                + `• − Income tax: ${F(est.incomeTax)}\n`
-                + `• − Resident tax: ${F(est.residentTax)}\n`
-                + `• − Company receivables: ${F(est.companyReceivables)}\n`
-                + `= ${F(est.takeHome)}`;
     } else {
       salaryVal = `${F(otGross)} <span class="ts-chip-badge">OT gross</span>`;
-      salaryTip = `OT gross only (no payslip baseline available — add a payslip in OT Planner first):\n`
-                + `• Base 125% × ${totalH.toFixed(2)}h: ${F(baseOTLine)}\n`
-                + (sundayLine ? `• Sunday +10% × ${sundayH.toFixed(2)}h: ${F(sundayLine)}\n` : '')
-                + (nightLine  ? `• Night +25% × ${nightH.toFixed(2)}h: ${F(nightLine)}\n` : '')
-                + `• Fixed allowance: ${F(SAL.FIXED_ALLOWANCE_YEN)}\n`
-                + `= ${F(otGross)} (gross, pre-tax)`;
     }
-    chips.push(['Salary', { html: salaryVal, tip: salaryTip, cls: 'ts-chip-salary', extras: salaryExtras }]);
+    chips.push(['Salary', { html: salaryVal, cls: 'ts-chip-salary', extras: salaryExtras }]);
   }
 
   let chipsHtml = '';
@@ -406,10 +383,13 @@ function renderTimesheet() {
     const val = c[1];
     const aux = c[2] || '';
     if (val && typeof val === 'object') {
-      const tip = (val.tip || '').replace(/"/g, '&quot;');
+      const tipRaw = typeof val.tip === 'string' ? val.tip.trim() : '';
+      const tip = tipRaw.replace(/"/g, '&quot;');
+      const tooltipCls = tipRaw ? ' tooltip-trigger' : '';
+      const tooltipAttr = tipRaw ? ` data-tooltip="${tip}"` : '';
       const extras = val.extras ? `<div class="ts-chip-label-extras">${val.extras}</div>` : '';
       chipsHtml += `
-        <div class="ts-chip ${val.cls || ''} tooltip-trigger" data-tooltip="${tip}">
+        <div class="ts-chip ${val.cls || ''}${tooltipCls}"${tooltipAttr}>
           <div class="ts-chip-label-row">
             <div class="ts-chip-label">${label}</div>
             ${extras}
@@ -456,6 +436,17 @@ function renderTimesheet() {
     summaryEl.innerHTML = `
       ${lostHtml}
       <div class="ts-summary-grid">${chipsHtml}</div>`;
+    summaryEl.querySelectorAll('.ts-chip-eye').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const month = btn.getAttribute('data-payslip-month');
+        const isEstimate = btn.getAttribute('data-payslip-estimate') === '1';
+        if (typeof openPayslipDetail === 'function') {
+          openPayslipDetail(month, isEstimate);
+        }
+      });
+    });
   }
 
   // ── Per-day table ──
