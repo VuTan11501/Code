@@ -634,7 +634,7 @@
     .gen-actions__utils .btn { min-height: 40px; flex: 1 1 auto; justify-content: center; }
     /* The big "Generate Suica PDF" full-width override from the older
        mobile block conflicts with our new sticky strategy — neutralize. */
-    #planner-auto-suggest, #planner-load-sample, #planner-clear { width: auto !important; }
+    #planner-auto-suggest, #planner-clear { width: auto !important; }
   }
 
   /* Dropdown menus rendered inside .gen-actions (Presets, Backup) — Tailwind's
@@ -1106,11 +1106,11 @@
           </div>
 
           <div class="gen-actions__tools" role="group" aria-label="Plan tools">
-            <button id="planner-auto-suggest" class="btn sm btn-ghost" type="button" data-tooltip="Auto-fill weekday commute (current From↔To) and tune leisure to hit your ¥ target">
+            <button id="planner-auto-suggest" class="btn sm btn-ghost" type="button" data-tooltip="Tune your plan to the ¥ target — keeps your weekly pattern + weekend pool, only adjusts weekend-trip count (seeds from From↔To if empty)">
               <span data-icon="wand" data-size="14"></span>
               <span class="btn-label">Auto-suggest</span>
             </button>
-            <button id="planner-multi-suggest" class="btn sm btn-ghost" type="button" data-tooltip="Show 3 alternative plans (Light / Standard / Heavy) — pick the one you like">
+            <button id="planner-multi-suggest" class="btn sm btn-ghost" type="button" data-tooltip="Show 3 alternative plans (Light / Standard / Heavy) — same commute, different weekend intensity">
               <span data-icon="list" data-size="14"></span>
               <span class="btn-label">Compare 3</span>
             </button>
@@ -1122,10 +1122,6 @@
               </summary>
               <div id="planner-presets-menu" class="absolute right-0 top-full mt-1 bg-card border border-border rounded-md shadow-lg p-1 z-20 min-w-[260px] flex flex-col gap-1"></div>
             </details>
-            <button id="planner-load-sample" class="btn sm btn-ghost" type="button" data-tooltip="Load a demo plan to see how everything fits together">
-              <span data-icon="sparkles" data-size="14"></span>
-              <span class="btn-label">Sample</span>
-            </button>
           </div>
 
           <div class="gen-actions__utils">
@@ -1581,7 +1577,7 @@
 </style>
 <script src="js/auth.js?v=2" defer></script>
 <script>window.SUICA_FARE_API='https://suica-fare-proxy.workflow-dashboard.workers.dev';</script>
-<script src="js/suica-planner.js?v=133" defer></script>
+<script src="js/suica-planner.js?v=134" defer></script>
 <script defer>
 // Wire the date-range popover to the planner Month/Schedule field.
 // Strategy:

@@ -3893,25 +3893,6 @@
     reader.readAsText(file);
   }
 
-  function loadSamplePlan() {
-    pushHistory();
-    state.pattern = {
-      monday: [{ route: '東京↔新宿', type: 'commute' }],
-      tuesday: [{ route: '東京↔新宿', type: 'commute' }],
-      wednesday: [{ route: '東京↔新宿', type: 'commute' }],
-      thursday: [{ route: '東京↔新宿', type: 'commute' }],
-      friday: [{ route: '東京↔新宿', type: 'commute' }],
-      saturday: [],
-      sunday: [],
-    };
-    state.leisure = [
-      { route: '新宿↔横浜', weight: 3 },
-      { route: '東京↔上野', weight: 2 },
-      { route: '渋谷↔横浜', weight: 2 },
-    ];
-    renderPattern(); renderLeisure(); renderEstimate(); saveState();
-  }
-
   function clearPlan() {
     pushHistory();
     DAYS.forEach((d) => { state.pattern[d] = []; });
@@ -3919,82 +3900,156 @@
     renderPattern(); renderLeisure(); renderEstimate(); saveState();
   }
 
-  // ────── Auto-suggest from target + current route ──────
-  // Given the currently picked From↔To and state.settings.target, fill Mon-Fri
-  // commute with that route (2 fares/day = round trip) and tune the leisure
-  // pool so total monthly spend lands near the target.
-  // - If no route is picked, try last-used or '東京↔新宿' as fallback.
-  // - Picks leisure variants from known fares around the same endpoint.
-  // Pure builder: returns a plan {pattern, leisure, settings, projected, commuteSpend, outings, weekdayCount, leisureCandidates}
-  // WITHOUT mutating state. Used by both autoSuggest (single) and multiSuggest (3 variants).
-  function buildSuggestion(opts) {
-    const route = opts.route;
-    const target = +opts.target || 0;
-    const monthInfo = opts.monthInfo;
-    const weekdayDays = opts.weekdayDays || 5; // 4 = skip Friday (light), 5 = full week (standard)
-    const leisureMultiplier = opts.leisureMultiplier || 1.0; // 0.5 / 1.0 / 1.6 etc
-    if (!route || !target || !monthInfo) return null;
-    const commuteFare = fareOf(route);
-    if (!commuteFare) return null;
-    const weekdayCount = (
-      monthInfo.counts.monday + monthInfo.counts.tuesday +
-      monthInfo.counts.wednesday + monthInfo.counts.thursday +
-      (weekdayDays >= 5 ? monthInfo.counts.friday : 0)
-    );
-    const commuteSpend = 2 * commuteFare * weekdayCount;
-    const remainder = Math.max(0, target - commuteSpend);
-    const [a, b] = route.split('↔');
-    // Popularity weights from Recent run history so suggestions favour
-    // routes the user has actually generated PDFs with before.
+  // ────── Leisure candidate seeding ──────
+  // Find verified fares that touch any of `endpoints`, priced like a plausible
+  // weekend trip, sorted by how well they fit the per-outing budget slice and
+  // by how often the user has actually generated them before. Returns route keys.
+  function seedLeisureCandidates(endpoints, remainder, exclude) {
+    const ep = new Set((endpoints || []).filter(Boolean));
+    const ex = new Set(exclude || []);
     const popMap = {};
     try {
       const recent = loadRecent();
       recent.forEach((r) => (r.routes || []).forEach((rt) => { popMap[rt] = (popMap[rt] || 0) + 1; }));
     } catch (_) {}
     const popScore = (k) => Math.log(1 + (popMap[k] || 0)); // 0, 0.69, 1.10, 1.39…
+    const slice = remainder > 0 ? remainder / 8 : 400;
     const nearby = [];
     Object.keys(state.fares).forEach((k) => {
-      if (k === route) return;
+      if (ex.has(k)) return;
       const [x, y] = k.split('↔');
-      if (x === a || x === b || y === a || y === b) {
-        const f = state.fares[k];
-        if (f >= 150 && f <= 800) nearby.push({ k, f });
-      }
+      if (ep.size && !(ep.has(x) || ep.has(y))) return;
+      const f = state.fares[k];
+      if (f >= 150 && f <= 800) nearby.push({ k, f });
     });
-    // Sort by fare proximity to target slice, then break ties by popularity.
     nearby.sort((p, q) => {
-      const ds = Math.abs((remainder/8) - p.f) - Math.abs((remainder/8) - q.f);
+      const ds = Math.abs(slice - p.f) - Math.abs(slice - q.f);
       if (Math.abs(ds) > 30) return ds; // strong fare-fit dominates
       return popScore(q.k) - popScore(p.k);
     });
-    let leisureCandidates = nearby.slice(0, 3).map((n) => n.k);
-    if (!leisureCandidates.length) {
-      const any = Object.keys(state.fares)
-        .filter((k) => state.fares[k] >= 200 && state.fares[k] <= 800)
+    let out = nearby.slice(0, 3).map((n) => n.k);
+    if (!out.length) {
+      out = Object.keys(state.fares)
+        .filter((k) => !ex.has(k) && state.fares[k] >= 200 && state.fares[k] <= 800)
         .sort((p, q) => popScore(q) - popScore(p))
         .slice(0, 2);
-      leisureCandidates = any;
     }
-    const avgLeisureFare = leisureCandidates.length
-      ? leisureCandidates.reduce((s, k) => s + (state.fares[k] || 0), 0) / leisureCandidates.length
+    return out;
+  }
+
+  // Collect the unique commute routes currently present in the weekly pattern.
+  function patternCommuteRoutes() {
+    const set = new Set();
+    DAYS.forEach((d, idx) => {
+      if (idx >= 5) return; // weekday commute only
+      (state.pattern[d] || []).forEach((t) => {
+        const route = (t && t.route) ? t.route : (typeof t === 'string' ? t : '');
+        const isCommute = !t || typeof t === 'string' || (t && t.type === 'commute');
+        if (route && isCommute) set.add(route);
+      });
+    });
+    return Array.from(set);
+  }
+
+  // ────── Suggestion builder (settings-aware) ──────
+  // Builds a plan that lands monthly spend near state.settings.target.
+  //
+  // Honours the user's existing settings when present:
+  //   • Weekly pattern (commute) — kept verbatim; commute base is computed from it.
+  //   • Weekend trip pool — kept verbatim (and lightly augmented when too thin),
+  //     then the number of weekend outings (leisure_min/max) is tuned to the target.
+  // When pattern / pool are empty it seeds them from the picked From↔To `route`.
+  //
+  // Pure: returns a plan WITHOUT mutating state. Used by autoSuggest (single)
+  // and multiSuggest (3 variants).
+  function buildSuggestion(opts) {
+    const route = opts.route;
+    const target = +opts.target || 0;
+    const monthInfo = opts.monthInfo;
+    const weekdayDays = opts.weekdayDays || 5; // only used when seeding from scratch
+    const leisureMultiplier = opts.leisureMultiplier || 1.0; // 0.6 / 1.0 / 1.6 etc
+    const augmentPool = opts.augmentPool !== false;
+    if (!target || !monthInfo) return null;
+
+    const existingCommute = patternCommuteRoutes();
+    const preservedPattern = existingCommute.length > 0;
+    const existingPool = (state.leisure || []).filter((l) => l && l.route && fareOf(l.route) > 0);
+    const preservedPool = existingPool.length > 0;
+
+    // ── Commute base ──
+    let pattern = {};
+    let commuteSpend = 0;
+    let weekdayCount = 0;
+    let endpoints = [];
+    if (preservedPattern) {
+      // Keep the user's pattern exactly; derive cost + endpoints from it.
+      DAYS.forEach((d) => {
+        pattern[d] = (state.pattern[d] || []).map((t) => (typeof t === 'string' ? { route: t, type: 'commute' } : { ...t }));
+      });
+      DAYS.forEach((d, idx) => {
+        const dayFare = pattern[d].reduce((s, t) => {
+          const isCommute = !t.type || t.type === 'commute';
+          return s + fareOf(t.route) * (isCommute ? 2 : 1);
+        }, 0);
+        commuteSpend += dayFare * monthInfo.counts[d];
+        if (idx < 5 && pattern[d].length) weekdayCount += monthInfo.counts[d];
+      });
+      existingCommute.forEach((r) => r.split('↔').forEach((s) => endpoints.push(s)));
+    } else {
+      // Seed weekday commute from the picked route.
+      if (!route) return null;
+      const commuteFare = fareOf(route);
+      if (!commuteFare) return null;
+      DAYS.forEach((d, idx) => {
+        const isWeekday = idx < 5;
+        const includeFriday = weekdayDays >= 5 || idx !== 4;
+        pattern[d] = (isWeekday && includeFriday) ? [{ route, type: 'commute' }] : [];
+      });
+      weekdayCount = (
+        monthInfo.counts.monday + monthInfo.counts.tuesday +
+        monthInfo.counts.wednesday + monthInfo.counts.thursday +
+        (weekdayDays >= 5 ? monthInfo.counts.friday : 0)
+      );
+      commuteSpend = 2 * commuteFare * weekdayCount;
+      endpoints = route.split('↔');
+    }
+
+    const remainder = Math.max(0, target - commuteSpend);
+
+    // ── Weekend trip pool ──
+    let leisure;
+    if (preservedPool) {
+      leisure = existingPool.map((l) => ({ ...l }));
+      // Augment only when the pool is too thin to give the randomizer variety,
+      // pulling extra nearby routes around the commute endpoints.
+      if (augmentPool && leisure.length < 2) {
+        const exclude = leisure.map((l) => l.route);
+        seedLeisureCandidates(endpoints, remainder, exclude)
+          .slice(0, 2 - leisure.length)
+          .forEach((k) => leisure.push({ route: k, weight: 2 }));
+      }
+    } else {
+      leisure = seedLeisureCandidates(endpoints, remainder, [route]).map((k) => ({ route: k, weight: 2 }));
+    }
+
+    // Weighted average leisure fare (matches renderEstimate's weighting).
+    const totW = leisure.reduce((s, l) => s + (l.weight || 0), 0);
+    const avgLeisureFare = totW
+      ? leisure.reduce((s, l) => s + fareOf(l.route) * (l.weight || 0), 0) / totW
       : 0;
+
     let outings = avgLeisureFare > 0 ? Math.round((remainder * leisureMultiplier) / (2 * avgLeisureFare)) : 0;
     outings = Math.max(0, Math.min(12, outings));
     const leisureMin = Math.max(0, outings - 1);
     const leisureMax = Math.min(20, outings + 1);
     const projected = commuteSpend + (avgLeisureFare * outings * 2);
-    const pattern = {};
-    DAYS.forEach((d, idx) => {
-      const isWeekday = idx < 5;
-      const includeFriday = weekdayDays >= 5 || idx !== 4;
-      pattern[d] = (isWeekday && includeFriday) ? [{ route, type: 'commute' }] : [];
-    });
+
     return {
-      route, pattern,
-      leisure: leisureCandidates.map((k) => ({ route: k, weight: 2 })),
+      route, pattern, leisure,
       settings: { leisure_min: leisureMin, leisure_max: leisureMax },
       projected, commuteSpend, outings, weekdayCount,
-      leisureCandidates, avgLeisureFare,
+      leisureCandidates: leisure.map((l) => l.route), avgLeisureFare,
+      preservedPattern, preservedPool,
     };
   }
 
@@ -4052,6 +4107,8 @@
     const note = (txt, cls) => { if (status) { status.textContent = txt; status.className = 'text-xs ' + (cls || 'text-muted-foreground'); } };
     const target = +state.settings.target || 0;
     if (!target || target < 1000) { note('Set a target (≥ ¥1000) first.', 'text-warning'); return; }
+    const hasPattern = patternCommuteRoutes().length > 0;
+    // Resolve a fallback route only needed when there's no weekly pattern to keep.
     let route = currentRoute();
     if (!route) {
       try {
@@ -4062,20 +4119,25 @@
         }
       } catch (_) {}
     }
-    if (!route && state.stations.includes('東京') && state.stations.includes('新宿')) {
+    if (!route && !hasPattern && state.stations.includes('東京') && state.stations.includes('新宿')) {
       route = '東京↔新宿';
       if (cbFrom && cbTo) { cbFrom.setValue('東京'); cbTo.setValue('新宿'); updateFareDisplay(); }
     }
-    if (!route) { note('Pick a From and To station first.', 'text-warning'); return; }
+    if (!route && !hasPattern) { note('Pick a From↔To station, or build a weekly pattern first.', 'text-warning'); return; }
     const monthInfo = countWeekdaysInMonth(state.settings.month);
     if (!monthInfo) { note('Set a valid YYYY-MM month first.', 'text-warning'); return; }
-    const s = buildSuggestion({ route, target, monthInfo, weekdayDays: 5, leisureMultiplier: 1.0 });
+    const s = buildSuggestion({ route, target, monthInfo, weekdayDays: 5, leisureMultiplier: 1.0, augmentPool: true });
     if (!s) { note('Selected route has no verified fare — pick a JR-served pair.', 'text-warning'); return; }
     applySuggestion(s);
-    const msg = `Auto-filled: ${route} weekdays + ${s.leisureCandidates.length} leisure route(s), ~${s.outings} outings/mo`;
+    const kept = [];
+    if (s.preservedPattern) kept.push('your weekly pattern');
+    if (s.preservedPool) kept.push('your weekend pool');
+    const lead = kept.length
+      ? `Kept ${kept.join(' + ')} — tuned weekend trips to ~${s.outings}/mo`
+      : `Auto-filled: ${route} weekdays + ${s.leisureCandidates.length} leisure route(s), ~${s.outings} outings/mo`;
     const detail = `Projected ${fmtYen(s.projected)} vs target ${fmtYen(target)}`;
-    note(`${msg} → ${detail}`, 'text-primary');
-    if (window.Toast) window.Toast.success(detail, { title: 'Auto-suggest applied' });
+    note(`${lead} → ${detail}`, 'text-primary');
+    if (window.Toast) window.Toast.success(detail, { title: kept.length ? 'Tuned to your settings' : 'Auto-suggest applied' });
   }
 
   // Show 3-card alternatives: Light, Standard, Heavy
@@ -4084,23 +4146,30 @@
     const note = (txt, cls) => { if (status) { status.textContent = txt; status.className = 'text-xs ' + (cls || 'text-muted-foreground'); } };
     const target = +state.settings.target || 0;
     if (!target || target < 1000) { note('Set a target (≥ ¥1000) first.', 'text-warning'); return; }
+    const hasPattern = patternCommuteRoutes().length > 0;
     let route = currentRoute();
-    if (!route && state.stations.includes('東京') && state.stations.includes('新宿')) {
+    if (!route && !hasPattern && state.stations.includes('東京') && state.stations.includes('新宿')) {
       route = '東京↔新宿';
       if (cbFrom && cbTo) { cbFrom.setValue('東京'); cbTo.setValue('新宿'); updateFareDisplay(); }
     }
-    if (!route) { note('Pick a From and To station first.', 'text-warning'); return; }
+    if (!route && !hasPattern) { note('Pick a From↔To station, or build a weekly pattern first.', 'text-warning'); return; }
     const monthInfo = countWeekdaysInMonth(state.settings.month);
     if (!monthInfo) { note('Set a valid YYYY-MM month first.', 'text-warning'); return; }
+    // Variants vary weekend-trip intensity only — the weekly commute (whether
+    // your saved pattern or the seeded route) stays identical across all three.
     const variants = [
-      { id: 'light',    label: 'Light',    desc: 'Mon-Thu commute, fewer outings', opts: { weekdayDays: 4, leisureMultiplier: 0.6 } },
-      { id: 'standard', label: 'Standard', desc: 'Mon-Fri commute, balanced',       opts: { weekdayDays: 5, leisureMultiplier: 1.0 } },
-      { id: 'heavy',    label: 'Heavy',    desc: 'Mon-Fri + more weekend trips',    opts: { weekdayDays: 5, leisureMultiplier: 1.6 } },
+      { id: 'light',    label: 'Light',    desc: 'Fewer weekend trips',    opts: { weekdayDays: 5, leisureMultiplier: 0.6 } },
+      { id: 'standard', label: 'Standard', desc: 'Balanced weekend trips', opts: { weekdayDays: 5, leisureMultiplier: 1.0 } },
+      { id: 'heavy',    label: 'Heavy',    desc: 'More weekend trips',     opts: { weekdayDays: 5, leisureMultiplier: 1.6 } },
     ];
     const built = variants.map((v) => ({
-      ...v, suggestion: buildSuggestion({ route, target, monthInfo, ...v.opts }),
+      ...v, suggestion: buildSuggestion({ route, target, monthInfo, augmentPool: true, ...v.opts }),
     })).filter((v) => v.suggestion);
     if (!built.length) { note('No verified fare for this route.', 'text-warning'); return; }
+    const keptParts = [];
+    if (built[0].suggestion.preservedPattern) keptParts.push('weekly pattern');
+    if (built[0].suggestion.preservedPool) keptParts.push('weekend pool');
+    const sourceLabel = keptParts.length ? `Kept your ${keptParts.join(' + ')}` : `Route ${route}`;
 
     const panel = $('planner-multi-suggest-panel');
     if (!panel) return;
@@ -4113,7 +4182,7 @@
             <span data-icon="x" data-size="12"></span>
           </button>
         </div>
-        <div class="card-description text-xs">Target ¥${target.toLocaleString('en-US')} · Route ${route}</div>
+        <div class="card-description text-xs">Target ¥${target.toLocaleString('en-US')} · ${sourceLabel} · weekend intensity only</div>
       </div>
       <div class="card-content">
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -4123,9 +4192,11 @@
             const tone = deltaPct <= 10 ? 'status-success' : deltaPct <= 25 ? 'status-pending' : 'status-failure';
             const s = v.suggestion;
             const explain = [
-              `Commute base: ${fmtYen(s.commuteSpend)} (${s.weekdayCount} weekdays × 2 × ${fmtYen(fareOf(s.route))})`,
+              s.preservedPattern
+                ? `Commute base: ${fmtYen(s.commuteSpend)} (from your weekly pattern, ${s.weekdayCount} weekday-runs)`
+                : `Commute base: ${fmtYen(s.commuteSpend)} (${s.weekdayCount} weekdays × 2 × ${fmtYen(fareOf(s.route))})`,
               `Leisure budget: ${fmtYen(s.projected - s.commuteSpend)} (${s.outings} outings × 2 × avg ${fmtYen(Math.round(s.avgLeisureFare || 0))})`,
-              `Pool: ${(s.leisureCandidates || []).slice(0, 3).join(', ') || '(none)'}`,
+              `Pool${s.preservedPool ? ' (yours)' : ''}: ${(s.leisureCandidates || []).slice(0, 3).join(', ') || '(none)'}`,
               `→ Projected: ${fmtYen(s.projected)} vs target ${fmtYen(target)} (${delta >= 0 ? '+' : ''}${fmtYen(delta)})`,
             ].join('\n');
             return `
@@ -4418,7 +4489,6 @@
         const s = $('planner-pdf-status'); if (s) { s.textContent = 'Failed: ' + err.message; s.className = 'text-xs text-destructive'; }
       }
     });
-    $('planner-load-sample').addEventListener('click', loadSamplePlan);
     $('planner-clear').addEventListener('click', clearPlan);
     const sgBtn = $('planner-auto-suggest');
     if (sgBtn) sgBtn.addEventListener('click', autoSuggest);
