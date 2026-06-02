@@ -47,3 +47,5 @@ _drw.py
 _meta.py
 _meta.txt
 
+# git worktrees
+.worktrees/
