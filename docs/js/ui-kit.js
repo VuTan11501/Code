@@ -83,7 +83,13 @@
 
     overlay.appendChild(modal);
     document.body.appendChild(overlay);
-    document.body.classList.add('modal-open');
+    // Delegate body lock to the central manager (window.Modal.syncBodyLock,
+    // installed by app.js initScrollLock IIFE). It also picks this overlay
+    // up via its childList observer, but call explicitly so the lock lands
+    // before the next paint (no single-frame scroll flash).
+    if (window.Modal && typeof window.Modal.syncBodyLock === 'function') {
+      window.Modal.syncBodyLock();
+    }
 
     let closed = false;
     function onKey(e) { if (e.key === 'Escape') close(); }
@@ -95,8 +101,11 @@
       try { overlay.remove(); } catch { /* ignore */ }
       const i = _openSheets.indexOf(ctl);
       if (i >= 0) _openSheets.splice(i, 1);
-      if (!_openSheets.length && !document.querySelector('.modal-overlay.open')) {
-        document.body.classList.remove('modal-open');
+      // Central manager re-evaluates open state and releases the body lock
+      // if no other overlays remain. childList observer also catches the
+      // overlay.remove() above; this explicit call avoids the rAF delay.
+      if (window.Modal && typeof window.Modal.syncBodyLock === 'function') {
+        window.Modal.syncBodyLock();
       }
       try { onClose && onClose(); } catch { /* ignore */ }
     }

@@ -1581,15 +1581,158 @@ if (document.readyState === 'loading') {
 }
 
 // ─── Body scroll-lock when any modal/dialog overlay is open ───
+// Targeted manager — observes only overlay nodes (class/hidden/style) instead
+// of the whole documentElement subtree class graph. This avoids the feedback
+// loop the previous implementation risked: toggling `modal-open` on <body>
+// fired the broad class observer that toggled it again, and any unrelated
+// class churn (theme, page nav, animation frames) re-triggered a global
+// querySelector pass on every iteration — a known startup-thrash vector.
 (function initScrollLock() {
-  function syncScrollLock() {
-    const hasOpen = document.querySelector('.modal-overlay.open, .dialog-overlay.open, .spinner-overlay.open');
-    document.body.classList.toggle('modal-open', !!hasOpen);
+  const OVERLAY_SELECTOR = '.modal-overlay, .dialog-overlay, .spinner-overlay, .proposal-modal';
+  const OPEN_SELECTOR = '.modal-overlay.open, .dialog-overlay.open, .spinner-overlay.open, .proposal-modal.show';
+
+  let lockApplied = false;
+  let lockScrollY = 0;
+  let syncQueued = false;
+  let syncInFlight = false;
+
+  function applyLock() {
+    if (!document.body || lockApplied) return;
+    lockApplied = true;
+    lockScrollY = window.scrollY || window.pageYOffset || 0;
+    document.body.dataset.modalLockY = String(lockScrollY);
+    document.body.style.position = 'fixed';
+    document.body.style.top = `-${lockScrollY}px`;
+    document.body.style.left = '0';
+    document.body.style.right = '0';
+    document.body.style.width = '100%';
+    if (!document.body.classList.contains('modal-open')) document.body.classList.add('modal-open');
   }
-  const observer = new MutationObserver(syncScrollLock);
-  observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'], subtree: true });
-  // Also listen on DOMContentLoaded in case overlays exist at load
-  document.addEventListener('DOMContentLoaded', syncScrollLock);
+
+  function releaseLock() {
+    if (!document.body) return;
+    if (!lockApplied) {
+      // Idempotent cleanup if no fixed-lock was active.
+      if (document.body.classList.contains('modal-open')) document.body.classList.remove('modal-open');
+      return;
+    }
+    const restoreY = parseInt(document.body.dataset.modalLockY || '0', 10) || 0;
+    lockApplied = false;
+    document.body.style.position = '';
+    document.body.style.top = '';
+    document.body.style.left = '';
+    document.body.style.right = '';
+    document.body.style.width = '';
+    delete document.body.dataset.modalLockY;
+    document.body.classList.remove('modal-open');
+    window.scrollTo(0, restoreY);
+  }
+
+  function syncScrollLock() {
+    // Coalesce bursts (e.g. multiple overlays toggling in same frame) to a
+    // single state read — keeps the handler O(1) even under churn.
+    if (syncQueued) return;
+    syncQueued = true;
+    const run = () => {
+      syncQueued = false;
+      if (syncInFlight) return;
+      syncInFlight = true;
+      try {
+        const hasOpen = !!document.querySelector(OPEN_SELECTOR);
+        if (hasOpen) applyLock();
+        else releaseLock();
+      } finally {
+        syncInFlight = false;
+      }
+    };
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(run);
+    else setTimeout(run, 0);
+  }
+
+  // One shared attribute observer; we just call .observe() per overlay node.
+  // Filtered to the attributes that actually change open state.
+  const tracked = new WeakSet();
+  const attrObserver = new MutationObserver(syncScrollLock);
+
+  function trackOverlay(node) {
+    if (!(node instanceof Element)) return;
+    if (tracked.has(node)) return;
+    tracked.add(node);
+    attrObserver.observe(node, {
+      attributes: true,
+      attributeFilter: ['class', 'hidden', 'style'],
+    });
+  }
+
+  function scanAndTrack(root) {
+    if (!root || root.nodeType !== 1) return;
+    if (typeof root.matches === 'function' && root.matches(OVERLAY_SELECTOR)) {
+      trackOverlay(root);
+    }
+    if (typeof root.querySelectorAll === 'function') {
+      const found = root.querySelectorAll(OVERLAY_SELECTOR);
+      for (let i = 0; i < found.length; i++) trackOverlay(found[i]);
+    }
+  }
+
+  function init() {
+    if (!document.body) return;
+    scanAndTrack(document.body);
+
+    // Watch only for added/removed overlay nodes so we can attach the
+    // attribute observer to anything injected later (modals appended on
+    // demand by ai-agent, settings, proposals, ui-kit sheets). Handler is
+    // cheap — it filters by overlay-class membership, never mutates the
+    // DOM itself, so it cannot feed back into itself.
+    const childObserver = new MutationObserver((records) => {
+      let dirty = false;
+      for (let i = 0; i < records.length; i++) {
+        const rec = records[i];
+        if (rec.addedNodes && rec.addedNodes.length) {
+          for (let j = 0; j < rec.addedNodes.length; j++) {
+            const added = rec.addedNodes[j];
+            const before = dirty;
+            scanAndTrack(added);
+            // Any overlay-bearing addition (whether matched directly or
+            // descended via querySelectorAll) forces a re-sync so an
+            // already-open inserted overlay locks the body immediately.
+            if (added && added.nodeType === 1 && (
+              (typeof added.matches === 'function' && added.matches(OVERLAY_SELECTOR))
+              || (typeof added.querySelector === 'function' && added.querySelector(OVERLAY_SELECTOR))
+            )) dirty = true;
+            if (dirty && !before) { /* keep flag */ }
+          }
+        }
+        if (rec.removedNodes && rec.removedNodes.length) {
+          // Removed overlays (e.g. UIKit sheet close → overlay.remove())
+          // never fire attrObserver, so we must re-sync here to release
+          // the body lock if nothing else is open. Filter so unrelated
+          // child removals (cards, list items) don't schedule needless
+          // sync passes.
+          for (let j = 0; j < rec.removedNodes.length; j++) {
+            const removed = rec.removedNodes[j];
+            if (removed && removed.nodeType === 1 && (
+              (typeof removed.matches === 'function' && removed.matches(OVERLAY_SELECTOR))
+              || (typeof removed.querySelector === 'function' && removed.querySelector(OVERLAY_SELECTOR))
+            )) { dirty = true; break; }
+          }
+        }
+      }
+      if (dirty) syncScrollLock();
+    });
+    // Overlays are mounted directly under <body>; avoid subtree churn.
+    childObserver.observe(document.body, { childList: true, subtree: false });
+    syncScrollLock();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init, { once: true });
+  } else {
+    init();
+  }
+
+  window.Modal = window.Modal || {};
+  window.Modal.syncBodyLock = syncScrollLock;
 })();
 
 // ─── Global tooltip portal (shadcn-style) ───

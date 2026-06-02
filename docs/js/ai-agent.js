@@ -404,7 +404,9 @@ window.AIAgent = (function () {
     if (!s) return;
     s.classList.add('open');
     _renderConvList();
-    document.body.style.overflow = 'hidden';
+    if (window.Modal && typeof window.Modal.syncBodyLock === 'function') {
+      window.Modal.syncBodyLock();
+    }
     setTimeout(() => {
       const input = document.getElementById('aiConvSearch');
       if (input) try { input.focus(); } catch {}
@@ -419,7 +421,9 @@ window.AIAgent = (function () {
     const s = document.getElementById('aiConvSheet');
     if (!s) return;
     s.classList.remove('open');
-    document.body.style.overflow = '';
+    if (window.Modal && typeof window.Modal.syncBodyLock === 'function') {
+      window.Modal.syncBodyLock();
+    }
     _convEditingId = null;
   }
 
