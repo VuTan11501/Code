@@ -406,6 +406,45 @@
   }
   body:has(#suicaPdfOverlay) #planner-kbd-fab:hover,
   body:has(#suicaLogModal) #planner-kbd-fab:hover { opacity: 1; }
+  /* ─── Manual History Wizard ─── */
+  .wizard-stepper {
+    display: flex; gap: 0; margin-bottom: 1rem;
+    border: 1px solid var(--border); border-radius: var(--radius-md);
+    overflow: hidden; background: var(--muted);
+  }
+  .wizard-stepper-item {
+    flex: 1; display: flex; align-items: center; justify-content: center; gap: 0.5rem;
+    padding: 0.625rem 0.75rem; font-size: var(--fs-sm); font-weight: 500;
+    color: var(--muted-foreground); position: relative;
+    border: none; cursor: pointer; background: transparent;
+    transition: background var(--duration-fast), color var(--duration-fast);
+  }
+  .wizard-stepper-item.is-active {
+    background: var(--background); color: var(--foreground);
+    box-shadow: var(--shadow-sm);
+  }
+  .wizard-stepper-item.is-done { color: var(--green); }
+  .wizard-stepper-num {
+    width: 1.25rem; height: 1.25rem; border-radius: 9999px;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: var(--fs-xs); font-weight: 600;
+    border: 1px solid var(--border); background: var(--secondary);
+    flex-shrink: 0;
+  }
+  .wizard-stepper-item.is-active .wizard-stepper-num {
+    background: var(--primary); color: #fff; border-color: var(--primary);
+  }
+  .wizard-stepper-item.is-done .wizard-stepper-num {
+    background: var(--green); color: #fff; border-color: var(--green);
+  }
+  .wizard-step-panel { display: none; }
+  .wizard-step-panel.is-active { display: block; }
+  .wizard-stepper-item.is-active + .wizard-stepper-item { border-left: 1px solid var(--border); }
+  #manual-view-toggle-calendar.is-active,
+  #manual-view-toggle-table.is-active {
+    background: var(--primary); color: #fff; border-color: var(--primary);
+  }
+
   /* Pulse animation triggered on Ctrl+Z / Ctrl+S so the user gets a
      subtle visual confirmation their shortcut was received. */
   @keyframes fabPulse {
@@ -1193,6 +1232,113 @@
   <!-- Keyboard shortcuts help (popover) -->
   <section id="planner-shortcuts-help" class="hidden" aria-label="Keyboard shortcuts"></section>
 
+  <!-- ═══ MANUAL HISTORY WIZARD ═══════════════════════════════════════════ -->
+  <section id="manual-wizard-section" aria-label="Manual History Wizard">
+    <div class="section-title text-sm font-medium text-muted-foreground mb-4 flex items-center gap-2">
+      <span data-icon="edit" data-size="16"></span> Manual History Wizard
+    </div>
+    <div class="card">
+      <div class="card-content">
+        <!-- Stepper header -->
+        <div class="wizard-stepper" role="tablist" aria-label="Wizard steps">
+          <button type="button" class="wizard-stepper-item is-active" role="tab" id="wizard-tab-1" aria-selected="true" aria-controls="wizard-panel-1" tabindex="0" data-wizard-step="1">
+            <span class="wizard-stepper-num">1</span>
+            <span class="hidden sm:inline">Time range</span>
+          </button>
+          <button type="button" class="wizard-stepper-item" role="tab" id="wizard-tab-2" aria-selected="false" aria-controls="wizard-panel-2" tabindex="-1" data-wizard-step="2">
+            <span class="wizard-stepper-num">2</span>
+            <span class="hidden sm:inline">Edit history</span>
+          </button>
+          <button type="button" class="wizard-stepper-item" role="tab" id="wizard-tab-3" aria-selected="false" aria-controls="wizard-panel-3" tabindex="-1" data-wizard-step="3">
+            <span class="wizard-stepper-num">3</span>
+            <span class="hidden sm:inline">Validate &amp; export</span>
+          </button>
+        </div>
+
+        <!-- Step 1: Time range -->
+        <div class="wizard-step-panel is-active" id="wizard-panel-1" data-wizard-panel="1" role="tabpanel" aria-labelledby="wizard-tab-1">
+          <div class="space-y-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label for="manual-range-from" class="text-xs text-muted-foreground mb-1 block">From</label>
+                <input type="date" id="manual-range-from" class="input w-full">
+              </div>
+              <div>
+                <label for="manual-range-to" class="text-xs text-muted-foreground mb-1 block">To</label>
+                <input type="date" id="manual-range-to" class="input w-full">
+              </div>
+            </div>
+            <label class="flex items-center gap-2 text-sm cursor-pointer">
+              <input type="checkbox" id="manual-start-blank" class="accent-[var(--primary)]">
+              <span>Start with blank history (no auto-generated entries)</span>
+            </label>
+            <div class="flex justify-end">
+              <button id="manual-step-next" class="btn primary" type="button">
+                Next
+                <span data-icon="chevronRight" data-size="14"></span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Step 2: Edit history (Hybrid) -->
+        <div class="wizard-step-panel" id="wizard-panel-2" data-wizard-panel="2" role="tabpanel" aria-labelledby="wizard-tab-2">
+          <div class="space-y-4">
+            <!-- View toggle -->
+            <div class="flex items-center gap-2 mb-2">
+              <button id="manual-view-toggle-calendar" class="btn sm btn-outline is-active" type="button" aria-pressed="true">Calendar</button>
+              <button id="manual-view-toggle-table" class="btn sm btn-outline" type="button" aria-pressed="false">Table</button>
+              <div class="ml-auto flex items-center gap-2">
+                <button id="manual-batch-add" class="btn sm btn-ghost" type="button" data-tooltip="Batch add entries">
+                  <span data-icon="plus" data-size="14"></span> <span class="btn-label">Add</span>
+                </button>
+                <button id="manual-batch-remove" class="btn sm btn-ghost" type="button" data-tooltip="Batch remove entries">
+                  <span data-icon="minus" data-size="14"></span> <span class="btn-label">Remove</span>
+                </button>
+                <button id="manual-duplicate-week" class="btn sm btn-ghost" type="button" data-tooltip="Duplicate selected week">
+                  <span data-icon="copy" data-size="14"></span> <span class="btn-label">Dup week</span>
+                </button>
+                <button id="manual-recalc-balance" class="btn sm btn-ghost" type="button" data-tooltip="Recalculate running balance">
+                  <span data-icon="refresh" data-size="14"></span> <span class="btn-label">Recalc</span>
+                </button>
+              </div>
+            </div>
+            <!-- Editor views (calendar / table) -->
+            <div id="manual-editor-calendar"></div>
+            <div id="manual-editor-table" class="hidden"></div>
+            <!-- Navigation -->
+            <div class="flex justify-between">
+              <button id="manual-step-back" class="btn btn-outline sm" type="button">
+                <span data-icon="chevronLeft" data-size="14"></span> Back
+              </button>
+              <button id="manual-step-next-2" class="btn primary" type="button">
+                Next <span data-icon="chevronRight" data-size="14"></span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Step 3: Validate & export -->
+        <div class="wizard-step-panel" id="wizard-panel-3" data-wizard-panel="3" role="tabpanel" aria-labelledby="wizard-tab-3">
+          <div class="space-y-4">
+            <div id="manual-validation-summary" class="rounded-md border border-border bg-muted/30 p-3 text-sm text-muted-foreground">
+              Validation results will appear here.
+            </div>
+            <div class="flex justify-between">
+              <button id="manual-step-back-3" class="btn btn-outline sm" type="button">
+                <span data-icon="chevronLeft" data-size="14"></span> Back
+              </button>
+              <button id="manual-export-pdf" class="btn primary" type="button">
+                <span data-icon="download" data-size="14"></span> Export PDF
+              </button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
   </div><!-- /tab generate -->
 
   <!-- Sticky mobile CTA — visible only on <=640px viewports. Forwards click
@@ -1581,7 +1727,13 @@
 </style>
 <script src="js/auth.js?v=2" defer></script>
 <script>window.SUICA_FARE_API='https://suica-fare-proxy.workflow-dashboard.workers.dev';</script>
-<script src="js/suica-planner.js?v=132" defer></script>
+<script src="js/suica-editor-store.js?v=1" defer></script>
+<script src="js/suica-validator.js?v=1" defer></script>
+<script src="js/suica-editor-calendar.js?v=1" defer></script>
+<script src="js/suica-editor-table.js?v=1" defer></script>
+<script src="js/suica-export.js?v=2" defer></script>
+<script src="js/suica-wizard.js?v=1" defer></script>
+<script src="js/suica-planner.js?v=133" defer></script>
 <script defer>
 // Wire the date-range popover to the planner Month/Schedule field.
 // Strategy:

@@ -62,6 +62,7 @@
   // fare/station catalogues (those are reloaded from the network each visit).
   const STORAGE_KEY = 'suica-planner-v2';
   let _saveTimer = null;
+  let _saveSuspended = false;
   function _setSaveBadge(stateLabel) {
     const el = document.getElementById('planner-save-badge');
     if (!el) return;
@@ -76,8 +77,17 @@
       el.title = 'Last saved ' + now.toLocaleTimeString();
     }
   }
+  function _cancelPendingSave() {
+    if (!_saveTimer) return;
+    clearTimeout(_saveTimer);
+    _saveTimer = null;
+  }
+  function _setSaveSuspended(suspended) {
+    _saveSuspended = !!suspended;
+    if (_saveSuspended) _cancelPendingSave();
+  }
   function saveState() {
-    if (_saveTimer) return;
+    if (_saveSuspended || _saveTimer) return;
     _setSaveBadge('saving');
     _saveTimer = setTimeout(() => {
       _saveTimer = null;
@@ -2452,6 +2462,156 @@
     setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 200);
     console.info(`[suica-planner] Saved ${filename} (${blob.size.toLocaleString()} bytes from artifact ${zipBuffer.byteLength.toLocaleString()} bytes)`);
     return filename;
+  }
+
+  // ───── Public bridge: export PDF from an external MonthlyHistory ─────
+  // Consumed by docs/js/suica-export.js (manual-editor flow) to hand off
+  // a history payload back to the planner's existing GitHub Actions PDF
+  // pipeline. We derive a best-effort preset from history.entries
+  // (weekday commute = most-frequent paired route per weekday; leisure
+  // pool = weekend paired routes weighted by occurrence count), then
+  // dispatch the standard workflow with month/target/initial_balance
+  // overrides taken from the history. The planner UI state is
+  // temporarily overridden so dispatch+buildPreset see history values,
+  // and unconditionally restored in `finally` so the user's authored
+  // plan is intact regardless of outcome.
+  //
+  // Returns `{ pdfGenerated: boolean, message: string }`. Errors are
+  // caught and surfaced via the return value — this function never
+  // throws to the caller (per suica-export.js bridge contract).
+  async function _exportPdfFromHistory(history) {
+    const fail = (msg) => ({ ok: false, pdfGenerated: false, message: msg });
+    const getEntryAt = (entry) => {
+      if (!entry || typeof entry !== 'object') return '';
+      if (typeof entry.datetime === 'string' && entry.datetime) return entry.datetime;
+      if (typeof entry.at === 'string' && entry.at) return entry.at;
+      return '';
+    };
+    const isAutoTopupKind = (kind) => (
+      typeof kind === 'string'
+      && (kind === 'オートチャージ' || kind === 'ｵｰﾄﾁｬｰｼﾞ' || kind.startsWith('ｵ'))
+    );
+    try {
+      if (!history || typeof history !== 'object') return fail('No history payload supplied.');
+      const entries = Array.isArray(history.entries) ? history.entries : null;
+      if (!entries || !entries.length) return fail('History has no entries to export.');
+      if (!history.month || !/^\d{4}-\d{2}$/.test(String(history.month))) {
+        return fail('History is missing a valid month (YYYY-MM).');
+      }
+
+      const token = getSessionToken();
+      if (!token) return fail('Session token unavailable — unlock the main dashboard first.');
+      if (typeof JSZip === 'undefined') return fail('JSZip library not loaded — refresh the page.');
+
+      // ── Derive weekly_pattern + leisure_pool from entries ──
+      // Walk in chronological order and pair each '入' (tap-in) with the
+      // next '出' (tap-out) on the same date. Each pair gives a canonical
+      // route "A↔B" attributed to the weekday of the entry.
+      const sorted = entries.slice().sort((x, z) => String(getEntryAt(x)).localeCompare(String(getEntryAt(z))));
+      const dayKeys = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+      const weekdayRouteCounts = {};
+      DAYS.forEach((d) => { weekdayRouteCounts[d] = {}; });
+      const leisureCounts = {};
+
+      let pendingIn = null;
+      for (const e of sorted) {
+        if (!e || !e.station || !e.kind) continue;
+        const eventAt = getEntryAt(e);
+        if (!eventAt) continue;
+        if (e.kind === '入') {
+          pendingIn = { station: e.station, at: eventAt };
+        } else if (e.kind === '出' && pendingIn) {
+          const outDate = String(eventAt).slice(0, 10);
+          const inDate = String(pendingIn.at).slice(0, 10);
+          if (outDate === inDate && pendingIn.station !== e.station) {
+            const route = pairKey(pendingIn.station, e.station);
+            const [yy, mm, dd] = outDate.split('-').map(Number);
+            if (yy && mm && dd) {
+              const dow = new Date(yy, mm - 1, dd).getDay();
+              const dowKey = dayKeys[dow];
+              if (dow === 0 || dow === 6) {
+                leisureCounts[route] = (leisureCounts[route] || 0) + 1;
+              } else {
+                weekdayRouteCounts[dowKey][route] = (weekdayRouteCounts[dowKey][route] || 0) + 1;
+              }
+            }
+          }
+          pendingIn = null;
+        } else if (!isAutoTopupKind(e.kind)) {
+          // Stray entry — reset pairing. Auto-topup entries are ignored
+          // without disturbing the in/out pairing state.
+          pendingIn = null;
+        }
+      }
+
+      // Pick the most-frequent route per weekday (simple heuristic).
+      const derivedPattern = {};
+      DAYS.forEach((d) => {
+        const counts = weekdayRouteCounts[d];
+        const keys = Object.keys(counts);
+        if (!keys.length) { derivedPattern[d] = []; return; }
+        keys.sort((a, b) => counts[b] - counts[a]);
+        derivedPattern[d] = [{ route: keys[0] }];
+      });
+      const derivedLeisure = Object.keys(leisureCounts).map((route) => ({
+        route, weight: Math.max(1, leisureCounts[route]),
+      }));
+      const leisureMonthlyTotal = derivedLeisure.reduce((s, l) => s + l.weight, 0);
+
+      // ── Snapshot planner state so we can restore after dispatch ──
+      const origSettings = JSON.parse(JSON.stringify(state.settings));
+      const origPattern = JSON.parse(JSON.stringify(state.pattern));
+      const origLeisure = JSON.parse(JSON.stringify(state.leisure));
+
+      try {
+        _setSaveSuspended(true);
+        // Override with history-derived values. auto_topup, seed, and
+        // topup thresholds inherit from current planner settings.
+        state.settings.month = String(history.month);
+        if (Number.isFinite(+history.total_spent) && +history.total_spent > 0) {
+          state.settings.target = +history.total_spent;
+        }
+        if (Number.isFinite(+history.initial_balance)) {
+          state.settings.initial_balance = +history.initial_balance;
+        }
+        DAYS.forEach((d) => { state.pattern[d] = derivedPattern[d]; });
+        state.leisure = derivedLeisure;
+        state.settings.leisure_min = leisureMonthlyTotal;
+        state.settings.leisure_max = leisureMonthlyTotal;
+
+        const preset = buildPreset();
+        const dispatchedAt = Date.now();
+        await _dispatchWorkflow(token, preset);
+        const run = await _waitForRun(token, dispatchedAt);
+        const zipBuf = await _downloadArtifact(token, run.id);
+        const filename = await _extractAndSavePdf(zipBuf, `suica-${state.settings.month}.pdf`);
+        return {
+          ok: true,
+          pdfGenerated: true,
+          message: `Saved ${filename} via planner workflow (run #${run.run_number}).`,
+        };
+      } finally {
+        // Always restore — even on dispatch/run/download failure.
+        state.settings = origSettings;
+        state.pattern = origPattern;
+        state.leisure = origLeisure;
+        _setSaveSuspended(false);
+        saveState();
+      }
+    } catch (err) {
+      const msg = (err && err.message) ? err.message : String(err);
+      console.error('[suica-planner] exportPdfFromHistory failed:', err);
+      return { ok: false, pdfGenerated: false, message: 'Planner export failed: ' + msg };
+    }
+  }
+
+  // Register the export bridge at module load (function declarations are
+  // hoisted within this IIFE, so all dependencies are already in scope).
+  // Doing this outside init() ensures suica-export.js can find the bridge
+  // even before DOMContentLoaded fires.
+  if (typeof window !== 'undefined') {
+    window.SuicaPlannerExport = window.SuicaPlannerExport || {};
+    window.SuicaPlannerExport.exportPdfFromHistory = _exportPdfFromHistory;
   }
 
   async function generatePDF(btn) {
