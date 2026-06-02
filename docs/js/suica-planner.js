@@ -1062,6 +1062,9 @@
     const disableAdd = () => addBtns.forEach((b) => b.setAttribute('disabled', ''));
     const enableAdd  = () => addBtns.forEach((b) => b.removeAttribute('disabled'));
     renderStationHints();
+    // Keep the open day-picker popover's label/Apply state in sync with the route.
+    const _addPop = $('planner-add-days-pop');
+    if (_addPop && !_addPop.classList.contains('hidden') && typeof renderAddDaysPop === 'function') renderAddDaysPop();
     if (!from || !to)   { setBadge('Pick from & to', 'status-skipped'); disableAdd(); return; }
     if (from === to)    { setBadge('Pick different stations', 'status-failure'); disableAdd(); return; }
     const key = pairKey(from, to);
@@ -1179,18 +1182,113 @@
   }
 
   // ────── Add / remove routes ──────
-  function addCommute() {
-    const r = currentRoute(); if (!r) return;
+  // Add the currently-selected route to the given day keys (commute type),
+  // skipping days that already contain it. Returns count of days actually added.
+  function addCommuteToDays(dayKeys) {
+    const r = currentRoute(); if (!r) return 0;
+    const days = (dayKeys || []).filter((d) => DAYS.indexOf(d) >= 0);
+    if (!days.length) return 0;
     pushHistory();
-    const days = DAYS.slice(0, 5); // Mon-Fri default
+    let added = 0;
     days.forEach((day) => {
       if (!state.pattern[day].some((x) => x.route === r)) {
         state.pattern[day].push({ route: r, type: 'commute' });
+        added++;
       }
     });
     renderPattern();
     renderEstimate();
     saveState();
+    return added;
+  }
+
+  function addCommute() {
+    const r = currentRoute(); if (!r) return;
+    const added = addCommuteToDays(DAYS.slice(0, 5)); // Mon-Fri default
+    if (!added && window.Toast) window.Toast.info(`${r} is already on every weekday.`);
+  }
+
+  // Day-picker popover for the "Add commute" split button: lets the user add
+  // the current route to an arbitrary set of days (defaults to Mon-Fri) instead
+  // of only the fixed weekday block.
+  let _addDaysSelection = DAYS.slice(0, 5);
+  function closeAddDaysPop() {
+    const pop = $('planner-add-days-pop');
+    const caret = $('planner-add-commute-days');
+    if (pop) pop.classList.add('hidden');
+    if (caret) caret.setAttribute('aria-expanded', 'false');
+    document.removeEventListener('mousedown', _onAddDaysOutside);
+    document.removeEventListener('keydown', _onAddDaysKey);
+  }
+  function _onAddDaysOutside(e) {
+    const split = e.target.closest && e.target.closest('.gen-add-split');
+    if (!split) closeAddDaysPop();
+  }
+  function _onAddDaysKey(e) { if (e.key === 'Escape') closeAddDaysPop(); }
+  function renderAddDaysPop() {
+    const pop = $('planner-add-days-pop');
+    if (!pop) return;
+    const r = currentRoute();
+    pop.innerHTML = `
+      <div class="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">Add ${r ? r : 'route'} to days</div>
+      <div class="gen-add-days__chips mb-2" id="planner-add-days-chips">
+        ${DAYS.map((d) => {
+          const on = _addDaysSelection.indexOf(d) >= 0;
+          const isWeekend = d === 'saturday' || d === 'sunday';
+          return `<button type="button" class="gen-add-days__chip${isWeekend ? ' italic' : ''}" data-add-day="${d}" aria-pressed="${on}">${DAY_LABELS[d]}</button>`;
+        }).join('')}
+      </div>
+      <div class="flex gap-1 mb-2">
+        <button type="button" class="btn btn-ghost sm text-[10px] px-2 py-0.5" data-add-days-quick="weekdays">Mon–Fri</button>
+        <button type="button" class="btn btn-ghost sm text-[10px] px-2 py-0.5" data-add-days-quick="all">All week</button>
+        <button type="button" class="btn btn-ghost sm text-[10px] px-2 py-0.5" data-add-days-quick="weekend">Weekend</button>
+        <button type="button" class="btn btn-ghost sm text-[10px] px-2 py-0.5" data-add-days-quick="none">None</button>
+      </div>
+      <button type="button" id="planner-add-days-apply" class="btn sm primary w-full" ${r ? '' : 'disabled'}>
+        <span data-icon="plus" data-size="12"></span><span class="btn-label">Add to selected day(s)</span>
+      </button>`;
+    pop.querySelectorAll('[data-add-day]').forEach((b) => b.addEventListener('click', () => {
+      const d = b.getAttribute('data-add-day');
+      const i = _addDaysSelection.indexOf(d);
+      if (i >= 0) _addDaysSelection.splice(i, 1); else _addDaysSelection.push(d);
+      renderAddDaysPop();
+    }));
+    pop.querySelectorAll('[data-add-days-quick]').forEach((b) => b.addEventListener('click', () => {
+      const k = b.getAttribute('data-add-days-quick');
+      _addDaysSelection = k === 'weekdays' ? DAYS.slice(0, 5)
+        : k === 'all' ? DAYS.slice()
+        : k === 'weekend' ? ['saturday', 'sunday']
+        : [];
+      renderAddDaysPop();
+    }));
+    const apply = pop.querySelector('#planner-add-days-apply');
+    if (apply) apply.addEventListener('click', () => {
+      const r2 = currentRoute();
+      if (!r2) { if (window.Toast) window.Toast.warning('Pick a From↔To route first.'); return; }
+      if (!_addDaysSelection.length) { if (window.Toast) window.Toast.warning('Select at least one day.'); return; }
+      const added = addCommuteToDays(_addDaysSelection);
+      const labels = _addDaysSelection.map((d) => DAY_LABELS[d]).join(', ');
+      closeAddDaysPop();
+      if (window.Toast) {
+        if (added) window.Toast.success(`Added ${r2} to ${labels}.`);
+        else window.Toast.info(`${r2} was already on ${labels}.`);
+      }
+    });
+    if (window.refreshIcons) window.refreshIcons(pop);
+  }
+  function toggleAddDaysPop() {
+    const pop = $('planner-add-days-pop');
+    const caret = $('planner-add-commute-days');
+    if (!pop) return;
+    if (pop.classList.contains('hidden')) {
+      renderAddDaysPop();
+      pop.classList.remove('hidden');
+      if (caret) caret.setAttribute('aria-expanded', 'true');
+      document.addEventListener('mousedown', _onAddDaysOutside);
+      document.addEventListener('keydown', _onAddDaysKey);
+    } else {
+      closeAddDaysPop();
+    }
   }
 
   function addLeisure() {
@@ -4370,6 +4468,12 @@
 
     $('planner-swap').addEventListener('click', swap);
     $('planner-add-commute').addEventListener('click', addCommute);
+    const addDaysCaret = $('planner-add-commute-days');
+    if (addDaysCaret) addDaysCaret.addEventListener('click', (e) => {
+      if (addDaysCaret.hasAttribute('disabled')) return;
+      e.stopPropagation();
+      toggleAddDaysPop();
+    });
     $('planner-add-leisure').addEventListener('click', addLeisure);
 
     // ────── Fare-range filter for To-station combobox ──────

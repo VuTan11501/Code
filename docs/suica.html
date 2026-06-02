@@ -699,6 +699,37 @@
     display: flex; flex-direction: column; gap: 0.125rem;
   }
 
+  /* ─── Split "Add commute" button + day-picker popover ─── */
+  .gen-add-split { position: relative; }
+  .gen-add-split__main { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+  .gen-add-split__caret {
+    border-top-left-radius: 0; border-bottom-left-radius: 0;
+    padding-left: var(--sp-2); padding-right: var(--sp-2);
+    margin-left: 1px; min-width: 0;
+  }
+  .gen-add-days__pop {
+    position: absolute; left: 0; top: calc(100% + 4px);
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: var(--radius-md); box-shadow: var(--shadow-md);
+    padding: var(--sp-3); z-index: 80; min-width: 240px;
+  }
+  .gen-add-days__pop .gen-add-days__chips { display: flex; flex-wrap: wrap; gap: 0.25rem; }
+  .gen-add-days__chip {
+    font-size: var(--fs-xs); padding: 0.2rem 0.5rem;
+    border-radius: var(--radius-full); border: 1px solid var(--input);
+    background: transparent; color: var(--muted-foreground); cursor: pointer;
+    transition: background var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out);
+  }
+  .gen-add-days__chip[aria-pressed="true"] {
+    background: var(--primary); border-color: var(--primary); color: var(--primary-foreground);
+  }
+
+  @media (max-width: 640px) {
+    .gen-add-split { width: 100%; }
+    .gen-add-split__main { flex: 1; }
+    .gen-add-days__pop { left: auto; right: 0; }
+  }
+
   /* ─── Estimate panel: prioritise Total on mobile ─── */
   @media (max-width: 640px) {
     #planner-estimate-total { font-size: 1.5rem; }
@@ -860,10 +891,16 @@
             <span class="status-badge status-info" id="planner-fare-out">—</span>
             <span id="planner-fare-refresh" class="hidden"></span>
             <div class="separator h-5 w-px bg-border mx-1"></div>
-            <button id="planner-add-commute" class="btn sm primary" type="button" data-planner-add disabled>
-              <span data-icon="plus" data-size="14"></span>
-              <span class="btn-label">Add as weekday commute</span>
-            </button>
+            <div class="gen-add-split inline-flex items-stretch">
+              <button id="planner-add-commute" class="btn sm primary gen-add-split__main" type="button" data-planner-add disabled>
+                <span data-icon="plus" data-size="14"></span>
+                <span class="btn-label">Add as weekday commute</span>
+              </button>
+              <button id="planner-add-commute-days" class="btn sm primary gen-add-split__caret" type="button" data-planner-add disabled data-tooltip="Pick specific day(s) to add this route to" aria-haspopup="true" aria-expanded="false" aria-label="Pick days to add commute">
+                <span data-icon="chevronDown" data-size="14"></span>
+              </button>
+              <div id="planner-add-days-pop" class="gen-add-days__pop hidden" role="dialog" aria-label="Add route to specific days"></div>
+            </div>
             <button id="planner-add-leisure" class="btn btn-outline sm" type="button" data-planner-add disabled>
               <span data-icon="plus" data-size="14"></span>
               <span class="btn-label">Add to weekend trip pool</span>
@@ -1577,7 +1614,7 @@
 </style>
 <script src="js/auth.js?v=2" defer></script>
 <script>window.SUICA_FARE_API='https://suica-fare-proxy.workflow-dashboard.workers.dev';</script>
-<script src="js/suica-planner.js?v=134" defer></script>
+<script src="js/suica-planner.js?v=135" defer></script>
 <script defer>
 // Wire the date-range popover to the planner Month/Schedule field.
 // Strategy:
