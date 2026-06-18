@@ -52,6 +52,16 @@ jobs:
           sparse-checkout: |
             .github/scripts
 
+      - name: Jitter — natural late checkout (skip for manual/Siri dispatch)
+        # Sleeps 0–600 s so the actual DokoKin API call lands 0–10 min after
+        # the scheduled checkout time, giving a natural departure timestamp.
+        # Skipped for manual triggers so immediate user action responds fast.
+        if: ${{ inputs.trigger_source != 'manual' && github.event_name != 'repository_dispatch' }}
+        run: |
+          DELAY=$(( RANDOM % 601 ))
+          echo "⏱️ Jitter ${DELAY}s (natural late-checkout timing)"
+          sleep "$DELAY"
+
       - name: Run checkout script
         id: checkout_step
         env:

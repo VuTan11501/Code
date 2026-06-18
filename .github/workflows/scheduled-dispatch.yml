@@ -273,6 +273,10 @@ jobs:
                   print(f"  ❌ Dispatch {workflow} HTTP {e.code}")
                   return False
 
+          # Checkin workflows fire this many seconds early so the in-workflow
+          # random jitter (0–600s) results in an actual API call at T-10min..T.
+          CHECKIN_ADVANCE_S = 600
+
           def should_run_recurring(entry, now_jst):
               if entry.get('enabled') is False: return False
               rec = entry.get('recurrence', {})
@@ -291,7 +295,10 @@ jobs:
                   if last_run_dt.astimezone(JST).date() == now_jst.date(): return False
               hour, minute = map(int, sched_time.split(':'))
               sched_dt = now_jst.replace(hour=hour, minute=minute, second=0, microsecond=0)
-              if (now_jst - sched_dt).total_seconds() < 0: return False
+              # Checkin workflows fire CHECKIN_ADVANCE_S early so in-workflow
+              # jitter can make the actual API call land before the scheduled time.
+              advance = CHECKIN_ADVANCE_S if 'checkin' in entry.get('workflow', '') else 0
+              if (now_jst - sched_dt).total_seconds() < -advance: return False
               dow = now_jst.weekday()
               js_dow = (dow + 1) % 7 if dow < 6 else 0
               if pattern == 'daily': return True
@@ -355,7 +362,11 @@ jobs:
                           # Paused one-time entry — keep but skip dispatch
                           updated.append(entry); continue
                       run_at = datetime.fromisoformat(run_at_str.replace('Z', '+00:00'))
-                      if run_at <= now:
+                      # Checkin one-time entries fire CHECKIN_ADVANCE_S early so
+                      # in-workflow jitter produces actual API call at T-10min..T.
+                      wf_name = entry.get('workflow', '')
+                      advance = timedelta(seconds=CHECKIN_ADVANCE_S) if 'checkin' in wf_name else timedelta(0)
+                      if run_at - advance <= now:
                           wf = entry['workflow']
                           print(f"🔹 One-time: {wf} (scheduled {run_at_str})")
                           # One-time entries are user-created intent (default to

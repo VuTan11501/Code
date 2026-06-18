@@ -47,6 +47,17 @@ jobs:
           sparse-checkout: |
             .github/scripts
 
+      - name: Jitter — natural early checkin (skip for manual/Siri dispatch)
+        # Sleeps 0–600 s so the actual DokoKin API call lands anywhere in the
+        # 10-minute window before the scheduled time (dispatcher fires this
+        # workflow 10 min early for exactly this reason). Skipped for manual
+        # triggers so Siri / dashboard "checkin now" responds immediately.
+        if: ${{ inputs.trigger_source != 'manual' && github.event_name != 'repository_dispatch' }}
+        run: |
+          DELAY=$(( RANDOM % 601 ))
+          echo "⏱️ Jitter ${DELAY}s (natural early-checkin timing)"
+          sleep "$DELAY"
+
       - name: Run checkin script
         id: checkin
         env:
