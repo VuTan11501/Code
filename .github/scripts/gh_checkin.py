@@ -660,17 +660,11 @@ def _add_skip_date_to_recurring_co(date_str, entry_dt=None):
         log(f"  ⚠️ skip_date CAS error: {e} — checkin continues")
 
 
-def ensure_ot_checkout_scheduled(ot_entries_today, now_jst, location_key="home",
-                                  ci_actual_dt=None):
+def ensure_ot_checkout_scheduled(ot_entries_today, now_jst, location_key="home"):
     """Ensure a checkout entry exists in Gist scheduled-runs.json covering OT end.
 
     Called after successful checkin or when early-CO is skipped.
     Creates a once-type entry in the Gist if no existing CO covers the OT end time.
-
-    ci_actual_dt: when provided (post-CI path), schedules CO at
-    ci_actual_dt + planned_ot_hours instead of the static OT end time.
-    This compensates for CI jitter so the actual shift = planned_hours exactly,
-    preventing an unintended break-time threshold crossing (Labor Law §34).
 
     Returns list of created entry descriptions (for logging).
     """
@@ -682,28 +676,6 @@ def ensure_ot_checkout_scheduled(ot_entries_today, now_jst, location_key="home",
     created = []
     for ot_entry in ot_entries_today:
         ot_co_dt = _compute_ot_co_time(ot_entry)
-
-        # Jitter compensation: if we know when CI actually fired, schedule CO
-        # at ci_actual_dt + planned_duration so shift = planned_h exactly.
-        # Only apply when CI is within 30 min of planned OT start (sanity guard).
-        if ci_actual_dt is not None:
-            try:
-                ot_date = ot_entry.get("date", "")
-                ot_start_str = f"{ot_date} {ot_entry.get('start', '22:00')}"
-                ot_start_dt = datetime.strptime(ot_start_str, "%Y-%m-%d %H:%M").replace(tzinfo=JST)
-                planned_h = (ot_co_dt - ot_start_dt).total_seconds() / 3600
-                ci_drift_min = abs((ci_actual_dt - ot_start_dt).total_seconds()) / 60
-                if ci_drift_min <= 30:
-                    adjusted_co_dt = ci_actual_dt + timedelta(hours=planned_h)
-                    log(
-                        f"  🎯 CI drift {ci_drift_min:.0f}min from planned OT start "
-                        f"→ CO adjusted {ot_co_dt.strftime('%H:%M')} → "
-                        f"{adjusted_co_dt.strftime('%H:%M')} (planned {planned_h:.2f}h, "
-                        f"shift will be exactly {planned_h:.2f}h, no extra break)"
-                    )
-                    ot_co_dt = adjusted_co_dt
-            except Exception as _e:
-                log(f"  ⚠️ CI-drift CO adjustment skipped: {_e}")
 
         # Only schedule future COs
         if ot_co_dt <= now_jst:
@@ -904,6 +876,7 @@ def main():
         # Bug #1 fix: detect overnight checkout using schedule time + API state
         is_checkout_yesterday = False
         break_hours = 0.0
+        ci_dt = None  # populated below; also used by break-compensation block
         if is_checkout:
             # Use schedule entry time if available; for force_action use current time
             if action_entry.get("datetime"):
@@ -1018,6 +991,73 @@ def main():
                     )
                     return  # No email for routine domain-rule skips
 
+        # ── Break-compensation delay for OT-night checkouts ──
+        # When CI fired early (jitter ≤15min) and the resulting shift crosses
+        # a Labor Law §34 break threshold (6h or 8h), we must send a break to
+        # DokoKin — which reduces recorded working time.  Fix: before calling CO,
+        # sleep until ci_dt + planned_OT_hours + required_break, so that
+        # actual_shift = planned_OT_h + break → working = planned_OT_h exactly.
+        #
+        # Only applies when shift_excess (due to jitter) ≤ 15 min AND that excess
+        # pushes the shift over a threshold.  Regular-day + OT shifts (CI at 9am)
+        # have shift_at_OT_end >> planned_OT_h and are left untouched.
+        #
+        # Backup: sleep in 30-second chunks inside try/except so CO always fires
+        # even if the runner receives an interrupt.
+        if is_checkout and ci_dt is not None:
+            _ot_bc_date = yesterday_str if is_checkout_yesterday else today_str
+            try:
+                _ot_all_bc = load_ot_from_gist(log=log) or []
+                _ot_bc = next(
+                    (e for e in _ot_all_bc if e.get("date") == _ot_bc_date), None
+                )
+                if _ot_bc:
+                    _ot_co_bc = _compute_ot_co_time(_ot_bc)
+                    _ot_ci_bc = datetime.strptime(
+                        f"{_ot_bc_date} {_ot_bc.get('start', '22:00')}", "%Y-%m-%d %H:%M"
+                    ).replace(tzinfo=JST)
+                    planned_ot_h_bc = (_ot_co_bc - _ot_ci_bc).total_seconds() / 3600
+                    shift_at_ot_end = (_ot_co_bc - ci_dt).total_seconds() / 3600
+                    excess = shift_at_ot_end - planned_ot_h_bc
+
+                    # Check if jitter-sized excess crosses a break threshold
+                    threshold_crossed = (
+                        (planned_ot_h_bc <= 6.0 < shift_at_ot_end) or
+                        (planned_ot_h_bc <= 8.0 < shift_at_ot_end)
+                    )
+                    if 0 < excess <= 0.25 and threshold_crossed:
+                        req_break_bc = 1.0 if shift_at_ot_end > 8 else 0.75
+                        target_co_bc = ci_dt + timedelta(hours=planned_ot_h_bc + req_break_bc)
+                        target_co_bc = max(target_co_bc, _ot_co_bc)  # always cover OT end
+                        wait_sec_bc = (target_co_bc - now_jst).total_seconds()
+                        if wait_sec_bc > 60:
+                            log(
+                                f"  ⏳ Break-compensation: CI {excess*60:.0f}min early → "
+                                f"shift at OT_end={shift_at_ot_end:.2f}h crosses "
+                                f"{'6h' if shift_at_ot_end <= 8 else '8h'} threshold. "
+                                f"Waiting {wait_sec_bc/60:.1f}min → CO at "
+                                f"{target_co_bc.strftime('%H:%M')} (working = {planned_ot_h_bc:.1f}h)"
+                            )
+                            try:
+                                _rem_bc = wait_sec_bc
+                                while _rem_bc > 0:
+                                    time.sleep(min(30.0, _rem_bc))
+                                    _rem_bc -= 30
+                            except Exception as _se_bc:
+                                log(f"  ⚠️ Sleep interrupted ({_se_bc}). Proceeding with CO.")
+                            now_jst = datetime.now(JST)
+                            # Recalculate break_hours based on actual shift after sleep
+                            final_shift = (now_jst - ci_dt).total_seconds() / 3600
+                            break_hours = 1.0 if final_shift > 8 else (0.75 if final_shift > 6 else 0.0)
+                            log(
+                                f"  ✅ Post-compensation: shift={final_shift:.2f}h "
+                                f"break={int(break_hours*60)}min working={final_shift-break_hours:.2f}h"
+                            )
+                        else:
+                            log("  ℹ️ Break-compensation: target already passed, CO fires now.")
+            except Exception as _ce_bc:
+                log(f"  ⚠️ Break-compensation skipped (non-fatal): {_ce_bc}")
+
         # ── Execute (with retry on server errors) ──
         emoji = "📥" if action == "checkin" else "📤"
 
@@ -1053,9 +1093,7 @@ def main():
                 ot_today = [ot for ot in ot_data if ot.get("date") == today_str]
                 if ot_today:
                     log(f"🔍 OT-aware check: {len(ot_today)} OT request(s) today")
-                    created = ensure_ot_checkout_scheduled(
-                        ot_today, now_jst, location_key, ci_actual_dt=now_jst
-                    )
+                    created = ensure_ot_checkout_scheduled(ot_today, now_jst, location_key)
                     if created:
                         result_detail += f" | Auto-scheduled CO: {', '.join(created)}"
             elif action == "checkout" and not is_checkout_yesterday:
