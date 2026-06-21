@@ -899,6 +899,35 @@ def main():
                     if ci_dt.tzinfo is None:
                         ci_dt = ci_dt.replace(tzinfo=JST)
                     shift_h = (now_jst - ci_dt).total_seconds() / 3600
+
+                    # Jitter-safe break calc: if an OT request exists for the
+                    # shift's calendar date, use *planned* OT duration instead of
+                    # the actual clock spread.  Checkin fires up to 10 min early,
+                    # so a 6h-exactly OT plan (22:00→04:00) would otherwise read
+                    # ~6h10m and incorrectly trigger a 45-min break.  Tolerate up
+                    # to 15 min of clock drift before we trust the actual value.
+                    ot_ref_date = yesterday_str if is_checkout_yesterday else today_str
+                    try:
+                        _ot_all = load_ot_from_gist(log=log) or []
+                        _ot_match = next(
+                            (e for e in _ot_all if e.get("date") == ot_ref_date), None
+                        )
+                        if _ot_match:
+                            _ot_co = _compute_ot_co_time(_ot_match)
+                            _ot_ci_str = f"{ot_ref_date} {_ot_match.get('start', '22:00')}"
+                            _ot_ci = datetime.strptime(_ot_ci_str, "%Y-%m-%d %H:%M").replace(tzinfo=JST)
+                            planned_h = (_ot_co - _ot_ci).total_seconds() / 3600
+                            if abs(shift_h - planned_h) <= 0.25:
+                                # clock drift ≤15min — trust the plan
+                                log(
+                                    f"  OT plan {_ot_match.get('start')}→{_ot_match.get('end')} "
+                                    f"= {planned_h:.2f}h (actual {shift_h:.2f}h, drift "
+                                    f"{abs(shift_h-planned_h)*60:.0f}min) → using plan for break calc"
+                                )
+                                shift_h = planned_h
+                    except Exception as _e:
+                        log(f"  ⚠️ OT break-calc adjustment skipped: {_e}")
+
                     if shift_h > 8:
                         break_hours = 1.0
                     elif shift_h > 6:
