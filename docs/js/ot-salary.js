@@ -208,17 +208,18 @@ const DEDUCTIONS = Object.freeze({
   // Defaults — override via profile
   STANDARD_INSURANCE_AMOUNT: 280000,   // line 1.8 (fixed by 標準報酬月額 revision)
   CONTRACT_GROSS: 270000,              // line 1.x sum (basic + life design + fixed allowance)
-  RESIDENT_TAX: 4300,                  // line 4.7 (prev-year basis, configurable)
+  RESIDENT_TAX: 19200,                 // line 4.7 — revised Jun 2026 (FY2026 basis; was ¥4,300)
   TRAVEL_ALLOWANCE: 0,                 // line 3.7
 });
 
 // ─── Japan 源泉徴収月額表 甲欄 (dependents=0) ───
-// CALIBRATED against TanVC's real payslip history (FJP, 21 monthly slips
-// 2024-08 → 2026-04). Anchors are actual (A, tax) pairs from payslips:
+// CALIBRATED against TanVC's real payslip history (FJP, 22 monthly slips
+// 2024-08 → 2026-06). Anchors are actual (A, tax) pairs from payslips:
 //
 //   PRIMARY (2026 table — used for OT estimates today):
 //     • Jan 2026: A=  83,901 → ¥0       (under 88k threshold)
 //     • Apr 2026: A= 351,790 → ¥11,730
+//     • Jun 2026: A= 388,729 → ¥14,670  ← NEW (May work, Jun payslip)
 //     • Mar 2026: A= 510,168 → ¥29,660
 //     • Feb 2026: A= 534,526 → ¥33,580
 //
@@ -243,8 +244,7 @@ const _INCOME_TAX_TABLE = [
   [252083,   6640],    // 2025-H2 anchor
   [295658,   8140],    // 2025-H2 anchor
   [351790,   11730],   // ★ 2026 anchor — Apr 2026 payslip
-  [400000,   17000],   // interp (~9% marginal)
-  [450000,   23000],   // interp (~12% marginal)
+  [388729,   14670],   // ★ 2026 anchor — Jun 2026 payslip (A=taxable from May work)
   [510168,   29660],   // ★ 2026 anchor — Mar 2026 payslip
   [534526,   33580],   // ★ 2026 anchor — Feb 2026 payslip
   [600000,   44100],   // extrap (~16% marginal)
