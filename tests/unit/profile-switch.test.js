@@ -111,4 +111,62 @@ describe('ProfileSwitch core', () => {
     expect(last.from).toBe('p-old');
     expect(last.to).toBe('p-unknown');
   });
+
+  it('activateProfileTx rollback does NOT clobber a newer successful switch (CAS)', async () => {
+    // Race: tx A starts (prev='p-old', next='p-A'), then tx B commits
+    // ('p-B'), then tx A's applyRefs throws. CAS guard must see the
+    // pointer is no longer 'p-A' and leave 'p-B' intact.
+    const s = makeMockStore({ active_profile: 'p-old' });
+    let releaseA;
+    const aBlocker = new Promise((res) => { releaseA = res; });
+
+    const txA = activateProfileTx({
+      store: s,
+      next: 'p-A',
+      applyRefs: async () => {
+        await aBlocker;
+        throw new Error('A failed');
+      },
+    });
+
+    // Allow A to write its pointer (synchronous set inside tx, but the
+    // await aBlocker yields control). Microtask flush:
+    await Promise.resolve();
+    expect(s.get('active_profile')).toBe('p-A');
+
+    // B runs to completion while A is still paused.
+    const txB = await activateProfileTx({
+      store: s,
+      next: 'p-B',
+      applyRefs: async () => {},
+    });
+    expect(txB.ok).toBe(true);
+    expect(s.get('active_profile')).toBe('p-B');
+
+    // Now let A fail. With CAS, A must NOT roll back to 'p-old' because
+    // current pointer ('p-B') is not its own next.
+    releaseA();
+    const rA = await txA;
+    expect(rA.ok).toBe(false);
+    expect(s.get('active_profile')).toBe('p-B'); // winner preserved
+  });
+
+  it('activate() serializes concurrent calls (in-flight guard)', async () => {
+    localStorage.clear();
+    localStorage.setItem('wf_dash_active_profile', 'p-old');
+    // Two parallel manual activations — both should commit, in order.
+    const [r1, r2] = await Promise.all([
+      activate('p-1', { source: 'manual' }),
+      activate('p-2', { source: 'manual' }),
+    ]);
+    expect(r1.ok).toBe(true);
+    expect(r2.ok).toBe(true);
+    expect(localStore.get('active_profile')).toBe('p-2');
+    const audit = JSON.parse(localStorage.getItem('wf_dash_profile_audit') || '[]');
+    // Last two audit entries reflect committed order p-old→p-1→p-2.
+    const tail = audit.slice(-2);
+    expect(tail[0].to).toBe('p-1');
+    expect(tail[1].from).toBe('p-1');
+    expect(tail[1].to).toBe('p-2');
+  });
 });

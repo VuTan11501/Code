@@ -137,7 +137,12 @@ export async function activateProfileTx({ store, next, applyRefs }) {
     await applyRefs(next);
     return { ok: true, prev, next };
   } catch (e) {
-    store.set('active_profile', prev);
+    // Compare-and-swap rollback: only revert if the pointer is still
+    // ours. A concurrent activation that committed after us must not be
+    // clobbered by this tx's failure.
+    if (store.get('active_profile') === next) {
+      store.set('active_profile', prev);
+    }
     return { ok: false, prev, next, error: e && e.message ? e.message : String(e) };
   }
 }
@@ -231,20 +236,31 @@ export function appendSwitchAudit(entry) {
  * @param {string} profileId
  * @param {{source?: string}} [opts]
  */
+let _activateInFlight = null;
+
 export async function activate(profileId, opts) {
   const source = (opts && opts.source) || 'unknown';
   if (typeof profileId !== 'string' || !profileId.trim()) {
     throw new Error('activate requires profileId');
   }
-  const defs = loadProfileDefs();
-  const tx = await activateProfileTx({
-    store: localStore,
-    next: profileId,
-    applyRefs: async (id) => applyProfileRefs(id, defs),
-  });
-  appendSwitchAudit({ source, from: tx.prev, to: tx.next, ok: tx.ok });
-  if (!tx.ok) throw new Error(`Profile switch failed: ${tx.error}`);
-  return tx;
+  // Lightweight in-flight guard: serialize concurrent activate() calls
+  // through a single promise chain so the audit log + pointer move in
+  // commit order. The CAS rollback inside activateProfileTx still
+  // protects against direct concurrent uses of the tx primitive.
+  const run = async () => {
+    const defs = loadProfileDefs();
+    const tx = await activateProfileTx({
+      store: localStore,
+      next: profileId,
+      applyRefs: async (id) => applyProfileRefs(id, defs),
+    });
+    appendSwitchAudit({ source, from: tx.prev, to: tx.next, ok: tx.ok });
+    if (!tx.ok) throw new Error(`Profile switch failed: ${tx.error}`);
+    return tx;
+  };
+  const chained = (_activateInFlight || Promise.resolve()).then(run, run);
+  _activateInFlight = chained.catch(() => {});
+  return chained;
 }
 
 const ProfileSwitch = {
