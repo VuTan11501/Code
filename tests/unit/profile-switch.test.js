@@ -4,7 +4,26 @@ import {
   shouldSwitchByCooldown,
   validateProfileBundle,
   activateProfileTx,
+  activate,
+  appendSwitchAudit,
+  localStore,
 } from '../../docs/js/profile-switch.js';
+
+// Minimal in-memory localStorage shim so activate() (which uses the
+// real localStorage-backed `localStore`) is exercisable in node/vitest.
+// Node 24+ ships a built-in `localStorage` but it lacks `.clear()`, so we
+// always install our own deterministic shim for tests.
+{
+  const mem = new Map();
+  globalThis.localStorage = {
+    getItem: (k) => (mem.has(k) ? mem.get(k) : null),
+    setItem: (k, v) => { mem.set(k, String(v)); },
+    removeItem: (k) => { mem.delete(k); },
+    clear: () => { mem.clear(); },
+    key: (i) => Array.from(mem.keys())[i] ?? null,
+    get length() { return mem.size; },
+  };
+}
 
 function makeMockStore(initial = {}) {
   const data = { ...initial };
@@ -61,5 +80,35 @@ describe('ProfileSwitch core', () => {
     expect(r.prev).toBe('p-old');
     expect(r.next).toBe('p-new');
     expect(s.get('active_profile')).toBe('p-new');
+  });
+
+  it('activate() persists pointer + audits when refs apply cleanly', async () => {
+    localStorage.clear();
+    localStorage.setItem('wf_dash_active_profile', 'p-old');
+    // No defs registered → applyProfileRefs is a no-op so refs succeed.
+    const tx = await activate('p-new', { source: 'manual' });
+    expect(tx.ok).toBe(true);
+    expect(tx.prev).toBe('p-old');
+    expect(tx.next).toBe('p-new');
+    expect(localStore.get('active_profile')).toBe('p-new');
+    const audit = JSON.parse(localStorage.getItem('wf_dash_profile_audit') || '[]');
+    const last = audit[audit.length - 1];
+    expect(last.source).toBe('manual');
+    expect(last.from).toBe('p-old');
+    expect(last.to).toBe('p-new');
+    expect(last.ok).toBe(true);
+  });
+
+  it('activate() throws + rolls back + audits failure when defs registry rejects id', async () => {
+    localStorage.clear();
+    localStorage.setItem('wf_dash_active_profile', 'p-old');
+    localStorage.setItem('wf_dash_profile_defs', JSON.stringify([{ id: 'p-known' }]));
+    await expect(activate('p-unknown', { source: 'manual' })).rejects.toThrow(/Profile switch failed/);
+    expect(localStore.get('active_profile')).toBe('p-old');
+    const audit = JSON.parse(localStorage.getItem('wf_dash_profile_audit') || '[]');
+    const last = audit[audit.length - 1];
+    expect(last.ok).toBe(false);
+    expect(last.from).toBe('p-old');
+    expect(last.to).toBe('p-unknown');
   });
 });

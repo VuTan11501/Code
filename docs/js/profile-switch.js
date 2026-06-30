@@ -142,11 +142,120 @@ export async function activateProfileTx({ store, next, applyRefs }) {
   }
 }
 
+// ─── localStorage-backed store + audit helpers ──────────────────────────
+// These run in the browser. In test (node) environments without
+// `localStorage`, the adapters degrade to no-ops so module import stays
+// side-effect free.
+
+const LS_PREFIX = 'wf_dash_';
+
+function lsAvailable() {
+  try { return typeof localStorage !== 'undefined' && localStorage !== null; }
+  catch { return false; }
+}
+
+/** localStorage-backed key/value store used by `activate()`. */
+export const localStore = {
+  get(key) {
+    if (!lsAvailable()) return null;
+    try { return localStorage.getItem(LS_PREFIX + key); } catch { return null; }
+  },
+  set(key, value) {
+    if (!lsAvailable()) return;
+    try {
+      if (value == null) localStorage.removeItem(LS_PREFIX + key);
+      else localStorage.setItem(LS_PREFIX + key, String(value));
+    } catch { /* ignore quota / disabled storage */ }
+  },
+};
+
+function loadProfileDefs() {
+  if (!lsAvailable()) return [];
+  try {
+    const raw = localStorage.getItem(LS_PREFIX + 'profile_defs');
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch { return []; }
+}
+
+/**
+ * Apply profile refs (schedule_set_id, locations, etc.). For Task 3 this
+ * only guards "unknown id when a defs registry exists" — full refs
+ * application (rewriting active schedule pointer, location overrides, …)
+ * lands in Task 4/5. Throwing here triggers `activateProfileTx` rollback.
+ *
+ * @param {string} profileId
+ * @param {Array<object>} defs
+ */
+export async function applyProfileRefs(profileId, defs) {
+  const list = Array.isArray(defs) ? defs : [];
+  if (list.length > 0) {
+    const found = list.find((p) => p && p.id === profileId);
+    if (!found) throw new Error(`profile not found: ${profileId}`);
+  }
+  // Real side effects (schedule set swap, location remap) wired in Task 4/5.
+}
+
+const AUDIT_KEY = LS_PREFIX + 'profile_audit';
+const AUDIT_MAX = 100;
+
+/**
+ * Append a switch audit entry to a localStorage ring buffer (max 100).
+ * Schema: { ts, source, from, to, ok }.
+ */
+export function appendSwitchAudit(entry) {
+  if (!lsAvailable()) return;
+  let arr = [];
+  try {
+    const raw = localStorage.getItem(AUDIT_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    if (Array.isArray(parsed)) arr = parsed;
+  } catch { arr = []; }
+  arr.push({
+    ts: new Date().toISOString(),
+    source: entry && entry.source != null ? entry.source : 'unknown',
+    from: entry ? entry.from : null,
+    to: entry ? entry.to : null,
+    ok: !!(entry && entry.ok),
+  });
+  if (arr.length > AUDIT_MAX) arr = arr.slice(-AUDIT_MAX);
+  try { localStorage.setItem(AUDIT_KEY, JSON.stringify(arr)); } catch { /* ignore */ }
+}
+
+/**
+ * Activate a profile by id. Wraps `activateProfileTx` with the real
+ * localStorage-backed store + `applyProfileRefs`. Throws when the
+ * transaction reports `ok:false` so callers (UI) can surface the error.
+ * Always records an audit entry (rollback or success).
+ *
+ * @param {string} profileId
+ * @param {{source?: string}} [opts]
+ */
+export async function activate(profileId, opts) {
+  const source = (opts && opts.source) || 'unknown';
+  if (typeof profileId !== 'string' || !profileId.trim()) {
+    throw new Error('activate requires profileId');
+  }
+  const defs = loadProfileDefs();
+  const tx = await activateProfileTx({
+    store: localStore,
+    next: profileId,
+    applyRefs: async (id) => applyProfileRefs(id, defs),
+  });
+  appendSwitchAudit({ source, from: tx.prev, to: tx.next, ok: tx.ok });
+  if (!tx.ok) throw new Error(`Profile switch failed: ${tx.error}`);
+  return tx;
+}
+
 const ProfileSwitch = {
   resolveWinningRule,
   shouldSwitchByCooldown,
   validateProfileBundle,
   activateProfileTx,
+  activate,
+  applyProfileRefs,
+  appendSwitchAudit,
+  localStore,
 };
 
 if (typeof window !== 'undefined') {
