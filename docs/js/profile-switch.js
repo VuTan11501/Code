@@ -34,9 +34,23 @@ export function resolveWinningRule(rules, ctx) {
   if (matches.length === 0) return null;
   matches.sort((a, b) => {
     if (a.priority !== b.priority) return b.priority - a.priority;
+    const au = tsOf(a.r.updated_at), bu = tsOf(b.r.updated_at);
+    if (au !== bu) return bu - au;
+    const ac = tsOf(a.r.created_at), bc = tsOf(b.r.created_at);
+    if (ac !== bc) return bc - ac;
     return b.i - a.i;
   });
   return matches[0].r;
+}
+
+function tsOf(v) {
+  if (v == null) return 0;
+  if (typeof v === 'number' && isFinite(v)) return v;
+  if (typeof v === 'string') {
+    const n = Date.parse(v);
+    return isNaN(n) ? 0 : n;
+  }
+  return 0;
 }
 
 function ruleMatches(rule, ctx) {
@@ -81,7 +95,7 @@ export function shouldSwitchByCooldown(lastSwitchTs, nowTs, cooldownSec) {
   if (typeof lastSwitchTs !== 'number' || !isFinite(lastSwitchTs)) return true;
   if (typeof nowTs !== 'number' || !isFinite(nowTs)) return false;
   const cd = Number(cooldownSec) || 0;
-  return nowTs - lastSwitchTs > cd;
+  return nowTs - lastSwitchTs >= cd;
 }
 
 /**

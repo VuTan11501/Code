@@ -17,7 +17,17 @@ describe('ProfileSwitch core', () => {
 
   it('enforces 60s cooldown', () => {
     expect(shouldSwitchByCooldown(100000, 100030, 60)).toBe(false);
+    expect(shouldSwitchByCooldown(100000, 100060, 60)).toBe(true); // exact boundary
     expect(shouldSwitchByCooldown(100000, 100061, 60)).toBe(true);
+  });
+
+  it('breaks priority ties by updated_at recency', () => {
+    const rules = [
+      { id: 'older', priority: 5, profile_id: 'a', updated_at: '2026-06-01T00:00:00Z' },
+      { id: 'newer', priority: 5, profile_id: 'b', updated_at: '2026-06-15T00:00:00Z' },
+    ];
+    const winner = resolveWinningRule(rules, { dow: 2, hhmm: '10:00' });
+    expect(winner?.id).toBe('newer');
   });
 
   it('rejects missing schedule_set_id', () => {
