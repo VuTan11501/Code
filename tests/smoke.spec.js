@@ -46,6 +46,12 @@ test.describe('PWA boot smoke', () => {
     }
   });
 
+  test('profile switch card skeleton exists in settings DOM', async ({ page }) => {
+    await page.goto('/');
+    const hasCard = await page.evaluate(() => !!document.getElementById('profileSwitchCard'));
+    expect(hasCard).toBeTruthy();
+  });
+
   test('CSP meta tag is present', async ({ page }) => {
     await page.goto('/');
     const csp = await page.locator('meta[http-equiv="Content-Security-Policy"]').getAttribute('content');

@@ -50,6 +50,7 @@ function initSettingsPage() {
   renderThemeStatus();
   renderAiAuditStatus();
   renderProxyStatus();
+  renderProfileSwitchCard();
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -927,4 +928,46 @@ function renderReauthState(s) {
         <button class="btn sm" onclick="closeAzureReauthModal()">Close</button>
       </div>`;
   }
+}
+
+// ─────────────────────────────────────────────────────────────
+// Profile Switch — settings UI (manual activate)
+// ─────────────────────────────────────────────────────────────
+async function renderProfileSwitchCard() {
+  const host = document.getElementById('profileSwitchBody');
+  if (!host) return;
+  if (!window.ProfileSwitch || typeof window.ProfileSwitch.loadState !== 'function') {
+    host.innerHTML = `<div class="vault-info-box text-xs text-muted-foreground">Profile switch engine not loaded yet.</div>`;
+    return;
+  }
+  try {
+    const state = await window.ProfileSwitch.loadState();
+    host.innerHTML = `
+      <div class="vault-info-box mb-3 text-xs">${esc(state.summary)}</div>
+      <div class="flex flex-wrap gap-2">
+        <select id="activeProfileSelect" class="select"></select>
+        <button class="btn btn-outline sm" onclick="activateSelectedProfile()">Activate</button>
+      </div>`;
+    if (typeof window.ProfileSwitch.fillProfileOptions === 'function') {
+      window.ProfileSwitch.fillProfileOptions(document.getElementById('activeProfileSelect'), state);
+    }
+  } catch (e) {
+    host.innerHTML = `<div class="vault-info-box text-xs text-muted-foreground">Failed to load profile state: ${esc(String(e && e.message || e))}</div>`;
+  }
+}
+
+async function activateSelectedProfile() {
+  const id = document.getElementById('activeProfileSelect')?.value;
+  if (!id) return;
+  if (!window.ProfileSwitch || typeof window.ProfileSwitch.activate !== 'function') {
+    if (typeof toast === 'function') toast('⚠️ Profile switch engine missing', 'error');
+    return;
+  }
+  try {
+    await window.ProfileSwitch.activate(id, { source: 'manual' });
+    if (typeof toast === 'function') toast('✅ Profile activated');
+  } catch (e) {
+    if (typeof toast === 'function') toast(`⚠️ Activate failed: ${e && e.message || e}`, 'error');
+  }
+  renderProfileSwitchCard();
 }
