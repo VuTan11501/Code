@@ -4,7 +4,7 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
-    include: ['tests/**/*.test.mjs'],
+    include: ['tests/**/*.test.mjs', 'tests/**/*.test.js'],
     exclude: ['node_modules', 'tests/smoke.spec.js', 'playwright.config.js'],
   },
 });
