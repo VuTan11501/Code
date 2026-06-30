@@ -2207,6 +2207,7 @@ async function saveEditSchedule() {
   const needsLocation = ['auto-checkin.yml', 'auto-checkout.yml'].includes(workflow);
   const enabled = document.getElementById('editSchedEnabled').classList.contains('active');
 
+  const oldEntry = scheduleTableData[index];
   let updatedEntry;
 
   if (type === 'once') {
@@ -2214,7 +2215,14 @@ async function saveEditSchedule() {
     if (!date) { toast('⚠️ Pick a date'); return; }
     if (!time) { toast('⚠️ Pick a time'); return; }
     const runAt = `${date}T${time}:00+09:00`;
-    updatedEntry = { type: 'once', workflow, run_at: runAt, note, created: scheduleTableData[index].created || new Date().toISOString() };
+    updatedEntry = { 
+      ...oldEntry,
+      type: 'once', 
+      workflow, 
+      run_at: runAt, 
+      note, 
+      created: oldEntry.created || new Date().toISOString() 
+    };
   } else {
     if (!time) { toast('⚠️ Set a time'); return; }
     const pattern = document.getElementById('editSchedPattern').value;
@@ -2237,7 +2245,15 @@ async function saveEditSchedule() {
     if (startDate) recurrence.start_date = startDate;
     if (endDate) recurrence.end_date = endDate;
 
-    updatedEntry = { type: 'recurring', workflow, recurrence, enabled, note, created: scheduleTableData[index].created || new Date().toISOString() };
+    updatedEntry = { 
+      ...oldEntry,
+      type: 'recurring', 
+      workflow, 
+      recurrence, 
+      enabled, 
+      note, 
+      created: oldEntry.created || new Date().toISOString() 
+    };
   }
 
   if (needsLocation) {
