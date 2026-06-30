@@ -121,10 +121,32 @@ export function validateProfileBundle(bundle) {
   return { ok: true };
 }
 
+/**
+ * Transactional profile activation. Writes the pointer optimistically,
+ * runs the side-effect (`applyRefs`), and rolls the pointer back if it
+ * throws. Returns a result describing the outcome — callers should not
+ * throw from this function.
+ *
+ * @param {{store: {get:(k:string)=>any, set:(k:string,v:any)=>void}, next: string, applyRefs: (next:string)=>any}} args
+ * @returns {Promise<{ok: boolean, prev: any, next: string, error?: string}>}
+ */
+export async function activateProfileTx({ store, next, applyRefs }) {
+  const prev = store.get('active_profile');
+  try {
+    store.set('active_profile', next);
+    await applyRefs(next);
+    return { ok: true, prev, next };
+  } catch (e) {
+    store.set('active_profile', prev);
+    return { ok: false, prev, next, error: e && e.message ? e.message : String(e) };
+  }
+}
+
 const ProfileSwitch = {
   resolveWinningRule,
   shouldSwitchByCooldown,
   validateProfileBundle,
+  activateProfileTx,
 };
 
 if (typeof window !== 'undefined') {

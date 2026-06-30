@@ -3,7 +3,17 @@ import {
   resolveWinningRule,
   shouldSwitchByCooldown,
   validateProfileBundle,
+  activateProfileTx,
 } from '../../docs/js/profile-switch.js';
+
+function makeMockStore(initial = {}) {
+  const data = { ...initial };
+  return {
+    get: (k) => data[k],
+    set: (k, v) => { data[k] = v; },
+    _data: data,
+  };
+}
 
 describe('ProfileSwitch core', () => {
   it('picks specific rule over default rule', () => {
@@ -34,5 +44,22 @@ describe('ProfileSwitch core', () => {
     const result = validateProfileBundle({ id: 'p1', refs: { location_key: 'office' } });
     expect(result.ok).toBe(false);
     expect(result.error).toMatch(/schedule_set_id/i);
+  });
+
+  it('rolls back pointer when apply fails', async () => {
+    const s = makeMockStore({ active_profile: 'p-old' });
+    const apply = () => { throw new Error('write failed'); };
+    const r = await activateProfileTx({ store: s, next: 'p-new', applyRefs: apply });
+    expect(r.ok).toBe(false);
+    expect(s.get('active_profile')).toBe('p-old');
+  });
+
+  it('commits pointer when apply succeeds', async () => {
+    const s = makeMockStore({ active_profile: 'p-old' });
+    const r = await activateProfileTx({ store: s, next: 'p-new', applyRefs: async () => {} });
+    expect(r.ok).toBe(true);
+    expect(r.prev).toBe('p-old');
+    expect(r.next).toBe('p-new');
+    expect(s.get('active_profile')).toBe('p-new');
   });
 });
