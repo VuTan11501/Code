@@ -130,18 +130,30 @@ export function validateProfileBundle(bundle) {
  * @param {{store: {get:(k:string)=>any, set:(k:string,v:any)=>void}, next: string, applyRefs: (next:string)=>any}} args
  * @returns {Promise<{ok: boolean, prev: any, next: string, error?: string}>}
  */
+let _txCounter = 0;
+function _nextTxToken() {
+  _txCounter = (_txCounter + 1) >>> 0;
+  return `tx-${Date.now().toString(36)}-${_txCounter}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
 export async function activateProfileTx({ store, next, applyRefs }) {
   const prev = store.get('active_profile');
+  const prevToken = store.get('active_profile_token');
+  const myToken = _nextTxToken();
   try {
     store.set('active_profile', next);
+    store.set('active_profile_token', myToken);
     await applyRefs(next);
     return { ok: true, prev, next };
   } catch (e) {
-    // Compare-and-swap rollback: only revert if the pointer is still
-    // ours. A concurrent activation that committed after us must not be
-    // clobbered by this tx's failure.
-    if (store.get('active_profile') === next) {
+    // Token-based ownership rollback: only revert if OUR write is still
+    // the most recent one. A bare value-CAS would false-match when a
+    // concurrent tx wrote the same profile id and we'd clobber its
+    // successful commit. External readers of `active_profile` still see
+    // a plain string — `active_profile_token` is a tx-internal sibling.
+    if (store.get('active_profile_token') === myToken) {
       store.set('active_profile', prev);
+      store.set('active_profile_token', prevToken);
     }
     return { ok: false, prev, next, error: e && e.message ? e.message : String(e) };
   }

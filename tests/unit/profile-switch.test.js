@@ -151,6 +151,45 @@ describe('ProfileSwitch core', () => {
     expect(s.get('active_profile')).toBe('p-B'); // winner preserved
   });
 
+  it('activateProfileTx token-rollback survives concurrent tx with SAME next id', async () => {
+    // Same-id race: A starts (prev='p-old', next='p-X'), B then writes
+    // 'p-X' too and commits, A throws. A bare value-CAS would see
+    // pointer === next === 'p-X' and false-roll-back to 'p-old',
+    // destroying B's commit. Token CAS must protect against this.
+    const s = makeMockStore({ active_profile: 'p-old' });
+    let releaseA;
+    const aBlocker = new Promise((res) => { releaseA = res; });
+
+    const txA = activateProfileTx({
+      store: s,
+      next: 'p-X',
+      applyRefs: async () => {
+        await aBlocker;
+        throw new Error('A failed');
+      },
+    });
+
+    await Promise.resolve();
+    expect(s.get('active_profile')).toBe('p-X');
+
+    // B writes the SAME profile id and commits cleanly.
+    const txB = await activateProfileTx({
+      store: s,
+      next: 'p-X',
+      applyRefs: async () => {},
+    });
+    expect(txB.ok).toBe(true);
+    expect(s.get('active_profile')).toBe('p-X');
+    const tokenAfterB = s.get('active_profile_token');
+
+    // A fails. Token mismatch ⇒ no rollback.
+    releaseA();
+    const rA = await txA;
+    expect(rA.ok).toBe(false);
+    expect(s.get('active_profile')).toBe('p-X'); // NOT rolled back to 'p-old'
+    expect(s.get('active_profile_token')).toBe(tokenAfterB); // B's token intact
+  });
+
   it('activate() serializes concurrent calls (in-flight guard)', async () => {
     localStorage.clear();
     localStorage.setItem('wf_dash_active_profile', 'p-old');
