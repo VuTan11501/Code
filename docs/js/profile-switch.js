@@ -206,11 +206,20 @@ function loadProfileDefs() {
  */
 export async function applyProfileRefs(profileId, defs) {
   const list = Array.isArray(defs) ? defs : [];
-  if (list.length > 0) {
-    const found = list.find((p) => p && p.id === profileId);
-    if (!found) throw new Error(`profile not found: ${profileId}`);
+  const found = list.find((p) => p && p.id === profileId);
+  if (!found) throw new Error(`profile not found: ${profileId}`);
+
+  // Switch Gist IDs in localStorage to load the profile's dedicated data
+  if (lsAvailable()) {
+    const newGistId = found.gist_id || 'abc2a47c0a396025a72a6580227ff493';
+    localStorage.setItem(LS_PREFIX + 'gist_id', newGistId);
+    localStorage.setItem(LS_PREFIX + 'gist_id_timesheet', found.gist_id_timesheet || newGistId);
+    localStorage.setItem(LS_PREFIX + 'gist_id_payslip', found.gist_id_payslip || newGistId);
+    
+    // Clear timestamps and CloudSync etag cache so the new profile loads fresh Gist contents
+    localStorage.removeItem(LS_PREFIX + 'last_pulled_at');
+    localStorage.removeItem(LS_PREFIX + 'cloudsync_etag');
   }
-  // Real side effects (schedule set swap, location remap) wired in Task 4/5.
 }
 
 const AUDIT_KEY = LS_PREFIX + 'profile_audit';
@@ -446,6 +455,12 @@ export async function loadState() {
     const tokenStatus = await loadAzureTokenStatus();
     const seed = buildSeedProfileFromTokenStatus(tokenStatus);
     if (seed) {
+      // Inherit currently configured Gist IDs so the initial migration is seamless
+      try {
+        seed.gist_id = localStorage.getItem(LS_PREFIX + 'gist_id') || 'abc2a47c0a396025a72a6580227ff493';
+        seed.gist_id_timesheet = localStorage.getItem(LS_PREFIX + 'gist_id_timesheet') || seed.gist_id;
+        seed.gist_id_payslip = localStorage.getItem(LS_PREFIX + 'gist_id_payslip') || seed.gist_id;
+      } catch {}
       defs = [seed];
       activeId = activeId || seed.id;
       persistSeedProfile(seed);
@@ -587,6 +602,9 @@ export function addProfile(data) {
   const newProfile = {
     id,
     name,
+    gist_id: String(data && data.gist_id || '').trim(),
+    gist_id_timesheet: String(data && data.gist_id_timesheet || '').trim(),
+    gist_id_payslip: String(data && data.gist_id_payslip || '').trim(),
     refs: {
       location_key: locationKey,
       schedule_set_id: 'current',

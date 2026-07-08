@@ -1015,6 +1015,9 @@ async function renderProfileSwitchCard() {
       const emailHtml = azureEmail
         ? `<span class="text-muted-foreground text-xs">(${esc(azureEmail)})</span>`
         : `<span class="text-muted-foreground text-xs opacity-60">(no azure linked)</span>`;
+      const gistInfo = p.gist_id 
+        ? `<div class="text-xs text-muted-foreground opacity-75 font-mono truncate" style="max-width:240px; margin-top:2px;">Gist: ${esc(p.gist_id.slice(0,8))}...</div>`
+        : `<div class="text-xs text-muted-foreground opacity-50 font-mono truncate" style="margin-top:2px;">Gist: Default</div>`;
 
       const activateBtn = !isActive
         ? `<button class="btn btn-outline sm" onclick="activateProfileById(${esc(JSON.stringify(p.id))})">Activate</button>`
@@ -1025,11 +1028,16 @@ async function renderProfileSwitchCard() {
       const deleteBtn = `<button class="btn btn-outline sm danger-outline" onclick="deleteProfileById(${esc(JSON.stringify(p.id))})">Del</button>`;
 
       rowsHtml += `
-        <div class="flex items-center gap-2 py-1" style="min-height:36px">
-          <span class="text-xs" style="min-width:14px">${dot}</span>
-          <span class="text-sm font-medium flex-1 min-w-0 truncate">${nameHtml}</span>
-          ${emailHtml}
-          <div class="flex gap-1 ml-auto shrink-0">${activateBtn}${linkBtn}${deleteBtn}</div>
+        <div class="flex items-start gap-2 py-2 border-b border-muted/10" style="min-height:54px">
+          <span class="text-xs mt-1" style="min-width:14px">${dot}</span>
+          <div class="flex flex-col flex-1 min-w-0">
+            <div class="flex items-center gap-1.5 flex-wrap">
+              <span class="text-sm font-medium truncate">${nameHtml}</span>
+              ${emailHtml}
+            </div>
+            ${gistInfo}
+          </div>
+          <div class="flex gap-1 ml-auto shrink-0 self-center">${activateBtn}${linkBtn}${deleteBtn}</div>
         </div>`;
     }
     if (!rowsHtml) {
@@ -1152,7 +1160,7 @@ function openAddProfileModal() {
           <h3 class="dialog-title text-lg font-semibold" id="addProfileTitle">Add Profile</h3>
           <button class="btn btn-ghost btn-icon modal-close" onclick="closeAddProfileModal()" aria-label="Close">&times;</button>
         </div>
-        <div class="dialog-body modal-body" style="padding:20px">
+        <div class="dialog-body modal-body" style="padding:20px; max-height:60vh; overflow-y:auto;">
           <div class="flex flex-col gap-4">
             <div>
               <label class="text-xs text-muted-foreground mb-1 block">Profile Name <span style="color:var(--red)">*</span></label>
@@ -1167,6 +1175,19 @@ function openAddProfileModal() {
               <input id="addProfileAzureEmail" class="input" type="email" placeholder="e.g. user@fpt.com" autocomplete="off">
               <div class="text-xs text-muted-foreground mt-1">Used to detect Azure account mismatch. Can be left blank and linked later.</div>
             </div>
+            <div>
+              <label class="text-xs text-muted-foreground mb-1 block">Main Gist ID (optional)</label>
+              <input id="addProfileGistId" class="input" type="text" placeholder="e.g. abc2a47c..." autocomplete="off">
+              <div class="text-xs text-muted-foreground mt-1">Gist containing schedules and settings. Falls back to default active if empty.</div>
+            </div>
+            <div>
+              <label class="text-xs text-muted-foreground mb-1 block">Timesheet Gist ID (optional)</label>
+              <input id="addProfileGistIdTimesheet" class="input" type="text" placeholder="e.g. def12345..." autocomplete="off">
+            </div>
+            <div>
+              <label class="text-xs text-muted-foreground mb-1 block">Payslip Gist ID (optional)</label>
+              <input id="addProfileGistIdPayslip" class="input" type="text" placeholder="e.g. xyz98765..." autocomplete="off">
+            </div>
           </div>
         </div>
         <div class="dialog-footer modal-footer flex gap-2 justify-end" style="padding:16px 20px">
@@ -1180,9 +1201,15 @@ function openAddProfileModal() {
   const nameInput = document.getElementById('addProfileName');
   const emailInput = document.getElementById('addProfileAzureEmail');
   const locSelect = document.getElementById('addProfileLocation');
+  const gistInput = document.getElementById('addProfileGistId');
+  const tsGistInput = document.getElementById('addProfileGistIdTimesheet');
+  const payGistInput = document.getElementById('addProfileGistIdPayslip');
   if (nameInput) nameInput.value = '';
   if (emailInput) emailInput.value = '';
   if (locSelect) locSelect.value = '';
+  if (gistInput) gistInput.value = '';
+  if (tsGistInput) tsGistInput.value = '';
+  if (payGistInput) payGistInput.value = '';
   modal.classList.add('open');
   if (nameInput) setTimeout(() => nameInput.focus(), 50);
 }
@@ -1196,6 +1223,9 @@ async function _submitAddProfile() {
   const name = (document.getElementById('addProfileName')?.value || '').trim();
   const locationKey = document.getElementById('addProfileLocation')?.value || '';
   const azureEmail = (document.getElementById('addProfileAzureEmail')?.value || '').trim();
+  const gistId = (document.getElementById('addProfileGistId')?.value || '').trim();
+  const gistIdTimesheet = (document.getElementById('addProfileGistIdTimesheet')?.value || '').trim();
+  const gistIdPayslip = (document.getElementById('addProfileGistIdPayslip')?.value || '').trim();
 
   if (!name) {
     if (typeof toast === 'function') toast('⚠️ Profile name is required', 'error');
@@ -1207,7 +1237,14 @@ async function _submitAddProfile() {
     return;
   }
   try {
-    window.ProfileSwitch.addProfile({ name, location_key: locationKey || undefined, azure_email: azureEmail || undefined });
+    window.ProfileSwitch.addProfile({
+      name,
+      location_key: locationKey || undefined,
+      azure_email: azureEmail || undefined,
+      gist_id: gistId || undefined,
+      gist_id_timesheet: gistIdTimesheet || undefined,
+      gist_id_payslip: gistIdPayslip || undefined
+    });
     closeAddProfileModal();
     if (typeof toast === 'function') toast('✅ Profile created');
     renderProfileSwitchCard();
@@ -1238,12 +1275,19 @@ if (typeof window !== 'undefined') {
   window.closeAzureReauthModal = closeAzureReauthModal;
 }
 
-// Re-render the Profile Switch card whenever the active profile changes
-// (manual activate or auto-switch scheduler). Guarded so we only wire the
-// listener once, no matter how many times settings.js is (re-)executed.
+// Re-render the Profile Switch card and reload dashboard to refresh Gist configuration
+// when the active profile changes. Guarded so we only wire the listener once.
 if (typeof window !== 'undefined' && !window.__wfProfileChangedWired) {
   window.addEventListener('wf:profile:changed', () => {
     try { renderProfileSwitchCard(); } catch (_) {}
+    
+    // Hard reload the browser page so app.js and all submodules read the new Gist IDs
+    console.log('[profile] Active profile changed. Reloading page...');
+    if (typeof window !== 'undefined' && window.location) {
+      setTimeout(() => {
+        window.location.reload();
+      }, 500);
+    }
   });
   window.__wfProfileChangedWired = true;
 }
