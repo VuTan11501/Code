@@ -26,6 +26,7 @@ CREATION_WINDOW_DAYS = 7   # forward: today + 7 days
 BACKWARD_DAYS = 1          # backward: today - 1 day (yesterday allowed by DokoKin)
 
 OT_GIST_FILE = "ot-requests.json"
+SCHEDULED_RUNS_FILE = "scheduled-runs.json"
 
 LOG_LINES = []
 
@@ -186,10 +187,181 @@ def create_ot_request(token, entry):
 
 
 # ═══════════════════════════════════════════════════════════
+#  SCHEDULE COVERAGE CHECK
+# ═══════════════════════════════════════════════════════════
+
+def _parse_time_hm(value):
+    h, m = map(int, str(value).split(":")[:2])
+    return h, m
+
+
+def _compute_ot_datetimes(entry):
+    ot_date = date.fromisoformat(entry["date"])
+    start_h, start_m = _parse_time_hm(entry["start"])
+    end_h, end_m = _parse_time_hm(entry["end"])
+
+    start_dt = datetime(ot_date.year, ot_date.month, ot_date.day,
+                        start_h, start_m, tzinfo=JST)
+    end_dt = datetime(ot_date.year, ot_date.month, ot_date.day,
+                      end_h, end_m, tzinfo=JST)
+    if end_dt <= start_dt:
+        end_dt += timedelta(days=1)
+    return start_dt, end_dt
+
+
+def load_scheduled_runs(schedule_fallback=None):
+    """Load Gist scheduled-runs.json, falling back to local schedule.json actions.
+
+    Returns (entries, source). Entries are normalized enough for coverage checks.
+    """
+    pat = os.environ.get("GH_PAT")
+    if pat:
+        try:
+            from gist_safety import read_gist_file  # noqa: E402
+            snapshot = read_gist_file(pat, GIST_ID, SCHEDULED_RUNS_FILE, log=log)
+            parsed = snapshot.get("parsed")
+            if isinstance(parsed, list):
+                return parsed, "gist"
+            log(f"Scheduled-runs Gist has unexpected shape ({type(parsed).__name__}); trying schedule.json fallback")
+        except Exception as e:
+            log(f"Failed to read scheduled-runs Gist: {e}; trying schedule.json fallback")
+    else:
+        log("GH_PAT not set; cannot read scheduled-runs Gist (trying schedule.json fallback)")
+
+    schedule = schedule_fallback
+    if schedule is None:
+        try:
+            sched_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "schedule.json")
+            with open(sched_path, encoding="utf-8") as f:
+                schedule = json.load(f)
+        except Exception as e:
+            log(f"Failed to load schedule.json fallback: {e}")
+            return [], "unavailable"
+
+    entries = []
+    workflow_by_action = {
+        "checkin": "auto-checkin.yml",
+        "checkout": "auto-checkout.yml",
+    }
+    for action in schedule.get("actions", []):
+        try:
+            action_dt = datetime.strptime(action["datetime"], "%Y-%m-%d %H:%M").replace(tzinfo=JST)
+        except (KeyError, ValueError, TypeError):
+            continue
+        workflow = workflow_by_action.get(action.get("action"))
+        if not workflow:
+            continue
+        entries.append({
+            "type": "once",
+            "workflow": workflow,
+            "run_at": action_dt.isoformat(),
+            "location": action.get("location"),
+            "note": action.get("note", ""),
+        })
+    return entries, "schedule.json"
+
+
+def _entry_datetime_on_date(entry, target_date):
+    if entry.get("enabled") is False:
+        return None
+
+    if entry.get("type") == "once" and entry.get("run_at"):
+        try:
+            run_at = datetime.fromisoformat(str(entry["run_at"]).replace("Z", "+00:00"))
+            if run_at.tzinfo is None:
+                run_at = run_at.replace(tzinfo=JST)
+            run_at = run_at.astimezone(JST)
+            return run_at if run_at.date() == target_date else None
+        except (ValueError, TypeError):
+            return None
+
+    if entry.get("type") != "recurring":
+        return None
+
+    rec = entry.get("recurrence") or {}
+    time_value = rec.get("time") or entry.get("time")
+    if not time_value:
+        return None
+    try:
+        hour, minute = _parse_time_hm(time_value)
+    except (ValueError, TypeError):
+        return None
+
+    date_str = target_date.isoformat()
+    if date_str in set(rec.get("skip_dates") or []):
+        return None
+    if rec.get("start_date") and date_str < rec["start_date"]:
+        return None
+    if rec.get("end_date") and date_str > rec["end_date"]:
+        return None
+
+    dow_js = target_date.isoweekday() % 7  # Sun=0..Sat=6
+    pattern = rec.get("pattern", "daily")
+    if pattern == "weekdays" and dow_js in (0, 6):
+        return None
+    if pattern == "weekly" and dow_js not in (rec.get("days") or []):
+        return None
+    if pattern == "monthly" and target_date.day not in (rec.get("dates") or []):
+        return None
+
+    return datetime(target_date.year, target_date.month, target_date.day,
+                    hour, minute, tzinfo=JST)
+
+
+def _scheduled_datetimes(entries, workflow, target_date):
+    out = []
+    for entry in entries:
+        if entry.get("workflow") != workflow:
+            continue
+        dt = _entry_datetime_on_date(entry, target_date)
+        if dt:
+            out.append(dt)
+    return sorted(out)
+
+
+def detect_ot_schedule_gaps(ot_entries, scheduled_entries):
+    """Return warning dicts for OT dates missing checkin/checkout coverage."""
+    warnings = []
+
+    for entry in ot_entries:
+        try:
+            start_dt, end_dt = _compute_ot_datetimes(entry)
+        except Exception as e:
+            warnings.append({
+                "date": entry.get("date", "?"),
+                "time": f"{entry.get('start', '?')}->{entry.get('end', '?')}",
+                "missing": "invalid OT time",
+                "detail": str(e),
+            })
+            continue
+
+        checkins = _scheduled_datetimes(scheduled_entries, "auto-checkin.yml", start_dt.date())
+        checkouts = _scheduled_datetimes(scheduled_entries, "auto-checkout.yml", end_dt.date())
+
+        missing = []
+        if not any(ci <= start_dt + timedelta(minutes=30) for ci in checkins):
+            missing.append("checkin")
+        if not any(end_dt <= co <= end_dt + timedelta(hours=6) for co in checkouts):
+            missing.append("checkout")
+
+        if missing:
+            warnings.append({
+                "date": entry["date"],
+                "time": f"{entry.get('start', '?')}->{entry.get('end', '?')}",
+                "missing": ", ".join(missing),
+                "detail": (
+                    f"Need CI on {start_dt.date().isoformat()} and CO covering "
+                    f"{end_dt.strftime('%Y-%m-%d %H:%M')} JST"
+                ),
+            })
+    return warnings
+
+
+# ═══════════════════════════════════════════════════════════
 #  EMAIL
 # ═══════════════════════════════════════════════════════════
 
-def build_ot_html(created, existing, past, outside_window, errors, today):
+def build_ot_html(created, existing, past, outside_window, errors, schedule_warnings, today):
     """Build shadcn/ui dark-themed HTML email for Auto Request OT results."""
     BG = "#0a0a0a"
     CARD = "#0f0f0f"
@@ -240,6 +412,28 @@ def build_ot_html(created, existing, past, outside_window, errors, today):
           <div style="color:#f87171;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:6px;">Errors ({len(errors)})</div>
           <ul style="margin:0;padding-left:18px;">{err_items}</ul></div>'''
 
+    warning_html = ""
+    if schedule_warnings:
+        warn_rows = ""
+        for w in schedule_warnings:
+            warn_rows += f'''<tr style="border-bottom:1px solid {BORDER};">
+              <td style="padding:10px 8px;color:{FG};font:13px ui-monospace,SFMono-Regular,Consolas,monospace;">{w['date']}</td>
+              <td style="padding:10px 8px;color:{MUTED};font:12px ui-monospace,SFMono-Regular,Consolas,monospace;">{w['time']}</td>
+              <td style="padding:10px 8px;color:#facc15;font:600 12px ui-monospace,SFMono-Regular,Consolas,monospace;">{w['missing']}</td>
+              <td style="padding:10px 8px;color:{MUTED};font-size:12px;">{w['detail']}</td></tr>'''
+        warning_html = f'''<div style="background:rgba(234,179,8,0.08);border:1px solid rgba(234,179,8,0.25);border-radius:8px;padding:14px;margin-top:20px;">
+          <div style="color:#facc15;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:10px;">Schedule warnings ({len(schedule_warnings)})</div>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border:1px solid {BORDER};border-radius:8px;overflow:hidden;">
+            <thead><tr style="background:{MUTED_BG};">
+              <th style="padding:8px;text-align:left;color:{MUTED};font-size:10px;text-transform:uppercase;">Date</th>
+              <th style="padding:8px;text-align:left;color:{MUTED};font-size:10px;text-transform:uppercase;">OT</th>
+              <th style="padding:8px;text-align:left;color:{MUTED};font-size:10px;text-transform:uppercase;">Missing</th>
+              <th style="padding:8px;text-align:left;color:{MUTED};font-size:10px;text-transform:uppercase;">Required</th>
+            </tr></thead>
+            <tbody>{warn_rows}</tbody>
+          </table>
+        </div>'''
+
     log_html = "<br>".join(LOG_LINES)
 
     return f'''<!DOCTYPE html>
@@ -277,6 +471,7 @@ def build_ot_html(created, existing, past, outside_window, errors, today):
       </tr></thead>
       <tbody>{rows}</tbody>
     </table>
+    {warning_html}
     {error_html}
   </td></tr>
 
@@ -422,6 +617,7 @@ def main():
     outside_items = []
     skipped_past = 0
     errors = []
+    schedule_warnings = []
 
     try:
         # Try to load OT requests from Gist first (authoritative if present)
@@ -463,6 +659,15 @@ def main():
             return
 
         log(f"{len(actionable)} entries within window (-{BACKWARD_DAYS}..+{CREATION_WINDOW_DAYS} days), checking existing...")
+
+        scheduled_entries, schedule_source = load_scheduled_runs()
+        if schedule_source != "unavailable":
+            schedule_warnings = detect_ot_schedule_gaps(actionable, scheduled_entries)
+            log(f"Schedule coverage check: {len(scheduled_entries)} entries ({schedule_source}), warnings={len(schedule_warnings)}")
+            for w in schedule_warnings:
+                log(f"  Schedule warning {w['date']} {w['time']}: missing {w['missing']} ({w['detail']})")
+        else:
+            log(f"Schedule coverage check skipped: no checkin/checkout schedule entries available ({schedule_source})")
 
         # Get token
         refresh_token = os.environ.get("AZURE_REFRESH_TOKEN")
@@ -556,6 +761,7 @@ def main():
         log(f"  Already exist: {len(existing_items)}")
         log(f"  Past dates: {skipped_past}")
         log(f"  Outside window: {len(outside_items)}")
+        log(f"  Schedule warnings: {len(schedule_warnings)}")
         if errors:
             log(f"  Errors: {len(errors)}")
             for e in errors:
@@ -565,6 +771,8 @@ def main():
         today_str = today if isinstance(today, str) else str(today)
         if errors:
             emoji, status_word = "🚨", "ERROR"
+        elif schedule_warnings:
+            emoji, status_word = "⚠️", "SCHEDULE-WARNING"
         elif created_items:
             emoji, status_word = "✅", "CREATED"
         elif existing_items and not outside_items:
@@ -576,10 +784,14 @@ def main():
         subject = (
             f"{emoji} Auto Request OT [{status_word}]: "
             f"{len(created_items)} created, {len(existing_items)} exist, "
-            f"{len(outside_items)} pending, {len(errors)} errors — {today_str}"
+            f"{len(outside_items)} pending, {len(schedule_warnings)} warnings, "
+            f"{len(errors)} errors — {today_str}"
         )
         plain_body = "\n".join(LOG_LINES)
-        html_body = build_ot_html(created_items, existing_items, skipped_past, outside_items, errors, today_str)
+        html_body = build_ot_html(
+            created_items, existing_items, skipped_past, outside_items,
+            errors, schedule_warnings, today_str
+        )
         send_email(subject, plain_body, html=html_body)
 
         if errors:
