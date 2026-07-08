@@ -51,6 +51,7 @@ const SCRIPT_ORDER = [
   'ai-agent.js',
   'insights.js',
   'settings.js',
+  'profile-switch.js',
 ];
 
 const OBFUSCATE = process.argv.includes('--obfuscate');
@@ -68,7 +69,16 @@ async function main() {
       console.warn(`[build-js] missing ${name}, skipping`);
       continue;
     }
-    const src = readFileSync(p, 'utf8');
+    const rawSrc = readFileSync(p, 'utf8');
+    // Strip top-level ESM export declarations so dual-mode files (e.g.
+    // profile-switch.js) don't make esbuild treat the concatenated bundle
+    // as an ESM module.  The browser consumers always use window.X
+    // assignments; exports are only needed for vitest ESM imports.
+    const src = rawSrc
+      .replace(/^export\s+default\s+\S+;?\s*$/gm, '')     // export default Foo;
+      .replace(/^export\s+(async\s+)?function\s+/gm, '$1function ')  // export function/async
+      .replace(/^export\s+const\s+/gm, 'const ')           // export const
+      .replace(/^export\s+class\s+/gm, 'class ');           // export class
     bytesIn += statSync(p).size;
     parts.push(`/* === ${name} === */\n${src}\n`);
   }

@@ -52,6 +52,14 @@ test.describe('PWA boot smoke', () => {
     expect(hasCard).toBeTruthy();
   });
 
+  test('ProfileSwitch API is available after bundle load', async ({ page }) => {
+    await page.goto('/');
+    const apiOk = await page.evaluate(() =>
+      !!(window.ProfileSwitch && typeof window.ProfileSwitch.activate === 'function')
+    );
+    expect(apiOk).toBeTruthy();
+  });
+
   test('CSP meta tag is present', async ({ page }) => {
     await page.goto('/');
     const csp = await page.locator('meta[http-equiv="Content-Security-Policy"]').getAttribute('content');

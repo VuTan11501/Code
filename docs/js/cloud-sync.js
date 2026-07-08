@@ -576,6 +576,7 @@ window.CloudSync = (function () {
         'renderScheduleTable',       // schedule.js (pip filter applies here)
         'renderScheduleCalendar',    // schedule.js
         'renderThemeStatus',         // settings.js
+        'renderProfileSwitchCard',   // settings.js (profile switch)
         'renderInfraToggle',         // dashboard.js (visible cards / order)
         'renderCardPicker',          // dashboard.js (customize modal body)
         'applyDashboardSettingsFromCloud', // dashboard.js — re-render grid if visible

@@ -253,6 +253,8 @@ function showDashboard() {
     window.CloudSync.register('wf_dash_theme',          'Theme (light/dark/auto)',   'theme');
     window.CloudSync.register('wf_dash_card_order',     'Dashboard card order',      'dash_order');
     window.CloudSync.register('wf_dash_visible_cards',  'Dashboard visible cards',   'dash_visible');
+    window.CloudSync.register('wf_dash_active_profile', 'Active profile pointer',    'active_profile');
+    window.CloudSync.register('wf_dash_profile_rules',  'Profile auto-switch rules', 'profile_rules');
     window.CloudSync.pull().then(r => {
       if (r && r.applied) window.CloudSync.applyToUI();
     });

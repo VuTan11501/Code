@@ -765,10 +765,6 @@ const _jobLogPolls = new Map(); // key → timer
 const _jobLogCache = new Map(); // jobId → parsed log
 const _jobStepsMap = new Map(); // jobId → steps[]
 
-function escapeHtml(s) {
-  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-}
-
 async function toggleStepLog(btn) {
   const block = btn.closest('.step-block');
   const body = block.querySelector('.step-log-body');

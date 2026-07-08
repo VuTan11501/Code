@@ -206,12 +206,6 @@ function renderAiAuditStatus() {
   }
 }
 
-function escapeHtml(s) {
-  return String(s == null ? '' : s)
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-}
-
 function toggleAiAuditSync(enabled) {
   if (!window.AIAudit) return;
   // Block opt-in for non-owners — push would silently 404 against owner's gist.
@@ -360,12 +354,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
 window.openAiAuditModal = openAiAuditModal;
 window.closeAiAuditModal = closeAiAuditModal;
-
-function escapeHtml(s) {
-  return String(s == null ? '' : s)
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-}
 
 function setTheme(mode) {
   if (!window.Theme) return;
