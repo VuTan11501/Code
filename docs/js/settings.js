@@ -696,6 +696,53 @@ async function loadTokenStatus() {
     }
     const s = JSON.parse(content);
     renderTokenStatus(s);
+
+    // Auto-update profile with newly fetched token status details
+    if (s && s.user && s.user.email) {
+      try {
+        const linkingId = localStorage.getItem('wf_dash_linking_profile_id') || localStorage.getItem('wf_dash_active_profile');
+        if (linkingId) {
+          const rawDefs = localStorage.getItem('wf_dash_profile_defs');
+          if (rawDefs) {
+            const defs = JSON.parse(rawDefs);
+            if (Array.isArray(defs)) {
+              const idx = defs.findIndex(p => p && p.id === linkingId);
+              if (idx !== -1) {
+                const targetProf = defs[idx];
+                const oldEmail = targetProf.azure_user ? targetProf.azure_user.email : '';
+                const newEmail = s.user.email || '';
+                const newOid = s.user.oid || '';
+                
+                // Only update and sync if there is an actual change
+                if (oldEmail.toLowerCase() !== newEmail.toLowerCase() || (targetProf.azure_user && targetProf.azure_user.oid !== newOid)) {
+                  defs[idx].azure_user = {
+                    name: s.user.name || '',
+                    email: newEmail,
+                    oid: newOid
+                  };
+                  if (!defs[idx].source || defs[idx].source === 'manual') {
+                    defs[idx].source = 'azure-token';
+                  }
+                  localStorage.setItem('wf_dash_profile_defs', JSON.stringify(defs));
+                  localStorage.removeItem('wf_dash_linking_profile_id');
+                  
+                  if (window.CloudSync && typeof window.CloudSync.markDirty === 'function') {
+                    window.CloudSync.markDirty();
+                  }
+                  
+                  renderProfileSwitchCard();
+                  if (typeof toast === 'function') {
+                    toast(`✅ Linked Azure account <${newEmail}> to profile "${defs[idx].name || defs[idx].id}"`);
+                  }
+                }
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to auto-update profile azure_user:', err);
+      }
+    }
   } catch (e) {
     box.innerHTML = `<div class="text-red-400">Failed to load: ${e.message}</div>`;
   }
@@ -777,7 +824,7 @@ function closeAzureReauthModal() {
   if (azureReauthPollTimer) { clearInterval(azureReauthPollTimer); azureReauthPollTimer = null; }
 }
 
-async function startAzureReauth() {
+async function startAzureReauth(opts = {}) {
   if (!sessionToken) { toast('🔒 Unlock vault first'); return; }
 
   // Check for existing in-flight session first — avoid spawning duplicate runs
@@ -804,6 +851,7 @@ async function startAzureReauth() {
       title: 'Re-auth already in progress',
       message: `An active sign-in is waiting (code ${existing.user_code}, expires ${new Date(existing.expires_at).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}).\n\nResume that session?`,
       confirmText: 'Resume',
+      customWidth: '400px',
       cancelText: 'Cancel',
     });
     if (!reuse) return;
@@ -813,7 +861,7 @@ async function startAzureReauth() {
     return;
   }
 
-  if (!await uiConfirm({
+  if (!opts?.skipConfirm && !await uiConfirm({
     title: 'Start re-authentication?',
     message: 'A workflow will run a device-code login. You will see a code to enter on microsoft.com/devicelogin from any device.',
     confirmText: 'Start',
@@ -1029,14 +1077,9 @@ async function linkAzureToProfile(id) {
   }).catch(() => false);
   if (!confirmed) return;
   try {
-    await apiFetch(`/repos/${OWNER}/${REPO}/actions/workflows/azure-reauth.yml/dispatches`, {
-      method: 'POST',
-      body: JSON.stringify({ ref: 'main' }),
-    });
-    if (typeof toast === 'function') toast('✅ Re-auth workflow dispatched. Complete sign-in then reload this page.');
-  } catch (e) {
-    if (typeof toast === 'function') toast(`❌ Dispatch failed: ${e && e.message || e}`, 'error');
-  }
+    localStorage.setItem('wf_dash_linking_profile_id', id);
+  } catch {}
+  await startAzureReauth({ skipConfirm: true });
 }
 
 function renderAzureMismatchBanner(container, activeProfile, tokenStatus) {
@@ -1165,6 +1208,11 @@ if (typeof window !== 'undefined') {
   window.closeAddProfileModal = closeAddProfileModal;
   window._submitAddProfile = _submitAddProfile;
   window.activateSelectedProfile = activateSelectedProfile;
+  
+  // Expose re-auth modal actions
+  window.startAzureReauth = startAzureReauth;
+  window.openAzureReauthModal = openAzureReauthModal;
+  window.closeAzureReauthModal = closeAzureReauthModal;
 }
 
 // Re-render the Profile Switch card whenever the active profile changes
