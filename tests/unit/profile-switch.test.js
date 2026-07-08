@@ -8,6 +8,7 @@ import {
   appendSwitchAudit,
   localStore,
   computeAutoSwitchDecision,
+  fillProfileOptions,
 } from '../../docs/js/profile-switch.js';
 
 // Minimal in-memory localStorage shim so activate() (which uses the
@@ -237,6 +238,35 @@ describe('ProfileSwitch core', () => {
     });
     expect(res.shouldSwitch).toBe(false);
     expect(res.reason).toBe('no-rule');
+  });
+
+  it('fills profile options without HTML injection', () => {
+    const created = [];
+    const doc = {
+      createElement: (tag) => {
+        const node = { tag, value: '', textContent: '', selected: false };
+        created.push(node);
+        return node;
+      },
+    };
+    const select = {
+      ownerDocument: doc,
+      replaceChildren: (...nodes) => { select.nodes = nodes; },
+    };
+
+    const payload = {
+      activeId: 'safe"id',
+      defs: [
+        { id: 'safe"id', name: '<img src=x onerror=alert(1)>' },
+      ],
+    };
+    fillProfileOptions(select, payload);
+
+    expect(created).toHaveLength(1);
+    expect(select.nodes).toHaveLength(1);
+    expect(select.nodes[0].value).toBe('safe"id');
+    expect(select.nodes[0].textContent).toBe('<img src=x onerror=alert(1)>');
+    expect(select.nodes[0].selected).toBe(true);
   });
 
   it('activate() serializes concurrent calls (in-flight guard)', async () => {

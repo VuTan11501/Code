@@ -392,18 +392,30 @@ export function fillProfileOptions(selectEl, state) {
   const s = state || {};
   const defs = Array.isArray(s.defs) ? s.defs : [];
   const active = s.activeId || '';
-  const opts = [];
+  const doc = selectEl.ownerDocument || (typeof document !== 'undefined' ? document : null);
+  if (!doc || typeof doc.createElement !== 'function') return;
+  const options = [];
   if (defs.length === 0) {
-    opts.push('<option value="">(no profiles defined)</option>');
+    const opt = doc.createElement('option');
+    opt.value = '';
+    opt.textContent = '(no profiles defined)';
+    options.push(opt);
   } else {
     for (const p of defs) {
       if (!p || typeof p.id !== 'string') continue;
-      const label = p.name || p.id;
-      const sel = p.id === active ? ' selected' : '';
-      opts.push(`<option value="${p.id}"${sel}>${label}</option>`);
+      const opt = doc.createElement('option');
+      opt.value = p.id;
+      opt.textContent = p.name || p.id;
+      opt.selected = p.id === active;
+      options.push(opt);
     }
   }
-  selectEl.innerHTML = opts.join('');
+  if (typeof selectEl.replaceChildren === 'function') {
+    selectEl.replaceChildren(...options);
+  } else {
+    while (selectEl.firstChild) selectEl.removeChild(selectEl.firstChild);
+    for (const opt of options) selectEl.appendChild(opt);
+  }
 }
 
 let _autoSwitchTimer = null;
