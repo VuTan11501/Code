@@ -1022,6 +1022,7 @@ async function renderProfileSwitchCard() {
       const activateBtn = !isActive
         ? `<button class="btn btn-outline sm" onclick="activateProfileById(${esc(JSON.stringify(p.id))})">Activate</button>`
         : '';
+      const editBtn = `<button class="btn btn-outline sm" onclick="openEditProfileModal(${esc(JSON.stringify(p.id))})">Edit</button>`;
       const linkBtn = !azureEmail
         ? `<button class="btn btn-outline sm" onclick="linkAzureToProfile(${esc(JSON.stringify(p.id))})">Link Azure</button>`
         : '';
@@ -1037,7 +1038,7 @@ async function renderProfileSwitchCard() {
             </div>
             ${gistInfo}
           </div>
-          <div class="flex gap-1 ml-auto shrink-0 self-center">${activateBtn}${linkBtn}${deleteBtn}</div>
+          <div class="flex gap-1 ml-auto shrink-0 self-center">${activateBtn}${editBtn}${linkBtn}${deleteBtn}</div>
         </div>`;
     }
     if (!rowsHtml) {
@@ -1131,6 +1132,145 @@ function renderAzureMismatchBanner(container, activeProfile, tokenStatus) {
       but current token belongs to <strong>${esc(tokenStatus.user.email)}</strong>.
       <button class="btn btn-outline sm" style="margin-left:var(--sp-2)" onclick="linkAzureToProfile(${esc(JSON.stringify(activeProfile.id))})">Re-auth for this profile</button>
     </div>`;
+}
+
+let _editingProfileId = null;
+
+function openEditProfileModal(id) {
+  _editingProfileId = id;
+  let modal = document.getElementById('editProfileModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'editProfileModal';
+    modal.className = 'dialog-overlay modal-overlay';
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-modal', 'true');
+    modal.setAttribute('aria-labelledby', 'editProfileTitle');
+
+    // Build location options from global getAllLocations if available
+    let locOptions = '<option value="">— None —</option>';
+    try {
+      if (typeof getAllLocations === 'function') {
+        const locs = getAllLocations();
+        for (const [key, loc] of Object.entries(locs)) {
+          locOptions += `<option value="${esc(key)}">${esc(loc.name || key)}</option>`;
+        }
+      }
+    } catch {}
+
+    modal.innerHTML = `
+      <div class="dialog-content modal" style="max-width:420px">
+        <div class="dialog-header modal-header">
+          <h3 class="dialog-title text-lg font-semibold" id="editProfileTitle">Edit Profile</h3>
+          <button class="btn btn-ghost btn-icon modal-close" onclick="closeEditProfileModal()" aria-label="Close">&times;</button>
+        </div>
+        <div class="dialog-body modal-body" style="padding:20px; max-height:60vh; overflow-y:auto;">
+          <div class="flex flex-col gap-4">
+            <div>
+              <label class="text-xs text-muted-foreground mb-1 block">Profile Name <span style="color:var(--red)">*</span></label>
+              <input id="editProfileName" class="input" type="text" maxlength="50" placeholder="e.g. Tan Vu Cao" autocomplete="off">
+            </div>
+            <div>
+              <label class="text-xs text-muted-foreground mb-1 block">Default Location</label>
+              <select id="editProfileLocation" class="select">${locOptions}</select>
+            </div>
+            <div>
+              <label class="text-xs text-muted-foreground mb-1 block">Azure Email (optional)</label>
+              <input id="editProfileAzureEmail" class="input" type="email" placeholder="e.g. user@fpt.com" autocomplete="off">
+            </div>
+            <div>
+              <label class="text-xs text-muted-foreground mb-1 block">Main Gist ID (optional)</label>
+              <input id="editProfileGistId" class="input" type="text" placeholder="e.g. abc2a47c..." autocomplete="off">
+            </div>
+            <div>
+              <label class="text-xs text-muted-foreground mb-1 block">Timesheet Gist ID (optional)</label>
+              <input id="editProfileGistIdTimesheet" class="input" type="text" placeholder="e.g. def12345..." autocomplete="off">
+            </div>
+            <div>
+              <label class="text-xs text-muted-foreground mb-1 block">Payslip Gist ID (optional)</label>
+              <input id="editProfileGistIdPayslip" class="input" type="text" placeholder="e.g. xyz98765..." autocomplete="off">
+            </div>
+          </div>
+        </div>
+        <div class="dialog-footer modal-footer flex gap-2 justify-end" style="padding:16px 20px">
+          <button class="btn btn-outline sm" onclick="closeEditProfileModal()">Cancel</button>
+          <button class="btn primary sm" onclick="_submitEditProfile()">Save Changes</button>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+  }
+
+  // Load and populate profile data
+  try {
+    const rawDefs = localStorage.getItem('wf_dash_profile_defs');
+    if (rawDefs) {
+      const defs = JSON.parse(rawDefs);
+      const p = defs.find(x => x && x.id === id);
+      if (p) {
+        document.getElementById('editProfileName').value = p.name || '';
+        document.getElementById('editProfileLocation').value = p.refs?.location_key || '';
+        document.getElementById('editProfileAzureEmail').value = p.azure_user?.email || '';
+        document.getElementById('editProfileGistId').value = p.gist_id || '';
+        document.getElementById('editProfileGistIdTimesheet').value = p.gist_id_timesheet || '';
+        document.getElementById('editProfileGistIdPayslip').value = p.gist_id_payslip || '';
+      }
+    }
+  } catch (err) {
+    console.warn('Failed to populate edit profile modal:', err);
+  }
+
+  modal.classList.add('open');
+  document.getElementById('editProfileName')?.focus();
+}
+
+function closeEditProfileModal() {
+  const modal = document.getElementById('editProfileModal');
+  if (modal) modal.classList.remove('open');
+}
+
+async function _submitEditProfile() {
+  if (!_editingProfileId) return;
+  const name = (document.getElementById('editProfileName')?.value || '').trim();
+  const locationKey = document.getElementById('editProfileLocation')?.value || '';
+  const azureEmail = (document.getElementById('editProfileAzureEmail')?.value || '').trim();
+  const gistId = (document.getElementById('editProfileGistId')?.value || '').trim();
+  const gistIdTimesheet = (document.getElementById('editProfileGistIdTimesheet')?.value || '').trim();
+  const gistIdPayslip = (document.getElementById('editProfileGistIdPayslip')?.value || '').trim();
+
+  if (!name) {
+    if (typeof toast === 'function') toast('⚠️ Profile name is required', 'error');
+    document.getElementById('editProfileName')?.focus();
+    return;
+  }
+  if (!window.ProfileSwitch || typeof window.ProfileSwitch.updateProfile !== 'function') {
+    if (typeof toast === 'function') toast('⚠️ Profile switch engine not available', 'error');
+    return;
+  }
+  try {
+    window.ProfileSwitch.updateProfile(_editingProfileId, {
+      name,
+      location_key: locationKey || undefined,
+      azure_email: azureEmail || undefined,
+      gist_id: gistId || undefined,
+      gist_id_timesheet: gistIdTimesheet || undefined,
+      gist_id_payslip: gistIdPayslip || undefined
+    });
+    closeEditProfileModal();
+    if (typeof toast === 'function') toast('✅ Profile updated');
+    
+    // Reload card, and if we edited the active profile, reload the page to refresh configurations
+    const activeId = localStorage.getItem('wf_dash_active_profile');
+    if (activeId === _editingProfileId) {
+      if (typeof toast === 'function') toast('✅ Active profile updated. Reloading...');
+      setTimeout(() => {
+        window.location.reload();
+      }, 1000);
+    } else {
+      renderProfileSwitchCard();
+    }
+  } catch (e) {
+    if (typeof toast === 'function') toast(`⚠️ ${e && e.message || e}`, 'error');
+  }
 }
 
 function openAddProfileModal() {
@@ -1273,6 +1413,11 @@ if (typeof window !== 'undefined') {
   window.startAzureReauth = startAzureReauth;
   window.openAzureReauthModal = openAzureReauthModal;
   window.closeAzureReauthModal = closeAzureReauthModal;
+
+  // Expose edit profile actions
+  window.openEditProfileModal = openEditProfileModal;
+  window.closeEditProfileModal = closeEditProfileModal;
+  window._submitEditProfile = _submitEditProfile;
 }
 
 // Re-render the Profile Switch card and reload dashboard to refresh Gist configuration

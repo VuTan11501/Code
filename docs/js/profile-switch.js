@@ -670,6 +670,69 @@ export function deleteProfile(id) {
   return updated;
 }
 
+export function updateProfile(id, data) {
+  const name = String(data && data.name || '').trim();
+  if (!name) throw new Error('Profile name is required');
+  if (name.length > 50) throw new Error('Profile name must be 50 characters or fewer');
+
+  const defs = loadProfileDefs();
+  const idx = defs.findIndex(p => p && p.id === id);
+  if (idx === -1) throw new Error(`Profile not found: ${id}`);
+
+  // Check name conflict with other profiles
+  if (defs.some((p, i) => i !== idx && p && typeof p.name === 'string' && p.name.toLowerCase() === name.toLowerCase())) {
+    throw new Error(`A profile named "${name}" already exists`);
+  }
+
+  defs[idx].name = name;
+  defs[idx].gist_id = String(data.gist_id || '').trim();
+  defs[idx].gist_id_timesheet = String(data.gist_id_timesheet || '').trim();
+  defs[idx].gist_id_payslip = String(data.gist_id_payslip || '').trim();
+  
+  if (data.location_key) {
+    defs[idx].refs.location_key = data.location_key;
+  }
+  
+  const azureEmail = String(data.azure_email || '').trim();
+  if (azureEmail) {
+    if (!defs[idx].azure_user) defs[idx].azure_user = {};
+    defs[idx].azure_user.email = azureEmail;
+    if (!defs[idx].azure_user.name) defs[idx].azure_user.name = name;
+    defs[idx].source = 'azure-token';
+  } else {
+    defs[idx].azure_user = null;
+    defs[idx].source = 'manual';
+  }
+
+  if (lsAvailable()) {
+    try {
+      localStorage.setItem(LS_PREFIX + 'profile_defs', JSON.stringify(defs));
+      
+      // If we updated the currently active profile, update active localStorage Gist IDs immediately
+      const activeId = localStore.get('active_profile');
+      if (activeId === id) {
+        const newGistId = defs[idx].gist_id || 'abc2a47c0a396025a72a6580227ff493';
+        localStorage.setItem(LS_PREFIX + 'gist_id', newGistId);
+        localStorage.setItem(LS_PREFIX + 'gist_id_timesheet', defs[idx].gist_id_timesheet || newGistId);
+        localStorage.setItem(LS_PREFIX + 'gist_id_payslip', defs[idx].gist_id_payslip || newGistId);
+      }
+      
+      if (window.CloudSync && typeof window.CloudSync.markDirty === 'function') {
+        window.CloudSync.markDirty();
+      }
+    } catch {}
+  }
+
+  // Fire event to notify listeners
+  try {
+    if (typeof window !== 'undefined' && typeof CustomEvent === 'function') {
+      window.dispatchEvent(new CustomEvent('wf:profile:changed', { detail: { action: 'updated', id } }));
+    }
+  } catch { /* ignore */ }
+
+  return defs[idx];
+}
+
 const ProfileSwitch = {
   resolveWinningRule,
   shouldSwitchByCooldown,
@@ -685,6 +748,7 @@ const ProfileSwitch = {
   bootAutoSwitch,
   evaluateAutoSwitch,
   addProfile,
+  updateProfile,
   deleteProfile,
   loadAzureTokenStatus,
 };
