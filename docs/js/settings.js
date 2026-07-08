@@ -1156,6 +1156,17 @@ async function activateSelectedProfile() {
   if (id) await activateProfileById(id);
 }
 
+// Expose profile switch UI functions to window so inline onclick handlers in HTML work after obfuscation
+if (typeof window !== 'undefined') {
+  window.activateProfileById = activateProfileById;
+  window.deleteProfileById = deleteProfileById;
+  window.linkAzureToProfile = linkAzureToProfile;
+  window.openAddProfileModal = openAddProfileModal;
+  window.closeAddProfileModal = closeAddProfileModal;
+  window._submitAddProfile = _submitAddProfile;
+  window.activateSelectedProfile = activateSelectedProfile;
+}
+
 // Re-render the Profile Switch card whenever the active profile changes
 // (manual activate or auto-switch scheduler). Guarded so we only wire the
 // listener once, no matter how many times settings.js is (re-)executed.

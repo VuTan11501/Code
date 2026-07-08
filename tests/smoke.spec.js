@@ -60,6 +60,23 @@ test.describe('PWA boot smoke', () => {
     expect(apiOk).toBeTruthy();
   });
 
+  test('Profile Switch settings UI handlers are exposed globally on window', async ({ page }) => {
+    await page.goto('/');
+    const handlersOk = await page.evaluate(() => {
+      const fns = [
+        'activateProfileById',
+        'deleteProfileById',
+        'linkAzureToProfile',
+        'openAddProfileModal',
+        'closeAddProfileModal',
+        '_submitAddProfile',
+        'activateSelectedProfile'
+      ];
+      return fns.every(name => typeof window[name] === 'function');
+    });
+    expect(handlersOk).toBeTruthy();
+  });
+
   test('CSP meta tag is present', async ({ page }) => {
     await page.goto('/');
     const csp = await page.locator('meta[http-equiv="Content-Security-Policy"]').getAttribute('content');
