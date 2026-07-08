@@ -257,6 +257,20 @@ function showDashboard() {
       if (r && r.applied) window.CloudSync.applyToUI();
     });
   }
+  // Profile Switch — boot the auto-switch scheduler (evaluates rules
+  // against JST now + polls every 60s + fires on tab focus/visibility).
+  // Idempotent: safe against multiple showDashboard() calls.
+  try {
+    if (window.ProfileSwitch && typeof window.ProfileSwitch.bootAutoSwitch === 'function') {
+      window.ProfileSwitch.bootAutoSwitch();
+    }
+  } catch (_) {}
+  if (!showDashboard._profileFocusWired) {
+    window.addEventListener('focus', () => {
+      try { window.ProfileSwitch?.evaluateAutoSwitch?.(); } catch (_) {}
+    });
+    showDashboard._profileFocusWired = true;
+  }
 }
 
 /* Sticky month headers (OT + Timesheet): only paint background / border /

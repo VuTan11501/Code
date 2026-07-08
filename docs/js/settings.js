@@ -971,3 +971,13 @@ async function activateSelectedProfile() {
   }
   renderProfileSwitchCard();
 }
+
+// Re-render the Profile Switch card whenever the active profile changes
+// (manual activate or auto-switch scheduler). Guarded so we only wire the
+// listener once, no matter how many times settings.js is (re-)executed.
+if (typeof window !== 'undefined' && !window.__wfProfileChangedWired) {
+  window.addEventListener('wf:profile:changed', () => {
+    try { renderProfileSwitchCard(); } catch (_) {}
+  });
+  window.__wfProfileChangedWired = true;
+}

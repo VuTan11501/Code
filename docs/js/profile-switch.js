@@ -268,11 +268,208 @@ export async function activate(profileId, opts) {
     });
     appendSwitchAudit({ source, from: tx.prev, to: tx.next, ok: tx.ok });
     if (!tx.ok) throw new Error(`Profile switch failed: ${tx.error}`);
+    // Successful commit → stamp cooldown clock so auto-switch respects it.
+    try { localStore.set('active_profile_last_switch_ts', String(Math.floor(Date.now() / 1000))); } catch { /* ignore */ }
+    // Fire DOM event so UI cards (Settings, dashboard) can re-render
+    // without polling. No-op in node/vitest.
+    try {
+      if (typeof window !== 'undefined' && typeof CustomEvent === 'function') {
+        window.dispatchEvent(new CustomEvent('wf:profile:changed', {
+          detail: { from: tx.prev, to: tx.next, source },
+        }));
+      }
+    } catch { /* ignore */ }
     return tx;
   };
   const chained = (_activateInFlight || Promise.resolve()).then(run, run);
   _activateInFlight = chained.catch(() => {});
   return chained;
+}
+
+// ─── Auto-switch scheduler ──────────────────────────────────────────────
+// Pure decision helper — no I/O. Given the current context, returns
+// whether an auto-switch should fire and its target.
+//
+// Ordering:
+//   1. no matching rule       → { shouldSwitch: false, reason: 'no-rule' }
+//   2. winner === current     → { shouldSwitch: false, reason: 'already-active' }
+//   3. cooldown not elapsed   → { shouldSwitch: false, reason: 'cooldown' }
+//   4. otherwise              → { shouldSwitch: true, target: winner.profile_id }
+export function computeAutoSwitchDecision(ctx) {
+  const c = ctx || {};
+  if (!c.winner || !c.winner.profile_id) {
+    return { shouldSwitch: false, reason: 'no-rule' };
+  }
+  if (c.winner.profile_id === c.currentProfile) {
+    return { shouldSwitch: false, reason: 'already-active' };
+  }
+  if (!shouldSwitchByCooldown(c.lastSwitchEpochSec, c.nowEpochSec, c.cooldownSec)) {
+    return { shouldSwitch: false, reason: 'cooldown' };
+  }
+  return { shouldSwitch: true, target: c.winner.profile_id };
+}
+
+// JST context extraction — auto-switch rules are authored in JST since the
+// whole product operates in Asia/Tokyo (workflows, DokoKin, kintai rules).
+function jstContext(now) {
+  const d = now instanceof Date ? now : new Date();
+  try {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Tokyo',
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', weekday: 'short', hour12: false,
+    }).formatToParts(d);
+    const m = {};
+    for (const p of parts) m[p.type] = p.value;
+    const dowMap = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+    return {
+      date: `${m.year}-${m.month}-${m.day}`,
+      hhmm: `${m.hour}:${m.minute}`,
+      dow: dowMap[m.weekday] != null ? dowMap[m.weekday] : d.getDay(),
+      epochSec: Math.floor(d.getTime() / 1000),
+    };
+  } catch {
+    // Fallback: local time (headless env with limited ICU data).
+    const pad = (n) => String(n).padStart(2, '0');
+    return {
+      date: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
+      hhmm: `${pad(d.getHours())}:${pad(d.getMinutes())}`,
+      dow: d.getDay(),
+      epochSec: Math.floor(d.getTime() / 1000),
+    };
+  }
+}
+
+function loadProfileRules() {
+  if (!lsAvailable()) return [];
+  try {
+    const raw = localStorage.getItem(LS_PREFIX + 'profile_rules');
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch { return []; }
+}
+
+function readCooldownSec() {
+  if (!lsAvailable()) return 60;
+  try {
+    const raw = localStorage.getItem(LS_PREFIX + 'profile_cooldown_sec');
+    const n = raw == null ? NaN : Number(raw);
+    return Number.isFinite(n) && n >= 0 ? n : 60;
+  } catch { return 60; }
+}
+
+function readLastSwitchTs() {
+  if (!lsAvailable()) return 0;
+  try {
+    const raw = localStorage.getItem(LS_PREFIX + 'active_profile_last_switch_ts');
+    const n = raw == null ? NaN : Number(raw);
+    return Number.isFinite(n) ? n : 0;
+  } catch { return 0; }
+}
+
+/**
+ * Read persisted profile state for UI rendering.
+ * Returns { activeId, defs, rules, cooldownSec, lastSwitchTs, summary }.
+ */
+export async function loadState() {
+  const defs = loadProfileDefs();
+  const rules = loadProfileRules();
+  const activeId = localStore.get('active_profile') || '';
+  const cooldownSec = readCooldownSec();
+  const lastSwitchTs = readLastSwitchTs();
+  const activeLabel = activeId
+    ? (defs.find((p) => p && p.id === activeId)?.name || activeId)
+    : '(none)';
+  const summary = `Active: ${activeLabel} — ${defs.length} profile(s), ${rules.length} rule(s), cooldown ${cooldownSec}s`;
+  return { activeId, defs, rules, cooldownSec, lastSwitchTs, summary };
+}
+
+/**
+ * Populate a <select> with profile options. Marks the active one selected.
+ */
+export function fillProfileOptions(selectEl, state) {
+  if (!selectEl) return;
+  const s = state || {};
+  const defs = Array.isArray(s.defs) ? s.defs : [];
+  const active = s.activeId || '';
+  const opts = [];
+  if (defs.length === 0) {
+    opts.push('<option value="">(no profiles defined)</option>');
+  } else {
+    for (const p of defs) {
+      if (!p || typeof p.id !== 'string') continue;
+      const label = p.name || p.id;
+      const sel = p.id === active ? ' selected' : '';
+      opts.push(`<option value="${p.id}"${sel}>${label}</option>`);
+    }
+  }
+  selectEl.innerHTML = opts.join('');
+}
+
+let _autoSwitchTimer = null;
+let _autoSwitchInFlight = false;
+const AUTO_SWITCH_INTERVAL_MS = 60_000;
+
+/**
+ * Evaluate the auto-switch rules against JST now and fire `activate()`
+ * when the decision says so. Safe to call at any time; guarded against
+ * re-entry. Never throws — errors are logged and audited.
+ */
+export async function evaluateAutoSwitch() {
+  if (_autoSwitchInFlight) return { shouldSwitch: false, reason: 're-entrant' };
+  _autoSwitchInFlight = true;
+  try {
+    const rules = loadProfileRules();
+    if (!rules.length) return { shouldSwitch: false, reason: 'no-rules-configured' };
+    const ctx = jstContext();
+    const winner = resolveWinningRule(rules, ctx);
+    const decision = computeAutoSwitchDecision({
+      currentProfile: localStore.get('active_profile') || null,
+      winner,
+      lastSwitchEpochSec: readLastSwitchTs(),
+      nowEpochSec: ctx.epochSec,
+      cooldownSec: readCooldownSec(),
+    });
+    if (!decision.shouldSwitch) return decision;
+    try {
+      await activate(decision.target, { source: 'auto' });
+      return { ...decision, activated: true };
+    } catch (e) {
+      // activate() already wrote a failure audit entry.
+      if (typeof console !== 'undefined' && console.warn) {
+        console.warn('[ProfileSwitch] auto-switch failed:', e && e.message ? e.message : e);
+      }
+      return { ...decision, activated: false, error: e && e.message ? e.message : String(e) };
+    }
+  } finally {
+    _autoSwitchInFlight = false;
+  }
+}
+
+/**
+ * Boot the auto-switch loop: evaluate immediately, then poll every 60s.
+ * Idempotent — repeat calls do NOT stack timers.
+ */
+export function bootAutoSwitch() {
+  // Fire once at boot (non-blocking).
+  Promise.resolve().then(() => evaluateAutoSwitch()).catch(() => {});
+  if (_autoSwitchTimer != null) return; // already booted
+  if (typeof setInterval !== 'function') return;
+  _autoSwitchTimer = setInterval(() => {
+    evaluateAutoSwitch().catch(() => {});
+  }, AUTO_SWITCH_INTERVAL_MS);
+  // Also re-evaluate when the browser signals we came back from sleep /
+  // tab focus — the interval alone can drift when the tab is throttled.
+  try {
+    if (typeof window !== 'undefined' && !bootAutoSwitch._focusWired) {
+      window.addEventListener('visibilitychange', () => {
+        if (typeof document !== 'undefined' && !document.hidden) {
+          evaluateAutoSwitch().catch(() => {});
+        }
+      });
+      bootAutoSwitch._focusWired = true;
+    }
+  } catch { /* ignore */ }
 }
 
 const ProfileSwitch = {
@@ -284,6 +481,11 @@ const ProfileSwitch = {
   applyProfileRefs,
   appendSwitchAudit,
   localStore,
+  computeAutoSwitchDecision,
+  loadState,
+  fillProfileOptions,
+  bootAutoSwitch,
+  evaluateAutoSwitch,
 };
 
 if (typeof window !== 'undefined') {

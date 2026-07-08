@@ -7,6 +7,7 @@ import {
   activate,
   appendSwitchAudit,
   localStore,
+  computeAutoSwitchDecision,
 } from '../../docs/js/profile-switch.js';
 
 // Minimal in-memory localStorage shim so activate() (which uses the
@@ -188,6 +189,54 @@ describe('ProfileSwitch core', () => {
     expect(rA.ok).toBe(false);
     expect(s.get('active_profile')).toBe('p-X'); // NOT rolled back to 'p-old'
     expect(s.get('active_profile_token')).toBe(tokenAfterB); // B's token intact
+  });
+
+  it('does not switch when cooldown not elapsed', async () => {
+    const res = computeAutoSwitchDecision({
+      currentProfile: 'p1',
+      winner: { profile_id: 'p2' },
+      lastSwitchEpochSec: 2000,
+      nowEpochSec: 2050,
+      cooldownSec: 60,
+    });
+    expect(res.shouldSwitch).toBe(false);
+    expect(res.reason).toBe('cooldown');
+  });
+
+  it('switches when winner differs and cooldown elapsed', async () => {
+    const res = computeAutoSwitchDecision({
+      currentProfile: 'p1',
+      winner: { profile_id: 'p2' },
+      lastSwitchEpochSec: 2000,
+      nowEpochSec: 2100,
+      cooldownSec: 60,
+    });
+    expect(res.shouldSwitch).toBe(true);
+    expect(res.target).toBe('p2');
+  });
+
+  it('skips auto-switch when winner already active', async () => {
+    const res = computeAutoSwitchDecision({
+      currentProfile: 'p1',
+      winner: { profile_id: 'p1' },
+      lastSwitchEpochSec: 0,
+      nowEpochSec: 5000,
+      cooldownSec: 60,
+    });
+    expect(res.shouldSwitch).toBe(false);
+    expect(res.reason).toBe('already-active');
+  });
+
+  it('skips auto-switch when no rule matches', async () => {
+    const res = computeAutoSwitchDecision({
+      currentProfile: 'p1',
+      winner: null,
+      lastSwitchEpochSec: 0,
+      nowEpochSec: 5000,
+      cooldownSec: 60,
+    });
+    expect(res.shouldSwitch).toBe(false);
+    expect(res.reason).toBe('no-rule');
   });
 
   it('activate() serializes concurrent calls (in-flight guard)', async () => {
