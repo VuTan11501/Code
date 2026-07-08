@@ -647,6 +647,7 @@ function importVault(event) {
 const TOKEN_STATUS_FILE = 'token-status.json';
 const REAUTH_STATUS_FILE = 'reauth-status.json';
 let azureReauthPollTimer = null;
+let azureReauthDispatchTime = 0;
 
 function _fmtJST(iso) {
   if (!iso) return '—';
@@ -847,18 +848,23 @@ async function startAzureReauth(opts = {}) {
   } catch {}
 
   if (existing) {
-    const reuse = await uiConfirm({
+    const startNew = await uiConfirm({
       title: 'Re-auth already in progress',
-      message: `An active sign-in is waiting (code ${existing.user_code}, expires ${new Date(existing.expires_at).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}).\n\nResume that session?`,
-      confirmText: 'Resume',
+      message: `An active sign-in session is waiting (code ${existing.user_code}, expires ${new Date(existing.expires_at).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}).\n\nWould you like to start a new session instead?`,
+      confirmText: 'Start New',
+      cancelText: 'Resume Code',
       customWidth: '400px',
-      cancelText: 'Cancel',
-    });
-    if (!reuse) return;
-    openAzureReauthModal();
-    renderReauthState(existing);
-    _startReauthPolling();
-    return;
+    }).catch(() => null);
+
+    if (startNew === null) return; // Dialog closed or cancelled
+
+    if (startNew === false) { // User chose "Resume Code"
+      openAzureReauthModal();
+      renderReauthState(existing);
+      azureReauthDispatchTime = 0; // Disable time fence for manual resume
+      _startReauthPolling();
+      return;
+    }
   }
 
   if (!opts?.skipConfirm && !await uiConfirm({
@@ -870,6 +876,10 @@ async function startAzureReauth(opts = {}) {
   openAzureReauthModal();
   const body = document.getElementById('azureReauthBody');
   body.innerHTML = '<div class="text-sm text-muted-foreground p-4 text-center">Starting workflow…</div>';
+  
+  // Set dispatch time fence to ignore previous runs' stale data (buffer 10s clock skew)
+  azureReauthDispatchTime = Date.now() - 10000;
+
   try {
     const r = await fetch(`${API}/repos/${OWNER}/${REPO}/actions/workflows/azure-reauth.yml/dispatches`, {
       method: 'POST',
@@ -903,6 +913,16 @@ function _startReauthPolling() {
       const content = await readGistFile(f);
       if (!content) return;
       const s = JSON.parse(content);
+
+      // Time fence: ignore Gist files that are older than our current dispatch time
+      if (azureReauthDispatchTime > 0 && s.started_at) {
+        const startedAtTs = new Date(s.started_at).getTime();
+        if (startedAtTs < azureReauthDispatchTime) {
+          console.log('[reauth] Ignoring stale Gist auth session from previous runs.');
+          return;
+        }
+      }
+
       // Only re-render when state OR code changes (avoids flicker on countdown)
       if (s.state === lastState && s.user_code === lastCode) return;
       lastState = s.state;
@@ -913,7 +933,10 @@ function _startReauthPolling() {
         azureReauthPollTimer = null;
         if (s.state === 'success') {
           toast('✅ Re-authenticated. Refreshing status…');
-          setTimeout(loadTokenStatus, 5000);
+          setTimeout(() => {
+            loadTokenStatus();
+            try { renderProfileSwitchCard(); } catch (_) {}
+          }, 5000);
         }
       }
     } catch {}
