@@ -558,6 +558,100 @@ export function bootAutoSwitch() {
   } catch { /* ignore */ }
 }
 
+/**
+ * Create a new profile and persist it.
+ * @param {{name: string, location_key?: string, azure_email?: string}} data
+ * @returns {object} The new profile.
+ * @throws {Error} If name is empty, too long, or already exists.
+ */
+export function addProfile(data) {
+  const name = String(data && data.name || '').trim();
+  if (!name) throw new Error('Profile name is required');
+  if (name.length > 50) throw new Error('Profile name must be 50 characters or fewer');
+
+  const defs = loadProfileDefs();
+  if (defs.some(p => p && typeof p.name === 'string' && p.name.toLowerCase() === name.toLowerCase())) {
+    throw new Error(`A profile named "${name}" already exists`);
+  }
+
+  // Generate unique id
+  let baseId = slugifyProfileId(name);
+  let id = baseId;
+  let suffix = 2;
+  while (defs.some(p => p && p.id === id)) {
+    id = `${baseId}-${suffix++}`;
+  }
+
+  const azureEmail = String(data && data.azure_email || '').trim();
+  const locationKey = String(data && data.location_key || '').trim() || 'office';
+  const newProfile = {
+    id,
+    name,
+    refs: {
+      location_key: locationKey,
+      schedule_set_id: 'current',
+      ot_profile_key: 'default',
+      notif_prefs_key: 'wf_dash_notif_prefs',
+    },
+    source: azureEmail ? 'azure-token' : 'manual',
+    ...(azureEmail ? { azure_user: { name, email: azureEmail, oid: '' } } : {}),
+  };
+
+  defs.push(newProfile);
+  if (lsAvailable()) {
+    try { localStorage.setItem(LS_PREFIX + 'profile_defs', JSON.stringify(defs)); } catch {}
+  }
+
+  // Set active if no profile was active before
+  if (!localStore.get('active_profile')) {
+    localStore.set('active_profile', id);
+  }
+
+  try {
+    if (typeof window !== 'undefined' && typeof CustomEvent === 'function') {
+      window.dispatchEvent(new CustomEvent('wf:profile:changed', { detail: { action: 'added', id } }));
+    }
+  } catch { /* ignore */ }
+
+  try {
+    if (typeof window !== 'undefined' && window.CloudSync && typeof window.CloudSync.markDirty === 'function') {
+      window.CloudSync.markDirty();
+    }
+  } catch { /* ignore */ }
+
+  return newProfile;
+}
+
+/**
+ * Delete a profile by id. Cannot delete the only profile.
+ * @param {string} id
+ * @returns {Array} Updated defs array.
+ * @throws {Error} If trying to delete the last profile.
+ */
+export function deleteProfile(id) {
+  const defs = loadProfileDefs();
+  const updated = defs.filter(p => p && p.id !== id);
+  if (updated.length === 0) throw new Error('Cannot delete the last profile');
+
+  if (lsAvailable()) {
+    try { localStorage.setItem(LS_PREFIX + 'profile_defs', JSON.stringify(updated)); } catch {}
+  }
+
+  // If deleted profile was active, switch to first remaining
+  const activeId = localStore.get('active_profile');
+  if (activeId === id && updated.length > 0) {
+    localStore.set('active_profile', updated[0].id);
+  }
+
+  try {
+    if (typeof window !== 'undefined' && typeof CustomEvent === 'function') {
+      window.dispatchEvent(new CustomEvent('wf:profile:changed', { detail: { action: 'deleted', id } }));
+    }
+  } catch { /* ignore */ }
+
+  return updated;
+}
+
 const ProfileSwitch = {
   resolveWinningRule,
   shouldSwitchByCooldown,
@@ -572,6 +666,9 @@ const ProfileSwitch = {
   fillProfileOptions,
   bootAutoSwitch,
   evaluateAutoSwitch,
+  addProfile,
+  deleteProfile,
+  loadAzureTokenStatus,
 };
 
 if (typeof window !== 'undefined') {

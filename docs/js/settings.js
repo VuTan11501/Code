@@ -919,7 +919,7 @@ function renderReauthState(s) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Profile Switch — settings UI (manual activate)
+// Profile Switch — settings UI (list + add + link azure)
 // ─────────────────────────────────────────────────────────────
 async function renderProfileSwitchCard() {
   const host = document.getElementById('profileSwitchBody');
@@ -930,23 +930,61 @@ async function renderProfileSwitchCard() {
   }
   try {
     const state = await window.ProfileSwitch.loadState();
+    const { activeId, defs } = state;
+    const activeProfile = defs.find(p => p && p.id === activeId);
+
+    // Build profile list rows
+    let rowsHtml = '';
+    for (const p of defs) {
+      if (!p || typeof p.id !== 'string') continue;
+      const isActive = p.id === activeId;
+      const dot = isActive ? '●' : '○';
+      const nameHtml = esc(p.name || p.id);
+      const azureEmail = p.azure_user && p.azure_user.email ? p.azure_user.email : null;
+      const emailHtml = azureEmail
+        ? `<span class="text-muted-foreground text-xs">(${esc(azureEmail)})</span>`
+        : `<span class="text-muted-foreground text-xs opacity-60">(no azure linked)</span>`;
+
+      const activateBtn = !isActive
+        ? `<button class="btn btn-outline sm" onclick="activateProfileById(${JSON.stringify(p.id)})">Activate</button>`
+        : '';
+      const linkBtn = !azureEmail
+        ? `<button class="btn btn-outline sm" onclick="linkAzureToProfile(${JSON.stringify(p.id)})">Link Azure</button>`
+        : '';
+      const deleteBtn = `<button class="btn btn-outline sm danger-outline" onclick="deleteProfileById(${JSON.stringify(p.id)})">Del</button>`;
+
+      rowsHtml += `
+        <div class="flex items-center gap-2 py-1" style="min-height:36px">
+          <span class="text-xs" style="min-width:14px">${dot}</span>
+          <span class="text-sm font-medium flex-1 min-w-0 truncate">${nameHtml}</span>
+          ${emailHtml}
+          <div class="flex gap-1 ml-auto shrink-0">${activateBtn}${linkBtn}${deleteBtn}</div>
+        </div>`;
+    }
+    if (!rowsHtml) {
+      rowsHtml = `<div class="text-xs text-muted-foreground py-2">No profiles defined yet.</div>`;
+    }
+
     host.innerHTML = `
       <div class="vault-info-box mb-3 text-xs">${esc(state.summary)}</div>
-      <div class="flex flex-wrap gap-2">
-        <select id="activeProfileSelect" class="select"></select>
-        <button class="btn btn-outline sm" onclick="activateSelectedProfile()">Activate</button>
-      </div>`;
-    if (typeof window.ProfileSwitch.fillProfileOptions === 'function') {
-      window.ProfileSwitch.fillProfileOptions(document.getElementById('activeProfileSelect'), state);
+      <div id="profileListRows" class="flex flex-col gap-1 mb-3">${rowsHtml}</div>
+      <div class="flex gap-2">
+        <button class="btn btn-outline sm" onclick="openAddProfileModal()">+ Add Profile</button>
+      </div>
+      <div id="azureMismatchBanner"></div>`;
+
+    // Azure mismatch banner (async, non-blocking)
+    if (activeProfile && window.ProfileSwitch && typeof window.ProfileSwitch.loadAzureTokenStatus === 'function') {
+      window.ProfileSwitch.loadAzureTokenStatus().then(tokenStatus => {
+        renderAzureMismatchBanner(document.getElementById('azureMismatchBanner'), activeProfile, tokenStatus);
+      }).catch(() => {});
     }
   } catch (e) {
     host.innerHTML = `<div class="vault-info-box text-xs text-muted-foreground">Failed to load profile state: ${esc(String(e && e.message || e))}</div>`;
   }
 }
 
-async function activateSelectedProfile() {
-  const id = document.getElementById('activeProfileSelect')?.value;
-  if (!id) return;
+async function activateProfileById(id) {
   if (!window.ProfileSwitch || typeof window.ProfileSwitch.activate !== 'function') {
     if (typeof toast === 'function') toast('⚠️ Profile switch engine missing', 'error');
     return;
@@ -958,6 +996,164 @@ async function activateSelectedProfile() {
     if (typeof toast === 'function') toast(`⚠️ Activate failed: ${e && e.message || e}`, 'error');
   }
   renderProfileSwitchCard();
+}
+
+async function deleteProfileById(id) {
+  if (!window.ProfileSwitch || typeof window.ProfileSwitch.deleteProfile !== 'function') {
+    if (typeof toast === 'function') toast('⚠️ Profile switch engine missing', 'error');
+    return;
+  }
+  const confirmed = await uiConfirm({
+    title: 'Delete profile?',
+    message: 'This will permanently remove the profile. This cannot be undone.',
+    confirmText: 'Delete',
+    cancelText: 'Cancel',
+  }).catch(() => false);
+  if (!confirmed) return;
+  try {
+    window.ProfileSwitch.deleteProfile(id);
+    if (typeof toast === 'function') toast('🗑️ Profile deleted');
+  } catch (e) {
+    if (typeof toast === 'function') toast(`⚠️ ${e && e.message || e}`, 'error');
+  }
+  renderProfileSwitchCard();
+}
+
+async function linkAzureToProfile(id) {
+  if (!sessionToken) { if (typeof toast === 'function') toast('🔒 Unlock vault first'); return; }
+  const confirmed = await uiConfirm({
+    title: 'Link Azure account?',
+    message: `This will trigger the Azure re-auth workflow. After sign-in completes, the token will be linked to profile "${id}". Continue?`,
+    confirmText: 'Start Re-auth',
+    cancelText: 'Cancel',
+  }).catch(() => false);
+  if (!confirmed) return;
+  try {
+    await apiFetch(`/repos/${OWNER}/${REPO}/actions/workflows/azure-reauth.yml/dispatches`, {
+      method: 'POST',
+      body: JSON.stringify({ ref: 'main' }),
+    });
+    if (typeof toast === 'function') toast('✅ Re-auth workflow dispatched. Complete sign-in then reload this page.');
+  } catch (e) {
+    if (typeof toast === 'function') toast(`❌ Dispatch failed: ${e && e.message || e}`, 'error');
+  }
+}
+
+function renderAzureMismatchBanner(container, activeProfile, tokenStatus) {
+  if (!container) return;
+  container.innerHTML = '';
+  if (!activeProfile || !tokenStatus) return;
+  const profileEmail = activeProfile.azure_user && activeProfile.azure_user.email
+    ? activeProfile.azure_user.email.toLowerCase()
+    : null;
+  const tokenEmail = tokenStatus.user && tokenStatus.user.email
+    ? tokenStatus.user.email.toLowerCase()
+    : null;
+  if (!profileEmail || !tokenEmail || profileEmail === tokenEmail) return;
+  container.innerHTML = `
+    <div class="vault-info-box mt-3 text-xs" style="border-color:var(--yellow)">
+      ⚠️ Active profile <strong>${esc(activeProfile.name || activeProfile.id)}</strong>
+      uses Azure account <strong>${esc(activeProfile.azure_user.email)}</strong>
+      but current token belongs to <strong>${esc(tokenStatus.user.email)}</strong>.
+      <button class="btn btn-outline sm" style="margin-left:var(--sp-2)" onclick="linkAzureToProfile(${JSON.stringify(activeProfile.id)})">Re-auth for this profile</button>
+    </div>`;
+}
+
+function openAddProfileModal() {
+  let modal = document.getElementById('addProfileModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'addProfileModal';
+    modal.className = 'dialog-overlay modal-overlay';
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-modal', 'true');
+    modal.setAttribute('aria-labelledby', 'addProfileTitle');
+
+    // Build location options from global getAllLocations if available
+    let locOptions = '<option value="">— None —</option>';
+    try {
+      if (typeof getAllLocations === 'function') {
+        const locs = getAllLocations();
+        for (const [key, loc] of Object.entries(locs)) {
+          locOptions += `<option value="${esc(key)}">${esc(loc.name || key)}</option>`;
+        }
+      }
+    } catch {}
+
+    modal.innerHTML = `
+      <div class="dialog-content modal" style="max-width:420px">
+        <div class="dialog-header modal-header">
+          <h3 class="dialog-title text-lg font-semibold" id="addProfileTitle">Add Profile</h3>
+          <button class="btn btn-ghost btn-icon modal-close" onclick="closeAddProfileModal()" aria-label="Close">&times;</button>
+        </div>
+        <div class="dialog-body modal-body" style="padding:20px">
+          <div class="flex flex-col gap-4">
+            <div>
+              <label class="text-xs text-muted-foreground mb-1 block">Profile Name <span style="color:var(--red)">*</span></label>
+              <input id="addProfileName" class="input" type="text" maxlength="50" placeholder="e.g. Tan Vu Cao" autocomplete="off">
+            </div>
+            <div>
+              <label class="text-xs text-muted-foreground mb-1 block">Default Location</label>
+              <select id="addProfileLocation" class="select">${locOptions}</select>
+            </div>
+            <div>
+              <label class="text-xs text-muted-foreground mb-1 block">Azure Email (optional)</label>
+              <input id="addProfileAzureEmail" class="input" type="email" placeholder="e.g. user@fpt.com" autocomplete="off">
+              <div class="text-xs text-muted-foreground mt-1">Used to detect Azure account mismatch. Can be left blank and linked later.</div>
+            </div>
+          </div>
+        </div>
+        <div class="dialog-footer modal-footer flex gap-2 justify-end" style="padding:16px 20px">
+          <button class="btn btn-outline sm" onclick="closeAddProfileModal()">Cancel</button>
+          <button class="btn primary sm" onclick="_submitAddProfile()">Create Profile</button>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+  }
+  // Reset form fields
+  const nameInput = document.getElementById('addProfileName');
+  const emailInput = document.getElementById('addProfileAzureEmail');
+  const locSelect = document.getElementById('addProfileLocation');
+  if (nameInput) nameInput.value = '';
+  if (emailInput) emailInput.value = '';
+  if (locSelect) locSelect.value = '';
+  modal.classList.add('open');
+  if (nameInput) setTimeout(() => nameInput.focus(), 50);
+}
+
+function closeAddProfileModal() {
+  const modal = document.getElementById('addProfileModal');
+  if (modal) modal.classList.remove('open');
+}
+
+async function _submitAddProfile() {
+  const name = (document.getElementById('addProfileName')?.value || '').trim();
+  const locationKey = document.getElementById('addProfileLocation')?.value || '';
+  const azureEmail = (document.getElementById('addProfileAzureEmail')?.value || '').trim();
+
+  if (!name) {
+    if (typeof toast === 'function') toast('⚠️ Profile name is required', 'error');
+    document.getElementById('addProfileName')?.focus();
+    return;
+  }
+  if (!window.ProfileSwitch || typeof window.ProfileSwitch.addProfile !== 'function') {
+    if (typeof toast === 'function') toast('⚠️ Profile switch engine not available', 'error');
+    return;
+  }
+  try {
+    window.ProfileSwitch.addProfile({ name, location_key: locationKey || undefined, azure_email: azureEmail || undefined });
+    closeAddProfileModal();
+    if (typeof toast === 'function') toast('✅ Profile created');
+    renderProfileSwitchCard();
+  } catch (e) {
+    if (typeof toast === 'function') toast(`⚠️ ${e && e.message || e}`, 'error');
+  }
+}
+
+// Keep legacy function so any stale HTML onclick references still work
+async function activateSelectedProfile() {
+  const id = document.getElementById('activeProfileSelect')?.value;
+  if (id) await activateProfileById(id);
 }
 
 // Re-render the Profile Switch card whenever the active profile changes
