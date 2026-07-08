@@ -494,7 +494,6 @@ window.CloudSync = (function () {
         files[BAK_FILE] = { content: JSON.stringify(bak, null, 2) };
       }
       const patchHeaders = { 'Content-Type': 'application/json' };
-      if (existingEtag) patchHeaders['If-Match'] = existingEtag;
       const resp = await _ghFetch(`https://api.github.com/gists/${GIST_ID}`, {
         method: 'PATCH',
         headers: patchHeaders,

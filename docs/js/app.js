@@ -914,8 +914,8 @@ async function apiFetch(path, opts = {}) {
     throw new Error('API 403 Forbidden');
   }
   if (!res.ok) throw new Error(`API ${res.status}`);
-
-  const data = await res.json();
+  const text = await res.text();
+  const data = text ? JSON.parse(text) : null;
 
   // Cache ETag for next request (GET only)
   if (isGet) {
