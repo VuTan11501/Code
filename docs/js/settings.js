@@ -946,12 +946,12 @@ async function renderProfileSwitchCard() {
         : `<span class="text-muted-foreground text-xs opacity-60">(no azure linked)</span>`;
 
       const activateBtn = !isActive
-        ? `<button class="btn btn-outline sm" onclick="activateProfileById(${JSON.stringify(p.id)})">Activate</button>`
+        ? `<button class="btn btn-outline sm" onclick="activateProfileById(${esc(JSON.stringify(p.id))})">Activate</button>`
         : '';
       const linkBtn = !azureEmail
-        ? `<button class="btn btn-outline sm" onclick="linkAzureToProfile(${JSON.stringify(p.id)})">Link Azure</button>`
+        ? `<button class="btn btn-outline sm" onclick="linkAzureToProfile(${esc(JSON.stringify(p.id))})">Link Azure</button>`
         : '';
-      const deleteBtn = `<button class="btn btn-outline sm danger-outline" onclick="deleteProfileById(${JSON.stringify(p.id)})">Del</button>`;
+      const deleteBtn = `<button class="btn btn-outline sm danger-outline" onclick="deleteProfileById(${esc(JSON.stringify(p.id))})">Del</button>`;
 
       rowsHtml += `
         <div class="flex items-center gap-2 py-1" style="min-height:36px">
@@ -1055,7 +1055,7 @@ function renderAzureMismatchBanner(container, activeProfile, tokenStatus) {
       ⚠️ Active profile <strong>${esc(activeProfile.name || activeProfile.id)}</strong>
       uses Azure account <strong>${esc(activeProfile.azure_user.email)}</strong>
       but current token belongs to <strong>${esc(tokenStatus.user.email)}</strong>.
-      <button class="btn btn-outline sm" style="margin-left:var(--sp-2)" onclick="linkAzureToProfile(${JSON.stringify(activeProfile.id)})">Re-auth for this profile</button>
+      <button class="btn btn-outline sm" style="margin-left:var(--sp-2)" onclick="linkAzureToProfile(${esc(JSON.stringify(activeProfile.id))})">Re-auth for this profile</button>
     </div>`;
 }
 
