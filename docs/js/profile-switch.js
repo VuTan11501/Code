@@ -367,16 +367,90 @@ function readLastSwitchTs() {
   } catch { return 0; }
 }
 
+function readCurrentLocationKey() {
+  return 'office';
+}
+
+function slugifyProfileId(input) {
+  const base = String(input || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return base || 'current-profile';
+}
+
+async function loadAzureTokenStatus() {
+  if (!lsAvailable() || typeof apiFetch !== 'function') return null;
+  if (typeof GIST_ID !== 'string' || !GIST_ID.trim()) return null;
+  try {
+    const gist = await apiFetch(`/gists/${GIST_ID}`);
+    const file = gist && gist.files ? gist.files['token-status.json'] : null;
+    if (!file) return null;
+    const content = typeof readGistFile === 'function'
+      ? await readGistFile(file)
+      : (file.content || '');
+    if (!content) return null;
+    const parsed = JSON.parse(content);
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function buildSeedProfileFromTokenStatus(status) {
+  const user = status && status.user ? status.user : null;
+  const displayName = (user && (user.name || user.email)) ? (user.name || user.email) : '';
+  if (!displayName) return null;
+  const idSource = user && (user.oid || user.email || user.name) ? (user.oid || user.email || user.name) : displayName;
+  const id = slugifyProfileId(idSource);
+  return {
+    id,
+    name: displayName,
+    refs: {
+      location_key: readCurrentLocationKey(),
+      schedule_set_id: 'current',
+      ot_profile_key: 'default',
+      notif_prefs_key: 'wf_dash_notif_prefs',
+    },
+    source: 'azure-token',
+    azure_user: {
+      name: user.name || '',
+      email: user.email || '',
+      oid: user.oid || '',
+    },
+  };
+}
+
+function persistSeedProfile(seed) {
+  if (!lsAvailable() || !seed) return;
+  try {
+    localStorage.setItem(LS_PREFIX + 'profile_defs', JSON.stringify([seed]));
+    localStorage.setItem(LS_PREFIX + 'active_profile', seed.id);
+    if (typeof window !== 'undefined' && window.CloudSync && typeof window.CloudSync.markDirty === 'function') {
+      window.CloudSync.markDirty();
+    }
+  } catch {}
+}
+
 /**
  * Read persisted profile state for UI rendering.
  * Returns { activeId, defs, rules, cooldownSec, lastSwitchTs, summary }.
  */
 export async function loadState() {
-  const defs = loadProfileDefs();
+  let defs = loadProfileDefs();
   const rules = loadProfileRules();
-  const activeId = localStore.get('active_profile') || '';
+  let activeId = localStore.get('active_profile') || '';
   const cooldownSec = readCooldownSec();
   const lastSwitchTs = readLastSwitchTs();
+  if (!defs.length) {
+    const tokenStatus = await loadAzureTokenStatus();
+    const seed = buildSeedProfileFromTokenStatus(tokenStatus);
+    if (seed) {
+      defs = [seed];
+      activeId = activeId || seed.id;
+      persistSeedProfile(seed);
+    }
+  }
   const activeLabel = activeId
     ? (defs.find((p) => p && p.id === activeId)?.name || activeId)
     : '(none)';

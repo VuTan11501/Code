@@ -9,6 +9,7 @@ import {
   localStore,
   computeAutoSwitchDecision,
   fillProfileOptions,
+  loadState,
 } from '../../docs/js/profile-switch.js';
 
 // Minimal in-memory localStorage shim so activate() (which uses the
@@ -267,6 +268,38 @@ describe('ProfileSwitch core', () => {
     expect(select.nodes[0].value).toBe('safe"id');
     expect(select.nodes[0].textContent).toBe('<img src=x onerror=alert(1)>');
     expect(select.nodes[0].selected).toBe(true);
+  });
+
+  it('seeds current profile from Azure token status when none exist', async () => {
+    localStorage.clear();
+    const prevApiFetch = globalThis.apiFetch;
+    const prevReadGistFile = globalThis.readGistFile;
+    globalThis.GIST_ID = 'abc2a47c0a396025a72a6580227ff493';
+    globalThis.apiFetch = async () => ({
+      files: {
+        'token-status.json': {
+          content: JSON.stringify({
+            user: { name: 'Tan Vu Cao', email: 'tanvc@fpt.com', oid: 'oid-123' },
+          }),
+        },
+      },
+    });
+    globalThis.readGistFile = async (file) => file && file.content ? file.content : '';
+    try {
+      const state = await loadState();
+      expect(state.defs).toHaveLength(1);
+      expect(state.defs[0].name).toBe('Tan Vu Cao');
+      expect(state.activeId).toBe(state.defs[0].id);
+      expect(state.summary).toContain('Tan Vu Cao');
+      const persisted = JSON.parse(localStorage.getItem('wf_dash_profile_defs') || '[]');
+      expect(persisted).toHaveLength(1);
+      expect(persisted[0].name).toBe('Tan Vu Cao');
+      expect(localStorage.getItem('wf_dash_active_profile')).toBe(state.defs[0].id);
+    } finally {
+      globalThis.apiFetch = prevApiFetch;
+      globalThis.readGistFile = prevReadGistFile;
+      delete globalThis.GIST_ID;
+    }
   });
 
   it('activate() serializes concurrent calls (in-flight guard)', async () => {
