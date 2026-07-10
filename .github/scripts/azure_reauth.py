@@ -62,8 +62,10 @@ def gist_write(status):
     try:
         with urllib.request.urlopen(req, timeout=20) as resp:
             print(f"  → gist {STATUS_FILE} updated ({resp.status})")
+            return True
     except Exception as e:
         print(f"  ⚠️ gist write failed: {e}")
+        return False
 
 
 def now_iso():
@@ -104,7 +106,7 @@ def main():
     print(f"URL: {verification_uri}")
     print(f"Expires at: {expires_at}")
 
-    gist_write({
+    success = gist_write({
         "state": "waiting_code",
         "user_code": user_code,
         "verification_uri": verification_uri,
@@ -113,6 +115,9 @@ def main():
         "finished_at": None,
         "message": dc.get("message", ""),
     })
+    if not success:
+        print("❌ FATAL: Could not write to Gist. Is the GIST_ID correct and accessible?")
+        sys.exit(1)
 
     # Step 2: poll for token
     print()
@@ -149,8 +154,10 @@ def main():
             print(f"  ❌ {err}: {last_err}")
             break
         else:
+            last_status = "error"
             last_err = tok.get("error_description", err or str(tok))
             print(f"  ⚠️ unexpected: {last_err}")
+            break
 
     if not new_refresh:
         gist_write({
