@@ -929,14 +929,9 @@ function _startReauthPolling() {
       if (!content) return;
       const s = JSON.parse(content);
 
-      // Time fence: ignore Gist files that are older than our current dispatch time
-      if (azureReauthDispatchTime > 0 && s.started_at) {
-        const startedAtTs = new Date(s.started_at).getTime();
-        if (startedAtTs < azureReauthDispatchTime) {
-          console.log('[reauth] Ignoring stale Gist auth session from previous runs.');
-          return;
-        }
-      }
+      // Removed fragile time fence. Clock skew between the client browser
+      // and GitHub Actions server can cause perfectly valid, brand-new Gists
+      // to be rejected as "stale".
 
       // Only re-render when state OR code changes (avoids flicker on countdown)
       if (s.state === lastState && s.user_code === lastCode) return;
