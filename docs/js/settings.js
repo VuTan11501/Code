@@ -920,7 +920,7 @@ function _startReauthPolling() {
   azureReauthPollTimer = setInterval(async () => {
     try {
       const gr = await fetch(`${API}/gists/${GIST_ID}?_=${Date.now()}`, {
-        headers: { 'Authorization': `Bearer ${sessionToken}`, 'Accept': 'application/vnd.github+json' }
+        headers: { 'Authorization': `Bearer ${sessionToken}`, 'Accept': 'application/vnd.github+json', 'Cache-Control': 'no-cache, no-store, must-revalidate', 'Pragma': 'no-cache' }
       });
       if (!gr.ok) return;
       const g = await gr.json();
@@ -949,9 +949,10 @@ function _startReauthPolling() {
         if (s.state === 'success') {
           toast('✅ Re-authenticated. Refreshing status…');
           setTimeout(() => {
+            closeAzureReauthModal();
             loadTokenStatus();
             try { renderProfileSwitchCard(); } catch (_) {}
-          }, 5000);
+          }, 2500);
         }
       }
     } catch {}
