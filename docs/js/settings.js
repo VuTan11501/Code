@@ -794,7 +794,10 @@ async function triggerTokenCheck() {
     const r = await fetch(`${API}/repos/${OWNER}/${REPO}/actions/workflows/token-monitor.yml/dispatches`, {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${sessionToken}`, 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ref: 'main' })
+      body: JSON.stringify({ 
+        ref: 'main',
+        inputs: { gist_id: typeof GIST_ID !== 'undefined' ? GIST_ID : '' }
+      })
     });
     if (r.status !== 204) {
       const txt = await r.text();
@@ -884,7 +887,14 @@ async function startAzureReauth(opts = {}) {
     const r = await fetch(`${API}/repos/${OWNER}/${REPO}/actions/workflows/azure-reauth.yml/dispatches`, {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${sessionToken}`, 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ref: 'main' })
+      body: JSON.stringify({ 
+        ref: 'main',
+        inputs: {
+          gist_id: typeof GIST_ID !== 'undefined' ? GIST_ID : '',
+          gist_id_timesheet: typeof GIST_ID_TIMESHEET !== 'undefined' ? GIST_ID_TIMESHEET : '',
+          gist_id_payslip: typeof GIST_ID_PAYSLIP !== 'undefined' ? GIST_ID_PAYSLIP : ''
+        }
+      })
     });
     if (r.status !== 204) throw new Error(`HTTP ${r.status}`);
     body.innerHTML = `
@@ -1023,7 +1033,7 @@ async function renderProfileSwitchCard() {
         ? `<button class="btn btn-outline sm" onclick="activateProfileById(${esc(JSON.stringify(p.id))})">Activate</button>`
         : '';
       const editBtn = `<button class="btn btn-outline sm" onclick="openEditProfileModal(${esc(JSON.stringify(p.id))})">Edit</button>`;
-      const linkBtn = !azureEmail
+      const linkBtn = (isActive && !azureEmail)
         ? `<button class="btn btn-outline sm" onclick="linkAzureToProfile(${esc(JSON.stringify(p.id))})">Link Azure</button>`
         : '';
       const deleteBtn = `<button class="btn btn-outline sm danger-outline" onclick="deleteProfileById(${esc(JSON.stringify(p.id))})">Del</button>`;

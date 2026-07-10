@@ -2,6 +2,11 @@ name: Azure Re-authenticate
 
 on:
   workflow_dispatch:
+    inputs:
+      gist_id:
+        description: 'Target Main Gist ID'
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -28,6 +33,6 @@ jobs:
       - name: Run device-code flow  # stdlib-only, uses preinstalled python3
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
-          GIST_ID: ${{ vars.GIST_ID || 'abc2a47c0a396025a72a6580227ff493' }}
+          GIST_ID: ${{ inputs.gist_id || vars.GIST_ID || 'abc2a47c0a396025a72a6580227ff493' }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: python3 .github/scripts/azure_reauth.py
