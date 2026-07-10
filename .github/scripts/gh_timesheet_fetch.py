@@ -29,6 +29,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from gh_ot_creator import (  # type: ignore
     JST, API_BASE, ACCOUNT as DEFAULT_ACCOUNT,
     log, refresh_azure_token, get_kintai_token, api_headers,
+    get_fes_token, fes_api_headers
 )
 # Use the timesheet-specific gist shard (falls back to GIST_ID when unset).
 from user_config import GIST_ID_TIMESHEET as GIST_ID  # noqa: E402
@@ -40,18 +41,41 @@ from gist_safety import (  # type: ignore
 TIMESHEET_GIST_FILE = "timesheet-history.json"
 
 
-def fetch_timesheet_month(token: str, account: str, year: int, month: int) -> dict | None:
-    """GET /api/timesheet/{account}/{year}/{month}."""
-    url = f"{API_BASE}timesheet/{account}/{year}/{month}"
-    req = urllib.request.Request(url, headers=api_headers(token), method="GET")
+def fetch_timesheet_list(token: str) -> dict:
+    """GET /api/timesheet/list."""
+    url = f"{API_BASE}timesheet/list"
+    req = urllib.request.Request(url, headers=fes_api_headers(token), method="GET")
     try:
+        req.add_header('X-Pagination-Page', '0')
+        req.add_header('X-Pagination-Size', '50')
+        req.add_header('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36')
+        req.add_header('Accept', 'application/json, text/plain, */*')
+        req.add_header('Referer', 'https://dokokin.fjpservice.com/')
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            data = json.loads(resp.read() or b"[]")
+        if not isinstance(data, list):
+            return {}
+        return {(item.get("year"), item.get("month")): item.get("id") for item in data if isinstance(item, dict)}
+    except Exception as e:
+        log(f"  ⚠ Timesheet list fetch failed: {e}")
+        return {}
+
+
+def fetch_timesheet_id(token: str, ts_id: int) -> dict | None:
+    """GET /api/timesheet/{id}."""
+    url = f"{API_BASE}timesheet/{ts_id}"
+    req = urllib.request.Request(url, headers=fes_api_headers(token), method="GET")
+    try:
+        req.add_header('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36')
+        req.add_header('Accept', 'application/json, text/plain, */*')
+        req.add_header('Referer', 'https://dokokin.fjpservice.com/')
         with urllib.request.urlopen(req, timeout=30) as resp:
             data = json.loads(resp.read() or b"{}")
         if not isinstance(data, dict):
             return None
         return data
     except Exception as e:
-        log(f"  ⚠ {year}-{month:02d} timesheet fetch failed: {e}")
+        log(f"  ⚠ Timesheet ID {ts_id} fetch failed: {e}")
         return None
 
 
@@ -176,8 +200,10 @@ def _months_back(now: datetime, count: int):
     return out
 
 
-def _fetch_month_snapshot(token: str, account: str, year: int, month: int) -> tuple[dict | None, str]:
-    raw = fetch_timesheet_month(token, account, year, month)
+def _fetch_month_snapshot(token: str, account: str, year: int, month: int, ts_id: int) -> tuple[dict | None, str]:
+    if not ts_id:
+        return None, f"  · {year}-{month:02d}: skipped (no ID found in list)"
+    raw = fetch_timesheet_id(token, ts_id)
     if not raw:
         return None, f"  · {year}-{month:02d}: skipped (no data / fetch error)"
     snap = normalize_month(raw)
@@ -236,15 +262,22 @@ def main():
     if not pat:
         raise RuntimeError("GH_PAT not set (needed to PATCH Gist)")
 
-    log("Refreshing Azure → KINTAI token…")
+    log("Refreshing Azure → FES token…")
     az_tok, new_refresh = refresh_azure_token(refresh_token)
-    kt = get_kintai_token(az_tok)
+    fes_tok = get_fes_token(az_tok)
     log("Token OK ✓")
+    
+    ts_map = fetch_timesheet_list(fes_tok)
+    log(f"Found {len(ts_map)} timesheets in list.")
 
     # ─── DEBUG MODE: dump raw current-month payload and exit ───
     if os.environ.get("DEBUG_DUMP", "").lower() in ("1", "true", "yes"):
         log("⚠ DEBUG_DUMP=1 — fetching current month raw and printing, then exit (no Gist write)")
-        raw = fetch_timesheet_month(kt, account, now.year, now.month)
+        ts_id = ts_map.get((now.year, now.month))
+        if not ts_id:
+            log("  · no data (ID not found)")
+            return
+        raw = fetch_timesheet_id(fes_tok, ts_id)
         if not raw:
             log("  · no data")
             return
@@ -274,7 +307,7 @@ def main():
     month_results: dict[tuple[int, int], tuple[dict | None, str]] = {}
     with ThreadPoolExecutor(max_workers=fetch_workers) as pool:
         future_map = {
-            pool.submit(_fetch_month_snapshot, kt, account, y, m): (y, m)
+            pool.submit(_fetch_month_snapshot, fes_tok, account, y, m, ts_map.get((y, m))): (y, m)
             for (y, m) in targets
         }
         for fut in as_completed(future_map):

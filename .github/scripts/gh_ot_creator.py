@@ -97,11 +97,29 @@ def get_kintai_token(azure_token):
     return data["access_token"]
 
 
+def get_fes_token(azure_token):
+    status, data = http_post(
+        API_BASE + "token",
+        data={"module": "FES", "grant_type": "azure_ad_token", "token": azure_token},
+    )
+    if status != 200 or not data.get("access_token"):
+        raise RuntimeError(f"FES token exchange failed: {data}")
+    return data["access_token"]
+
+
 def api_headers(token):
     return {
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json",
         "Module": "KINTAI",
+    }
+
+
+def fes_api_headers(token):
+    return {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+        "Module": "FES",
     }
 
 
