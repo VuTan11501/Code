@@ -834,6 +834,10 @@ function closeAzureReauthModal() {
 
 async function startAzureReauth(opts = {}) {
   if (!sessionToken) { toast('🔒 Unlock vault first'); return; }
+  if (typeof GIST_ID === 'undefined' || !GIST_ID) {
+    if (typeof toast === 'function') toast('⚠️ Please edit profile and set Main Gist ID first', 'error');
+    return;
+  }
 
   // Check for existing in-flight session first — avoid spawning duplicate runs
   let existing = null;
@@ -913,6 +917,7 @@ async function startAzureReauth(opts = {}) {
 }
 
 function _startReauthPolling() {
+  if (typeof GIST_ID === 'undefined' || !GIST_ID) return;
   if (azureReauthPollTimer) { clearInterval(azureReauthPollTimer); }
   let lastState = null;
   let lastCode = null;
