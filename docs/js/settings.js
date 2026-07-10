@@ -897,11 +897,7 @@ async function startAzureReauth(opts = {}) {
       headers: { 'Authorization': `Bearer ${sessionToken}`, 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
         ref: 'main',
-        inputs: {
-          gist_id: typeof GIST_ID !== 'undefined' ? GIST_ID : '',
-          gist_id_timesheet: typeof GIST_ID_TIMESHEET !== 'undefined' ? GIST_ID_TIMESHEET : '',
-          gist_id_payslip: typeof GIST_ID_PAYSLIP !== 'undefined' ? GIST_ID_PAYSLIP : ''
-        }
+        inputs: { gist_id: typeof GIST_ID !== 'undefined' ? GIST_ID : '' }
       })
     });
     if (r.status !== 204) throw new Error(`HTTP ${r.status}`);
