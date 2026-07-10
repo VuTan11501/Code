@@ -920,7 +920,7 @@ function _startReauthPolling() {
   azureReauthPollTimer = setInterval(async () => {
     try {
       const gr = await fetch(`${API}/gists/${GIST_ID}?_=${Date.now()}`, {
-        headers: { 'Authorization': `Bearer ${sessionToken}`, 'Accept': 'application/vnd.github+json', 'Cache-Control': 'no-cache, no-store, must-revalidate', 'Pragma': 'no-cache' }
+        headers: { 'Authorization': `Bearer ${sessionToken}`, 'Accept': 'application/vnd.github+json' }
       });
       if (!gr.ok) return;
       const g = await gr.json();
