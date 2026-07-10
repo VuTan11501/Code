@@ -681,6 +681,10 @@ async function loadTokenStatus() {
     box.innerHTML = '<div class="text-muted-foreground">Unlock vault first to load token status.</div>';
     return;
   }
+  if (typeof GIST_ID === 'undefined' || !GIST_ID) {
+    box.innerHTML = '<div class="text-muted-foreground text-yellow-400">⚠️ Main Gist ID is not configured. Edit profile to set it up.</div>';
+    return;
+  }
   box.innerHTML = '<div class="text-muted-foreground">Loading…</div>';
   try {
     const r = await fetch(`${API}/gists/${GIST_ID}`, {

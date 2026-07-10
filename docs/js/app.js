@@ -4,7 +4,9 @@
 const OWNER = localStorage.getItem('wf_dash_owner') || 'VuTan11501';
 const REPO = localStorage.getItem('wf_dash_repo') || 'Code';
 const API = 'https://api.github.com';
-const GIST_ID = localStorage.getItem('wf_dash_gist_id') || 'abc2a47c0a396025a72a6580227ff493';
+const _activeProfId = localStorage.getItem('wf_dash_active_profile') || 'default';
+const _fallbackGist = _activeProfId === 'default' ? 'abc2a47c0a396025a72a6580227ff493' : '';
+const GIST_ID = localStorage.getItem('wf_dash_gist_id') || _fallbackGist;
 // Sharded gist IDs for large/heavy files. Fall back to the main GIST_ID when
 // the per-shard override is not configured, so existing single-gist setups
 // keep working unchanged.

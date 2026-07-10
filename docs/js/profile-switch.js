@@ -211,7 +211,8 @@ export async function applyProfileRefs(profileId, defs) {
 
   // Switch Gist IDs in localStorage to load the profile's dedicated data
   if (lsAvailable()) {
-    const newGistId = found.gist_id || 'abc2a47c0a396025a72a6580227ff493';
+    const fallbackGist = profileId === 'default' ? 'abc2a47c0a396025a72a6580227ff493' : '';
+    const newGistId = found.gist_id || fallbackGist;
     localStorage.setItem(LS_PREFIX + 'gist_id', newGistId);
     localStorage.setItem(LS_PREFIX + 'gist_id_timesheet', found.gist_id_timesheet || newGistId);
     localStorage.setItem(LS_PREFIX + 'gist_id_payslip', found.gist_id_payslip || newGistId);
