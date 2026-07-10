@@ -22,6 +22,14 @@
    deployments (e.g. github.io/Code/). */
 (function () {
   try {
+    // Auto-grant session when running via the local Python server (localhost:5000)
+    // so the Edit PDF + Rakuraku workflow doesn't require a separate login step.
+    if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
+      if (!sessionStorage.getItem('wf_dash_session')) {
+        sessionStorage.setItem('wf_dash_session', 'local_auto_grant');
+      }
+      return;
+    }
     if (!sessionStorage.getItem('wf_dash_session')) {
       var next = encodeURIComponent(location.pathname + location.search + location.hash);
       location.replace('index.html?next=' + next + '&reason=suica');
@@ -770,7 +778,7 @@
         <span data-i18n="title">Commutation Management</span>
       </h1>
       <p class="text-xs text-muted-foreground mt-1 hidden sm:block">
-        Companion viewer for the <code class="font-mono">suica-history-generator</code> skill. All processing is in-browser.
+        Unified Suica PDF editor &amp; Rakuraku Seisan expense filer. Requires <code class="font-mono">scripts/suica_server.py</code> on <code class="font-mono">localhost:5000</code>.
       </p>
     </div>
     <div class="flex items-center gap-2 ml-auto">
@@ -826,11 +834,11 @@
     </div>
   </header>
 
-  <!-- Tab bar (Analyze / Generate / History) — see Phase A in suica.html CSS -->
+  <!-- Tab bar (Edit PDF / Analyze / History) — see Phase A in suica.html CSS -->
   <nav class="suica-tabs" role="tablist" aria-label="Workspace">
-    <button type="button" role="tab" data-tab-target="generate" aria-selected="true">
-      <span data-icon="sparkles" data-size="14"></span>
-      <span>Generate</span>
+    <button type="button" role="tab" data-tab-target="editpdf" aria-selected="true">
+      <span data-icon="fileText" data-size="14"></span>
+      <span>Edit PDF</span>
     </button>
     <button type="button" role="tab" data-tab-target="analyze" aria-selected="false">
       <span data-icon="barChart" data-size="14"></span>
@@ -842,424 +850,277 @@
     </button>
   </nav>
 
-  <!-- ═══ TAB: GENERATE (Trip Planner workflow) ═══════════════════════ -->
-  <div class="suica-panel is-active" data-tab="generate" role="tabpanel" aria-labelledby="tab-generate">
+  <!-- ═══ TAB: EDIT PDF (Unified Suica PDF Editor + Rakuraku Filing) ═══ -->
+  <div class="suica-panel is-active" data-tab="editpdf" role="tabpanel" aria-labelledby="tab-editpdf">
 
-  <!-- Trip Planner -->
-  <section aria-label="Trip planner">
+  <!-- ── Upload zone ───────────────────────────────────────────────── -->
+  <section aria-label="Upload Suica PDF">
     <div class="section-title text-sm font-medium text-muted-foreground mb-4 flex items-center gap-2">
-      <span data-icon="mapPin" data-size="16"></span> <span data-i18n="section.planner">Trip Planner</span>
+      <span data-icon="upload" data-size="16"></span> Upload Suica Statement PDF
     </div>
     <div class="card">
-      <div class="card-header">
-        <div class="card-title flex items-center gap-2">
-          <span data-icon="target" data-size="16"></span> <span data-i18n="planner.designTitle">Design a Suica history</span>
+      <div class="card-content">
+        <!-- Drop zone -->
+        <div id="ep-dropzone" class="suica-drop border-2 border-dashed border-border rounded-lg p-10 flex flex-col items-center justify-center gap-3 text-center cursor-pointer" tabindex="0" role="button" aria-label="Drop or click to upload Suica PDF">
+          <span data-icon="fileText" data-size="40" style="opacity:0.35"></span>
+          <p class="text-sm font-medium">Drop your Suica PDF here, or click to browse</p>
+          <p class="text-xs text-muted-foreground">Mobile Suica statement (JE80FE…pdf)</p>
+          <input type="file" id="ep-file-input" accept=".pdf" class="hidden" aria-label="Choose Suica PDF file">
+          <button type="button" class="btn sm btn-outline" onclick="document.getElementById('ep-file-input').click()">
+            <span data-icon="upload" data-size="14"></span>
+            <span class="btn-label">Choose file</span>
+          </button>
         </div>
-        <div class="card-description">
-          Pick stations, build a weekly commute and a weekend trip pool, then click <strong>Generate Suica PDF</strong> &mdash; a GitHub Actions workflow renders a byte-faithful Mobile Suica PDF and the dashboard downloads it for you (~30&ndash;60s).
+
+        <!-- File status badge (shown after upload) -->
+        <div id="ep-file-status" class="hidden mt-3 flex items-center gap-2 text-sm">
+          <span data-icon="fileText" data-size="16" style="color:var(--primary)"></span>
+          <span id="ep-file-name" class="font-mono font-medium truncate max-w-xs"></span>
+          <span id="ep-file-trips" class="status-badge status-success text-xs"></span>
+          <span id="ep-file-total" class="ml-auto font-mono text-xs text-muted-foreground"></span>
+          <button type="button" class="btn sm btn-ghost ml-2" id="ep-clear-btn" aria-label="Clear file">
+            <span data-icon="x" data-size="14"></span>
+          </button>
         </div>
+
+        <!-- Parse progress / error -->
+        <div id="ep-parse-status" class="hidden mt-2 text-xs text-muted-foreground"></div>
       </div>
-      <div class="card-content space-y-5">
+    </div>
+  </section>
 
-        <!-- Route picker -->
-        <div>
-          <div class="text-xs text-muted-foreground font-medium mb-2 flex items-center gap-2 uppercase tracking-wide">
-            <span data-icon="chevronRight" data-size="14"></span> Route
-          </div>
-          <div class="flex items-end gap-2 flex-wrap route-row">
-            <div class="field flex-1 min-w-[180px]">
-              <label class="field-label text-xs text-muted-foreground font-medium block mb-1" id="planner-from-label">From station</label>
-              <div class="combobox-wrapper" data-combobox-id="planner-from" aria-labelledby="planner-from-label">
-                <button type="button" class="combobox-trigger font-mono" aria-haspopup="listbox" aria-expanded="false">
-                  <span class="combobox-placeholder">Pick a station…</span>
-                </button>
-              </div>
-            </div>
-            <button id="planner-swap" class="btn sm btn-ghost btn-icon self-end" type="button" aria-label="Swap from and to" title="Swap from ↔ to">
-              <span data-icon="swapHoriz" data-size="16"></span>
-            </button>
-            <div class="field flex-1 min-w-[180px]">
-              <label class="field-label text-xs text-muted-foreground font-medium block mb-1" id="planner-to-label">To station</label>
-              <div class="combobox-wrapper" data-combobox-id="planner-to" aria-labelledby="planner-to-label">
-                <button type="button" class="combobox-trigger font-mono" aria-haspopup="listbox" aria-expanded="false">
-                  <span class="combobox-placeholder">Pick a station…</span>
-                </button>
-              </div>
-            </div>
-          </div>
-          <div class="flex items-center gap-3 mt-3 flex-wrap">
-            <span class="status-badge status-info" id="planner-fare-out">—</span>
-            <span id="planner-fare-refresh" class="hidden"></span>
-            <div class="separator h-5 w-px bg-border mx-1"></div>
-            <div class="gen-add-split inline-flex items-stretch">
-              <button id="planner-add-commute" class="btn sm primary gen-add-split__main" type="button" data-planner-add disabled>
-                <span data-icon="plus" data-size="14"></span>
-                <span class="btn-label">Add as weekday commute</span>
-              </button>
-              <button id="planner-add-commute-days" class="btn sm primary gen-add-split__caret" type="button" data-planner-add disabled data-tooltip="Pick specific day(s) to add this route to" aria-haspopup="true" aria-expanded="false" aria-label="Pick days to add commute">
-                <span data-icon="chevronDown" data-size="14"></span>
-              </button>
-              <div id="planner-add-days-pop" class="gen-add-days__pop hidden" role="dialog" aria-label="Add route to specific days"></div>
-            </div>
-            <button id="planner-add-leisure" class="btn btn-outline sm" type="button" data-planner-add disabled>
-              <span data-icon="plus" data-size="14"></span>
-              <span class="btn-label">Add to weekend trip pool</span>
-            </button>
-          </div>
-          <div id="planner-load-status" class="suica-info-box mt-3">
-            <span data-icon="info" data-size="14"></span>
-            <div class="flex-1">Loading fare data…</div>
-          </div>
-          <div id="planner-station-hints" class="rounded-md border border-border bg-muted/20 px-3 py-2 mt-3 hidden" aria-live="polite"></div>
-          <details class="gen-fare-filter" id="planner-fare-range-row">
-            <summary data-tooltip="Limit the To-station dropdown to candidates whose verified fare from the selected From-station falls within this range.">
-              <span data-icon="filter" data-size="12"></span>
-              <span>Filter by fare</span>
-              <span data-icon="chevronDown" data-size="10" class="opacity-60"></span>
-              <span id="planner-fare-range-status" class="text-muted-foreground ml-1"></span>
-            </summary>
-            <div class="gen-fare-filter__body">
-              <input id="planner-fare-min" type="number" class="input input-sm w-24" placeholder="min ¥" min="0" step="10" autocomplete="off">
-              <span class="text-muted-foreground">–</span>
-              <input id="planner-fare-max" type="number" class="input input-sm w-24" placeholder="max ¥" min="0" step="10" autocomplete="off">
-              <button id="planner-fare-range-clear" class="btn btn-ghost sm text-[10px]" type="button">Clear</button>
-            </div>
-          </details>
+  <!-- ── Transactions table ─────────────────────────────────────────── -->
+  <section id="ep-trips-section" aria-label="Parsed transactions" class="hidden">
+    <div class="section-title text-sm font-medium text-muted-foreground mb-4 flex items-center gap-2">
+      <span data-icon="list" data-size="16"></span> Train Trips
+      <span id="ep-trips-count" class="status-badge text-xs"></span>
+      <button type="button" id="ep-add-trip-btn" class="ml-auto btn sm btn-ghost text-xs" aria-label="Add trip manually">
+        <span data-icon="plus" data-size="14"></span>
+        <span class="btn-label">Add row</span>
+      </button>
+    </div>
+    <div class="card">
+      <div class="card-content p-0">
+        <div class="suica-entries">
+          <table class="w-full text-xs font-mono border-collapse">
+            <thead>
+              <tr class="text-muted-foreground text-left">
+                <th class="px-3 py-2 font-medium">Date</th>
+                <th class="px-3 py-2 font-medium">From</th>
+                <th class="px-3 py-2 font-medium">To</th>
+                <th class="px-3 py-2 font-medium text-right">Amount (¥)</th>
+                <th class="px-3 py-2 font-medium text-right">Balance (¥)</th>
+                <th class="px-3 py-2 font-medium">
+                  IC Fare Verified
+                  <span data-icon="shieldCheck" data-size="11" style="opacity:.5;margin-left:2px"></span>
+                </th>
+                <th class="px-2 py-2"></th>
+              </tr>
+            </thead>
+            <tbody id="ep-trips-tbody"></tbody>
+          </table>
         </div>
-
-        <div class="separator h-px w-full bg-border"></div>
-
-        <!-- Weekly pattern -->
-        <div>
-          <div class="text-xs text-muted-foreground font-medium mb-2 flex items-center gap-2 uppercase tracking-wide">
-            <span data-icon="calendar" data-size="14"></span> Weekly pattern (commute)
-            <div id="planner-pattern-preset" class="shadcn-select ml-auto" data-tooltip="Apply a pre-built weekly pattern (overwrites your current week)">
-              <button type="button" class="shadcn-select-trigger" aria-haspopup="listbox" aria-expanded="false">
-                <span class="shadcn-select-value placeholder">Apply preset…</span>
-                <span data-icon="chevronDown" data-size="12" class="shadcn-select-chev"></span>
-              </button>
-            </div>
-            <span class="text-[10px] normal-case tracking-normal text-muted-foreground/70 italic planner-tip-inline">tip: click <kbd class="kbd-key">→</kbd> on a day to copy to other weekdays</span>
-          </div>
-          <div id="planner-pattern" class="suica-grouped"></div>
-        </div>
-
-        <!-- Weekend trip pool -->
-        <div>
-          <div class="text-xs text-muted-foreground font-medium mb-2 flex items-center gap-2 uppercase tracking-wide">
-            <span data-icon="sparkles" data-size="14"></span> Weekend trip pool (random picks on Sat/Sun)
-            <details class="gen-bulk-menu">
-              <summary class="btn btn-ghost sm text-[10px] normal-case tracking-normal" data-tooltip="Bulk import / clear actions for the weekend trip pool">
-                <span data-icon="moreVertical" data-size="12"></span>
-                <span class="btn-label">Bulk actions</span>
-                <span data-icon="chevronDown" data-size="10"></span>
-              </summary>
-              <div class="gen-bulk-menu__panel">
-                <button id="planner-leisure-bulk" type="button" class="btn btn-ghost sm justify-start" data-tooltip="Paste multiple routes at once (one per line or comma-separated)">
-                  <span data-icon="plus" data-size="14"></span>
-                  <span class="btn-label">Bulk add…</span>
-                </button>
-                <button id="planner-leisure-bulk-file" type="button" class="btn btn-ghost sm justify-start" data-tooltip="Load routes from a CSV/TSV file (one route per row, form 東京↔新宿)">
-                  <span data-icon="upload" data-size="14"></span>
-                  <span class="btn-label">Load CSV…</span>
-                </button>
-                <button id="planner-leisure-bulk-paste" type="button" class="btn btn-ghost sm justify-start" data-tooltip="Paste a list of routes (one per line, optionally route,weight)">
-                  <span data-icon="copy" data-size="14"></span>
-                  <span class="btn-label">Paste…</span>
-                </button>
-                <div class="separator h-px w-full bg-border my-1"></div>
-                <button id="planner-leisure-clear" type="button" class="btn btn-ghost sm justify-start text-destructive" data-tooltip="Remove every route from the weekend trip pool (undoable)">
-                  <span data-icon="trash" data-size="14"></span>
-                  <span class="btn-label">Clear all</span>
-                </button>
-              </div>
-            </details>
-            <input type="file" id="planner-leisure-bulk-file-input" accept=".csv,.tsv,.txt,text/csv,text/plain" class="hidden">
-          </div>
-          <div id="planner-leisure" class="suica-grouped"></div>
-          <div class="flex items-center gap-3 mt-3 flex-wrap text-xs">
-            <span class="text-muted-foreground">Weekend trips per month:</span>
-            <input id="planner-leisure-min" type="number" min="0" max="20" class="input input-sm w-16 font-mono" aria-label="Minimum weekend trips per month">
-            <span class="text-muted-foreground">to</span>
-            <input id="planner-leisure-max" type="number" min="0" max="20" class="input input-sm w-16 font-mono" aria-label="Maximum weekend trips per month">
-          </div>
-        </div>
-
-        <div class="separator h-px w-full bg-border"></div>
-
-        <!-- Generate settings (collapsible advanced section) -->
-        <details class="group" open>
-          <summary class="text-xs text-muted-foreground font-medium mb-3 flex items-center gap-2 uppercase tracking-wide cursor-pointer select-none list-none">
-            <span data-icon="chevronRight" data-size="12" class="transition-transform group-open:rotate-90"></span>
-            <span data-icon="target" data-size="12"></span>
-            <span>Generate settings</span>
-          </summary>
-
-          <!-- Row 1 — what to generate (Month / Target / Seed). 3 equal-width
-               primary fields. On <md viewports they stack 1-col to keep the
-               inline icon-buttons readable. -->
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <div class="field">
-              <label class="field-label text-xs text-muted-foreground font-medium flex items-center gap-1 mb-1" for="planner-month-trigger">
-                <span>Schedule</span>
-                <span data-icon="info" data-size="12" class="opacity-50 cursor-help" data-tooltip="Pick one month, or a date range to batch-generate consecutive months (auto-sets the Batch count below)."></span>
-              </label>
-              <button type="button" id="planner-month-trigger"
-                class="btn btn-outline w-full justify-between suica-dr-trigger"
-                aria-label="Choose month or range">
-                <span class="flex items-center gap-2 min-w-0">
-                  <span data-icon="calendar" data-size="14" class="opacity-70 flex-shrink-0"></span>
-                  <span data-dr-label class="truncate text-muted-foreground">Pick month</span>
-                </span>
-                <span data-icon="chevronDown" data-size="12" class="opacity-50 flex-shrink-0"></span>
-              </button>
-              <input id="planner-month" type="hidden" value="">
-            </div>
-            <div class="field">
-              <label class="field-label text-xs text-muted-foreground font-medium flex items-center gap-1 mb-1" for="planner-target">
-                <span>Target (¥)</span>
-                <span data-icon="info" data-size="12" class="opacity-50 cursor-help" data-tooltip="Your desired monthly spend. The generator tries to land within ±¥500 by mixing commute + leisure trips and optional small top-ups."></span>
-              </label>
-              <div class="flex items-center gap-1">
-                <input id="planner-target" type="number" min="0" step="500" class="input input-sm font-mono flex-1 min-w-0">
-                <button id="planner-target-shuffle" type="button" class="btn btn-ghost sm" data-tooltip="Randomize within ±15% of current target (rounded to ¥500)" aria-label="Randomize target">
-                  <span data-icon="sparkles" data-size="14"></span>
-                </button>
-                <button id="planner-target-spread" type="button" class="btn btn-ghost sm" data-tooltip="Spread a yearly/quarterly total evenly across N months (with ±5% jitter so the totals don't look identical)" aria-label="Spread target across multiple months">
-                  <span data-icon="list" data-size="14"></span>
-                </button>
-              </div>
-            </div>
-            <div class="field">
-              <label class="field-label text-xs text-muted-foreground font-medium flex items-center gap-1 mb-1" for="planner-seed" data-tooltip="Random seed. Same seed + same plan = byte-identical PDF every time. Change it to roll a different schedule.">
-                <span>Random seed</span>
-                <span data-icon="info" data-size="12" class="opacity-50 cursor-help"></span>
-              </label>
-              <div class="flex items-center gap-1">
-                <input id="planner-seed" type="number" min="0" class="input input-sm font-mono flex-1 min-w-0" data-tooltip="Same seed + same plan = byte-identical PDF every time.">
-                <button id="planner-seed-reroll" type="button" class="btn btn-ghost sm" data-tooltip="Try another seed (increments by 1)" aria-label="Roll a different seed">
-                  <span data-icon="refresh" data-size="14"></span>
-                </button>
-                <button id="planner-seed-pin" type="button" class="btn btn-ghost sm" data-tooltip="Pin this seed so reroll/randomize won't change it" aria-label="Pin seed" aria-pressed="false">
-                  <span data-icon="pin" data-size="14"></span>
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <!-- Row 2 — balance behavior. Visually subordinate (fieldset legend)
-               so users see at a glance these are "internal" Suica accounting
-               knobs, not the primary "what to generate" inputs. -->
-          <fieldset class="rounded-md border border-border px-3 pt-1.5 pb-3 mt-4">
-            <legend class="text-[10px] uppercase tracking-wide text-muted-foreground font-medium px-1.5 flex items-center gap-1">
-              <span data-icon="wallet" data-size="14"></span> Balance behavior
-            </legend>
-            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 mt-1">
-              <div class="field">
-                <label class="field-label text-xs text-muted-foreground font-medium flex items-center gap-1 mb-1" for="planner-initial">
-                  <span>Initial balance (¥)</span>
-                  <span data-icon="info" data-size="12" class="opacity-50 cursor-help" data-tooltip="Suica balance at the start of the month. Most people use ¥2000–¥3000; choose what matches your real card balance."></span>
-                </label>
-                <input id="planner-initial" type="number" min="0" step="500" class="input input-sm font-mono w-full">
-              </div>
-              <div class="field">
-                <label class="field-label text-xs text-muted-foreground font-medium flex items-center gap-1 mb-1" for="planner-topup-threshold">
-                  <span>Auto-topup &lt; (¥)</span>
-                  <span data-icon="info" data-size="12" class="opacity-50 cursor-help" data-tooltip="When balance dips below this value mid-month, a charge transaction is inserted. Set very low (e.g. 0) to disable automatic top-ups."></span>
-                </label>
-                <input id="planner-topup-threshold" type="number" min="0" step="500" class="input input-sm font-mono w-full">
-              </div>
-              <div class="field">
-                <label class="field-label text-xs text-muted-foreground font-medium flex items-center gap-1 mb-1" for="planner-topup-amount">
-                  <span>Topup amount (¥)</span>
-                  <span data-icon="info" data-size="12" class="opacity-50 cursor-help" data-tooltip="How much is charged each time the auto-topup triggers. Real Suica machines dispense in increments of ¥1000."></span>
-                </label>
-                <input id="planner-topup-amount" type="number" min="0" step="500" class="input input-sm font-mono w-full">
-              </div>
-            </div>
-          </fieldset>
-        </details>
-
-        <!-- Estimate -->
-        <div class="suica-info-box flex-col !items-stretch gap-2">
-          <div class="flex items-center justify-between flex-wrap gap-3">
-            <div class="flex items-center gap-2">
-              <span data-icon="barChart" data-size="14"></span>
-              <span class="text-xs uppercase tracking-wide font-medium">Estimated monthly spend</span>
-            </div>
-            <div id="planner-estimate-diff" class="text-xs font-mono"></div>
-          </div>
-          <div class="flex items-end gap-6 flex-wrap">
-            <div>
-              <div class="text-xs text-muted-foreground">Commute</div>
-              <div id="planner-estimate-commute" class="text-sm font-mono font-semibold text-foreground">¥—</div>
-            </div>
-            <div>
-              <div class="text-xs text-muted-foreground">Weekend (avg)</div>
-              <div id="planner-estimate-leisure" class="text-sm font-mono font-semibold text-foreground">¥—</div>
-            </div>
-            <div>
-              <div class="text-xs text-muted-foreground">Total</div>
-              <div id="planner-estimate-total" class="text-lg font-mono font-bold text-primary">¥—</div>
-            </div>
-          </div>
-          <!-- Progress bar vs target: green ≤10% delta, amber 10–25%, red >25% -->
-          <div id="planner-estimate-bar-wrap" class="mt-1" aria-hidden="true">
-            <div class="h-2 w-full bg-muted rounded overflow-hidden">
-              <div id="planner-estimate-bar" class="h-full bg-primary transition-all duration-300" style="width: 0%;"></div>
-            </div>
-            <div id="planner-estimate-bar-label" class="text-[10px] text-muted-foreground font-mono mt-1 flex justify-between">
-              <span>¥0</span><span id="planner-estimate-bar-target">Target ¥—</span>
-            </div>
-            <details class="mt-1">
-              <summary class="text-[10px] text-muted-foreground cursor-pointer hover:text-foreground select-none">Per-day breakdown</summary>
-              <div id="planner-estimate-day-breakdown" class="mt-1.5 flex items-end gap-1 px-1"></div>
-            </details>
-          </div>
-        </div>
-
-        <!-- Plan validation warnings (populated by computeWarnings) -->
-        <div id="planner-warnings" class="rounded-md border border-border bg-muted/30 p-3 hidden" role="status" aria-live="polite"></div>
-
-        <!-- Output actions — three groups: Primary CTA / Plan tools / Utilities.
-             On mobile the primary "Generate Suica PDF" is duplicated in a
-             sticky bottom bar (.gen-mobile-cta) so it's always reachable. -->
-        <div class="gen-actions">
-          <div class="gen-actions__primary">
-            <button id="planner-generate-pdf" class="btn primary" type="button" data-tooltip="Dispatches the Suica PDF Generate workflow on GitHub and downloads the resulting PDF (~30-60s)">
-              <span data-icon="download" data-size="14"></span>
-              <span class="btn-label">Generate Suica PDF</span>
-            </button>
-            <label class="gen-actions__batch" data-tooltip="Generate this many consecutive months in one batch (month increments, seed +1 each)">
-              <span>Batch:</span>
-              <div id="planner-batch-months" class="shadcn-select">
-                <button type="button" class="shadcn-select-trigger" aria-haspopup="listbox" aria-expanded="false">
-                  <span class="shadcn-select-value">1</span>
-                  <span data-icon="chevronDown" data-size="12" class="shadcn-select-chev"></span>
-                </button>
-              </div>
-              <span>mo.</span>
-            </label>
-          </div>
-
-          <div class="gen-actions__tools" role="group" aria-label="Plan tools">
-            <button id="planner-auto-suggest" class="btn sm btn-ghost" type="button" data-tooltip="Tune your plan to the ¥ target — keeps your weekly pattern + weekend pool, only adjusts weekend-trip count (seeds from From↔To if empty)">
-              <span data-icon="wand" data-size="14"></span>
-              <span class="btn-label">Auto-suggest</span>
-            </button>
-            <button id="planner-multi-suggest" class="btn sm btn-ghost" type="button" data-tooltip="Show 3 alternative plans (Light / Standard / Heavy) — same commute, different weekend intensity">
-              <span data-icon="list" data-size="14"></span>
-              <span class="btn-label">Compare 3</span>
-            </button>
-            <details class="relative">
-              <summary class="btn sm btn-ghost cursor-pointer list-none" data-tooltip="Pre-built scenarios — apply with one click">
-                <span data-icon="zap" data-size="14"></span>
-                <span class="btn-label">Presets</span>
-                <span data-icon="chevronDown" data-size="12"></span>
-              </summary>
-              <div id="planner-presets-menu" class="absolute right-0 top-full mt-1 bg-card border border-border rounded-md shadow-lg p-1 z-20 min-w-[260px] flex flex-col gap-1"></div>
-            </details>
-          </div>
-
-          <div class="gen-actions__utils">
-            <details class="relative">
-              <summary class="btn sm btn-outline cursor-pointer list-none" data-tooltip="Backup or share the raw plan / generated history">
-                <span data-icon="moreVertical" data-size="14"></span>
-                <span class="btn-label">Backup</span>
-              </summary>
-              <div class="absolute right-0 top-full mt-1 bg-card border border-border rounded-md shadow-lg p-1 z-20 min-w-[220px] flex flex-col gap-1">
-                <button id="planner-download" class="btn btn-ghost sm justify-start" type="button" data-tooltip="Save the trip plan so you can reload it later">
-                  <span data-icon="download" data-size="14"></span>
-                  <span class="btn-label">Download preset.json</span>
-                </button>
-                <button id="planner-download-json" class="btn btn-ghost sm justify-start" type="button" data-tooltip="Save the in-browser preview as JSON (useful for analysis)">
-                  <span data-icon="download" data-size="14"></span>
-                  <span class="btn-label">Download history.json</span>
-                </button>
-                <div class="separator h-px w-full bg-border my-1"></div>
-                <button id="planner-snapshot-save" class="btn btn-ghost sm justify-start" type="button" data-tooltip="Save the current plan into browser storage for one-click restore later">
-                  <span data-icon="save" data-size="14"></span>
-                  <span class="btn-label">Save snapshot…</span>
-                </button>
-                <button id="planner-snapshots-export" class="btn btn-ghost sm justify-start" type="button" data-tooltip="Download all snapshots as a JSON file (back up before clearing browser data)">
-                  <span data-icon="download" data-size="14"></span>
-                  <span class="btn-label">Export snapshots…</span>
-                </button>
-                <button id="planner-snapshots-import" class="btn btn-ghost sm justify-start" type="button" data-tooltip="Restore snapshots from a previously-exported JSON file (merges; existing IDs win)">
-                  <span data-icon="upload" data-size="14"></span>
-                  <span class="btn-label">Import snapshots…</span>
-                </button>
-                <button id="planner-share-link" class="btn btn-ghost sm justify-start" type="button" data-tooltip="Copy a URL that encodes the full plan; opening it on another browser asks to import">
-                  <span data-icon="copy" data-size="14"></span>
-                  <span class="btn-label">Copy share link</span>
-                </button>
-                <button id="planner-share-qr" class="btn btn-ghost sm justify-start" type="button" data-tooltip="Generate a scannable QR code of the share link — useful for opening this plan on your phone">
-                  <span data-icon="qr" data-size="14"></span>
-                  <span class="btn-label">Share via QR…</span>
-                </button>
-                <button id="planner-export-ics" class="btn btn-ghost sm justify-start" type="button" data-tooltip="Download an .ics calendar file with one event per scheduled trip — import into Google Calendar to preview the schedule">
-                  <span data-icon="calendar" data-size="14"></span>
-                  <span class="btn-label">Export .ics calendar</span>
-                </button>
-                <div class="separator h-px w-full bg-border my-1"></div>
-                <button id="planner-fare-table" class="btn btn-ghost sm justify-start" type="button" data-tooltip="Browse every known IC fare in the catalogue, sort by route or amount, see which ones you've overridden">
-                  <span data-icon="list" data-size="14"></span>
-                  <span class="btn-label">Fare table…</span>
-                </button>
-              </div>
-            </details>
-            <button id="planner-clear" class="btn sm btn-ghost" type="button" data-tooltip="Reset the entire plan (commute + weekend pool + settings)">
-              <span data-icon="trash" data-size="14"></span>
-              <span class="btn-label sr-only sm:not-sr-only">Clear</span>
-            </button>
-          </div>
-
-          <span id="planner-pdf-status" class="gen-actions__status" role="status" aria-live="polite"></span>
+        <!-- Bulk-verify progress strip (shown during verifyAllFares) -->
+        <div id="ep-verify-strip" style="margin:.5rem .75rem">
+          <div id="ep-verify-strip-bar" style="width:0%"></div>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- Multi-suggest variant panel (Light / Standard / Heavy) -->
-  <section id="planner-multi-suggest-panel" class="card hidden" aria-live="polite"></section>
+  <!-- ── Date Remap + Fare Update controls ─────────────────────────── -->
+  <section id="ep-remap-section" aria-label="Date remap and fare options" class="hidden">
+    <div class="section-title text-sm font-medium text-muted-foreground mb-4 flex items-center gap-2">
+      <span data-icon="calendar" data-size="16"></span> Remap Dates &amp; Update Fares
+    </div>
+    <div class="card">
+      <div class="card-content space-y-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div class="field">
+            <label class="field-label text-xs text-muted-foreground font-medium mb-1" for="ep-date-start">
+              Start date <span class="opacity-50">(shift month to start here)</span>
+            </label>
+            <input id="ep-date-start" type="date" class="input input-sm font-mono w-full">
+          </div>
+          <div class="field">
+            <label class="field-label text-xs text-muted-foreground font-medium mb-1" for="ep-date-end">
+              End date
+            </label>
+            <input id="ep-date-end" type="date" class="input input-sm font-mono w-full">
+          </div>
+        </div>
+        <div class="flex flex-wrap gap-4 text-xs">
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" id="ep-skip-sun" checked class="accent-primary w-4 h-4">
+            Skip Sundays
+          </label>
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" id="ep-skip-sat" class="accent-primary w-4 h-4">
+            Skip Saturdays
+          </label>
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" id="ep-skip-holidays" checked class="accent-primary w-4 h-4">
+            Skip Japanese public holidays
+          </label>
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" id="ep-update-fares" checked class="accent-primary w-4 h-4">
+            Auto-update JR fares (April 2026 prices)
+          </label>
+        </div>
 
-  <!-- Keyboard shortcuts help (popover) -->
-  <section id="planner-shortcuts-help" class="hidden" aria-label="Keyboard shortcuts"></section>
+        <!-- Fare verification status -->
+        <div id="ep-fare-status" class="suica-info-box hidden">
+          <span data-icon="info" data-size="14" style="color:var(--primary)"></span>
+          <span id="ep-fare-status-text" class="text-xs"></span>
+        </div>
 
-  </div><!-- /tab generate -->
+        <div class="flex flex-wrap gap-2 pt-1">
+          <button type="button" id="ep-download-btn" class="btn primary" disabled>
+            <span data-icon="download" data-size="14"></span>
+            <span class="btn-label">Download Updated PDF</span>
+          </button>
+          <button type="button" id="ep-preview-original-btn" class="btn sm btn-outline">
+            <span data-icon="eye" data-size="14"></span>
+            <span class="btn-label">Preview Original</span>
+          </button>
+          <button type="button" id="ep-preview-updated-btn" class="btn sm btn-outline">
+            <span data-icon="fileText" data-size="14"></span>
+            <span class="btn-label">Preview Updated</span>
+          </button>
+          <button type="button" id="ep-preview-fares-btn" class="btn sm btn-ghost">
+            <span data-icon="shieldCheck" data-size="14"></span>
+            <span class="btn-label">Verify All IC Fares</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </section>
 
-  <!-- Sticky mobile CTA — visible only on <=640px viewports. Forwards click
-       to the in-card #planner-generate-pdf so all existing JS hooks work
-       unchanged. The in-card button is hidden via CSS at the same breakpoint
-       to avoid duplicate visuals. -->
-  <div class="gen-mobile-cta" id="planner-mobile-cta" aria-hidden="false">
-    <button type="button" class="btn primary gen-mobile-cta__primary"
-            data-forwards-to="planner-generate-pdf"
-            aria-label="Generate Suica PDF">
-      <span data-icon="download" data-size="16"></span>
-      <span class="btn-label">Generate PDF</span>
-    </button>
-  </div>
+  <!-- ── Rakuraku Seisan Filing ────────────────────────────────────── -->
+  <section id="ep-rakuraku-section" aria-label="File expenses to Rakuraku Seisan" class="hidden">
+    <div class="section-title text-sm font-medium text-muted-foreground mb-4 flex items-center gap-2">
+      <span data-icon="send" data-size="16"></span> File Expenses to Rakuraku Seisan
+      <span class="status-badge text-[10px] ml-1" style="background:rgba(251,146,60,0.15);color:#f97316;border:1px solid rgba(251,146,60,0.3);">Local server required</span>
+    </div>
+    <div class="card">
+      <div class="card-content space-y-4">
+        <!-- Server status -->
+        <div id="ep-server-status" class="suica-info-box">
+          <span data-icon="server" data-size="14"></span>
+          <span id="ep-server-status-text" class="text-xs">Checking local server at http://localhost:5000…</span>
+          <button type="button" id="ep-server-check-btn" class="btn sm btn-ghost ml-auto text-xs">Recheck</button>
+        </div>
+
+        <!-- Credentials -->
+        <fieldset class="rounded-md border border-border px-3 pt-1.5 pb-3">
+          <legend class="text-[10px] uppercase tracking-wide text-muted-foreground font-medium px-1.5 flex items-center gap-1">
+            <span data-icon="user" data-size="12"></span> Rakuraku Credentials
+          </legend>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
+            <div class="field">
+              <label class="field-label text-xs text-muted-foreground mb-1" for="ep-rk-user">Username</label>
+              <input id="ep-rk-user" type="text" class="input input-sm font-mono w-full" placeholder="1186116" autocomplete="username">
+            </div>
+            <div class="field">
+              <label class="field-label text-xs text-muted-foreground mb-1" for="ep-rk-pass">Password</label>
+              <input id="ep-rk-pass" type="password" class="input input-sm font-mono w-full" placeholder="••••••••" autocomplete="current-password">
+            </div>
+          </div>
+        </fieldset>
+
+        <!-- Filing metadata -->
+        <fieldset class="rounded-md border border-border px-3 pt-1.5 pb-3">
+          <legend class="text-[10px] uppercase tracking-wide text-muted-foreground font-medium px-1.5 flex items-center gap-1">
+            <span data-icon="fileText" data-size="12"></span> Voucher Metadata
+          </legend>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
+            <div class="field">
+              <label class="field-label text-xs text-muted-foreground mb-1" for="ep-rk-purpose">Purpose</label>
+              <input id="ep-rk-purpose" type="text" class="input input-sm w-full" value="Working at customer office">
+            </div>
+            <div class="field">
+              <label class="field-label text-xs text-muted-foreground mb-1" for="ep-rk-project">Program Code</label>
+              <input id="ep-rk-project" type="text" class="input input-sm font-mono w-full" placeholder="101">
+            </div>
+            <div class="field">
+              <label class="field-label text-xs text-muted-foreground mb-1" for="ep-rk-customer">Customer Code</label>
+              <input id="ep-rk-customer" type="text" class="input input-sm font-mono w-full" placeholder="NES">
+            </div>
+            <div class="field">
+              <label class="field-label text-xs text-muted-foreground mb-1" for="ep-rk-paid">Paid Method</label>
+              <select id="ep-rk-paid" class="input input-sm w-full">
+                <option value="Cash or Individual credit card「自分の現金又は自分のクレジットカード」">Cash / Individual credit card</option>
+                <option value="Company credit card「会社のクレジットカード」">Company credit card</option>
+                <option value="Suica「スイカ」">Suica IC card</option>
+              </select>
+            </div>
+          </div>
+        </fieldset>
+
+        <!-- Import action + log -->
+        <div class="flex flex-wrap gap-2 items-center">
+          <button type="button" id="ep-import-btn" class="btn primary" disabled>
+            <span data-icon="send" data-size="14"></span>
+            <span class="btn-label">Run Import to Rakuraku</span>
+          </button>
+          <span class="text-xs text-muted-foreground">Saves as draft (一時保存). You review &amp; submit manually.</span>
+        </div>
+
+        <!-- Live log stream -->
+        <div id="ep-import-log" class="hidden rounded-md border border-border bg-muted/30 p-3 max-h-48 overflow-auto font-mono text-xs space-y-0.5" aria-live="polite" aria-label="Import progress log">
+        </div>
+
+        <!-- Progress bar -->
+        <div id="ep-import-progress-wrap" class="hidden">
+          <div class="w-full bg-muted rounded-full h-2 overflow-hidden">
+            <div id="ep-import-progress-bar" class="suica-bar h-2 rounded-full bg-primary" style="width:0%"></div>
+          </div>
+          <p id="ep-import-progress-label" class="text-xs text-muted-foreground mt-1"></p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── IC Fare Lookup (preserved from old system) ─────────────────── -->
+  <section id="ep-fare-lookup-section" aria-label="IC Fare lookup">
+    <div class="section-title text-sm font-medium text-muted-foreground mb-4 flex items-center gap-2">
+      <span data-icon="search" data-size="16"></span> IC Fare Lookup
+      <span class="status-badge text-[10px] ml-1" style="background:rgba(16,185,129,0.12);color:#10b981;border:1px solid rgba(16,185,129,0.25);">Verified</span>
+    </div>
+    <div class="card">
+      <div class="card-content">
+        <p class="text-xs text-muted-foreground mb-3">Look up the official post-April 2026 IC fare between any two stations in the verified database.</p>
+        <div class="flex gap-2 flex-wrap">
+          <div class="flex-1 min-w-[160px] combobox-wrapper" id="ep-from-wrap">
+            <button type="button" class="combobox-trigger" id="ep-from-trigger" aria-haspopup="listbox" aria-expanded="false">
+              <span class="combobox-placeholder">From station…</span>
+            </button>
+          </div>
+          <div class="flex-1 min-w-[160px] combobox-wrapper" id="ep-to-wrap">
+            <button type="button" class="combobox-trigger" id="ep-to-trigger" aria-haspopup="listbox" aria-expanded="false">
+              <span class="combobox-placeholder">To station…</span>
+            </button>
+          </div>
+          <button type="button" id="ep-fare-lookup-btn" class="btn sm btn-outline">
+            <span data-icon="search" data-size="14"></span>
+            <span class="btn-label">Lookup</span>
+          </button>
+        </div>
+        <div id="ep-fare-result" class="hidden mt-3 p-3 rounded-md border border-border bg-muted/20 text-sm font-mono"></div>
+      </div>
+    </div>
+  </section>
+
+  </div><!-- end editpdf panel -->
+
   <script>
-    // Forward sticky-CTA click → in-card primary button (preserves all JS hooks)
+    // Hide sticky generate CTA on old panel (now editpdf) — keep for compat
     (function () {
-      var src = document.querySelector('[data-forwards-to="planner-generate-pdf"]');
-      if (src) src.addEventListener('click', function () {
-        var dst = document.getElementById('planner-generate-pdf');
-        if (dst && !dst.disabled) dst.click();
-      });
-      // Hide sticky CTA when not on the generate tab
-      var tabs = document.querySelectorAll('[data-tab-target]');
-      var cta  = document.getElementById('planner-mobile-cta');
-      function sync() {
-        var active = document.querySelector('.suica-panel.is-active');
-        if (!cta) return;
-        cta.hidden = !(active && active.getAttribute('data-tab') === 'generate');
-      }
-      tabs.forEach(function (t) { t.addEventListener('click', function () { setTimeout(sync, 0); }); });
-      sync();
+      var cta = document.getElementById('planner-mobile-cta');
+      if (cta) cta.hidden = true;
     })();
   </script>
+
 
   <!-- ═══ TAB: HISTORY (saved snapshots + recent generations) ═════════ -->
   <div class="suica-panel" data-tab="history" role="tabpanel" aria-labelledby="tab-history">
@@ -1512,7 +1373,7 @@
     });
     obs.observe(report, { attributes: true, attributeFilter: ['class'] });
   }
-  activate(saved && ['analyze','generate','history'].includes(saved) ? saved : 'generate');
+  activate(saved && ['analyze','editpdf','history'].includes(saved) ? saved : 'editpdf');
 })();
 </script>
 
@@ -1524,6 +1385,7 @@
 <script src="js/ui-toast.js?v=2" defer></script>
 <script src="js/suica-history.js?v=8" defer></script>
 <script src="js/suica-date-range.js?v=2" defer></script>
+<script src="js/suica-editor.js?v=1" defer></script>
 <script defer>
 // Wire the date-range popover to the entries table. Hides rows whose
 // data-date is outside [from, to]. Listens for suica:loaded so the
