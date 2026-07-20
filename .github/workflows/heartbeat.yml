@@ -113,19 +113,19 @@ jobs:
                   print(f"  ⚠️ Alert email failed: {e}")
 
           def list_runs_with_retry():
-              """List dispatcher runs. Retry up to 3x with 5s sleep on empty result
+              """List dispatcher runs. Retry up to 3x with 5s sleep on empty result or transient error
               (defends against transient API blips that would otherwise trigger a needless resurrect)."""
+              status = 500
               for attempt in (1, 2, 3):
                   status, runs_data = gh_api(f"/repos/{REPO}/actions/workflows/scheduled-dispatch.yml/runs?per_page=5")
-                  if status != 200:
-                      return status, []
-                  runs = runs_data.get('workflow_runs', [])
-                  if runs:
-                      return status, runs
+                  if status == 200:
+                      runs = runs_data.get('workflow_runs', [])
+                      if runs:
+                          return status, runs
                   if attempt < 3:
-                      print(f"  (list returned 0 runs; retry {attempt}/3 after 5s)")
+                      print(f"  (list returned HTTP {status} or 0 runs; retry {attempt}/3 after 5s)")
                       time.sleep(5)
-              return 200, []
+              return status, []
 
           def try_resurrect(reason):
               """Resurrect dispatcher with debounce via lease.record_rescue.

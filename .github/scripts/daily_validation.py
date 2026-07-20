@@ -205,9 +205,10 @@ def main():
                 issues.append(f"MISSING CHECKOUT: expected at {expected_co}, no record found")
             elif actual_co_time:
                 act_h, act_m = map(int, actual_co_time.split(":"))
-                diff = abs((act_h * 60 + act_m) - (exp_co_h * 60 + exp_co_m))
+                # Only fail if checkout is EARLIER than expected (with 30m grace)
+                diff = (exp_co_h * 60 + exp_co_m) - (act_h * 60 + act_m)
                 if diff > 30:
-                    issues.append(f"CHECKOUT TIME MISMATCH: expected {expected_co}, actual {actual_co_time} (diff {diff}min)")
+                    issues.append(f"EARLY CHECKOUT: expected {expected_co}, actual {actual_co_time} (short by {diff}min)")
         else:
             print(f"Note: Checkout not yet due (expected at {expected_co})")
 
