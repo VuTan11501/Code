@@ -796,13 +796,21 @@ def main():
 
         # ── Holiday check: skip workday actions on Japanese holidays ──
         # OT entries (with "OT"/"Sun" in note or on weekends) are NOT skipped
-        entry_date = datetime.strptime(action_entry["datetime"], "%Y-%m-%d %H:%M").replace(tzinfo=JST).date()
+        entry_dt = datetime.strptime(action_entry["datetime"], "%Y-%m-%d %H:%M").replace(tzinfo=JST)
+        
+        # For overnight checkouts, the logical workday is yesterday
+        if action_entry["action"] == "checkout" and entry_dt.hour < 6:
+            logical_date = (entry_dt - timedelta(days=1)).date()
+        else:
+            logical_date = entry_dt.date()
+            
         entry_note = action_entry.get("note", "").lower()
-        is_ot_entry = any(k in entry_note for k in ("ot", "sun", "night")) or entry_date.isoweekday() >= 6
-        if not is_ot_entry and is_japanese_holiday(entry_date):
-            log(f"🎌 {entry_date} is a Japanese holiday. Skipping workday action.")
+        is_ot_entry = any(k in entry_note for k in ("ot", "sun", "night")) or logical_date.isoweekday() >= 6
+        
+        if not is_ot_entry and is_japanese_holiday(logical_date):
+            log(f"🎌 {logical_date} is a Japanese holiday. Skipping workday action.")
             set_output("skipped", "true")
-            set_summary(f"🎌 **Skipped** — {entry_date} is a Japanese holiday")
+            set_summary(f"🎌 **Skipped** — {logical_date} is a Japanese holiday")
             return
 
         action = action_entry["action"]
