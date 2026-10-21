@@ -14,8 +14,17 @@ name: Timesheet Action
 on:
   workflow_dispatch:
     inputs:
+      action_type:
+        description: "Action type (timesheet | working_time_change)"
+        required: true
+        default: "timesheet"
+        type: choice
+        options:
+          - timesheet
+          - working_time_change
+      # Timesheet inputs
       action:
-        description: "calculate | save | calc-save"
+        description: "[Timesheet] calculate | save | calc-save"
         required: false
         default: "calc-save"
         type: choice
@@ -24,27 +33,44 @@ on:
           - calculate
           - save
       year:
-        description: "Year (default: current JST year)"
+        description: "[Timesheet] Year (default: current JST year)"
         required: false
         default: ""
       month:
-        description: "Month 1-12 (default: current JST month)"
+        description: "[Timesheet] Month 1-12 (default: current JST month)"
         required: false
         default: ""
       account:
-        description: "DokoKin account (default: tanvc)"
+        description: "[Timesheet] DokoKin account (default: tanvc)"
         required: false
         default: "tanvc"
       dry_run:
-        description: "Do everything except the final POST /save"
+        description: "[Timesheet] Do everything except the final POST /save"
         required: false
         type: boolean
         default: false
       force:
-        description: "Override the anomaly guard ONLY (not the status gate)"
+        description: "[Timesheet] Override the anomaly guard ONLY (not the status gate)"
         required: false
         type: boolean
         default: false
+      # Working Time Change inputs
+      date:
+        description: "[Working Time Change] Date (YYYY-MM-DD)"
+        required: false
+        default: ""
+      new_end_time:
+        description: "[Working Time Change] New checkout time (HH:mm)"
+        required: false
+        default: ""
+      new_end_next_day:
+        description: "[Working Time Change] Is new time on next day? (true/false)"
+        required: false
+        default: "false"
+      reason:
+        description: "[Working Time Change] Reason / notes"
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -58,7 +84,8 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  action:
+  timesheet_action:
+    if: github.event.inputs.action_type == 'timesheet'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -89,3 +116,47 @@ jobs:
         run: python3 .github/scripts/gh_timesheet_action.py
       # Phase 3: token rotation is queued into Gist pending_token_rotation.json
       # and applied centrally by token-monitor.yml.
+
+  working_time_change:
+    if: github.event.inputs.action_type == 'working_time_change'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      TZ: Asia/Tokyo
+      EMPLOYEE_ID: '8883'
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            .github/scripts
+
+      - name: Update working time via DokoKin
+        id: update
+        env:
+          AZURE_REFRESH_TOKEN: ${{ secrets.AZURE_REFRESH_TOKEN }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          NOTIFY_EMAIL: ${{ secrets.NOTIFY_EMAIL }}
+          INPUT_DATE: ${{ github.event.inputs.date }}
+          # original_end_time is fetched server-side from the live dakoku
+          # record (displayEndWorkingTime) inside the Python worker itself.
+          INPUT_NEW_END_TIME: ${{ github.event.inputs.new_end_time }}
+          INPUT_NEW_END_NEXT_DAY: ${{ github.event.inputs.new_end_next_day }}
+          INPUT_REASON: ${{ github.event.inputs.reason }}
+        run: |
+          cd $GITHUB_WORKSPACE/.github/scripts
+          python3 dokokin_working_time_change.py
+
+      - name: Notify completion
+        if: always()
+        run: |
+          STATUS=${{ steps.update.outputs.status }}
+          if [ "$STATUS" = "success" ]; then
+            echo "✅ Working time change submitted"
+            echo "New hours: ${{ steps.update.outputs.new_hours }}"
+            echo "New gross: ¥${{ steps.update.outputs.new_gross }}"
+          else
+            echo "❌ Failed: ${{ steps.update.outputs.error }}"
+            exit 1
+          fi

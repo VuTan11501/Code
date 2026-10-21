@@ -4360,3 +4360,35 @@ body.ai-page-active .ai-dot-grid {
 .ai-rt-link:hover { text-decoration: underline; }
 .ai-rt-more { font-size: var(--fs-xs); color: var(--muted-foreground); padding: var(--sp-1) 0; font-style: italic; }
 .ai-rt-empty { font-size: var(--fs-xs); color: var(--muted-foreground); padding: var(--sp-2) 0; }
+
+/* ─── Working Time Change Modal ─── */
+.wtc-form {
+  display: grid;
+  gap: 1.25rem;
+  margin: 1.5rem 0;
+}
+.wtc-form .form-group {
+  display: grid;
+  gap: 0.5rem;
+}
+.wtc-form label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--foreground);
+}
+.wtc-form .input,
+.wtc-form .select {
+  padding: 0.625rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: rgba(var(--tint), 0.03);
+  color: var(--foreground);
+  font-size: 0.875rem;
+}
+.wtc-form .input:focus,
+.wtc-form .select:focus {
+  outline: none;
+  border-color: var(--primary);
+  background: var(--primary-subtle, rgba(59, 130, 246, 0.08));
+}
+

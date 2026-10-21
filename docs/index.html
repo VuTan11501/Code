@@ -58,7 +58,7 @@
 })();
 </script>
 <link rel="stylesheet" href="css/tailwind.css?v=1">
-<link rel="stylesheet" href="css/style.css?v=156">
+<link rel="stylesheet" href="css/style.css?v=157">
 <link rel="preconnect" href="https://api.github.com">
 </head>
 <body class="bg-background text-foreground font-sans text-sm antialiased min-h-dvh overflow-x-hidden">
@@ -1369,13 +1369,82 @@ wrangler login</pre>
   </div>
 </div>
 
+<!-- Working Time Change Modal (勤務時間変更) -->
+<div class="dialog-overlay modal-overlay" id="wtcModal" role="dialog" aria-modal="true" aria-labelledby="wtcModalTitle">
+  <div class="dialog-content modal" style="max-width:480px;">
+    <div class="dialog-header modal-header">
+      <h3 class="dialog-title text-lg font-semibold" id="wtcModalTitle">勤務時間変更 · Working Time Change</h3>
+      <button class="btn btn-ghost btn-icon modal-close" onclick="closeWtcModal()" aria-label="Close">&times;</button>
+    </div>
+    <div class="dialog-body modal-body" style="padding:20px">
+      <div class="wtc-form">
+        <!-- Date (read-only, pre-filled) -->
+        <div class="form-group">
+          <label>Date (日付)</label>
+          <input type="date" id="wtcDate" readonly class="input">
+        </div>
+
+        <!-- Original checkout time (display, not editable) -->
+        <div class="form-group">
+          <label>Original checkout (実際のチェックアウト時刻)</label>
+          <input type="time" id="wtcOriginalEnd" readonly class="input" style="opacity: 0.6;">
+        </div>
+
+        <!-- OT request (display) -->
+        <div class="form-group">
+          <label>OT requested (OT要求時間)</label>
+          <input type="text" id="wtcOtRequest" readonly class="input" placeholder="e.g. 11:00" style="opacity: 0.6;">
+        </div>
+
+        <!-- New checkout time (editable, pre-filled with suggestion) -->
+        <div class="form-group">
+          <label>New checkout time (新しいチェックアウト時刻) *</label>
+          <div style="display: flex; gap: 0.5rem;">
+            <input type="time" id="wtcNewEndTime" class="input" required>
+            <select id="wtcNewEndDate" class="select" style="min-width: 80px;">
+              <option value="same">Same day (当日)</option>
+              <option value="next">Next day (翌日)</option>
+            </select>
+          </div>
+          <div style="font-size: 0.75rem; color: var(--muted-foreground); margin-top: 0.25rem;">
+            💡 Đã gợi ý giờ ra đủ cover OT đã đăng ký — có thể sửa trước khi gửi.
+          </div>
+        </div>
+
+        <!-- Reason (optional) -->
+        <div class="form-group">
+          <label>Reason / Notes (理由・メモ)</label>
+          <textarea id="wtcReason" class="input" placeholder="e.g. OT not reflected yet" style="resize: vertical; min-height: 60px;"></textarea>
+        </div>
+      </div>
+
+      <!-- Impact preview -->
+      <div id="wtcPreview" class="card" style="margin: 1rem 0; padding: 1rem; background: var(--primary-subtle, rgba(59, 130, 246, 0.05)); border-left: 3px solid var(--primary);">
+        <div style="font-size: 0.875rem; color: var(--foreground);">
+          <strong>Impact preview:</strong>
+          <div id="wtcPreviewText" style="margin-top: 0.5rem; font-family: var(--font-mono); font-size: 0.75rem; line-height: 1.5; white-space: pre-wrap;"></div>
+        </div>
+      </div>
+
+      <!-- Status message -->
+      <div id="wtcStatus" class="text-sm" style="margin-top: 0.5rem; text-align: center;"></div>
+
+      <div class="flex gap-3 pt-2">
+        <button class="btn primary flex-1" id="wtcSubmitBtn" onclick="submitWorkingTimeChange()"><span data-icon="save" data-size="14"></span> Submit Request</button>
+        <button class="btn flex-1" onclick="closeWtcModal()">Cancel</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Scripts: single minified+obfuscated bundle (built by scripts/build-js.mjs).
      Source files live in docs/js/* for development; the bundle is what ships.
      To work on the raw source instead, comment the line below and re-enable
      the individual <script defer src="js/X.js"> tags (see git history). -->
-<script defer src="dist/app.bundle.min.js?v=108"></script>
+<script defer src="dist/app.bundle.min.js?v=109"></script>
 <!-- AI Proposal confirmation modal (Phase 3) -->
 <div id="aiProposalModal" class="proposal-modal" role="dialog" aria-modal="true" aria-labelledby="aiProposalTitle" hidden aria-hidden="true">
+
   <div class="proposal-modal-backdrop" onclick="AIProposals.closeModal()"></div>
   <div class="proposal-modal-card">
     <header class="proposal-modal-header">

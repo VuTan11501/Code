@@ -598,6 +598,23 @@ function _openLostOtSheet(date, details) {
     bodyHTML: breakdownHtml,
     actions: [
       { label: 'Hiểu nguyên nhân', variant: 'secondary', close: true },
+      {
+        label: '✏️ Tạo Working Time Change',
+        variant: 'primary',
+        close: true,
+        onClick: () => {
+          const suggestion = _suggestWtcNewEndTime(d, parts);
+          openWorkingTimeChangeModal({
+            date,
+            originalEnd: d.out || '',
+            otRequest: d.otRequest || '',
+            gapMin: parts.lostMin,
+            gapYen: dayYen,
+            suggestedNewEnd: suggestion.time,
+            suggestedNextDay: suggestion.nextDay,
+          });
+        },
+      },
     ],
   });
 }
@@ -996,3 +1013,182 @@ window.syncPayslipFromFJP = syncPayslipFromFJP;
 window.syncPayslipFullBackfill = syncPayslipFullBackfill;
 window.recalcTimesheet = recalcTimesheet;
 window.calcAndSaveTimesheetDraft = calcAndSaveTimesheetDraft;
+
+// ─── Working Time Change Modal ──────────────────────
+let _wtcState = {
+  date: null,           // YYYY-MM-DD
+  originalEnd: null,    // HH:mm
+  otRequest: null,      // HH:mm string (the requested OT span)
+  gapMin: null,         // minutes lost
+  gapYen: null,         // ¥ (floor-per-line, same formula as the sheet)
+};
+
+// Suggest a new checkout time that fully covers the lost OT span:
+// originalEnd + lostMin, rolling into the next calendar day if needed.
+function _suggestWtcNewEndTime(d, parts) {
+  const originalEndMin = _hhmmToMin(d.out);
+  const suggestedMin = originalEndMin + parts.lostMin;
+  const DAY_MIN = 24 * 60;
+  const nextDay = suggestedMin >= DAY_MIN;
+  const normalizedMin = ((suggestedMin % DAY_MIN) + DAY_MIN) % DAY_MIN;
+  return { time: _minToHhmm(normalizedMin), nextDay };
+}
+
+function openWorkingTimeChangeModal(dayData) {
+  // dayData = { date, originalEnd, otRequest, gapMin, gapYen, suggestedNewEnd, suggestedNextDay }
+  _wtcState = {
+    date: dayData.date,
+    originalEnd: dayData.originalEnd,
+    otRequest: dayData.otRequest,
+    gapMin: dayData.gapMin,
+    gapYen: dayData.gapYen,
+  };
+
+  document.getElementById('wtcDate').value = dayData.date;
+  document.getElementById('wtcOriginalEnd').value = dayData.originalEnd || '';
+  document.getElementById('wtcOtRequest').value = dayData.otRequest || '—';
+  // Pre-fill with the suggested fix so the user can edit before submitting.
+  document.getElementById('wtcNewEndTime').value = dayData.suggestedNewEnd || '';
+  document.getElementById('wtcNewEndDate').value = dayData.suggestedNextDay ? 'next' : 'same';
+  document.getElementById('wtcReason').value = 'OT chưa được ghi nhận đủ — checkout quá sớm so với OT request';
+  document.getElementById('wtcStatus').innerHTML = '';
+  updateWtcPreview();
+
+  document.getElementById('wtcModal').classList.add('open');
+}
+
+function closeWtcModal() {
+  const modal = document.getElementById('wtcModal');
+  if (modal) modal.classList.remove('open');
+}
+
+function updateWtcPreview() {
+  const newTime = document.getElementById('wtcNewEndTime').value;
+  const newDate = document.getElementById('wtcNewEndDate').value;
+  const preview = document.getElementById('wtcPreviewText');
+
+  if (!newTime) {
+    preview.innerHTML = '(Enter new checkout time to see impact)';
+    return;
+  }
+
+  const gapHours = (_wtcState.gapMin || 0) / 60;
+  preview.textContent = formatWorkingTimeChangePreview(
+    _wtcState.date, _wtcState.originalEnd, newTime, newDate === 'next',
+    gapHours, _wtcState.gapYen || 0
+  );
+}
+
+async function submitWorkingTimeChange() {
+  const newTime = document.getElementById('wtcNewEndTime').value;
+  const newDate = document.getElementById('wtcNewEndDate').value;
+  const reason = document.getElementById('wtcReason').value;
+  const statusEl = document.getElementById('wtcStatus');
+  const submitBtn = document.getElementById('wtcSubmitBtn');
+
+  const { errors, warnings } = validateWorkingTimeChange(_wtcState.date, newTime, newDate === 'next');
+  if (errors.length) {
+    statusEl.innerHTML = errors.map(e => `❌ ${e}`).join('<br>');
+    return;
+  }
+  if (warnings.length && !confirm(warnings.join('\n') + '\n\nTiếp tục gửi?')) {
+    return;
+  }
+
+  submitBtn.disabled = true;
+  statusEl.innerHTML = '⏳ Submitting...';
+
+  try {
+    // Dispatch workflow. apiFetch throws on non-2xx and returns parsed JSON
+    // (null for a 204 dispatch response) on success — so reaching this line
+    // without an exception already means the dispatch was accepted.
+    await apiFetch(
+      `/repos/${OWNER}/${REPO}/actions/workflows/${TS_ACTION_WF}/dispatches`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          ref: 'main',
+          inputs: {
+            action_type: 'working_time_change',
+            date: _wtcState.date,
+            new_end_time: newTime,
+            new_end_next_day: String(newDate === 'next'),
+            reason: reason,
+          },
+        }),
+      }
+    );
+
+    statusEl.innerHTML = '✅ Request submitted! Refresh in 30s to see updated timesheet.';
+    setTimeout(() => {
+      closeWtcModal();
+      loadTimesheetData({ refresh: true });
+    }, 2000);
+  } catch (e) {
+    statusEl.innerHTML = `❌ Error: ${e.message}`;
+  } finally {
+    submitBtn.disabled = false;
+  }
+}
+
+// Hook input changes to update preview in real-time
+document.addEventListener('DOMContentLoaded', function() {
+  const timeInput = document.getElementById('wtcNewEndTime');
+  const dateSelect = document.getElementById('wtcNewEndDate');
+  if (timeInput) timeInput.addEventListener('change', updateWtcPreview);
+  if (dateSelect) dateSelect.addEventListener('change', updateWtcPreview);
+});
+
+// Validate new end time doesn't violate DokoKin constraints.
+// Returns { errors, warnings } — errors block submit, warnings require confirm().
+function validateWorkingTimeChange(date, newEndTime, isNextDay) {
+  const errors = [];
+  const warnings = [];
+
+  if (!newEndTime || !/^\d{2}:\d{2}$/.test(newEndTime)) {
+    errors.push('Invalid time format (use HH:mm)');
+    return { errors, warnings };  // no point checking date math on a malformed time
+  }
+
+  // DokoKin constraint: working time change must be same/next day only
+  // Can't backdate beyond 1 day or future beyond 3 days
+  const today = jstNow();
+  const changeDate = new Date(date + 'T00:00:00+09:00');
+  const daysDiff = Math.floor((today - changeDate) / (1000 * 60 * 60 * 24));
+
+  if (daysDiff < -3 || daysDiff > 1) {
+    errors.push('Working time change must be for same day, yesterday, or up to 3 days in the future');
+  }
+
+  // Payroll cutoff check (typically 15th) — not verified against the actual
+  // DokoKin/FJP payroll calendar; shown as a warning only, never blocks submit.
+  const payrollDay = 15;
+  if (changeDate.getDate() > payrollDay) {
+    warnings.push(`Payroll cutoff is ~${payrollDay}th — changes after that may not affect this month's salary`);
+  }
+
+  return { errors, warnings };
+}
+
+// Format preview text for display to user
+function formatWorkingTimeChangePreview(date, originalEnd, newEnd, isNextDay, gapHours, estimatedYen) {
+  return `
+Date: ${date}
+Original checkout: ${originalEnd}
+New checkout: ${newEnd} (${isNextDay ? 'next day' : 'same day'})
+
+Hours recovered: ${gapHours.toFixed(2)}h
+Estimated gross: ¥${estimatedYen.toLocaleString()}
+
+Note: Actual amount depends on payroll rules & deductions.
+Submit before payroll cutoff (usually 15th).
+  `.trim();
+}
+
+// Expose modal functions for HTML
+window.openWorkingTimeChangeModal = openWorkingTimeChangeModal;
+window.closeWtcModal = closeWtcModal;
+window.submitWorkingTimeChange = submitWorkingTimeChange;
+window.validateWorkingTimeChange = validateWorkingTimeChange;
+window.formatWorkingTimeChangePreview = formatWorkingTimeChangePreview;
+
