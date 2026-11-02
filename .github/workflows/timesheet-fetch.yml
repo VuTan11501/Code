@@ -21,8 +21,12 @@ on:
         type: boolean
         default: false
   schedule:
-    # 07:00 JST daily = 22:00 UTC previous day
-    - cron: "0 22 * * *"
+    # 00:00 JST daily — right after day rollover, so yesterday's final
+    # timesheet data is already in DokoKin when the fetch runs.
+    - cron: "0 0 * * *"
+
+# Cron expressions above are evaluated in JST (no DST — JST is fixed UTC+9).
+timezone: Asia/Tokyo
 
 permissions:
   contents: read
