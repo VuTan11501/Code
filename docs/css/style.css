@@ -4219,6 +4219,13 @@ body.ai-page-active .ai-dot-grid {
   gap: var(--sp-2); margin-bottom: var(--sp-3);
 }
 .now-strip[hidden] { display: none; }
+/* Lost-OT bottom sheet footer (timesheet.js → UIKit.openSheet): right-align
+   actions with the same spacing/padding as other modal footers (.flex.gap-2). */
+.ot-lost-sheet .modal-footer {
+  display: flex; gap: 8px; justify-content: flex-end;
+  padding: 16px 20px;
+  padding-bottom: calc(16px + env(safe-area-inset-bottom));
+}
 /* Stat-chip-style status cards (Checkin / Checkout / OT) */
 .now-card {
   background: var(--muted); border: 1px solid var(--border);

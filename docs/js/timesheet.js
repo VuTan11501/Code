@@ -595,12 +595,13 @@ function _openLostOtSheet(date, details) {
 
   UIKit.openSheet({
     title: `OT bị mất — ${date}`,
+    className: 'ot-lost-sheet',
     bodyHTML: breakdownHtml,
     actions: [
-      { label: 'Hiểu nguyên nhân', variant: 'secondary', close: true },
+      { label: 'Hiểu nguyên nhân', variant: 'btn-outline sm', close: true },
       {
         label: '✏️ Tạo Working Time Change',
-        variant: 'primary',
+        variant: 'primary sm',
         close: true,
         onClick: () => {
           const suggestion = _suggestWtcNewEndTime(d, parts);
