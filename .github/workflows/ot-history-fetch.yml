@@ -3,6 +3,12 @@ name: OT History Fetch
 # Pulls historical OT requests from DokoKin for the last N months and merges
 # them into ot-requests.json (Gist). Useful for backfilling the dashboard
 # with OT records created outside this automation.
+#
+# Runs daily at 00:15 JST (schedule) as a batch sync — the same pattern as
+# Timesheet Fetch (00:00 JST). The 15-min offset keeps the two workers from
+# hitting the same Gist / Azure refresh token in the same minute (secondary
+# rate limit + rotation race, see KNOWLEDGE.md §3.22/§3.33). The merge is
+# idempotent and never deletes user-created entries, so daily runs are safe.
 
 on:
   workflow_dispatch:
@@ -19,6 +25,12 @@ on:
         description: "Also fetch monthly timesheet aggregates for payslip cross-check"
         required: false
         default: "true"
+  schedule:
+    # 00:15 JST daily — right after day rollover, like Timesheet Fetch.
+    - cron: "15 0 * * *"
+
+# Cron expressions above are evaluated in JST (no DST — JST is fixed UTC+9).
+timezone: Asia/Tokyo
 
 permissions:
   contents: read
@@ -46,9 +58,14 @@ jobs:
         env:
           AZURE_REFRESH_TOKEN: ${{ secrets.AZURE_REFRESH_TOKEN }}
           GH_PAT: ${{ secrets.GH_PAT }}
-          MONTHS_BACK: ${{ inputs.months_back }}
-          CLEAN_SEEDS: ${{ inputs.clean_seeds }}
-          FETCH_TIMESHEET: ${{ inputs.fetch_timesheet }}
+          # `inputs.*` is empty on schedule runs — give every input an
+          # explicit schedule default so the script never sees "".
+          # Speed default: cron keeps a 6-month rolling window (older
+          # months are immutable after payroll finalisation, and the merge
+          # keeps older Gist entries). Full backfill stays a manual option.
+          MONTHS_BACK: ${{ github.event_name == 'schedule' && '6' || (inputs.months_back || '24') }}
+          CLEAN_SEEDS: ${{ github.event_name == 'schedule' && 'true' || (inputs.clean_seeds || 'true') }}
+          FETCH_TIMESHEET: ${{ github.event_name == 'schedule' && 'true' || (inputs.fetch_timesheet || 'true') }}
           FETCH_WORKERS: "4"
         # Stdlib-only script; runner already has Python preinstalled.
         run: python3 .github/scripts/ot_history_fetch.py

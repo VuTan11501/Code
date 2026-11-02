@@ -311,7 +311,9 @@ def _fetch_month_bundle(token: str, year: int, month: int, fetch_ts: bool) -> di
 
 def main():
     now = datetime.now(JST)
-    months_back = int(os.environ.get("MONTHS_BACK", "24"))
+    # `or "24"` guards against an *empty* env var (workflow_dispatch with a
+    # blank input renders the env key as "" — int("") would crash).
+    months_back = int(os.environ.get("MONTHS_BACK") or "24")
     clean_seeds = os.environ.get("CLEAN_SEEDS", "true").lower() in ("1", "true", "yes")
     fetch_ts = os.environ.get("FETCH_TIMESHEET", "true").lower() in ("1", "true", "yes")
     try:
@@ -471,7 +473,7 @@ def main():
         log(f"Gist PATCH HTTP {st} ✓  (rolling backup → ot-requests.bak.json)")
     except RaceDetected as e:
         log(str(e))
-        log("⛔ Aborting — will retry on next scheduled run (every hour).")
+        log("⛔ Aborting — will retry on next scheduled run (daily 00:15 JST).")
         sys.exit(3)
     except GistSafetyError as e:
         log(f"⛔ Safety check failed: {e}")
