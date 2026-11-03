@@ -297,6 +297,23 @@ def safe_patch_gist_file(pat: str, gist_id: str, filename: str,
                 err_body = (e.read() or b"").decode(errors="replace")
             except Exception:
                 pass
+            if e.code == 409:
+                # "Gist cannot be updated." — the gist moved (or another
+                # PATCH was in flight) after our race-check read. Blindly
+                # resending THIS body would clobber the other writer's
+                # changes (e.g. their kintai_created marks), so surface it
+                # as RaceDetected: the caller must re-read the gist and
+                # re-merge its data on top of the fresh state.
+                # (Observed 2026-11-03: ot_history_fetch + gh_ot_creator
+                # dispatched in the same second; this job's PATCH 409'd
+                # inside GitHub's sub-second gist conflict window.)
+                snippet = err_body.strip().replace("\n", " ")[:300]
+                _log(f"⚠️ Gist PATCH HTTP 409 — concurrent write (body NOT applied) · {snippet}")
+                raise RaceDetected(
+                    f"Gist PATCH HTTP 409 (concurrent write): {filename} was "
+                    f"updated between the race-check read and the PATCH. "
+                    f"Re-read the gist and re-merge before writing again."
+                ) from e
             retryable = e.code in (403, 429) or 500 <= e.code < 600
             if retryable and attempt < max_attempts:
                 # Honor server retry hints first; fallback to exponential backoff.

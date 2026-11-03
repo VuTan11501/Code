@@ -13,7 +13,7 @@ Inputs (env):
 
 Stdlib only.
 """
-import os, sys, json, urllib.request, urllib.parse, traceback
+import os, sys, json, time, urllib.request, urllib.parse, traceback
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone, timedelta, date
 from calendar import monthrange
@@ -396,88 +396,106 @@ def main():
     log(f"Data range covered: {first_data_month or '—'} → {last_data_month or '—'}")
 
     log("Reading Gist…")
-    snapshot = read_gist_file(pat, GIST_ID, OT_GIST_FILE, log=log)
-    raw = snapshot["parsed"]
-    if isinstance(raw, dict) and "requests" in raw:
-        wrapper = raw
-        arr = list(raw.get("requests") or [])
-    elif isinstance(raw, list):
-        wrapper = None
-        arr = list(raw)
-    else:
-        log("Gist file not found or empty, creating new array")
-        wrapper = None
-        arr = []
-    existing_timesheets = []
-    if isinstance(wrapper, dict) and isinstance(wrapper.get("timesheets"), list):
-        existing_timesheets = wrapper.get("timesheets") or []
-
-    # Snapshot original array for sanity diff (deep-copied via json round-trip)
-    old_arr_snapshot = json.loads(json.dumps(arr))
-
-    seeds_removed = 0
-    if clean_seeds:
-        seeds_removed = _clean_seed_entries(arr)
-        if seeds_removed:
-            log(f"🧹 Removed {seeds_removed} PAST seed/mock entries")
-
-    before = len(arr)
-    updated, added = _merge(arr, fetched_all)
-    log(f"Merge: existing={before}, updated={updated}, added={added}, "
-        f"seeds_removed={seeds_removed}, new total={len(arr)}")
-
-    # Save timesheets only when changed to avoid no-op PATCHes.
-    timesheets_changed = False
-    if timesheets:
-        if _stable_json(existing_timesheets) != _stable_json(timesheets):
-            timesheets_changed = True
-            if wrapper is None:
-                wrapper = {"requests": arr}
-            wrapper["timesheets"] = timesheets
-            wrapper["timesheets_fetched_at"] = datetime.now(JST).isoformat(timespec="seconds")
+    # Retry loop for concurrent writers (e.g. "Auto Request OT" dispatched in
+    # the same second, or a dashboard manual edit): a sha mismatch (pre-PATCH
+    # race check) or an HTTP 409 (conflict during the PATCH) means the file
+    # moved under us. Blindly resending our body would clobber the other
+    # writer's changes (e.g. their kintai_created marks), so every retry
+    # RE-READS the gist and RE-MERGES our DokoKin data on top of the fresh
+    # state. The DokoKin fetch above is expensive and idempotent → not repeated.
+    MAX_RACE_ATTEMPTS = 3
+    for attempt in range(1, MAX_RACE_ATTEMPTS + 1):
+        if attempt > 1:
+            log(f"↻ Race attempt {attempt}/{MAX_RACE_ATTEMPTS} — re-reading Gist + re-merging…")
+        snapshot = read_gist_file(pat, GIST_ID, OT_GIST_FILE, log=log)
+        raw = snapshot["parsed"]
+        if isinstance(raw, dict) and "requests" in raw:
+            wrapper = raw
+            arr = list(raw.get("requests") or [])
+        elif isinstance(raw, list):
+            wrapper = None
+            arr = list(raw)
         else:
-            log("Timesheet aggregates unchanged — skip timesheet write-back.")
+            log("Gist file not found or empty, creating new array")
+            wrapper = None
+            arr = []
+        existing_timesheets = []
+        if isinstance(wrapper, dict) and isinstance(wrapper.get("timesheets"), list):
+            existing_timesheets = wrapper.get("timesheets") or []
 
-    if updated == 0 and added == 0 and seeds_removed == 0 and not timesheets_changed:
-        log("No changes to write.")
-        if new_refresh != refresh_token:
-            _emit_token_rotation(new_refresh)
-        return
+        # Snapshot original array for sanity diff (deep-copied via json round-trip)
+        old_arr_snapshot = json.loads(json.dumps(arr))
 
-    # ── SAFETY GATE: refuse to write if too destructive ──────────────
-    try:
-        sanity_check_ot_requests(old_arr_snapshot, arr, log=log)
-    except SanityCheckFailed as e:
-        log(str(e))
-        log("⛔ Aborting write to prevent data loss. Original gist content "
-            "preserved unchanged. Investigate logs above for what tried to "
-            "remove the entries.")
-        sys.exit(2)
+        seeds_removed = 0
+        if clean_seeds:
+            seeds_removed = _clean_seed_entries(arr)
+            if seeds_removed:
+                log(f"🧹 Removed {seeds_removed} PAST seed/mock entries")
 
-    # Build new content
-    if wrapper is not None:
-        wrapper["requests"] = arr
-        new_content = json.dumps(wrapper, indent=2, ensure_ascii=False)
-    else:
-        new_content = json.dumps(arr, indent=2, ensure_ascii=False)
+        before = len(arr)
+        updated, added = _merge(arr, fetched_all)
+        log(f"Merge: existing={before}, updated={updated}, added={added}, "
+            f"seeds_removed={seeds_removed}, new total={len(arr)}")
 
-    log("PATCHing Gist (with rolling backup + race detection)…")
-    try:
-        st = safe_patch_gist_file(
-            pat, GIST_ID, OT_GIST_FILE,
-            new_content=new_content,
-            snapshot=snapshot,
-            shape_validator=validate_ot_requests_shape,
-            log=log,
-        )
-        log(f"Gist PATCH HTTP {st} ✓  (rolling backup → ot-requests.bak.json)")
-    except RaceDetected as e:
-        log(str(e))
-        log("⛔ Aborting — will retry on next scheduled run (daily 00:15 JST).")
-        sys.exit(3)
-    except GistSafetyError as e:
-        log(f"⛔ Safety check failed: {e}")
-        sys.exit(2)
+        # Save timesheets only when changed to avoid no-op PATCHes.
+        timesheets_changed = False
+        if timesheets:
+            if _stable_json(existing_timesheets) != _stable_json(timesheets):
+                timesheets_changed = True
+                if wrapper is None:
+                    wrapper = {"requests": arr}
+                wrapper["timesheets"] = timesheets
+                wrapper["timesheets_fetched_at"] = datetime.now(JST).isoformat(timespec="seconds")
+            else:
+                log("Timesheet aggregates unchanged — skip timesheet write-back.")
+
+        if updated == 0 and added == 0 and seeds_removed == 0 and not timesheets_changed:
+            log("No changes to write.")
+            if new_refresh != refresh_token:
+                _emit_token_rotation(new_refresh)
+            return
+
+        # ── SAFETY GATE: refuse to write if too destructive ──────────────
+        try:
+            sanity_check_ot_requests(old_arr_snapshot, arr, log=log)
+        except SanityCheckFailed as e:
+            log(str(e))
+            log("⛔ Aborting write to prevent data loss. Original gist content "
+                "preserved unchanged. Investigate logs above for what tried to "
+                "remove the entries.")
+            sys.exit(2)
+
+        # Build new content
+        if wrapper is not None:
+            wrapper["requests"] = arr
+            new_content = json.dumps(wrapper, indent=2, ensure_ascii=False)
+        else:
+            new_content = json.dumps(arr, indent=2, ensure_ascii=False)
+
+        log("PATCHing Gist (with rolling backup + race detection)…")
+        try:
+            st = safe_patch_gist_file(
+                pat, GIST_ID, OT_GIST_FILE,
+                new_content=new_content,
+                snapshot=snapshot,
+                shape_validator=validate_ot_requests_shape,
+                log=log,
+            )
+            log(f"Gist PATCH HTTP {st} ✓  (rolling backup → ot-requests.bak.json)")
+            break
+        except RaceDetected as e:
+            log(str(e))
+            if attempt >= MAX_RACE_ATTEMPTS:
+                log("⛔ Aborting after "
+                    f"{MAX_RACE_ATTEMPTS} race attempts — will retry on next scheduled run (daily 00:15 JST).")
+                sys.exit(3)
+            # Back off a couple of seconds so a concurrent writer (or
+            # GitHub's sub-second gist conflict window) clears before we
+            # read + merge + write again.
+            time.sleep(2 * attempt)
+        except GistSafetyError as e:
+            log(f"⛔ Safety check failed: {e}")
+            sys.exit(2)
 
     if new_refresh != refresh_token:
         _emit_token_rotation(new_refresh)
