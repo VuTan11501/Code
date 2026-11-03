@@ -1108,6 +1108,21 @@ select option { background: var(--card); color: var(--foreground); }
 .payslip-formula-nums { font-family: var(--font-mono); color: var(--foreground); display: block; margin-top: 4px; }
 .payslip-formula-nums strong { color: var(--green); }
 
+/* Payslip detail modal (index.html #otPayslipModal): 560px on mobile,
+   doubled to 1120px on desktop with rows in two columns so the extra
+   width is usable instead of one stretched column. Head/total rows
+   always span the full width. */
+#otPayslipModal .dialog-content { max-width: 560px; }
+@media (min-width: 1024px) {
+  #otPayslipModal .dialog-content { max-width: 1120px; }
+  #otPayslipModal .payslip-section { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 16px; }
+  #otPayslipModal .payslip-section-head,
+  #otPayslipModal .payslip-total,
+  #otPayslipModal .payslip-subtotal,
+  #otPayslipModal .payslip-grand-total,
+  #otPayslipModal .payslip-formula { grid-column: 1 / -1; }
+}
+
 /* Read-only badge in OT table for past-month entries */
 .badge-readonly {
   display: inline-flex; align-items: center; justify-content: center;
