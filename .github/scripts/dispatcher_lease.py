@@ -23,7 +23,10 @@ from datetime import datetime, timezone, timedelta
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from gist_cas import cas_update, _gist_get, _GistError  # noqa: E402
 
-GIST_ID = 'abc2a47c0a396025a72a6580227ff493'
+# Env override so forks can point the lease at their own Gist (same pattern
+# as user_config.py — the old hard-coded constant made forks write their
+# dispatcher lease into the upstream owner's Gist).
+GIST_ID = os.environ.get("GIST_ID") or "abc2a47c0a396025a72a6580227ff493"
 LEASE_FILE = 'dispatcher-lease.json'
 DEFAULT_TTL_MIN = 15
 STALE_THRESHOLD_MIN = 5
