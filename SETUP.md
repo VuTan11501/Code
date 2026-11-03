@@ -17,12 +17,19 @@ cd Code
 
 ## Step 2: Create Your Gist
 
-Create a **public** Gist with these files:
+Create a **secret** Gist with these files:
 - `scheduled-runs.json` — content: `{"entries":[]}`
 - `ot-requests.json` — content: `[]`
 - `user-settings.json` — content: `{}`
 
 Note the Gist ID from the URL (e.g. `abc123def456...`).
+
+> ⚠️ **Keep the Gist secret — never public.** It will contain your work
+> hours, timesheets, OT records and (transiently) token state, and Gist
+> revision history keeps every past version. A secret Gist works everywhere:
+> the workflows read/write it with your `GH_PAT`, and the dashboard reads it
+> with your own GitHub PAT at the login screen (or via the Worker proxy —
+> see Step 6).
 
 ## Step 3: Set Repository Variables
 
@@ -66,6 +73,11 @@ Open the PWA dashboard. In **Settings**, the following are auto-configured from 
 - **Owner/Repo** — set `wf_dash_owner` and `wf_dash_repo`
 
 Or simply edit `docs/js/app.js` lines 4-7 with your values before deploying.
+
+**Gist access — the dashboard never reads the Gist unauthenticated**, so your secret Gist works with one of:
+
+1. **Login screen (simplest)** — when the dashboard opens, paste a classic GitHub PAT (`ghp_...`) with the same scopes as your `GH_PAT` (`repo` + `gist` + `workflow`). It is encrypted in your browser (AES-256-GCM) and only ever sent to `api.github.com`.
+2. **Worker proxy (recommended — no PAT in the browser)** — deploy `worker/` per `worker/SETUP-GUIDE.md` (`wrangler deploy`), then set its URL in **Settings → GitHub API Proxy** on the dashboard. The PAT stays encrypted in the Worker; DevTools shows no `Authorization` header.
 
 ## Step 7: Enable GitHub Pages
 
