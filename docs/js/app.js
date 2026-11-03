@@ -1450,30 +1450,53 @@ if ('serviceWorker' in navigator) {
 
 // ── Idle "new version" check ─────────────────────────────
 // The SW revalidates the shell only on navigation (manual refresh), so a
-// deploy while the app sits open never produced the reload toast. While the
-// page is visible we periodically fetch the deployed HTML cache-busted and
-// compare the asset version signatures (?v=N) against the signature of the
-// HTML this page booted with. A difference = a new deploy landed → show the
-// "Reload" toast. reg.update() also lets sw.js VERSION bumps activate
-// without waiting for a navigation. Runs at bundle eval, on focus, and on
-// a 15-minute interval; 60s throttle; at most one toast per page session.
-// (Captured at eval time — the deferred bundle runs after parse, before
-// bootstrap mutates the DOM, so this IS the boot HTML.)
+// deploy while the app sits open never produced the reload toast. Instead
+// we poll the deployed page every 30s with a CONDITIONAL request:
+//   * no change  → CDN answers 304 with ~200 bytes (If-None-Match + ETag),
+//   * new deploy → 200 with the fresh HTML (~1 min to ~3 min after push,
+//                  when Pages/CDN finishes propagating).
+// A 200's asset version signatures (?v=N) are compared against the page we
+// booted with; a difference = new version available → "Reload" toast.
+// The unique ?_vchk= query bypasses the SW cache; each 200's ETag is
+// remembered for the next round. If the CDN ever stops honoring
+// conditional requests (repeated full bodies), the interval stretches to
+// 5 min to limit bandwidth. reg.update() (every 15 min) covers sw.js
+// VERSION bumps. At most one toast per page session (shared guard with
+// the SW message path). (The signature below is the boot HTML — the
+// deferred bundle evals after parse, before bootstrap mutates the DOM.)
 const _bootVersionSig = ((document.documentElement.outerHTML || '').match(/\?v=\d+/g) || []).sort().join(',');
 let _lastShellChk = 0;
+let _shellEtag = '';
+let _shellFullHits = 0;
+let _lastRegUpdate = 0;
 
 async function checkForShellUpdate() {
   if (window._swUpdateToastShown) return;
   if (document.visibilityState !== 'visible') return;
   const now = Date.now();
-  if (now - _lastShellChk < 60 * 1000) return;
+  const interval = _shellFullHits >= 5 ? 5 * 60 * 1000 : 30 * 1000;
+  if (now - _lastShellChk < interval) return;
   _lastShellChk = now;
   try {
-    const reg = await navigator.serviceWorker?.getRegistration();
-    try { await reg?.update?.(); } catch { /* offline */ }
+    if (now - _lastRegUpdate > 15 * 60 * 1000) {
+      _lastRegUpdate = now;
+      const reg = await navigator.serviceWorker?.getRegistration();
+      try { await reg?.update?.(); } catch { /* offline */ }
+    }
     const base = location.href.split('#')[0].split('?')[0];
-    const fresh = await fetch(base + '?_vchk=' + now, { cache: 'no-store' });
-    if (!fresh || !fresh.ok) return;
+    const hadEtag = !!_shellEtag;
+    const fresh = await fetch(base + '?_vchk=' + now, {
+      cache: 'no-store',
+      headers: hadEtag ? { 'If-None-Match': _shellEtag } : {},
+    });
+    if (!fresh) return;
+    if (fresh.status === 304) { _shellFullHits = 0; return; } // unchanged — free
+    if (!fresh.ok) return;
+    const etag = fresh.headers.get('etag');
+    if (etag) _shellEtag = etag;
+    // Had an ETag but still got a full body → conditional requests are
+    // being ignored; stretch the interval after a few rounds.
+    _shellFullHits = (hadEtag && !etag) ? _shellFullHits + 1 : 0;
     const text = await fresh.text();
     const sig = (text.match(/\?v=\d+/g) || []).sort().join(',');
     if (sig && sig !== _bootVersionSig) {
@@ -1490,7 +1513,7 @@ async function checkForShellUpdate() {
 }
 
 window.addEventListener('focus', checkForShellUpdate);
-setInterval(checkForShellUpdate, 15 * 60 * 1000);
+setInterval(checkForShellUpdate, 30 * 1000);
 
 // ═══════════════════════════════════════════════════
 //  INIT  (wait for ALL scripts to load before init —
