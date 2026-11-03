@@ -1448,6 +1448,50 @@ if ('serviceWorker' in navigator) {
   }).catch(() => {});
 }
 
+// ── Idle "new version" check ─────────────────────────────
+// The SW revalidates the shell only on navigation (manual refresh), so a
+// deploy while the app sits open never produced the reload toast. While the
+// page is visible we periodically fetch the deployed HTML cache-busted and
+// compare the asset version signatures (?v=N) against the signature of the
+// HTML this page booted with. A difference = a new deploy landed → show the
+// "Reload" toast. reg.update() also lets sw.js VERSION bumps activate
+// without waiting for a navigation. Runs at bundle eval, on focus, and on
+// a 15-minute interval; 60s throttle; at most one toast per page session.
+// (Captured at eval time — the deferred bundle runs after parse, before
+// bootstrap mutates the DOM, so this IS the boot HTML.)
+const _bootVersionSig = ((document.documentElement.outerHTML || '').match(/\?v=\d+/g) || []).sort().join(',');
+let _lastShellChk = 0;
+
+async function checkForShellUpdate() {
+  if (window._swUpdateToastShown) return;
+  if (document.visibilityState !== 'visible') return;
+  const now = Date.now();
+  if (now - _lastShellChk < 60 * 1000) return;
+  _lastShellChk = now;
+  try {
+    const reg = await navigator.serviceWorker?.getRegistration();
+    try { await reg?.update?.(); } catch { /* offline */ }
+    const base = location.href.split('#')[0].split('?')[0];
+    const fresh = await fetch(base + '?_vchk=' + now, { cache: 'no-store' });
+    if (!fresh || !fresh.ok) return;
+    const text = await fresh.text();
+    const sig = (text.match(/\?v=\d+/g) || []).sort().join(',');
+    if (sig && sig !== _bootVersionSig) {
+      window._swUpdateToastShown = true;
+      if (typeof toast === 'function') {
+        toast('🔄 New version available', 'success', {
+          duration: 15000,
+          undoLabel: 'Reload',
+          onUndo: () => window.location.reload(),
+        });
+      }
+    }
+  } catch { /* offline / blocked — skip silently */ }
+}
+
+window.addEventListener('focus', checkForShellUpdate);
+setInterval(checkForShellUpdate, 15 * 60 * 1000);
+
 // ═══════════════════════════════════════════════════
 //  INIT  (wait for ALL scripts to load before init —
 //   otherwise dashboard.js symbols like startPolling/
