@@ -26,11 +26,11 @@ on:
         required: false
         default: "true"
   schedule:
-    # 00:15 JST daily — right after day rollover, like Timesheet Fetch.
-    - cron: "15 0 * * *"
-
-# Cron expressions above are evaluated in JST (no DST — JST is fixed UTC+9).
-timezone: Asia/Tokyo
+    # 00:15 JST daily = 15:15 UTC — right after day rollover, like Timesheet
+    # Fetch. (GitHub Actions cron is UTC-only — there is no workflow-level
+    # 'timezone' keyword; JST is fixed UTC+9 with no DST, so the offset is
+    # exact year-round.)
+    - cron: "15 15 * * *"
 
 permissions:
   contents: read
