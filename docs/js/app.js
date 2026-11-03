@@ -1420,7 +1420,7 @@ function checkForNewFailures(allRuns) {
 
 if ('serviceWorker' in navigator) {
   // Bump query string to force update of stale SW on existing PWA installs
-  navigator.serviceWorker.register('sw.js?v=31').then((reg) => {
+  navigator.serviceWorker.register('sw.js?v=32').then((reg) => {
     // Listen for the SW telling us a new version is active.
     navigator.serviceWorker.addEventListener('message', (ev) => {
       const data = ev.data || {};
@@ -1494,9 +1494,12 @@ async function checkForShellUpdate() {
     if (!fresh.ok) return;
     const etag = fresh.headers.get('etag');
     if (etag) _shellEtag = etag;
-    // Had an ETag but still got a full body → conditional requests are
-    // being ignored; stretch the interval after a few rounds.
-    _shellFullHits = (hadEtag && !etag) ? _shellFullHits + 1 : 0;
+    // We sent an If-None-Match but still got a full body → conditional
+    // requests are being ignored (older SW without passthrough, CDN quirk);
+    // stretch the interval after a few rounds. (A 200 with a changed
+    // signature fires the toast and stops polling, so this counter only
+    // ever counts no-change full bodies.)
+    _shellFullHits = hadEtag ? _shellFullHits + 1 : 0;
     const text = await fresh.text();
     const sig = (text.match(/\?v=\d+/g) || []).sort().join(',');
     if (sig && sig !== _bootVersionSig) {

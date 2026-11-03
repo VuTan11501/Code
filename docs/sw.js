@@ -10,7 +10,7 @@
 //   * Update flow: new SW activates → postMessage {type:'sw-updated'} to
 //     all clients. app.js shows a "Reload to update" toast.
 
-const VERSION = 'wf-dash-v10';
+const VERSION = 'wf-dash-v11';
 const SHELL_CACHE = `${VERSION}-shell`;
 const API_CACHE   = `${VERSION}-api`;
 const API_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
@@ -128,11 +128,19 @@ async function swrShell(req, cacheName, event) {
         // and never firing 'shell-updated'. We construct a new Request to
         // override cache mode because some browsers ignore init.cache when
         // a Request object is passed directly to fetch().
+        // Pass through If-None-Match: the app's idle update poll sends a
+        // conditional request so an unchanged deploy is a ~200-byte 304
+        // (which falls through below via !resp.ok) instead of the full HTML.
+        // Plain navigations carry no If-None-Match, so their behavior is
+        // unchanged.
+        const freshHeaders = { 'Accept': req.headers.get('Accept') || 'text/html,*/*' };
+        const ifNoneMatch = req.headers.get('if-none-match');
+        if (ifNoneMatch) freshHeaders['If-None-Match'] = ifNoneMatch;
         const freshReq = new Request(req.url, {
           method: 'GET',
           cache: 'no-store',
           credentials: 'same-origin',
-          headers: { 'Accept': req.headers.get('Accept') || 'text/html,*/*' },
+          headers: freshHeaders,
         });
         const resp = await fetch(freshReq);
         if (!resp || !resp.ok || resp.type !== 'basic') return resp;
