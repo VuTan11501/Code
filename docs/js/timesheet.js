@@ -455,7 +455,9 @@ function renderTimesheet() {
         const month = btn.getAttribute('data-payslip-month');
         const isEstimate = btn.getAttribute('data-payslip-estimate') === '1';
         if (typeof openPayslipDetail === 'function') {
-          openPayslipDetail(month, isEstimate);
+          // Pass this tab's own payslip list — the modal must not depend
+          // on the OT tab having loaded _otState first.
+          openPayslipDetail(month, isEstimate, _tsState.payslips);
         }
       });
     });

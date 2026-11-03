@@ -2277,18 +2277,26 @@ function _payslipLangButtons() {
     b.classList.toggle('active', b.dataset.plang === lang));
 }
 
-function openPayslipDetail(monthKey, isEstimate) {
+// payslips — optional. The Timesheet tab keeps its own copy in
+// _tsState.payslips and passes it here; without it we fall back to the
+// OT tab's loaded copy (empty until the OT tab has loaded its data,
+// which is why the modal used to show "No payslip data available" when
+// opened from the Timesheet tab first).
+function openPayslipDetail(monthKey, isEstimate, payslips) {
+  const payList = (Array.isArray(payslips) && payslips.length)
+    ? payslips
+    : (Array.isArray(_otState.payslips) ? _otState.payslips : []);
   const body = document.getElementById('otPayslipBody');
   const titleEl = document.getElementById('otPayslipTitle');
   const modal = document.getElementById('otPayslipModal');
   if (!body || !modal) return;
   const F = window.OT_SALARY.formatYen;
 
-  let slip = window.OT_SALARY.findPayslipForWorkMonth(_otState.payslips, monthKey);
+  let slip = window.OT_SALARY.findPayslipForWorkMonth(payList, monthKey);
   let source = 'actual';
   if (!slip || isEstimate) {
     // Build a synthetic "slip" from estimate
-    const baseline = window.OT_SALARY.pickBaselineForWorkMonth(_otState.payslips, monthKey);
+    const baseline = window.OT_SALARY.pickBaselineForWorkMonth(payList, monthKey);
     if (!baseline) {
       body.innerHTML = '<div class="empty text-muted-foreground text-sm p-4 text-center">No payslip data available.</div>';
       modal.classList.add('open');
