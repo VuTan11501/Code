@@ -7,9 +7,12 @@ name: Payslip Fetch
 #
 # Salary cycle:
 #   Work done in month X (incl. all OT) is paid on day 22 of month X+1.
-#   Schedule runs on day 22-25 each month at JST 12:00 to fetch the
-#   payslip that was just published. The script is idempotent — already
-#   fetched months are skipped unless FORCE=1.
+#   Primary run: 00:30 JST on day 23 — right after pay day, when the
+#   payslip is guaranteed to be published. The script is idempotent —
+#   already fetched months are skipped unless FORCE=1.
+#   Safety net: 12:00 JST on days 22-28 — catches payslips published
+#   during day 22 (before the primary run) and retries if the primary
+#   run was skipped (GitHub cron is not reliable).
 
 on:
   workflow_dispatch:
@@ -28,9 +31,20 @@ on:
         type: boolean
         default: false
   schedule:
-    # 03:00 UTC = 12:00 JST on days 22..28 of each month.
-    # Day 22 = pay date. Subsequent days are safety retries in case the
-    # payslip wasn't published exactly at 09:00 on the 22nd.
+    # Primary: 15:30 UTC on day 22 = 00:30 JST on day 23 — right after
+    # pay day (salary lands on day 22), the payslip is published by then.
+    # Deliberately NOT 00:00/00:15 JST: that would start in the same
+    # minute as Timesheet Fetch / OT History Fetch, which share the same
+    # Azure refresh token and Gist (secondary rate limit / rotation
+    # race — see KNOWLEDGE.md §3.22/§3.33).
+    # (GitHub Actions cron is UTC-only — there is no workflow-level
+    # 'timezone' keyword; JST is fixed UTC+9 with no DST, so the offset
+    # is exact year-round.)
+    - cron: "30 15 22 * *"
+    # Safety net: 03:00 UTC = 12:00 JST on days 22..28 of each month.
+    # Day 22 = pay date (payslip may appear mid-day, before the primary
+    # run). Subsequent days are retries in case the payslip was delayed
+    # or a scheduled run was skipped by GitHub.
     - cron: "0 3 22-28 * *"
 
 permissions:
