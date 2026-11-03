@@ -7,7 +7,7 @@ name: OT History Fetch
 # Runs daily at 00:15 JST (schedule) as a batch sync — the same pattern as
 # Timesheet Fetch (00:00 JST). The 15-min offset keeps the two workers from
 # hitting the same Gist / Azure refresh token in the same minute (secondary
-# rate limit + rotation race, see KNOWLEDGE.md §3.22/§3.33). The merge is
+# rate limit + rotation race, see KNOWLEDGE.md §3.22/§3.34). The merge is
 # idempotent and never deletes user-created entries, so daily runs are safe.
 
 on:
@@ -39,7 +39,14 @@ env:
   TZ: Asia/Tokyo
 
 concurrency:
-  group: ot-history-fetch
+  # Shared across ALL gist-writing workflows (this one, auto-ot-creator,
+  # timesheet-fetch, payslip-fetch, timesheet-action). Per-workflow groups
+  # only serialize a workflow against ITSELF — on 2026-11-03 "Auto Request
+  # OT" and "OT History Fetch" dispatched in the same second raced the same
+  # gist and one 409'd. One shared group queues all writers;
+  # cancel-in-progress: false so scheduled runs queue instead of being
+  # cancelled behind a manual dispatch.
+  group: gist-write
   cancel-in-progress: false
 
 jobs:

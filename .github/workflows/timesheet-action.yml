@@ -79,8 +79,11 @@ env:
   TZ: Asia/Tokyo
 
 concurrency:
-  # Serialize per month so two dispatches never race a save.
-  group: timesheet-action-${{ github.event.inputs.year }}-${{ github.event.inputs.month }}
+  # Shared gist-write group (was per-month) — see ot-history-fetch.yml for
+  # the rationale. Trade-off: saves for different months now queue behind
+  # any other gist writer instead of running in parallel; writers are
+  # short (seconds), so the queue cost is negligible.
+  group: gist-write
   cancel-in-progress: false
 
 jobs:

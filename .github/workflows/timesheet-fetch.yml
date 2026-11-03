@@ -35,7 +35,8 @@ env:
   TZ: Asia/Tokyo
 
 concurrency:
-  group: timesheet-fetch
+  # Shared gist-write group — see ot-history-fetch.yml for the rationale.
+  group: gist-write
   cancel-in-progress: false
 
 jobs:

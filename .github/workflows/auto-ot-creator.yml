@@ -11,6 +11,13 @@ permissions:
 env:
   TZ: Asia/Tokyo
 
+concurrency:
+  # Shared gist-write group — see ot-history-fetch.yml for the rationale.
+  # (Previously had NO concurrency block at all, so it could freely race
+  # OT History Fetch on ot-requests.json.)
+  group: gist-write
+  cancel-in-progress: false
+
 jobs:
   create-ot:
     runs-on: ubuntu-latest

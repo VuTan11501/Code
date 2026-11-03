@@ -36,7 +36,7 @@ on:
     # Deliberately NOT 00:00/00:15 JST: that would start in the same
     # minute as Timesheet Fetch / OT History Fetch, which share the same
     # Azure refresh token and Gist (secondary rate limit / rotation
-    # race — see KNOWLEDGE.md §3.22/§3.33).
+    # race — see KNOWLEDGE.md §3.22/§3.34).
     # (GitHub Actions cron is UTC-only — there is no workflow-level
     # 'timezone' keyword; JST is fixed UTC+9 with no DST, so the offset
     # is exact year-round.)
@@ -54,7 +54,8 @@ env:
   TZ: Asia/Tokyo
 
 concurrency:
-  group: payslip-fetch
+  # Shared gist-write group — see ot-history-fetch.yml for the rationale.
+  group: gist-write
   cancel-in-progress: false
 
 jobs:
