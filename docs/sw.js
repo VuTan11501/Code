@@ -131,10 +131,10 @@ async function swrShell(req, cacheName, event) {
         // Pass through If-None-Match: the app's idle update poll sends a
         // conditional request so an unchanged deploy is a ~200-byte 304
         // (which falls through below via !resp.ok) instead of the full HTML.
-        // Plain navigations carry no If-None-Match, so their behavior is
-        // unchanged.
+        // Navigations are NEVER given conditional headers — a 304 returned
+        // for a document load would break page rendering.
         const freshHeaders = { 'Accept': req.headers.get('Accept') || 'text/html,*/*' };
-        const ifNoneMatch = req.headers.get('if-none-match');
+        const ifNoneMatch = req.mode !== 'navigate' ? req.headers.get('if-none-match') : null;
         if (ifNoneMatch) freshHeaders['If-None-Match'] = ifNoneMatch;
         const freshReq = new Request(req.url, {
           method: 'GET',

@@ -1420,7 +1420,7 @@ function checkForNewFailures(allRuns) {
 
 if ('serviceWorker' in navigator) {
   // Bump query string to force update of stale SW on existing PWA installs
-  navigator.serviceWorker.register('sw.js?v=32').then((reg) => {
+  navigator.serviceWorker.register('sw.js?v=33').then((reg) => {
     // Listen for the SW telling us a new version is active.
     navigator.serviceWorker.addEventListener('message', (ev) => {
       const data = ev.data || {};
@@ -1467,14 +1467,20 @@ if ('serviceWorker' in navigator) {
 const _bootVersionSig = ((document.documentElement.outerHTML || '').match(/\?v=\d+/g) || []).sort().join(',');
 let _lastShellChk = 0;
 let _shellEtag = '';
-let _shellFullHits = 0;
+// Bandwidth guard: each full HTML body costs ~90KB. The first one is
+// unavoidable (no ETag to send yet); if we keep getting full bodies and
+// never a 304, conditional requests aren't being honored (SW older than
+// the If-None-Match passthrough, or a no-ETag CDN) — stretch the interval
+// so we don't burn ~100MB/day on a long-lived tab.
+let _shellBodies = 0;
+let _shell304s = 0;
 let _lastRegUpdate = 0;
 
 async function checkForShellUpdate() {
   if (window._swUpdateToastShown) return;
   if (document.visibilityState !== 'visible') return;
   const now = Date.now();
-  const interval = _shellFullHits >= 5 ? 5 * 60 * 1000 : 30 * 1000;
+  const interval = (_shellBodies >= 6 && _shell304s === 0) ? 5 * 60 * 1000 : 30 * 1000;
   if (now - _lastShellChk < interval) return;
   _lastShellChk = now;
   try {
@@ -1490,16 +1496,12 @@ async function checkForShellUpdate() {
       headers: hadEtag ? { 'If-None-Match': _shellEtag } : {},
     });
     if (!fresh) return;
-    if (fresh.status === 304) { _shellFullHits = 0; return; } // unchanged — free
+    if (fresh.status === 304) { _shellBodies = 0; _shell304s += 1; return; } // unchanged — free
     if (!fresh.ok) return;
     const etag = fresh.headers.get('etag');
     if (etag) _shellEtag = etag;
-    // We sent an If-None-Match but still got a full body → conditional
-    // requests are being ignored (older SW without passthrough, CDN quirk);
-    // stretch the interval after a few rounds. (A 200 with a changed
-    // signature fires the toast and stops polling, so this counter only
-    // ever counts no-change full bodies.)
-    _shellFullHits = hadEtag ? _shellFullHits + 1 : 0;
+    _shellBodies += 1;
+    _shell304s = 0;
     const text = await fresh.text();
     const sig = (text.match(/\?v=\d+/g) || []).sort().join(',');
     if (sig && sig !== _bootVersionSig) {
