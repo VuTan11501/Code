@@ -1115,6 +1115,15 @@ select option { background: var(--card); color: var(--foreground); }
   #otPayslipModal .dialog-content { max-width: 1120px; }
 }
 
+/* Payslip modal language toggle (EN default / JA = PDF labels) */
+.payslip-lang-toggle { display: inline-flex; gap: 2px; padding: 2px; border: 1px solid var(--border); border-radius: 999px; }
+.payslip-lang-btn {
+  border: 0; background: transparent; color: var(--muted-foreground);
+  font-family: var(--font-mono); font-size: var(--fs-xs); font-weight: 600;
+  padding: 3px 9px; border-radius: 999px; cursor: pointer;
+}
+.payslip-lang-btn.active { background: rgba(var(--tint),0.08); color: var(--foreground); }
+
 /* PDF-style numbered rows (mirrors FJP PayrollSlip_JP layout) */
 .payslip-num { display: inline-block; min-width: 30px; color: var(--muted-foreground); font-family: var(--font-mono); font-size: var(--fs-xs); }
 .payslip-row.payslip-strong .payslip-label { font-weight: 600; }

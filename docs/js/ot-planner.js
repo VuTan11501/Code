@@ -2214,6 +2214,69 @@ function _toggleOtOptTarget() {
 // ═══════════════════════════════════════════════════
 //  PAYSLIP DETAIL MODAL — full breakdown like steps-list
 // ═══════════════════════════════════════════════════
+
+// Row/section labels — mirrors the original FJP payslip PDF (PayrollSlip_JP).
+// EN is the default; JA matches the PDF. Toggle in the modal header,
+// persisted in localStorage ('wf_dash_payslip_lang').
+const _PAYSLIP_L10N = {
+  en: {
+    sec1: '1. Salary Input Items', sec2: '2. Working Hours', sec3: '3. Gross Income',
+    sec4: '4. Deductions', net: 'Net After Tax', deposit: 'Amount Deposited',
+    notes: 'Notes',
+    formula: 'Deposit = Gross − Insurance − Income tax − Resident tax − Receivables',
+    stdReward: 'Standard reward',
+    '1.1': 'Basic Salary A', '1.2': 'Basic Salary B (Life Design)', '1.3': 'Position / Fixed OT Allowance',
+    '1.4': 'Housing Allowance', '1.5': 'Family Allowance', '1.6': 'Local Allowance',
+    '1.7': 'Travel Allowance', '1.8': 'Standard Reward Monthly', '1.10': 'Average Hourly Wage',
+    '2.1': 'Standard Working Hours', '2.2': 'Hours Worked This Month', '2.3': 'Attendance Index',
+    '2.4': 'OT Hours', '2.5': 'Sunday OT Hours', '2.6': 'Night Hours (22:00–05:00)', '2.7': 'Other OT Hours',
+    '3.1': 'Basic Salary A', '3.2': 'Basic Salary B (Life Design)', '3.3': 'Fixed OT Allowance',
+    '3.4': 'Housing Allowance', '3.5': 'Family Allowance', '3.6': 'Local Allowance',
+    '3.7': 'Travel Allowance', '3.8': 'OT Allowance', '3.9': 'Sunday OT Allowance',
+    '3.10': 'Night Work Allowance', '3.11': 'Other OT Allowance', '3.12': 'Other Income',
+    '4.1': 'Health Insurance', '4.2': 'Welfare (Pension) Insurance', '4.3': 'Unemployment Insurance',
+    '4.4': 'Insurance Total', '4.5': 'Taxable Income', '4.6': 'Income Tax', '4.7': 'Resident Tax',
+    '4.8': 'Total to Government', '4.9': 'Company Receivables', '4.9.item': 'Advance', '4.10': 'Company Payable',
+  },
+  ja: {
+    sec1: '1. 給与入力項目', sec2: '2. 勤務時間の明細', sec3: '3. 総支給額',
+    sec4: '4. 控除', net: '差引支給額', deposit: '振込額',
+    notes: 'Notes（備考）',
+    formula: '振込額 = 総支給額 − 社保 − 所得税 − 住民税 − 立替金',
+    stdReward: '標準報酬月額',
+    '1.1': '基本給与A', '1.2': '基本給与B（ライフデザイン手当）', '1.3': '役職/職務/固定残業手当',
+    '1.4': '住宅手当', '1.5': '家族手当', '1.6': 'その地の手当',
+    '1.7': '通勤手当', '1.8': '標準報酬月額', '1.10': '平均時給',
+    '2.1': '標準勤務時間', '2.2': '当月出動務数', '2.3': '出動日率',
+    '2.4': '残業時間', '2.5': '日曜日の残業', '2.6': '深夜勤務時間', '2.7': '他の残業',
+    '3.1': '基本給与A', '3.2': '基本給与B（ライフデザイン手当）', '3.3': '固定残業手当',
+    '3.4': '住宅手当', '3.5': '家族手当', '3.6': 'その地の手当',
+    '3.7': '通勤手当', '3.8': '残業手当', '3.9': '日曜日の残業手当',
+    '3.10': '深夜勤務手当', '3.11': '他の残業手当', '3.12': 'その他の収入',
+    '4.1': '健康保険料', '4.2': '厚生年金保険料', '4.3': '雇用保険料',
+    '4.4': '社会保険合計', '4.5': '課税対象額', '4.6': '所得税', '4.7': '住民税',
+    '4.8': '公租公課合計', '4.9': '立替金控除', '4.9.item': '立替金', '4.10': '会社立替金',
+  },
+};
+
+function _payslipLang() {
+  return localStorage.getItem('wf_dash_payslip_lang') === 'ja' ? 'ja' : 'en';
+}
+
+function setPayslipLang(lang) {
+  if (lang !== 'en' && lang !== 'ja') return;
+  try { localStorage.setItem('wf_dash_payslip_lang', lang); } catch (e) { /* private mode */ }
+  _payslipLangButtons();
+  const last = window._payslipModalLast;
+  if (last) openPayslipDetail(last.monthKey, last.isEstimate); // re-render in new language
+}
+
+function _payslipLangButtons() {
+  const lang = _payslipLang();
+  document.querySelectorAll('#otPayslipModal .payslip-lang-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.plang === lang));
+}
+
 function openPayslipDetail(monthKey, isEstimate) {
   const body = document.getElementById('otPayslipBody');
   const titleEl = document.getElementById('otPayslipTitle');
@@ -2278,6 +2341,9 @@ function openPayslipDetail(monthKey, isEstimate) {
   const gb = slip.gross_breakdown || {};
   const d = slip.deductions || {};
   const cr = slip.company_receivables || {};
+  const L = _PAYSLIP_L10N[_payslipLang()];
+  window._payslipModalLast = { monthKey, isEstimate };
+  _payslipLangButtons();
 
   // ── Layout mirrors the original FJP payslip PDF (PayrollSlip_JP):
   // numbered rows (1.1, 2.4, 3.8…), Japanese labels, section sub-headers.
@@ -2292,89 +2358,89 @@ function openPayslipDetail(monthKey, isEstimate) {
 
   const stdIns = c.standard_insurance || window.OT_SALARY.DEDUCTIONS.STANDARD_INSURANCE_AMOUNT;
 
-  // ── 1. 給与入力項目 (input salary items — fixed contract amounts) ──
-  html += `<div class="payslip-section">${head('1. 給与入力項目')}`;
-  html += row('1.1', '基本給与A', F(c.basic_a ?? 0));
-  html += row('1.2', '基本給与B（ライフデザイン手当）', F(c.basic_b ?? 0));
-  html += row('1.3', '役職/職務/固定残業手当', F(c.fixed_allowance ?? 0));
-  html += row('1.4', '住宅手当', F(c.housing_allowance ?? 0));
-  html += row('1.5', '家族手当', F(c.family_allowance ?? 0));
-  html += row('1.6', 'その地の手当', F(c.other_allowance ?? 0));
-  html += row('1.7', '通勤手当', F(c.travel_allowance ?? 0));
-  if (c.standard_insurance != null) html += row('1.8', '標準報酬月額', F(c.standard_insurance), 'payslip-strong');
-  if (c.hourly_wage) html += row('1.10', '平均時給', `¥${Number(c.hourly_wage).toLocaleString()}`, 'payslip-strong');
+  // ── 1. Salary input items (fixed contract amounts) ──
+  html += `<div class="payslip-section">${head(L.sec1)}`;
+  html += row('1.1', L['1.1'], F(c.basic_a ?? 0));
+  html += row('1.2', L['1.2'], F(c.basic_b ?? 0));
+  html += row('1.3', L['1.3'], F(c.fixed_allowance ?? 0));
+  html += row('1.4', L['1.4'], F(c.housing_allowance ?? 0));
+  html += row('1.5', L['1.5'], F(c.family_allowance ?? 0));
+  html += row('1.6', L['1.6'], F(c.other_allowance ?? 0));
+  html += row('1.7', L['1.7'], F(c.travel_allowance ?? 0));
+  if (c.standard_insurance != null) html += row('1.8', L['1.8'], F(c.standard_insurance), 'payslip-strong');
+  if (c.hourly_wage) html += row('1.10', L['1.10'], `¥${Number(c.hourly_wage).toLocaleString()}`, 'payslip-strong');
   html += '</div>';
 
-  // ── 2. 勤務時間の明細 (working hours) ──
-  html += `<div class="payslip-section">${head('2. 勤務時間の明細')}`;
-  if (w.standard_hours) html += row('2.1', '標準勤務時間', hours(w.standard_hours));
-  if (w.month_hours) html += row('2.2', '当月出動務数', hours(w.month_hours));
-  html += row('2.3', '出動日率', (w.basic_index ?? 1).toFixed(2));
-  if (w.ot_hours != null) html += row('2.4', '残業時間', hours(w.ot_hours));
-  if (w.sunday_hours) html += row('2.5', '日曜日の残業', hours(w.sunday_hours));
-  if (w.night_hours) html += row('2.6', '深夜勤務時間', hours(w.night_hours));
-  if (w.other_ot_hours) html += row('2.7', '他の残業', hours(w.other_ot_hours));
+  // ── 2. Working hours ──
+  html += `<div class="payslip-section">${head(L.sec2)}`;
+  if (w.standard_hours) html += row('2.1', L['2.1'], hours(w.standard_hours));
+  if (w.month_hours) html += row('2.2', L['2.2'], hours(w.month_hours));
+  html += row('2.3', L['2.3'], (w.basic_index ?? 1).toFixed(2));
+  if (w.ot_hours != null) html += row('2.4', L['2.4'], hours(w.ot_hours));
+  if (w.sunday_hours) html += row('2.5', L['2.5'], hours(w.sunday_hours));
+  if (w.night_hours) html += row('2.6', L['2.6'], hours(w.night_hours));
+  if (w.other_ot_hours) html += row('2.7', L['2.7'], hours(w.other_ot_hours));
   html += '</div>';
 
-  // ── 3. 総支給額 (gross income) ──
-  html += `<div class="payslip-section">${head('3. 総支給額', slip.gross)}`;
-  html += row('3.1', '基本給与A', F(gb.basic_a_paid ?? c.basic_a ?? 0));
-  html += row('3.2', '基本給与B（ライフデザイン手当）', F(gb.basic_b_paid ?? c.basic_b ?? 0));
-  html += row('3.3', '固定残業手当', F(gb.fixed_allowance_paid ?? c.fixed_allowance ?? 0));
-  html += row('3.4', '住宅手当', F(c.housing_allowance ?? 0));
-  html += row('3.5', '家族手当', F(c.family_allowance ?? 0));
-  html += row('3.6', 'その地の手当', F(c.other_allowance ?? 0));
-  html += row('3.7', '通勤手当', F(c.travel_allowance ?? 0));
-  html += row('3.8', w.ot_hours ? `残業手当（${Number(w.ot_hours).toFixed(2)}h）` : '残業手当', F(gb.ot_allowance ?? 0));
-  if (w.sunday_hours) html += row('3.9', `日曜日の残業手当（${Number(w.sunday_hours).toFixed(2)}h）`, F(gb.sunday_ot_allowance ?? 0));
-  if (w.night_hours) html += row('3.10', `深夜勤務手当（${Number(w.night_hours).toFixed(2)}h）`, F(gb.night_allowance ?? 0));
-  if (gb.other_ot_allowance) html += row('3.11', '他の残業手当', F(gb.other_ot_allowance));
-  if (gb.other_income) html += row('3.12', 'その他の収入', F(gb.other_income));
+  // ── 3. Gross income ──
+  html += `<div class="payslip-section">${head(L.sec3, slip.gross)}`;
+  html += row('3.1', L['3.1'], F(gb.basic_a_paid ?? c.basic_a ?? 0));
+  html += row('3.2', L['3.2'], F(gb.basic_b_paid ?? c.basic_b ?? 0));
+  html += row('3.3', L['3.3'], F(gb.fixed_allowance_paid ?? c.fixed_allowance ?? 0));
+  html += row('3.4', L['3.4'], F(c.housing_allowance ?? 0));
+  html += row('3.5', L['3.5'], F(c.family_allowance ?? 0));
+  html += row('3.6', L['3.6'], F(c.other_allowance ?? 0));
+  html += row('3.7', L['3.7'], F(c.travel_allowance ?? 0));
+  html += row('3.8', w.ot_hours ? `${L['3.8']}（${Number(w.ot_hours).toFixed(2)}h）` : L['3.8'], F(gb.ot_allowance ?? 0));
+  if (w.sunday_hours) html += row('3.9', `${L['3.9']}（${Number(w.sunday_hours).toFixed(2)}h）`, F(gb.sunday_ot_allowance ?? 0));
+  if (w.night_hours) html += row('3.10', `${L['3.10']}（${Number(w.night_hours).toFixed(2)}h）`, F(gb.night_allowance ?? 0));
+  if (gb.other_ot_allowance) html += row('3.11', L['3.11'], F(gb.other_ot_allowance));
+  if (gb.other_income) html += row('3.12', L['3.12'], F(gb.other_income));
   html += '</div>';
 
-  // ── 4. 控除 (deductions) ──
-  html += `<div class="payslip-section">${head('4. 控除')}`;
-  html += row('4.1', '健康保険料', F(d.health_insurance ?? 0));
-  html += row('4.2', '厚生年金保険料', F(d.welfare_insurance ?? 0));
-  html += row('4.3', '雇用保険料', F(d.unemployment_insurance ?? 0));
-  html += row('4.4', '社会保険合計', F(d.insurance_total ?? 0), 'payslip-subtotal');
-  html += row('4.5', '課税対象額', F(d.taxable_income ?? 0));
-  html += row('4.6', '所得税', F(d.income_tax ?? 0));
-  html += row('4.7', '住民税', F(d.resident_tax ?? 0));
-  html += row('4.8', '公租公課合計', F(d.total_payable_to_gov ?? 0), 'payslip-subtotal');
+  // ── 4. Deductions ──
+  html += `<div class="payslip-section">${head(L.sec4)}`;
+  html += row('4.1', L['4.1'], F(d.health_insurance ?? 0));
+  html += row('4.2', L['4.2'], F(d.welfare_insurance ?? 0));
+  html += row('4.3', L['4.3'], F(d.unemployment_insurance ?? 0));
+  html += row('4.4', L['4.4'], F(d.insurance_total ?? 0), 'payslip-subtotal');
+  html += row('4.5', L['4.5'], F(d.taxable_income ?? 0));
+  html += row('4.6', L['4.6'], F(d.income_tax ?? 0));
+  html += row('4.7', L['4.7'], F(d.resident_tax ?? 0));
+  html += row('4.8', L['4.8'], F(d.total_payable_to_gov ?? 0), 'payslip-subtotal');
   const crItems = (cr && cr.items && cr.items.length) ? cr.items : [];
   if (crItems.length || (cr && cr.total)) {
-    crItems.forEach((it, i) => { html += row(`4.9.${i + 1}`, it.label || '立替金', F(it.value ?? 0), 'payslip-indent'); });
-    html += row('4.9', '立替金控除', F(cr.total ?? 0), 'payslip-subtotal');
+    crItems.forEach((it, i) => { html += row(`4.9.${i + 1}`, it.label || L['4.9.item'], F(it.value ?? 0), 'payslip-indent'); });
+    html += row('4.9', L['4.9'], F(cr.total ?? 0), 'payslip-subtotal');
   }
-  if (slip.company_payable) html += row('4.10', '会社立替金', F(slip.company_payable), 'payslip-subtotal');
+  if (slip.company_payable) html += row('4.10', L['4.10'], F(slip.company_payable), 'payslip-subtotal');
   html += '</div>';
 
-  // ── 5. 差引支給額 (net after tax) ──
+  // ── 5. Net after tax ──
   html += `<div class="payslip-section">
-    <div class="payslip-row payslip-subtotal"><span class="payslip-label">${num('5')}差引支給額</span><span class="payslip-val">${F(slip.net_after_tax ?? 0)}</span></div>
+    <div class="payslip-row payslip-subtotal"><span class="payslip-label">${num('5')}${L.net}</span><span class="payslip-val">${F(slip.net_after_tax ?? 0)}</span></div>
   </div>`;
 
-  // ── 6. 振込額 (take-home) ──
+  // ── 6. Take-home (amount deposited) ──
   const crTotal = (cr && cr.total) ? cr.total : 0;
   html += `<div class="payslip-section payslip-final">
     <div class="payslip-row payslip-grand-total">
-      <span class="payslip-label">${num('6')}${ICON('wallet', 14)} 振込額</span>
+      <span class="payslip-label">${num('6')}${ICON('wallet', 14)} ${L.deposit}</span>
       <span class="payslip-val">${F(slip.take_home ?? 0)}</span>
     </div>
     <div class="payslip-formula">
-      振込額 = 総支給額 − 社保 − 所得税 − 住民税 − 立替金<br>
+      ${L.formula}<br>
       <span class="payslip-formula-nums">${F(slip.gross)} − ${F(d.insurance_total ?? 0)} − ${F(d.income_tax ?? 0)} − ${F(d.resident_tax ?? 0)} − ${F(crTotal)} = <strong>${F(slip.take_home ?? 0)}</strong></span>
     </div>
     <div class="payslip-formula" style="margin-top:4px;opacity:0.7">
-      標準報酬月額: ¥${stdIns.toLocaleString()}
+      ${L.stdReward}: ¥${stdIns.toLocaleString()}
     </div>
   </div>`;
 
   // ── Remarks (notes printed on the payslip) ──
   const remarks = slip.remarks || [];
   if (remarks.length) {
-    html += `<div class="payslip-section"><div class="payslip-section-head">Notes（備考）</div>` +
+    html += `<div class="payslip-section"><div class="payslip-section-head">${L.notes}</div>` +
       remarks.map(r => `<div class="payslip-row"><span class="payslip-label">※ ${r.content}</span></div>`).join('') +
       '</div>';
   }

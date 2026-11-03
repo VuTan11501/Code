@@ -58,7 +58,7 @@
 })();
 </script>
 <link rel="stylesheet" href="css/tailwind.css?v=1">
-<link rel="stylesheet" href="css/style.css?v=160">
+<link rel="stylesheet" href="css/style.css?v=161">
 <link rel="preconnect" href="https://api.github.com">
 </head>
 <body class="bg-background text-foreground font-sans text-sm antialiased min-h-dvh overflow-x-hidden">
@@ -1335,7 +1335,13 @@ wrangler login</pre>
   <div class="dialog-content modal">
     <div class="dialog-header modal-header">
       <h3 class="dialog-title text-lg font-semibold" id="otPayslipTitle"><span data-icon="wallet" data-size="18"></span> Payslip Detail</h3>
-      <button class="btn btn-ghost btn-icon modal-close" onclick="closePayslipDetail()" aria-label="Close">&times;</button>
+      <div class="flex items-center gap-2">
+        <div class="payslip-lang-toggle" role="group" aria-label="Payslip label language">
+          <button type="button" class="payslip-lang-btn active" data-plang="en" onclick="setPayslipLang('en')" aria-label="English labels">EN</button>
+          <button type="button" class="payslip-lang-btn" data-plang="ja" onclick="setPayslipLang('ja')" aria-label="Japanese labels (as in the payslip PDF)">JA</button>
+        </div>
+        <button class="btn btn-ghost btn-icon modal-close" onclick="closePayslipDetail()" aria-label="Close">&times;</button>
+      </div>
     </div>
     <div class="dialog-body modal-body" style="padding:18px 20px 20px">
       <div id="otPayslipBody"></div>
@@ -1441,7 +1447,7 @@ wrangler login</pre>
      Source files live in docs/js/* for development; the bundle is what ships.
      To work on the raw source instead, comment the line below and re-enable
      the individual <script defer src="js/X.js"> tags (see git history). -->
-<script defer src="dist/app.bundle.min.js?v=111"></script>
+<script defer src="dist/app.bundle.min.js?v=112"></script>
 <!-- AI Proposal confirmation modal (Phase 3) -->
 <div id="aiProposalModal" class="proposal-modal" role="dialog" aria-modal="true" aria-labelledby="aiProposalTitle" hidden aria-hidden="true">
 
