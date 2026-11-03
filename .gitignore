@@ -49,3 +49,8 @@ _meta.txt
 
 # git worktrees
 .worktrees/
+
+# Tool caches & local scratch (kept on disk, never committed)
+.codegraph/
+scratch/
+gemini-web2api/
