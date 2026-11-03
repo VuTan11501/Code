@@ -1109,19 +1109,17 @@ select option { background: var(--card); color: var(--foreground); }
 .payslip-formula-nums strong { color: var(--green); }
 
 /* Payslip detail modal (index.html #otPayslipModal): 560px on mobile,
-   doubled to 1120px on desktop with rows in two columns so the extra
-   width is usable instead of one stretched column. Head/total rows
-   always span the full width. */
+   doubled to 1120px on desktop — single column, wider rows. */
 #otPayslipModal .dialog-content { max-width: 560px; }
 @media (min-width: 1024px) {
   #otPayslipModal .dialog-content { max-width: 1120px; }
-  #otPayslipModal .payslip-section { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 16px; }
-  #otPayslipModal .payslip-section-head,
-  #otPayslipModal .payslip-total,
-  #otPayslipModal .payslip-subtotal,
-  #otPayslipModal .payslip-grand-total,
-  #otPayslipModal .payslip-formula { grid-column: 1 / -1; }
 }
+
+/* PDF-style numbered rows (mirrors FJP PayrollSlip_JP layout) */
+.payslip-num { display: inline-block; min-width: 30px; color: var(--muted-foreground); font-family: var(--font-mono); font-size: var(--fs-xs); }
+.payslip-row.payslip-strong .payslip-label { font-weight: 600; }
+.payslip-row.payslip-indent .payslip-label { padding-left: 30px; }
+.payslip-section-head.has-total { display: flex; justify-content: space-between; align-items: baseline; }
 
 /* Read-only badge in OT table for past-month entries */
 .badge-readonly {
